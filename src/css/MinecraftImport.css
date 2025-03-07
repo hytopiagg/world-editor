@@ -1,0 +1,406 @@
+.minecraft-import-wizard {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.minecraft-import-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.minecraft-import-content {
+  position: relative;
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  width: 800px;
+  max-width: 90%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #ffffff;
+}
+
+.minecraft-import-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #333;
+}
+
+.minecraft-import-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.close-button:hover {
+  color: #fff;
+}
+
+.minecraft-import-steps {
+  display: flex;
+  padding: 16px 24px;
+  border-bottom: 1px solid #333;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: calc(100% - 40px);
+  height: 2px;
+  background-color: #444;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.step.completed:not(:last-child)::after {
+  background-color: #4caf50;
+}
+
+.step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  font-weight: bold;
+  position: relative;
+  z-index: 2;
+}
+
+.step.active .step-number {
+  background-color: #2196f3;
+}
+
+.step.completed .step-number {
+  background-color: #4caf50;
+}
+
+.step-title {
+  font-size: 14px;
+  color: #999;
+}
+
+.step.active .step-title {
+  color: #fff;
+}
+
+.minecraft-import-step-content {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 300px;
+}
+
+.minecraft-import-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid #333;
+  gap: 12px;
+}
+
+.primary-button, .secondary-button {
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.primary-button {
+  background-color: #2196f3;
+  color: #fff;
+}
+
+.primary-button:hover {
+  background-color: #0d8bf0;
+}
+
+.primary-button:disabled {
+  background-color: #333;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  background-color: #444;
+  color: #fff;
+}
+
+.secondary-button:hover {
+  background-color: #555;
+}
+
+/* Upload step styles */
+.upload-area {
+  border: 2px dashed #444;
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.upload-area:hover {
+  border-color: #2196f3;
+}
+
+.upload-area h3 {
+  margin-top: 0;
+}
+
+.upload-icon {
+  font-size: 48px;
+  color: #444;
+  margin-bottom: 16px;
+}
+
+.upload-progress {
+  margin-top: 24px;
+}
+
+.progress-bar {
+  height: 8px;
+  background-color: #333;
+  border-radius: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.progress-bar-inner {
+  height: 100%;
+  background-color: #2196f3;
+  transition: width 0.3s;
+}
+
+.error-message {
+  color: #f44336;
+  margin-top: 16px;
+}
+
+/* Region selector styles */
+.region-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bounds-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.bound-control {
+  display: flex;
+  flex-direction: column;
+}
+
+.bound-control label {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.bound-control input {
+  background-color: #333;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.region-stats {
+  background-color: #333;
+  padding: 12px;
+  border-radius: 4px;
+  margin-top: 16px;
+}
+
+/* Block mapping styles */
+.block-mapping {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.block-mapping-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.block-mapping-table th,
+.block-mapping-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.block-mapping-table th {
+  background-color: #222;
+  position: sticky;
+  top: 0;
+}
+
+.block-thumbnail {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+/* Import step styles */
+.import-summary {
+  background-color: #333;
+  padding: 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.import-result {
+  margin-top: 24px;
+}
+
+.success-message {
+  color: #4caf50;
+  margin-bottom: 16px;
+}
+
+.stats-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #333;
+}
+
+.stats-label {
+  color: #999;
+}
+
+.upload-instructions {
+  margin-top: 24px;
+  background-color: #333;
+  padding: 16px;
+  border-radius: 4px;
+}
+
+.upload-instructions h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.upload-instructions ol {
+  padding-left: 24px;
+  margin-bottom: 0;
+}
+
+.upload-instructions li {
+  margin-bottom: 8px;
+}
+
+.upload-instructions code {
+  background-color: #222;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.upload-instructions p {
+  margin-top: 12px;
+  margin-bottom: 0;
+  font-style: italic;
+  color: #aaa;
+}
+
+.upload-instructions .note {
+  margin-top: 12px;
+  margin-bottom: 16px;
+  font-style: italic;
+  color: #aaa;
+}
+
+.issue-list {
+  padding-left: 24px;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.issue-list li {
+  margin-bottom: 8px;
+  color: #f0ad4e;
+}
+
+.auto-map-container {
+  background-color: #333;
+  padding: 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.auto-map-container button {
+  margin-bottom: 4px;
+}
+
+.auto-map-container p {
+  margin: 0;
+  color: #aaa;
+  font-size: 14px;
+}
+
+.mapping-stats {
+  background-color: #333;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.mapping-stats p {
+  margin: 0;
+}
+
+.hint-text {
+  color: #aaa;
+  font-style: italic;
+  font-size: 14px;
+  margin-top: 8px;
+} 

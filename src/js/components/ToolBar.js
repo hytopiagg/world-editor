@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon } from "react-icons/fa";
+import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon, FaCubes } from "react-icons/fa";
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
 import "../../css/ToolBar.css";
 import { generatePerlinNoise } from "perlin-noise";
 import { 
 	exportMapFile,
+	exportFullAssetPack, 
 	importMap,
+	importAssetPack
 } from '../ImportExport';
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from '../Constants';
+import MinecraftImportWizard from './MinecraftImportWizard';
 const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, setAxisLockEnabled, placementSize, setPlacementSize, setGridSize, undoRedoManager, currentBlockType, environmentBuilderRef }) => {
 	const [newGridSize, setNewGridSize] = useState(100);
 	const [showDimensionsModal, setShowDimensionsModal] = useState(false);
@@ -40,6 +43,9 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 
 	// Add state for active tool tracking
 	const [activeTool, setActiveTool] = useState(null);
+
+	// Add state for Minecraft import modal
+	const [showMinecraftImportModal, setShowMinecraftImportModal] = useState(false);
 
 	let startPos = {
 		x: 0,
@@ -556,6 +562,13 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								<FaTrash />
 							</button>
 						</Tooltip>
+						<Tooltip text="Import Minecraft Map">
+							<button
+								onClick={() => setShowMinecraftImportModal(true)}
+								className="control-button">
+								<FaCubes />
+							</button>
+						</Tooltip>
 					</div>
 					<div className="control-label">Map Tools</div>
 				</div>
@@ -826,6 +839,21 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 						</div>
 					</div>
 				</div>
+			)}
+
+			{showMinecraftImportModal && (
+				<MinecraftImportWizard
+					isOpen={showMinecraftImportModal}
+					onClose={() => setShowMinecraftImportModal(false)}
+					onComplete={(result) => {
+						if (result && result.success) {
+							console.log('Minecraft map imported successfully:', result);
+							// The wizard already updates the terrain
+						}
+						setShowMinecraftImportModal(false);
+					}}
+					terrainBuilderRef={terrainBuilderRef}
+				/>
 			)}
 		</>
 	);
