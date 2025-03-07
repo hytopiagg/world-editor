@@ -1,0 +1,30 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const start: () => void;
+export const __wbg_vec2_free: (a: number, b: number) => void;
+export const __wbg_get_vec2_x: (a: number) => number;
+export const __wbg_set_vec2_x: (a: number, b: number) => void;
+export const __wbg_get_vec2_z: (a: number) => number;
+export const __wbg_set_vec2_z: (a: number, b: number) => void;
+export const vec2_new: (a: number, b: number) => number;
+export const __wbg_vec3_free: (a: number, b: number) => void;
+export const __wbg_get_vec3_z: (a: number) => number;
+export const __wbg_set_vec3_z: (a: number, b: number) => void;
+export const vec3_new: (a: number, b: number, c: number) => number;
+export const __wbg_mcworld_free: (a: number, b: number) => void;
+export const mcworld_new: () => number;
+export const mcworld_read_region: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+export const mcworld_convert: (a: number, b: number, c: number, d: any) => [number, number, number];
+export const __wbg_get_vec3_x: (a: number) => number;
+export const __wbg_get_vec3_y: (a: number) => number;
+export const __wbg_set_vec3_x: (a: number, b: number) => void;
+export const __wbg_set_vec3_y: (a: number, b: number) => void;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_export_4: WebAssembly.Table;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;

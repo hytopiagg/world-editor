@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <script>
+      if (!('FinalizationRegistry' in window)) {
+          window.FinalizationRegistry = function(callback) {
+              this.register = function(target, holdings) {};
+              this.unregister = function(target) {};
+          };
+      }
+
+      if (!('WeakRef' in window)) {
+          window.WeakRef = function(target) {
+              this.deref = function() { return null; };
+          };
+      }
+    </script>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
