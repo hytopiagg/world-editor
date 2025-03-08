@@ -66,21 +66,6 @@ export class MinecraftToHytopiaConverter {
       }
     }
     
-    // Calculate region dimensions
-    const regionWidth = this.selectedRegion.maxX - this.selectedRegion.minX;
-    const regionHeight = this.selectedRegion.maxY - this.selectedRegion.minY;
-    const regionDepth = this.selectedRegion.maxZ - this.selectedRegion.minZ;
-    
-    // For X and Z, center around 0,0
-    const centerOffsetX = Math.floor(this.selectedRegion.minX + regionWidth / 2);
-    const centerOffsetZ = Math.floor(this.selectedRegion.minZ + regionDepth / 2);
-    
-    // For Y, ensure bottom is at Y=0 if minY is negative
-    const yOffset = this.selectedRegion.minY < 0 ? this.selectedRegion.minY : 0;
-    
-    console.log(`Centering region horizontally with offset X:${centerOffsetX}, Z:${centerOffsetZ}`);
-    console.log(`Adjusting Y position with offset: ${yOffset} to ensure bottom is at Y=0`);
-    
     // Convert blocks within the selected region
     for (const [posKey, blockData] of Object.entries(this.worldData.chunks)) {
       const [x, y, z] = posKey.split(',').map(Number);
@@ -91,13 +76,13 @@ export class MinecraftToHytopiaConverter {
         const mapping = this.blockMappings[mcBlockType];
         
         if (mapping && mapping.action !== 'skip' && blockTypeIdMap[mcBlockType]) {
-          // Calculate centered position horizontally (X, Z) and adjust Y position
-          const centeredX = x - centerOffsetX;
-          const adjustedY = y - yOffset;  // If minY is negative, this brings bottom to Y=0
-          const centeredZ = z - centerOffsetZ;
+          // Calculate relative position within the selected region
+          const relX = x - this.selectedRegion.minX;
+          const relY = y - this.selectedRegion.minY;
+          const relZ = z - this.selectedRegion.minZ;
           
           // Add block to HYTOPIA map
-          hytopiaMap.blocks[`${centeredX},${adjustedY},${centeredZ}`] = blockTypeIdMap[mcBlockType];
+          hytopiaMap.blocks[`${relX},${relY},${relZ}`] = blockTypeIdMap[mcBlockType];
           processedBlocks++;
         } else {
           skippedBlocks++;
