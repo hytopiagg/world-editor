@@ -53,7 +53,11 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
       onComplete({
         success: true,
         hytopiaMap: conversionResult.hytopiaMap,
-        stats: conversionResult.stats
+        stats: conversionResult.stats || {
+          processedBlocks: 0,
+          skippedBlocks: 0,
+          uniqueBlockTypes: []
+        }
       });
     } catch (err) {
       console.error('Conversion error:', err);
@@ -94,26 +98,71 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
         <div className="import-result">
           <div className="success-message">
             <h4>Conversion Complete!</h4>
-            <p>Successfully converted {result.stats.processedBlocks.toLocaleString()} blocks.</p>
+            <p>Successfully converted {result.stats && result.stats.processedBlocks ? result.stats.processedBlocks.toLocaleString() : 0} blocks.</p>
           </div>
           
           <div className="stats-container">
             <h4>Import Statistics</h4>
             <div className="stats-item">
               <span className="stats-label">Blocks imported:</span>
-              <span>{result.stats.processedBlocks.toLocaleString()}</span>
+              <span>{result.stats && result.stats.processedBlocks ? result.stats.processedBlocks.toLocaleString() : 0}</span>
             </div>
             <div className="stats-item">
               <span className="stats-label">Blocks skipped:</span>
-              <span>{result.stats.skippedBlocks.toLocaleString()}</span>
+              <span>{result.stats && result.stats.skippedBlocks ? result.stats.skippedBlocks.toLocaleString() : 0}</span>
             </div>
             <div className="stats-item">
               <span className="stats-label">Unique block types:</span>
-              <span>{result.stats.uniqueBlockTypes.length}</span>
+              <span>{result.stats && result.stats.uniqueBlockTypes ? result.stats.uniqueBlockTypes.length : 0}</span>
             </div>
+            {result.stats && result.stats.originalCenter && (
+              <div className="stats-item">
+                <span className="stats-label">Original center point:</span>
+                <span>({result.stats.originalCenter.x}, {result.stats.originalCenter.y}, {result.stats.originalCenter.z})</span>
+              </div>
+            )}
           </div>
           
-          <p>Click "Complete Import" to add these blocks to your HYTOPIA world.</p>
+          <div className="world-bounds-info">
+            <h4>Map Placement in World</h4>
+            <p>The map has been centered at (0,0) on the X-Z plane with the bottom at Y=0.</p>
+            {result.stats && result.stats.worldBounds && (
+              <div className="bounds-diagram">
+                <p>Map now extends from ({result.stats.worldBounds.minX}, {result.stats.worldBounds.minY}, {result.stats.worldBounds.minZ}) to ({result.stats.worldBounds.maxX}, {result.stats.worldBounds.maxY}, {result.stats.worldBounds.maxZ})</p>
+                <div className="bounds-visual">
+                  <div className="bounds-box" style={{
+                    width: '100%',
+                    height: '100px',
+                    position: 'relative',
+                    border: '1px solid #999',
+                    marginTop: '10px'
+                  }}>
+                    <div className="origin-marker" style={{
+                      position: 'absolute',
+                      left: '50%',
+                      bottom: '0',
+                      width: '10px',
+                      height: '10px',
+                      background: 'red',
+                      borderRadius: '50%',
+                      transform: 'translate(-50%, 50%)'
+                    }}></div>
+                    <div className="origin-label" style={{
+                      position: 'absolute',
+                      left: '50%',
+                      bottom: '-20px',
+                      transform: 'translateX(-50%)',
+                      fontSize: '12px',
+                      fontWeight: 'bold'
+                    }}>
+                      (0,0,0)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <p>Click "Complete Import" to add these blocks to your HYTOPIA world.</p>
+          </div>
         </div>
       )}
       

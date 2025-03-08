@@ -241,7 +241,9 @@
   border: 1px solid #444;
   color: #fff;
   padding: 8px;
+  width: 80px;
   border-radius: 4px;
+  font-size: 14px;
 }
 
 .region-stats {
@@ -403,4 +405,96 @@
   font-style: italic;
   font-size: 14px;
   margin-top: 8px;
+}
+
+.centering-info {
+  margin-top: 15px;
+  padding: 12px;
+  background-color: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 4px;
+}
+
+.centering-info p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.centering-info p:first-child {
+  color: #0050b3;
+}
+
+.centering-info h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: #0050b3;
+}
+
+.centering-info ul {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.centering-info li {
+  margin-bottom: 5px;
+}
+
+.world-bounds-info {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f0f9ff;
+  border: 1px solid #91d5ff;
+  border-radius: 4px;
+}
+
+.world-bounds-info h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #0050b3;
+}
+
+.bounds-diagram {
+  margin: 10px 0;
+}
+
+.bounds-diagram p {
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.bounds-visual {
+  margin: 15px 0;
+}
+
+.offset-controls {
+  margin: 15px 0;
+  padding: 10px;
+  background-color: #333;
+  border-radius: 5px;
+  border: 1px solid #444;
+}
+
+.offset-controls h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #eee;
+}
+
+.offset-controls p {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #ccc;
+}
+
+.offset-controls p.hint-text {
+  font-style: italic;
+  margin-top: 8px;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.offset-inputs {
+  display: flex;
+  gap: 15px;
 } 

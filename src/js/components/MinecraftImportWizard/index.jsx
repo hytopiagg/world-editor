@@ -82,7 +82,7 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   
   // Initialize region when world data changes
   useEffect(() => {
-    if (worldData && worldData.bounds) {
+    if (worldData && worldData.bounds && !selectedRegion) {
       // Set a default region when world data is loaded (whole world)
       setSelectedRegion({
         minX: worldData.bounds.minX,
@@ -93,7 +93,7 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
         maxZ: worldData.bounds.maxZ
       });
     }
-  }, [worldData]);
+  }, [worldData, selectedRegion]);
   
   if (!isOpen) return null;
   
