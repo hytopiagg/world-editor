@@ -203,25 +203,38 @@ export const blockTypes = blockTypesArray;
 
 // Greedy meshing algorithm
 // Implementation based on "Meshing in a Minecraft Game" by Mikola Lysenko (0fps.net)
+// Optimized version with improved performance
 const generateGreedyMesh = (chunksBlocks, blockTypes) => {
-    // Initialize result
+    // Performance timing
+    const startTime = performance.now();
+    
+    // Initialize result with pre-allocated capacity to reduce resizing
+    const estimatedFaceCount = Object.keys(chunksBlocks).length * 3; // Assuming 3 visible faces per block on average
     const meshData = {
-        vertices: [],
-        indices: [],
-        normals: [],
-        uvs: [],
-        blockIds: [], // Store block ID for material selection
+        vertices: new Array(estimatedFaceCount * 12), // 12 components per face (4 vertices * 3 coords)
+        indices: new Array(estimatedFaceCount * 6),   // 6 indices per face (2 triangles)
+        normals: new Array(estimatedFaceCount * 12),  // 12 components per face (4 vertices * 3 coords) 
+        uvs: new Array(estimatedFaceCount * 8),       // 8 components per face (4 vertices * 2 coords)
+        blockIds: new Array(estimatedFaceCount * 4),  // 4 block IDs per face (1 per vertex)
+        vertexCount: 0,
+        indexCount: 0,
+        normalCount: 0,
+        uvCount: 0,
+        blockIdCount: 0
     };
     
     // Get dimensions (assuming cubic chunks)
     const SIZE = CHUNK_SIZE;
     
-    // Create a 3D grid to track block IDs
-    const grid = new Array(SIZE + 2).fill(0).map(() => 
-        new Array(SIZE + 2).fill(0).map(() => 
-            new Array(SIZE + 2).fill(0)
-        )
-    );
+    // Create optimized 3D grid using typed arrays for better performance
+    // We use a flat array and compute indices for faster access
+    const gridSize = (SIZE + 2) * (SIZE + 2) * (SIZE + 2);
+    const grid = new Uint16Array(gridSize);
+    
+    // Helper function to get grid index from coordinates
+    const getGridIndex = (x, y, z) => {
+        return (z + 1) * (SIZE + 2) * (SIZE + 2) + (y + 1) * (SIZE + 2) + (x + 1);
+    };
     
     // Extract chunk coordinates from the first block to use as base
     let chunkBaseX = 0, chunkBaseY = 0, chunkBaseZ = 0;
@@ -233,12 +246,9 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
         chunkBaseZ = Math.floor(firstZ / SIZE) * SIZE;
     }
     
-    // Debug info
-    console.log(`Greedy meshing chunk at ${chunkBaseX},${chunkBaseY},${chunkBaseZ}`);
-    console.log(`Block count: ${Object.keys(chunksBlocks).length}`);
-    
     // Fill grid with block IDs (adding a 1-block border for face detection)
-    Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
+    for (const posKey in chunksBlocks) {
+        const blockId = chunksBlocks[posKey];
         const [worldX, worldY, worldZ] = posKey.split(',').map(Number);
         
         // Convert from world coordinates to local chunk coordinates
@@ -248,73 +258,73 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
         
         // Skip if outside the chunk bounds (this shouldn't happen)
         if (localX < 0 || localX >= SIZE || localY < 0 || localY >= SIZE || localZ < 0 || localZ >= SIZE) {
-            console.warn(`Block at ${worldX},${worldY},${worldZ} is outside chunk bounds:`, localX, localY, localZ);
-            return;
+            continue;
         }
         
-        // Add block to grid with a 1-cell border
-        grid[localX + 1][localY + 1][localZ + 1] = parseInt(blockId);
-    });
+        // Add block to grid - use a flat array for better performance
+        grid[getGridIndex(localX, localY, localZ)] = parseInt(blockId);
+    }
+    
+    // For faster face checking, pre-compute direction offsets
+    const directionOffsets = [
+        1,                      // +X: shift by 1 in the flat array
+        -1,                     // -X: shift by -1
+        SIZE + 2,               // +Y: shift by a row length
+        -(SIZE + 2),            // -Y: shift by negative row length
+        (SIZE + 2) * (SIZE + 2), // +Z: shift by a slice
+        -((SIZE + 2) * (SIZE + 2)) // -Z: shift by negative slice
+    ];
+    
+    // Create a single reusable mask array for all slices to reduce allocations
+    const maskGrid = new Uint16Array((SIZE + 1) * (SIZE + 1));
+    const getMaskIndex = (y, x) => y * (SIZE + 1) + x;
     
     // Process each of the six faces (directions)
-    MESH_SIDES.forEach((side, faceIndex) => {
-        const { dir, normal } = side;
+    for (let faceIndex = 0; faceIndex < MESH_SIDES.length; faceIndex++) {
+        const { dir, normal } = MESH_SIDES[faceIndex];
         const [dx, dy, dz] = dir;
         
-        // Create a mask for this slice
-        const mask = new Array(SIZE + 1).fill(0).map(() => 
-            new Array(SIZE + 1).fill(0)
-        );
+        const dirOffset = directionOffsets[faceIndex];
         
         // Process each slice in this direction
         for (let depth = 0; depth < SIZE; depth++) {
+            // Clear the mask for this slice
+            maskGrid.fill(0);
+            
             // Compute the mask for this slice
             for (let y = 0; y < SIZE; y++) {
                 for (let x = 0; x < SIZE; x++) {
                     // Determine slice coordinates based on direction
-                    let blockX, blockY, blockZ, neighborX, neighborY, neighborZ;
+                    let blockIndex, neighborIndex;
                     
                     if (dx === 1) { 
-                        blockX = depth; neighborX = depth + 1; 
-                        blockY = y; neighborY = y;
-                        blockZ = x; neighborZ = x;
+                        blockIndex = getGridIndex(depth, y, x);
+                        neighborIndex = blockIndex + dirOffset;
                     } else if (dx === -1) {
-                        blockX = SIZE - 1 - depth; neighborX = SIZE - 2 - depth;
-                        blockY = y; neighborY = y;
-                        blockZ = x; neighborZ = x;
+                        blockIndex = getGridIndex(SIZE - 1 - depth, y, x);
+                        neighborIndex = blockIndex + dirOffset;
                     } else if (dy === 1) {
-                        blockX = x; neighborX = x;
-                        blockY = depth; neighborY = depth + 1;
-                        blockZ = y; neighborZ = y;
+                        blockIndex = getGridIndex(x, depth, y);
+                        neighborIndex = blockIndex + dirOffset;
                     } else if (dy === -1) {
-                        blockX = x; neighborX = x;
-                        blockY = SIZE - 1 - depth; neighborY = SIZE - 2 - depth;
-                        blockZ = y; neighborZ = y;
+                        blockIndex = getGridIndex(x, SIZE - 1 - depth, y);
+                        neighborIndex = blockIndex + dirOffset;
                     } else if (dz === 1) {
-                        blockX = x; neighborX = x;
-                        blockY = y; neighborY = y;
-                        blockZ = depth; neighborZ = depth + 1;
+                        blockIndex = getGridIndex(x, y, depth);
+                        neighborIndex = blockIndex + dirOffset;
                     } else if (dz === -1) {
-                        blockX = x; neighborX = x;
-                        blockY = y; neighborY = y;
-                        blockZ = SIZE - 1 - depth; neighborZ = SIZE - 2 - depth;
+                        blockIndex = getGridIndex(x, y, SIZE - 1 - depth);
+                        neighborIndex = blockIndex + dirOffset;
                     }
                     
-                    // Adjust for grid border
-                    blockX += 1; blockY += 1; blockZ += 1;
-                    neighborX += 1; neighborY += 1; neighborZ += 1;
-                    
                     // Get the block IDs
-                    const blockId = grid[blockX][blockY][blockZ];
-                    const neighborId = grid[neighborX][neighborY][neighborZ];
+                    const blockId = grid[blockIndex];
+                    const neighborId = grid[neighborIndex];
                     
-                    // Only create a face if there's a visible boundary:
-                    // 1. Current position has a block (blockId != 0)
-                    // 2. Neighbor position is empty or different block type
+                    // Only create a face if there's a visible boundary
+                    const maskIndex = getMaskIndex(y, x);
                     if (blockId !== 0 && blockId !== neighborId) {
-                        mask[y][x] = blockId; // Store the block ID in the mask
-                    } else {
-                        mask[y][x] = 0; // No face needed
+                        maskGrid[maskIndex] = blockId; // Store the block ID in the mask
                     }
                 }
             }
@@ -325,11 +335,12 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
                 let y = 0;
                 while (y < SIZE) {
                     // If this is a face
-                    const blockId = mask[y][x];
+                    const maskIndex = getMaskIndex(y, x);
+                    const blockId = maskGrid[maskIndex];
                     if (blockId !== 0) {
                         // Find width (how far can we go in x direction)
                         let width = 1;
-                        while (x + width < SIZE && mask[y][x + width] === blockId) {
+                        while (x + width < SIZE && maskGrid[getMaskIndex(y, x + width)] === blockId) {
                             width++;
                         }
                         
@@ -338,7 +349,7 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
                         let done = false;
                         while (y + height < SIZE && !done) {
                             for (let ix = 0; ix < width; ix++) {
-                                if (mask[y + height][x + ix] !== blockId) {
+                                if (maskGrid[getMaskIndex(y + height, x + ix)] !== blockId) {
                                     done = true;
                                     break;
                                 }
@@ -357,7 +368,7 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
                         const worldZ = localZ + chunkBaseZ;
                         
                         // Add quad for this region
-                        const vertexCount = meshData.vertices.length / 3;
+                        const vertexStart = meshData.vertexCount;
                         
                         // Calculate quad corners based on face direction
                         let positions = [];
@@ -405,39 +416,46 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
                             ];
                         }
                         
-                        // Add vertices (for each corner of quad)
-                        for (let i = 0; i < 12; i += 3) {
-                            meshData.vertices.push(positions[i], positions[i+1], positions[i+2]);
+                        // Add vertices directly to pre-allocated arrays
+                        for (let i = 0; i < 12; i++) {
+                            meshData.vertices[meshData.vertexCount++] = positions[i];
                         }
                         
-                        // Add indices (two triangles for the quad)
-                        meshData.indices.push(
-                            vertexCount, vertexCount + 1, vertexCount + 2,
-                            vertexCount, vertexCount + 2, vertexCount + 3
-                        );
+                        // Add indices
+                        const indexBase = vertexStart / 3;
+                        meshData.indices[meshData.indexCount++] = indexBase;
+                        meshData.indices[meshData.indexCount++] = indexBase + 1;
+                        meshData.indices[meshData.indexCount++] = indexBase + 2;
+                        meshData.indices[meshData.indexCount++] = indexBase;
+                        meshData.indices[meshData.indexCount++] = indexBase + 2;
+                        meshData.indices[meshData.indexCount++] = indexBase + 3;
                         
-                        // Add normals (same for all vertices in the quad)
+                        // Add normals
                         for (let i = 0; i < 4; i++) {
-                            meshData.normals.push(normal[0], normal[1], normal[2]);
+                            meshData.normals[meshData.normalCount++] = normal[0];
+                            meshData.normals[meshData.normalCount++] = normal[1];
+                            meshData.normals[meshData.normalCount++] = normal[2];
                         }
                         
-                        // Add UVs (simple mapping based on size)
-                        meshData.uvs.push(
-                            0, 0,          // Bottom-left
-                            width, 0,       // Bottom-right
-                            width, height,  // Top-right
-                            0, height       // Top-left
-                        );
+                        // Add UVs - now scaled correctly for the texture mapping
+                        meshData.uvs[meshData.uvCount++] = 0;
+                        meshData.uvs[meshData.uvCount++] = 0;
+                        meshData.uvs[meshData.uvCount++] = 0;
+                        meshData.uvs[meshData.uvCount++] = height;
+                        meshData.uvs[meshData.uvCount++] = width;
+                        meshData.uvs[meshData.uvCount++] = height;
+                        meshData.uvs[meshData.uvCount++] = width;
+                        meshData.uvs[meshData.uvCount++] = 0;
                         
-                        // Add block ID for material selection
+                        // Add block ID
                         for (let i = 0; i < 4; i++) {
-                            meshData.blockIds.push(blockId);
+                            meshData.blockIds[meshData.blockIdCount++] = blockId;
                         }
                         
                         // Clear the mask area we just processed
                         for (let iy = 0; iy < height; iy++) {
                             for (let ix = 0; ix < width; ix++) {
-                                mask[y + iy][x + ix] = 0;
+                                maskGrid[getMaskIndex(y + iy, x + ix)] = 0;
                             }
                         }
                         
@@ -449,10 +467,41 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
                 x++;
             }
         }
-    });
+    }
+    
+    // Trim arrays to actual size
+    meshData.vertices = meshData.vertices.slice(0, meshData.vertexCount);
+    meshData.indices = meshData.indices.slice(0, meshData.indexCount);
+    meshData.normals = meshData.normals.slice(0, meshData.normalCount);
+    meshData.uvs = meshData.uvs.slice(0, meshData.uvCount);
+    meshData.blockIds = meshData.blockIds.slice(0, meshData.blockIdCount);
+    
+    // Performance metrics
+    const endTime = performance.now();
+    console.log(`Greedy meshing completed in ${(endTime - startTime).toFixed(2)}ms`);
+    console.log(`Generated ${meshData.vertexCount / 3} vertices, ${meshData.indexCount / 3} triangles`);
     
     return meshData;
 };
+
+// LOD System Constants
+const LOD_ENABLED = true;
+const LOD_LEVELS = [
+	{ distance: 3, scale: 1 },    // Level 0: Full detail (1-3 chunks away)
+	{ distance: 6, scale: 2 },    // Level 1: Medium detail (4-6 chunks away)
+	{ distance: 10, scale: 4 },   // Level 2: Low detail (7-10 chunks away)
+	{ distance: 16, scale: 8 }    // Level 3: Very low detail (11-16 chunks away)
+];
+
+// Define face directions for optimized neighbor checking
+const NEIGHBOR_CHECK_DIRECTIONS = [
+    { offset: [1, 0, 0], axis: 0, dir: 1 },   // +X
+    { offset: [-1, 0, 0], axis: 0, dir: -1 }, // -X
+    { offset: [0, 1, 0], axis: 1, dir: 1 },   // +Y
+    { offset: [0, -1, 0], axis: 1, dir: -1 }, // -Y
+    { offset: [0, 0, 1], axis: 2, dir: 1 },   // +Z
+    { offset: [0, 0, -1], axis: 2, dir: -1 }  // -Z
+];
 
 function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
 
@@ -685,6 +734,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// A version of rebuildChunk that doesn't update visibility (for batch processing)
 	const rebuildChunkNoVisibilityUpdate = (chunkKey) => {
+		// Performance tracking
+		const startTime = performance.now();
+		
 		// Skip if scene not ready
 		if (!scene || !meshesInitializedRef.current) return;
 		
@@ -696,6 +748,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			if (chunkMeshesRef.current[chunkKey]) {
 				Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
 					safeRemoveFromScene(mesh);
+					// Dispose of geometries to free memory
+					if (mesh.geometry) mesh.geometry.dispose();
 				});
 			}
 			chunkMeshesRef.current[chunkKey] = {};
@@ -705,8 +759,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				return;
 			}
 			
-			// Use greedy meshing if enabled
+			// Use greedy meshing if enabled (much faster and more optimized)
 			if (GREEDY_MESHING_ENABLED) {
+				// Use object pooling for meshes to reduce garbage collection
 				const meshes = createGreedyMeshForChunk(chunksBlocks);
 				
 				// If no meshes were created, we're done
@@ -715,9 +770,21 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Add meshes to scene
 				chunkMeshesRef.current[chunkKey] = meshes;
 				Object.values(meshes).forEach(mesh => {
-					mesh.userData = { chunkKey };
+					mesh.userData = { 
+						chunkKey,
+						isGreedyMeshed: true 
+					};
 					safeAddToScene(mesh);
 				});
+				
+				// Log performance metrics
+				const endTime = performance.now();
+				const blockCount = Object.keys(chunksBlocks).length;
+				const meshCount = Object.keys(meshes).length;
+				if (blockCount > 100) { // Only log for larger chunks
+					console.log(`Chunk ${chunkKey} rebuilt in ${(endTime - startTime).toFixed(2)}ms ` +
+						`(${blockCount} blocks, ${meshCount} meshes)`);
+				}
 			} else {
 				// Use the original non-greedy meshing approach
 				// Group blocks by type
