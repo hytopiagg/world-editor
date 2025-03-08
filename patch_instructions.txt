@@ -1,0 +1,84 @@
+PATCH INSTRUCTIONS FOR TerrainBuilder.js
+
+There's a duplicate function definition issue in your TerrainBuilder.js file. To fix it, please manually apply these changes:
+
+1. FIND the original updateVisibleChunks function (around line ~1673):
+```javascript
+// Function to update which chunks are visible based on camera position and frustum
+const updateVisibleChunks = () => {
+    ...
+};
+```
+
+2. REPLACE it with:
+```javascript
+// Function to update which chunks are visible based on camera position and frustum
+const updateVisibleChunksWithViewDependency = () => {
+    if (!camera.current || !scene.current) return;
+    
+    // Skip if view-dependent chunk manager isn't initialized
+    if (!viewDependentChunkManager.current) return;
+    
+    // Update the camera information for priority calculations
+    viewDependentChunkManager.current.updateCamera(camera.current);
+    
+    // Use ChunkLoadManager for prioritized chunk loading
+    if (chunkLoadManager) {
+        // Clear existing queue
+        chunkLoadManager.clearQueue();
+        
+        // Get all available chunks
+        const chunks = Array.from(chunksRef.current.keys());
+        
+        // Skip if no chunks
+        if (chunks.length === 0) return;
+        
+        // Get chunks sorted by view-dependent priority
+        const prioritizedChunks = viewDependentChunkManager.current.getPrioritizedChunks(
+            chunks, 
+            camera.current.position,
+            chunks.length // Process all chunks but in priority order
+        );
+        
+        // Add chunks to queue with their calculated priorities
+        for (const { chunkKey, priority } of prioritizedChunks) {
+            chunkLoadManager.addChunkToQueue(chunkKey, priority * 100); // Scale priority for the queue
+        }
+        
+        // Debug info - show loading sequence
+        if (setDebugInfo && prioritizedChunks.length > 0) {
+            const debugChunkInfo = prioritizedChunks.slice(0, 5).map(({ chunkKey, priority }) => 
+                `${chunkKey}: ${priority.toFixed(2)}`
+            ).join(', ');
+            setDebugInfo(prev => ({ 
+                ...prev, 
+                chunkLoading: `Loading ${prioritizedChunks.length} chunks. Top 5: ${debugChunkInfo}`
+            }));
+        }
+    }
+    
+    // Original frustum culling code can go here if needed
+    // But our new priority-based system handles most of this already
+};
+```
+
+3. FIND all instances where updateVisibleChunks is called, and REPLACE them with updateVisibleChunksWithViewDependency:
+
+Look for these lines (line numbers approximate):
+- Line ~447: updateVisibleChunks();
+- Line ~470: updateVisibleChunks();
+- Line ~1718: updateVisibleChunks();
+- Line ~1722: updateVisibleChunks();
+- Line ~1739: updateVisibleChunks();
+
+4. DELETE the second duplicate function definition around line ~2023:
+```javascript
+const updateVisibleChunks = () => {
+    // This duplicate function should be removed entirely
+    ...
+};
+```
+
+5. FIND any remaining useEffect or other code referencing updateVisibleChunks and update to the new name.
+
+After these changes, the duplicate function error should be resolved, and your view-dependent chunk loading will work as expected. 

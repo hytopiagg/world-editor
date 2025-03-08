@@ -101,9 +101,11 @@ export class MinecraftToHytopiaConverter {
     console.log(`Additional XZ offsets: (${additionalOffsetX}, ${additionalOffsetZ})`);
     console.log(`After centering, map will extend from (${worldBounds.minX}, ${worldBounds.minY}, ${worldBounds.minZ}) to (${worldBounds.maxX}, ${worldBounds.maxY}, ${worldBounds.maxZ})`);
     
-    // Convert blocks within the selected region
-    for (const [posKey, blockData] of Object.entries(this.worldData.chunks)) {
-      const [x, y, z] = posKey.split(',').map(Number);
+    console.log(`Processing ${this.worldData.chunks.length} blocks from Minecraft world`);
+    
+    // Convert blocks within the selected region - FIXED to work with AnvilParser's array format
+    for (const blockData of this.worldData.chunks) {
+      const { x, y, z, type: mcBlockType } = blockData;
       
       // Calculate final position after centering and offsets
       const finalX = x - offsetX + additionalOffsetX;
@@ -112,7 +114,6 @@ export class MinecraftToHytopiaConverter {
       
       // Check if block is within the selected region and respects size limits
       if (this.isInFinalRegion(finalX, finalY, finalZ, regionWidth, regionHeight, regionDepth)) {
-        const mcBlockType = blockData.type;
         const mapping = this.blockMappings[mcBlockType];
         
         if (mapping && mapping.action !== 'skip' && blockTypeIdMap[mcBlockType]) {
@@ -127,12 +128,14 @@ export class MinecraftToHytopiaConverter {
       // Update progress for all blocks in original region
       if (this.isInRegion(x, y, z)) {
         processedCount++;
-        if (this.progressCallback && processedCount % 1000 === 0) {
+        if (this.progressCallback && processedCount % 10000 === 0) {
           const progress = Math.floor((processedCount / totalPotentialBlocks) * 100);
           this.progressCallback(progress);
         }
       }
     }
+    
+    console.log(`Conversion complete: Processed ${processedBlocks} blocks, skipped ${skippedBlocks} blocks`);
     
     // If no blocks were processed, return error
     if (processedBlocks === 0) {

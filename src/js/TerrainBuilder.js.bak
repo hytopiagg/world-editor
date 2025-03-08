@@ -19,8 +19,11 @@ import { ViewDependentChunkManager } from './ViewDependentChunkManager';
 // Import the ChunkWorkerManager
 import { ChunkWorkerManager } from './ChunkWorkerManager';
 
+// Import the LODManager
+import { LODManager } from './LODManager';
+
 // Define chunk constants
-const CHUNK_SIZE = 32;
+const CHUNK_SIZE = 32; 
 const CHUNK_BLOCK_CAPACITY = BLOCK_INSTANCED_MESH_CAPACITY / 8; // Smaller capacity per chunk
 const FRUSTUM_CULLING_DISTANCE = 48; // Reduced from 64 to be less noticeable
 const FRUSTUM_BUFFER_DISTANCE = 16; // Additional buffer distance to reduce popping
@@ -212,12 +215,14 @@ let textureAtlas = null;
 let chunkMeshBuilder = null;
 let chunkLoadManager = null;
 let chunkWorkerManager = null;
+let lodManager = null;
 
-// Track if the atlas is initialized
+// Track if managers are initialized
 let atlasInitialized = false;
 let workersInitialized = false;
+let lodInitialized = false;
 
-// Initialize the texture atlas and worker system
+// Initialize the texture atlas, worker system, and LOD
 const initTextureAtlas = async (blockTypes) => {
   if (atlasInitialized) return;
   
@@ -236,8 +241,15 @@ const initTextureAtlas = async (blockTypes) => {
     workersInitialized = true;
   }
   
+  // Initialize LOD manager
+  if (!lodInitialized) {
+    console.log("Initializing LOD system...");
+    lodManager = new LODManager();
+    lodInitialized = true;
+  }
+  
   atlasInitialized = true;
-  console.log("Texture atlas and worker system initialized");
+  console.log("Texture atlas, worker system, and LOD initialized");
   
   return textureAtlas.getAtlasTexture();
 };
@@ -1487,7 +1499,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Add spatial hash toggle
 		toggleSpatialHashRayCasting,
 		isSpatialHashRayCastingEnabled: () => useSpatialHashRef.current,
-		toggleWorkerUsage,
 	}));
 
 	// Add resize listener to update canvasRect
@@ -1532,7 +1543,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			}
 		};
 	}, []);
-
 	
 	// update the terrain blocks for added and removed blocks
 	const updateTerrainBlocks = (addedBlocks, removedBlocks) => {
@@ -1593,9 +1603,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		if (!scene.current) return;
 
 		// Get existing chunk mesh if any
-			if (chunkMeshesRef.current[chunkKey]) {
+		if (chunkMeshesRef.current[chunkKey]) {
 			safeRemoveFromScene(chunkMeshesRef.current[chunkKey]);
 			delete chunkMeshesRef.current[chunkKey];
+			
+			// Also clear LOD cache for this chunk
+			if (lodInitialized && lodManager) {
+				lodManager.clearChunkCache(chunkKey);
+			}
 		}
 
 		// Get blocks for this chunk
@@ -1619,23 +1634,44 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Generate mesh using worker
 				const geometry = await chunkWorkerManager.generateChunkMesh(chunkKey, chunksBlocks);
 				
-				// Create mesh
-				const mesh = chunkWorkerManager.createMeshFromGeometry(geometry);
+				// Create mesh (or LOD mesh if enabled)
+				let mesh;
+				
+				if (lodInitialized && useLOD && lodManager) {
+					// For LOD, we'll create a placeholder mesh that will be updated by the LOD system
+					// Store the original geometry for LOD calculations later
+					chunkGeometryCache.current.set(chunkKey, geometry);
+					
+					// Create basic mesh at LOD level 0 (full detail)
+					mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+						map: textureAtlas.getAtlasTexture(),
+						side: THREE.FrontSide,
+						transparent: false,
+						alphaTest: 0.5
+					}));
+					
+					// Tag the mesh for LOD updates
+					mesh.userData.requiresLODUpdate = true;
+					mesh.userData.chunkKey = chunkKey;
+				} else {
+					// Create regular mesh
+					mesh = chunkWorkerManager.createMeshFromGeometry(geometry);
+				}
 				
 				// Add to scene
 				chunkMeshesRef.current[chunkKey] = mesh;
-						safeAddToScene(mesh);
+				safeAddToScene(mesh);
 				
 				// Performance logging
 				endTime = performance.now();
 				if (setDebugInfo) {
 					setDebugInfo(prev => ({
 						...prev,
-						lastChunkTime: `${(endTime - startTime).toFixed(1)}ms (Worker)`
+						lastChunkTime: `${(endTime - startTime).toFixed(1)}ms (Worker${useLOD ? '+LOD' : ''})`
 					}));
 				}
 				
-					return;
+				return;
 			} catch (error) {
 				console.error("Error using worker-based mesh generation:", error);
 				// Fall back to normal methods
@@ -1652,12 +1688,19 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					chunkMeshesRef.current[chunkKey] = optimizedMesh;
 					safeAddToScene(optimizedMesh);
 					
+					// When using LOD system, store the geometry for later use
+					if (lodInitialized && useLOD && lodManager) {
+						chunkGeometryCache.current.set(chunkKey, optimizedMesh.geometry.clone());
+						optimizedMesh.userData.requiresLODUpdate = true;
+						optimizedMesh.userData.chunkKey = chunkKey;
+					}
+					
 					// Performance logging
 					endTime = performance.now();
 					if (setDebugInfo) {
 						setDebugInfo(prev => ({
 							...prev,
-							lastChunkTime: `${(endTime - startTime).toFixed(1)}ms (Main thread)`
+							lastChunkTime: `${(endTime - startTime).toFixed(1)}ms (Main thread${useLOD ? '+LOD' : ''})`
 						}));
 					}
 					
@@ -1897,7 +1940,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// If using original implementation that returns meshData, convert it to meshes
 		if (meshData) {
-				const geometry = new THREE.BufferGeometry();
+			const geometry = new THREE.BufferGeometry();
 			geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
 			geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
 			geometry.setAttribute('uv', new THREE.Float32BufferAttribute(meshData.uvs, 2));
@@ -1910,7 +1953,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				alphaTest: 0.5
 			});
 			
-				const mesh = new THREE.Mesh(geometry, material);
+			const mesh = new THREE.Mesh(geometry, material);
 			return { 'greedy': mesh };
 		}
 		
@@ -2125,6 +2168,56 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			}
 		}
 		
+		// Update LOD levels for all visible chunks if LOD is enabled
+		if (lodInitialized && useLOD && lodManager) {
+			const meshes = Object.entries(chunkMeshesRef.current);
+			
+			// For each chunk mesh, check if we need to update its LOD level
+			for (const [chunkKey, mesh] of meshes) {
+				// Skip if mesh doesn't exist or doesn't have userData
+				if (!mesh || !mesh.userData) continue;
+				
+				// Check if this mesh requires LOD updates
+				if (!mesh.userData.requiresLODUpdate) continue;
+				
+				// Get chunk position
+				const [cx, cy, cz] = chunkKey.split(',').map(Number);
+				const centerX = (cx + 0.5) * CHUNK_SIZE;
+				const centerY = (cy + 0.5) * CHUNK_SIZE;
+				const centerZ = (cz + 0.5) * CHUNK_SIZE;
+				
+				// Calculate distance to camera
+				const distance = camera.current.position.distanceTo(new THREE.Vector3(centerX, centerY, centerZ));
+				
+				// Get the appropriate LOD geometry from cache or generate it
+				const originalGeometry = chunkGeometryCache.current.get(chunkKey);
+				if (originalGeometry) {
+					const lodMesh = lodManager.getLODMeshForChunk(
+						chunkKey, 
+						originalGeometry, 
+						distance, 
+						textureAtlas.getAtlasTexture()
+					);
+					
+					// Replace the mesh in the scene if different from current
+					if (lodMesh !== mesh) {
+						// Copy original transform
+						lodMesh.position.copy(mesh.position);
+						lodMesh.rotation.copy(mesh.rotation);
+						lodMesh.scale.copy(mesh.scale);
+						
+						// Copy userData
+						lodMesh.userData = { ...mesh.userData };
+						
+						// Replace in scene
+						safeRemoveFromScene(mesh);
+						safeAddToScene(lodMesh);
+						chunkMeshesRef.current[chunkKey] = lodMesh;
+					}
+				}
+			}
+		}
+		
 		// Original frustum culling code can go here if needed
 		// But our new priority-based system handles most of this already
 	};
@@ -2228,6 +2321,80 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	}, [useWorkers, workersInitialized, setDebugInfo]);
 	
 	// ... existing code ...
+
+	// Add state to track LOD usage
+	const [useLOD, setUseLOD] = useState(true);
+	const [useLODDebug, setUseLODDebug] = useState(false);
+	
+	// ... existing code ...
+	
+	// Add method to toggle LOD usage
+	const toggleLOD = (enabled) => {
+		setUseLOD(enabled);
+		console.log(`LOD system ${enabled ? 'enabled' : 'disabled'}`);
+		
+		// Clear LOD cache if disabled to free memory
+		if (!enabled && lodInitialized && lodManager) {
+			lodManager.clearCache();
+		}
+		
+		// Force refresh of all chunks
+		meshesNeedsRefresh = true;
+	};
+	
+	// Add method to toggle LOD debug mode
+	const toggleLODDebug = (enabled) => {
+		setUseLODDebug(enabled);
+		
+		if (lodInitialized && lodManager) {
+			lodManager.setDebugMode(enabled);
+			
+			// Force refresh of all chunks
+			meshesNeedsRefresh = true;
+			
+			// Clear cache to rebuild with debug materials
+			lodManager.clearCache();
+		}
+	};
+	
+	// Add LOD status to debug info
+	useEffect(() => {
+		if (setDebugInfo && lodInitialized) {
+			setDebugInfo(prev => ({
+				...prev,
+				lodStatus: `LOD: ${useLOD ? 'Enabled' : 'Disabled'}${useLODDebug ? ' (Debug)' : ''}`
+			}));
+		}
+	}, [useLOD, useLODDebug, lodInitialized, setDebugInfo]);
+	
+	// ... existing cleanup code ...
+	useEffect(() => {
+		return () => {
+			if (chunkWorkerManager) {
+				chunkWorkerManager.dispose();
+			}
+			
+			// Also clean up LOD resources
+			if (lodInitialized && lodManager) {
+				lodManager.clearCache();
+			}
+		};
+	}, []);
+	
+	// ... existing code ...
+	
+	React.useImperativeHandle(ref, () => ({
+		// ... existing exposed methods ...
+	}));
+	
+	// ... existing code and return statement ...
+
+	// Add a geometry cache for LOD system
+	const chunkGeometryCache = useRef(new Map());
+	
+	// ... existing code ...
+
+	// Add right after the useImperativeHandle section:
 
 	// Main return statement
 	return (
