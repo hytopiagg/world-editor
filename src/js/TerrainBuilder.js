@@ -1008,10 +1008,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const normalizedMouse = pointer.clone();
 		// Setup raycaster with the normalized coordinates
 		raycaster.setFromCamera(normalizedMouse, camera);
-		
 		// Create a temporary array to store all intersections
 		let allIntersections = [];
-		
 		// Manually check each block in the terrain
 		Object.entries(terrainRef.current).forEach(([posKey, blockId]) => {
 			// Skip recently placed blocks during placement
@@ -1057,36 +1055,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			}
 		});
 		
-		// Also check intersection with the shadow plane (grid)
-		// This is essential for placing the first block when no blocks exist
-		const planeIntersects = raycaster.intersectObject(shadowPlaneRef.current);
-		
-		// Filter out any preview objects
-		const gridIntersections = planeIntersects.filter(hit => 
-			hit.object.isMesh && hit.object === shadowPlaneRef.current
-		);
-		
-		// If we hit the grid, add it to our intersections list
-		if (gridIntersections.length > 0) {
-			const gridHit = gridIntersections[0];
-			
-			// Calculate grid position
-			const point = gridHit.point.clone();
-			
-			// When placing the first block, we want to place it on top of the grid
-			// So we snap the y coordinate to 0 and adjust it upward if needed
-			// Depending on your grid setup, you may need to adjust this logic
-			const gridNormal = new THREE.Vector3(0, 1, 0); // Assuming grid faces upward
-			
-			allIntersections.push({
-				point,
-				normal: gridNormal,
-				block: { x: Math.floor(point.x), y: Math.floor(point.y), z: Math.floor(point.z) },
-				distance: gridHit.distance,
-				isGrid: true
-			});
-		}
-		
 		// Sort by distance (closest first)
 		allIntersections.sort((a, b) => a.distance - b.distance);
 		
@@ -1129,12 +1097,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Reuse vector for grid position calculation
 			tempVectorRef.current.copy(intersection.point);
 			
-			// Special handling for grid intersections (when there are no blocks)
-			if (intersection.isGrid) {
-				// For grid intersections, we want to place blocks on top of the grid
-				tempVectorRef.current.y = 0; // Start at grid level
-			}
-			
 			// Apply mode-specific adjustments
 			if (modeRef.current === "remove") {
 				tempVectorRef.current.x = Math.round(tempVectorRef.current.x - intersection.normal.x * 0.5);
@@ -1164,7 +1126,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						console.log("Axis locked to:", newAxis); // Debug log
 					}
 				}
-				
+
 				if (lockedAxisRef.current) {
 					// Lock movement to the determined axis
 					if (lockedAxisRef.current === 'x') {
@@ -1174,7 +1136,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}
 				}
 			}
-		
+
 			// Check if we've moved enough to update the preview position
 			// This adds hysteresis to prevent small jitters
 			if (!isFirstBlockRef.current && isPlacingRef.current) {
