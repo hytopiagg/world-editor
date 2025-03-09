@@ -30,6 +30,7 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   const handleComplete = useCallback(() => {
     if (importResult && importResult.hytopiaMap) {
       // Update the terrain with imported data
+      // The blocks property could be either an object or an Int16Array
       terrainBuilderRef.current?.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
     }
     

@@ -21,47 +21,71 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
           let terrainData = {};
           let environmentData = [];
           
-          // Lets make sure there is data at all
+          // Process any custom blocks first
+          if (importData.blockTypes && importData.blockTypes.length > 0) {
+            console.log(`Processing ${importData.blockTypes.length} block types from import`);
+            
+            // Process each block type, ensuring custom blocks are properly handled
+            for (const blockType of importData.blockTypes) {
+              // Only process blocks that are custom or have IDs in the custom range (100-199)
+              if (blockType.isCustom || (blockType.id >= 100 && blockType.id < 200)) {
+                console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
+                
+                // Make sure the block has all required properties
+                const processedBlock = {
+                  id: blockType.id,
+                  name: blockType.name,
+                  textureUri: blockType.textureUri,
+                  isCustom: true,
+                  isMultiTexture: blockType.isMultiTexture || false,
+                  sideTextures: blockType.sideTextures || {}
+                };
+                
+                // Process the custom block
+                await processCustomBlock(processedBlock);
+              }
+            }
+            
+            // Dispatch event to notify that custom blocks have been loaded
+            window.dispatchEvent(new CustomEvent('custom-blocks-loaded', {
+              detail: { 
+                blocks: importData.blockTypes.filter(b => b.isCustom || (b.id >= 100 && b.id < 200))
+              }
+            }));
+          }
+          
+          // Check if blocks data exists
           if (importData.blocks) {
+            // Check if blocks is an Int16Array or array-like object that needs conversion
+            if (Array.isArray(importData.blocks) || importData.blocks.buffer instanceof ArrayBuffer) {
+              console.log("Processing blocks in Int16Array format");
               
-            // Process any custom blocks first
-            if (importData.blockTypes && importData.blockTypes.length > 0) {
-              console.log(`Processing ${importData.blockTypes.length} block types from import`);
-              
-              // Process each block type, ensuring custom blocks are properly handled
-              for (const blockType of importData.blockTypes) {
-                // Only process blocks that are custom or have IDs in the custom range (100-199)
-                if (blockType.isCustom || (blockType.id >= 100 && blockType.id < 200)) {
-                  console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
-                  
-                  // Make sure the block has all required properties
-                  const processedBlock = {
-                    id: blockType.id,
-                    name: blockType.name,
-                    textureUri: blockType.textureUri,
-                    isCustom: true,
-                    isMultiTexture: blockType.isMultiTexture || false,
-                    sideTextures: blockType.sideTextures || {}
-                  };
-                  
-                  // Process the custom block
-                  await processCustomBlock(processedBlock);
-                }
+              // If it's an array but not an Int16Array, convert it
+              let blocksArray;
+              if (Array.isArray(importData.blocks)) {
+                blocksArray = new Int16Array(importData.blocks);
+              } else {
+                blocksArray = importData.blocks;
               }
               
-              // Dispatch event to notify that custom blocks have been loaded
-              window.dispatchEvent(new CustomEvent('custom-blocks-loaded', {
-                detail: { 
-                  blocks: importData.blockTypes.filter(b => b.isCustom || (b.id >= 100 && b.id < 200))
-                }
-              }));
+              // Convert Int16Array to object format for internal use
+              for (let i = 0; i < blocksArray.length; i += 4) {
+                const x = blocksArray[i];
+                const y = blocksArray[i + 1];
+                const z = blocksArray[i + 2];
+                const blockId = blocksArray[i + 3];
+                terrainData[`${x},${y},${z}`] = blockId;
+              }
+              
+              console.log(`Converted ${blocksArray.length / 4} blocks from Int16Array format`);
+            } else {
+              // Process traditional object format
+              console.log("Processing blocks in object format");
+              terrainData = Object.entries(importData.blocks).reduce((acc, [key, blockId]) => {
+                acc[key] = blockId;
+                return acc;
+              }, {});
             }
-
-            // Now process terrain data
-            terrainData = Object.entries(importData.blocks).reduce((acc, [key, blockId]) => {
-              acc[key] = blockId;
-              return acc;
-            }, {});
             
             // Convert entities to environment format
             if (importData.entities) {
@@ -155,13 +179,28 @@ export const exportMapFile = async (terrainBuilderRef) => {
     // Get environment data
     const environmentObjects = await DatabaseManager.getData(STORES.ENVIRONMENT, "current") || [];
 
-    // Simplify terrain data to just include block IDs
-    const simplifiedTerrain = Object.entries(terrainBuilderRef.current.getCurrentTerrainData()).reduce((acc, [key, value]) => {
-      if (key.split(",").length === 3) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {});
+    // Get terrain data
+    const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+    
+    // Convert terrain data to Int16Array for more efficient storage
+    const blockEntries = Object.entries(terrainData).filter(([key]) => key.split(",").length === 3);
+    const blockCount = blockEntries.length;
+    
+    // Create Int16Array to hold all block data (x, y, z, id for each block)
+    const blocksArray = new Int16Array(blockCount * 4);
+    
+    // Fill the array with block data
+    blockEntries.forEach(([key, blockId], index) => {
+      const [x, y, z] = key.split(',').map(Number);
+      const arrayIndex = index * 4;
+      
+      blocksArray[arrayIndex] = x;
+      blocksArray[arrayIndex + 1] = y;
+      blocksArray[arrayIndex + 2] = z;
+      blocksArray[arrayIndex + 3] = blockId;
+    });
+    
+    console.log(`Converted ${blockCount} blocks to Int16Array format`);
 
     const allBlockTypes = getBlockTypes();
     console.log("Exporting block types:", allBlockTypes);
@@ -191,7 +230,8 @@ export const exportMapFile = async (terrainBuilderRef) => {
           };
         }
       }),
-      blocks: simplifiedTerrain,
+      // Store blocks as array instead of object for more efficient serialization
+      blocks: Array.from(blocksArray),
       entities: environmentObjects.reduce((acc, obj) => {
         const entityType = environmentModels.find((model) => model.modelUrl === obj.modelUrl);
 

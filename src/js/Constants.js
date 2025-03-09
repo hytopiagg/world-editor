@@ -15,8 +15,8 @@ export const ENVIRONMENT_INSTANCED_MESH_CAPACITY = 50000;
 export const BLOCK_INSTANCED_MESH_CAPACITY = 500000;
 
 // Map import size limitations
-export const MAX_IMPORT_SIZE_X = 400;
-export const MAX_IMPORT_SIZE_Y = 400;
-export const MAX_IMPORT_SIZE_Z = 400;
-export const DEFAULT_IMPORT_SIZE = 400;
+export const MAX_IMPORT_SIZE_X = 500;
+export const MAX_IMPORT_SIZE_Y = 500;
+export const MAX_IMPORT_SIZE_Z = 500;
+export const DEFAULT_IMPORT_SIZE = 500;
 export const CENTER_IMPORTS_AT_ORIGIN = true;

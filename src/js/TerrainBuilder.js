@@ -1691,7 +1691,23 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 
 	const updateTerrainFromToolBar = (terrainData) => {
-		terrainRef.current = terrainData;
+		// Check if terrainData is an Int16Array (new format) or an object (old format)
+		if (terrainData instanceof Int16Array) {
+			console.log("Processing terrain data in Int16Array format");
+			// Convert Int16Array to the object format used internally
+			const convertedTerrain = {};
+			for (let i = 0; i < terrainData.length; i += 4) {
+				const x = terrainData[i];
+				const y = terrainData[i + 1];
+				const z = terrainData[i + 2];
+				const blockId = terrainData[i + 3];
+				convertedTerrain[`${x},${y},${z}`] = blockId;
+			}
+			terrainRef.current = convertedTerrain;
+		} else {
+			console.log("Processing terrain data in object format");
+			terrainRef.current = terrainData;
+		}
 		buildUpdateTerrain();
 	};
 
