@@ -157,6 +157,7 @@ function App() {
         debugInfo={debugInfo}
         totalBlocks={totalBlocks}
         totalEnvironmentObjects={totalEnvironmentObjects} 
+        terrainBuilderRef={terrainBuilderRef}
       />
 
       <ToolBar

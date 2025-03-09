@@ -138,6 +138,9 @@ export class ChunkMeshBuilder {
     this.maxBlocksPerBatch = 10000; // Maximum number of blocks per batch
     this.transparentBlocks = new Set(['minecraft:glass', 'minecraft:water', 'minecraft:leaves']); // Add more transparent blocks as needed
     this.useGreedyMeshing = true; // Enable greedy meshing by default
+    this.enableLod = true; // Enable Level of Detail
+    this.lodDistances = [3, 6, 10, 16]; // Chunk distances for different LOD levels
+    this.lodScales = [1, 2, 4, 8]; // Corresponding detail reduction factors
   }
   
   // Toggle greedy meshing
@@ -145,9 +148,57 @@ export class ChunkMeshBuilder {
     this.useGreedyMeshing = enabled;
   }
   
-  // Build optimized mesh for a chunk
-  buildChunkMesh(chunksBlocks, blockTypes) {
+  // Toggle LOD
+  setLodEnabled(enabled) {
+    this.enableLod = enabled;
+  }
+  
+  // Set LOD distance thresholds
+  setLodDistances(distances, scales) {
+    if (distances.length !== scales.length) {
+      console.error("LOD distances and scales arrays must have the same length");
+      return;
+    }
+    this.lodDistances = distances;
+    this.lodScales = scales;
+  }
+  
+  // Determine LOD level based on distance from camera
+  getLodLevel(chunkKey, camera) {
+    // Parse chunk coordinates
+    const [cx, cy, cz] = chunkKey.split(',').map(Number);
+    
+    // Calculate camera position in chunk coordinates
+    const cameraChunkX = Math.floor(camera.position.x / 32);
+    const cameraChunkY = Math.floor(camera.position.y / 32);
+    const cameraChunkZ = Math.floor(camera.position.z / 32);
+    
+    // Calculate chunk distance (in chunk units)
+    const distanceInChunks = Math.sqrt(
+      Math.pow(cx - cameraChunkX, 2) +
+      Math.pow(cy - cameraChunkY, 2) +
+      Math.pow(cz - cameraChunkZ, 2)
+    );
+    
+    // Find appropriate LOD level
+    for (let i = 0; i < this.lodDistances.length; i++) {
+      if (distanceInChunks <= this.lodDistances[i]) {
+        return i;
+      }
+    }
+    
+    // Default to highest LOD level if beyond all thresholds
+    return this.lodDistances.length - 1;
+  }
+  
+  // Build optimized mesh for a chunk with LOD support
+  buildChunkMesh(chunksBlocks, blockTypes, chunkKey, camera) {
     console.time('buildChunkMesh');
+    
+    // Determine LOD level based on distance
+    const lodLevel = this.enableLod && camera ? this.getLodLevel(chunkKey, camera) : 0;
+    const lodScale = this.lodScales[lodLevel];
+    
     const blockTypeMap = new Map();
     blockTypes.forEach(blockType => {
       blockTypeMap.set(blockType.id, blockType);
@@ -166,6 +217,14 @@ export class ChunkMeshBuilder {
       const blockType = blockTypeMap.get(blockId);
       
       if (!blockType) continue;
+      
+      // Apply LOD filtering - only include blocks that align with the LOD grid
+      if (lodScale > 1) {
+        // Skip blocks that don't align with the LOD grid
+        if ((x % lodScale !== 0) || (y % lodScale !== 0) || (z % lodScale !== 0)) {
+          continue;
+        }
+      }
       
       // Store block in grid for neighbor lookups
       blockGrid.set(posKey, {

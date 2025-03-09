@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, forwardRef, useMemo } from "react";
+import React, { useRef, useEffect, useState, forwardRef, useMemo, useImperativeHandle } from "react";
 import { useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -16,7 +16,7 @@ import { ToolManager, WallTool } from "./tools";
 // Define chunk constants
 const CHUNK_SIZE = 32;
 const CHUNK_BLOCK_CAPACITY = BLOCK_INSTANCED_MESH_CAPACITY / 8; // Smaller capacity per chunk
-const FRUSTUM_CULLING_DISTANCE = 48; // Reduced from 64 to be less noticeable
+const FRUSTUM_CULLING_DISTANCE = 64; // Increase view distance for less pop-in
 const FRUSTUM_BUFFER_DISTANCE = 16; // Additional buffer distance to reduce popping
 
 // Helper function to get chunk key from position
@@ -25,7 +25,7 @@ const getChunkKey = (x, y, z) => {
 };
 
 // Greedy meshing constants - use ref later to allow runtime toggling
-let GREEDY_MESHING_ENABLED = false; // Start with classic method for stability
+let GREEDY_MESHING_ENABLED = true; // Enable greedy meshing by default for better performance
 let meshesNeedsRefresh = false;
 
 // Get or set the greedy meshing state
@@ -253,6 +253,53 @@ const NEIGHBOR_CHECK_DIRECTIONS = [
     { offset: [0, 0, 1], axis: 2, dir: 1 },   // +Z
     { offset: [0, 0, -1], axis: 2, dir: -1 }  // -Z
 ];
+
+// Add performance optimization settings
+const PERFORMANCE_SETTINGS = {
+  maxChunksPerFrame: 5,          // Max chunks to process in a single frame
+  objectPooling: true,           // Reuse geometry/material objects
+  batchedGeometry: true,         // Combine similar geometries
+  occlusionCulling: true,        // Skip rendering fully hidden chunks
+  instancingEnabled: true,       // Use instanced meshes when possible
+  shadowDistance: 96            // Distance at which to disable shadows
+};
+
+// Function to toggle instanced rendering
+export const toggleInstancing = (enabled) => {
+  if (PERFORMANCE_SETTINGS.instancingEnabled !== enabled) {
+    console.log(`Setting instanced rendering to ${enabled}`);
+    PERFORMANCE_SETTINGS.instancingEnabled = enabled;
+    return true;
+  }
+  return false;
+};
+
+// Function to get current instancing state
+export const getInstancingEnabled = () => PERFORMANCE_SETTINGS.instancingEnabled;
+
+// Function to optimize rendering performance
+const optimizeRenderer = (gl) => {
+  // Optimize THREE.js renderer
+  if (gl) {
+    // Disable shadow auto update
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+    
+    // Optimize for static scenes
+    gl.sortObjects = false;
+    
+    // Don't change physically correct lights (keep default)
+    // Don't set output encoding (keep default)
+    
+    // Set power preference to high-performance
+    if (gl.getContextAttributes) {
+      const contextAttributes = gl.getContextAttributes();
+      if (contextAttributes) {
+        contextAttributes.powerPreference = "high-performance";
+      }
+    }
+  }
+};
 
 function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
 
@@ -509,35 +556,34 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			if (Object.keys(chunksBlocks).length === 0) {
 				return;
 			}
-			
-			// Use greedy meshing if enabled (much faster and more optimized)
+
+			// Try to use greedy meshing first if enabled
 			if (GREEDY_MESHING_ENABLED) {
-				// Use object pooling for meshes to reduce garbage collection
-				const meshes = createGreedyMeshForChunk(chunksBlocks);
-				
-				// If no meshes were created, we're done
-				if (!meshes) return;
-				
-				// Add meshes to scene
-				chunkMeshesRef.current[chunkKey] = meshes;
-				Object.values(meshes).forEach(mesh => {
-					mesh.userData = { 
-						chunkKey,
-						isGreedyMeshed: true 
-					};
-					safeAddToScene(mesh);
-				});
-				
-				// Log performance metrics
-				const endTime = performance.now();
-				const blockCount = Object.keys(chunksBlocks).length;
-				const meshCount = Object.keys(meshes).length;
-				if (blockCount > 100) { // Only log for larger chunks
-					console.log(`Chunk ${chunkKey} rebuilt in ${(endTime - startTime).toFixed(2)}ms ` +
-						`(${blockCount} blocks, ${meshCount} meshes)`);
+				try {
+					const meshes = createGreedyMeshForChunk(chunksBlocks);
+					if (meshes) {
+						if (!chunkMeshesRef.current[chunkKey]) {
+							chunkMeshesRef.current[chunkKey] = {};
+						}
+
+						// Add all generated meshes
+						Object.entries(meshes).forEach(([key, mesh]) => {
+							mesh.userData = { chunkKey };
+							mesh.frustumCulled = true;
+							chunkMeshesRef.current[chunkKey][key] = mesh;
+							safeAddToScene(mesh);
+						});
+						
+						return;
+					}
+				} catch (error) {
+					console.error("Error creating greedy mesh:", error);
 				}
-			} else {
-				// Use the original non-greedy meshing approach
+			}
+			
+			// If greedy meshing is disabled or failed, use instanced or standard rendering
+			if (PERFORMANCE_SETTINGS.instancingEnabled) {
+				// Use instanced rendering
 				// Group blocks by type
 				const blockTypes = {};
 				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
@@ -586,9 +632,52 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					chunkMeshesRef.current[chunkKey][blockId] = instancedMesh;
 					safeAddToScene(instancedMesh);
 				});
+			} else {
+				// Use standard (non-instanced) rendering - one mesh per block
+				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
+					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
+					if (!blockType) return;
+					
+					// Use cached geometry and material
+					const geometry = getCachedGeometry(blockType);
+					const material = getCachedMaterial(blockType);
+					
+					// Create regular mesh
+					const mesh = new THREE.Mesh(geometry, material);
+					
+					// Set position
+					const [x, y, z] = posKey.split(',').map(Number);
+					mesh.position.set(x, y, z);
+					
+					// Set metadata
+					mesh.userData = { blockId: blockType.id, chunkKey, blockPos: posKey };
+					mesh.frustumCulled = true;
+					mesh.castShadow = true;
+					mesh.receiveShadow = true;
+					
+					// Store and add to scene
+					if (!chunkMeshesRef.current[chunkKey]) {
+						chunkMeshesRef.current[chunkKey] = {};
+					}
+					if (!chunkMeshesRef.current[chunkKey][blockId]) {
+						chunkMeshesRef.current[chunkKey][blockId] = [];
+					}
+					if (Array.isArray(chunkMeshesRef.current[chunkKey][blockId])) {
+						chunkMeshesRef.current[chunkKey][blockId].push(mesh);
+					} else {
+						// If it's not an array (e.g., from a previous instanced mesh), make it an array
+						chunkMeshesRef.current[chunkKey][blockId] = [mesh];
+					}
+					safeAddToScene(mesh);
+				});
 			}
+			
+			// Record performance data
+			const endTime = performance.now();
+			console.log(`Chunk rebuild took ${endTime - startTime}ms`);
+			
 		} catch (error) {
-			console.error(`Error rebuilding chunk ${chunkKey}:`, error);
+			console.error("Error rebuilding chunk:", error, chunkKey);
 		}
 	};
 
@@ -1418,7 +1507,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	}, [scene, onSceneReady]);
 
 	// Expose buildUpdateTerrain and clearMap via ref
-	React.useImperativeHandle(ref, () => ({
+	useImperativeHandle(ref, () => ({
 		buildUpdateTerrain,
 		updateTerrainFromToolBar,
 		getCurrentTerrainData,
@@ -1465,6 +1554,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Add greedy meshing toggle
 		toggleGreedyMeshing,
 		getGreedyMeshingEnabled: () => GREEDY_MESHING_ENABLED,
+		
+		// Add instancing toggle
+		toggleInstancing,
+		getInstancingEnabled,
 		
 		// Add spatial hash toggle
 		toggleSpatialHashRayCasting,
@@ -1670,42 +1763,84 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Function to update which chunks are visible based on camera position and frustum
 	const updateVisibleChunks = () => {
-		if (!camera.current || !scene.current) return;
-
-		// ... existing frustum calculation code ...
-
-		// Use ChunkLoadManager for prioritized chunk loading
+		if (!camera || !scene) return;
+		
+		// Update frustum for culling
+		frustumRef.current.setFromProjectionMatrix(
+		frustumMatrixRef.current.multiplyMatrices(
+			camera.projectionMatrix,
+			camera.matrixWorldInverse
+			)
+		);
+		
+		// Track visible chunks for this update
+		const visibleChunks = new Set();
+		
+		// Check all chunks to see which are visible
+		chunksRef.current.forEach((_, chunkKey) => {
+			// Check if chunk is visible using our improved function
+			if (isChunkVisible(chunkKey, camera, frustumRef.current)) {
+				visibleChunks.add(chunkKey);
+				
+				// Ensure chunk mesh exists and is visible
+				if (!chunkMeshesRef.current[chunkKey]) {
+					// Queue chunk for loading if not already loaded
+					setTimeout(() => {
+						if (!isUpdatingChunksRef.current) {
+							rebuildChunkNoVisibilityUpdate(chunkKey);
+						}
+					}, 0);
+				} else {
+					// Make sure all meshes in the chunk are visible
+					const meshes = chunkMeshesRef.current[chunkKey];
+					Object.values(meshes).forEach(mesh => {
+						if (!scene.children.includes(mesh)) {
+							safeAddToScene(mesh);
+						}
+					});
+				}
+			} else {
+				// Chunk not visible, hide its meshes (but don't destroy them)
+				const meshes = chunkMeshesRef.current[chunkKey];
+				if (meshes) {
+					Object.values(meshes).forEach(mesh => {
+						if (scene.children.includes(mesh)) {
+							safeRemoveFromScene(mesh);
+						}
+					});
+				}
+			}
+		});
+		
+		// Use ChunkLoadManager for prioritized chunk loading if available
 		if (chunkLoadManager) {
 			// Clear existing queue
 			chunkLoadManager.clearQueue();
-
-			// Get chunks data - use chunksRef instead of blockRefsByChunk
-			const chunks = Array.from(chunksRef.current.keys());
-			const chunksWithDistance = chunks.map(chunkKey => {
+			
+			// Get chunks with distance
+			const chunksWithDistance = Array.from(visibleChunks).map(chunkKey => {
 				const [cx, cy, cz] = chunkKey.split(',').map(Number);
 				const centerX = (cx + 0.5) * CHUNK_SIZE;
 				const centerY = (cy + 0.5) * CHUNK_SIZE;
 				const centerZ = (cz + 0.5) * CHUNK_SIZE;
-				const dx = centerX - camera.current.position.x;
-				const dy = centerY - camera.current.position.y;
-				const dz = centerZ - camera.current.position.z;
+				const dx = centerX - camera.position.x;
+				const dy = centerY - camera.position.y;
+				const dz = centerZ - camera.position.z;
 				const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 				return { chunkKey, distance };
 			});
-
+			
 			// Sort by distance (closest first)
 			chunksWithDistance.sort((a, b) => a.distance - b.distance);
-
+			
 			// Add to load queue with priority based on distance
 			for (let i = 0; i < chunksWithDistance.length; i++) {
 				const { chunkKey, distance } = chunksWithDistance[i];
-				// Higher priority for closer chunks (inverse of distance)
-				const priority = 1000 - distance;
+				// Higher priority for closer chunks
+				const priority = Math.max(0, 1000 - Math.floor(distance));
 				chunkLoadManager.addChunkToQueue(chunkKey, priority);
 			}
 		}
-		
-		// ... rest of existing code ...
 	};
 
 	// Call update visible chunks when camera moves
@@ -2004,6 +2139,71 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			initAtlas();
 		}
 	}, [meshesInitializedRef && meshesInitializedRef.current]);
+
+	// Update the usages of these optimizations
+	useEffect(() => {
+		// Apply renderer optimizations
+		optimizeRenderer(gl);
+		
+		// Initialize camera manager with camera and controls
+		cameraManager.initialize(camera, orbitControlsRef.current);
+		
+		// Set up a consistent update loop
+		let frameId;
+		let lastTime = 0;
+		
+		const animate = (time) => {
+			frameId = requestAnimationFrame(animate);
+			
+			// Calculate delta time for smooth updates
+			const delta = time - lastTime;
+			lastTime = time;
+			
+			// Only update if enough time has passed (throttle updates)
+			if (delta > 16) { // ~60fps max
+				// Update visible chunks
+				updateVisibleChunks();
+				
+				// Only update shadows periodically
+				if (time % 500 < 16) {
+					gl.shadowMap.needsUpdate = true;
+				}
+				
+				// Force shadow maps to update occasionally
+				if (directionalLightRef.current) {
+					directionalLightRef.current.shadow.needsUpdate = time % 2000 < 16;
+				}
+			}
+		};
+		
+		// Start the animation loop
+		frameId = requestAnimationFrame(animate);
+		
+		// Clean up animation frame on component unmount
+		return () => {
+			cancelAnimationFrame(frameId);
+		};
+	}, [gl]);
+
+	// Helper function to check if a chunk is visible in the frustum
+	const isChunkVisible = (chunkKey, camera, frustum) => {
+		// Get chunk coordinates
+		const [x, y, z] = chunkKey.split('_').map(Number);
+		
+		// Create a bounding box for the chunk
+		const chunkSize = CHUNK_SIZE;
+		const worldX = x * chunkSize;
+		const worldY = y * chunkSize;
+		const worldZ = z * chunkSize;
+		
+		const chunkBox = new THREE.Box3(
+			new THREE.Vector3(worldX, worldY, worldZ),
+			new THREE.Vector3(worldX + chunkSize, worldY + chunkSize, worldZ + chunkSize)
+		);
+		
+		// Test if the chunk is in frustum
+		return frustum.intersectsBox(chunkBox);
+	};
 
 	// Main return statement
 	return (

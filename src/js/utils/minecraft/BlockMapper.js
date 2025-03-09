@@ -1,9 +1,12 @@
 // Default mapping from Minecraft to HYTOPIA blocks
-import { blockTypes } from '../../TerrainBuilder';
+import { blockTypes, getBlockTypes } from '../../TerrainBuilder';
 
 // First, let's create a function to find a block ID by name pattern
 function findBlockIdByName(pattern) {
-  if (!blockTypes || !blockTypes.length) {
+  // Get the latest block types to ensure we have up-to-date data
+  const currentBlockTypes = getBlockTypes();
+  
+  if (!currentBlockTypes || !currentBlockTypes.length) {
     // Use fallbacks if editor blocks aren't available
     return getFallbackBlockId(pattern);
   }
@@ -12,7 +15,7 @@ function findBlockIdByName(pattern) {
   const patternLower = pattern.toLowerCase();
   
   // First try exact match
-  const exactMatch = blockTypes.find(block => 
+  const exactMatch = currentBlockTypes.find(block => 
     block.name.toLowerCase() === patternLower
   );
   
@@ -21,7 +24,7 @@ function findBlockIdByName(pattern) {
   }
   
   // Then try includes match
-  const includesMatch = blockTypes.find(block => 
+  const includesMatch = currentBlockTypes.find(block => 
     block.name.toLowerCase().includes(patternLower)
   );
   
@@ -29,7 +32,7 @@ function findBlockIdByName(pattern) {
     return includesMatch.id;
   }
   
-  // If no match, fall back to default mapping
+  // If no matches, use fallbacks
   return getFallbackBlockId(pattern);
 }
 
@@ -179,69 +182,40 @@ export function suggestMapping(minecraftBlockName) {
     };
   }
   
-  // If no match found in blockTypes, use pattern matching
+  // Only do simple matches for obvious block types
+  // This is intentionally limited to very clear matches
   
-  // Map grass-related blocks to grass
-  if (blockName.includes('grass') || blockName.includes('fern') || blockName.includes('vine') || 
-      blockName.includes('leaves') || blockName.includes('foliage')) {
-    return { id: BLOCK_IDS.GRASS || 7, name: 'Grass', action: 'map' };
-  }
-  
-  // Map dirt-related blocks to dirt
-  if (blockName.includes('dirt') || blockName.includes('soil') || blockName.includes('mud')) {
-    return { id: BLOCK_IDS.DIRT || 4, name: 'Dirt', action: 'map' };
-  }
-  
-  // Map sand-related blocks
-  if (blockName.includes('sand') || blockName.includes('gravel')) {
-    return { id: BLOCK_IDS.SAND || 4, name: 'Sand', action: 'map' };
-  }
-  
-  // Map ore-related blocks to diamond ore
-  if (blockName.includes('ore') || blockName.includes('mineral')) {
-    return { id: BLOCK_IDS.DIAMOND_ORE || 3, name: 'Diamond Ore', action: 'map' };
-  }
-  
-  // Map brick/stone-related blocks to stone
-  if (blockName.includes('brick') || blockName.includes('stone') || blockName.includes('rock') || 
-      blockName.includes('cobble') || blockName.includes('smooth') || blockName.includes('polish')) {
+  // Exact matches for common materials - be very conservative
+  if (blockName === 'stone' || blockName === 'cobblestone') {
     return { id: BLOCK_IDS.STONE || 1, name: 'Stone', action: 'map' };
   }
   
-  // Map wood-related blocks
-  if (blockName.includes('log') || blockName.includes('wood')) {
-    return { id: findBlockIdByName('log') || BLOCK_IDS.OAK_PLANKS || 1, name: 'Log', action: 'map' };
+  if (blockName === 'dirt') {
+    return { id: BLOCK_IDS.DIRT || 4, name: 'Dirt', action: 'map' };
   }
   
-  // Map planks-related blocks
-  if (blockName.includes('plank')) {
-    return { id: BLOCK_IDS.OAK_PLANKS || 1, name: 'Oak Planks', action: 'map' };
+  if (blockName === 'grass_block' || blockName === 'grass') {
+    return { id: BLOCK_IDS.GRASS || 7, name: 'Grass', action: 'map' };
   }
   
-  // Map special blocks to dragons stone
-  if (blockName.includes('obsidian') || blockName.includes('end') || blockName.includes('nether') || 
-      blockName.includes('ancient') || blockName.includes('deepslate') || blockName.includes('bedrock')) {
-    return { id: BLOCK_IDS.DRAGON_STONE || 5, name: 'Dragons Stone', action: 'map' };
+  if (blockName === 'oak_log' || blockName === 'oak_planks') {
+    return { id: 2, name: 'Wood', action: 'map' };
   }
   
-  // Map clay-related blocks
-  if (blockName.includes('clay') || blockName.includes('terracotta')) {
-    return { id: BLOCK_IDS.CLAY || 2, name: 'Clay', action: 'map' };
+  if (blockName === 'water') {
+    return { id: BLOCK_IDS.WATER || 6, name: 'Water', action: 'map' };
   }
   
-  // Map water-related blocks
-  if (blockName.includes('water') || blockName.includes('ice') || blockName.includes('liquid') || 
-      blockName.includes('aqua')) {
-    return { id: BLOCK_IDS.WATER || 6, name: 'Water', action: 'map', isLiquid: true };
-  }
-  
-  // Default fallback
-  return DEFAULT_BLOCK_MAPPINGS.default;
+  // Default to skip for non-obvious matches - let user decide
+  return { action: 'skip' };
 }
 
 // Helper function to find matching block in blockTypes array
 function findMatchingBlock(blockNamePattern) {
-  if (!blockTypes || !blockTypes.length) {
+  // Get the latest block types
+  const currentBlockTypes = getBlockTypes();
+  
+  if (!currentBlockTypes || !currentBlockTypes.length) {
     return null;
   }
   
@@ -249,9 +223,8 @@ function findMatchingBlock(blockNamePattern) {
   const nameWithoutPrefix = blockNamePattern.replace('minecraft:', '');
   
   // Try direct match
-  let match = blockTypes.find(block => 
-    block.name.toLowerCase() === nameWithoutPrefix.toLowerCase() ||
-    block.name.toLowerCase().replace('-', '_') === nameWithoutPrefix.toLowerCase()
+  let match = currentBlockTypes.find(block => 
+    block.name.toLowerCase() === nameWithoutPrefix.toLowerCase()
   );
   
   if (match) {
@@ -259,10 +232,10 @@ function findMatchingBlock(blockNamePattern) {
   }
   
   // Try contains match
-  match = blockTypes.find(block => {
-    const normalizedBlockName = block.name.toLowerCase().replace(/-/g, '_');
-    return normalizedBlockName.includes(nameWithoutPrefix.toLowerCase()) ||
-           nameWithoutPrefix.toLowerCase().includes(normalizedBlockName);
+  match = currentBlockTypes.find(block => {
+    const normalizedBlockName = block.name.toLowerCase();
+    return normalizedBlockName.includes(nameWithoutPrefix) || 
+           nameWithoutPrefix.includes(normalizedBlockName);
   });
   
   return match || null;

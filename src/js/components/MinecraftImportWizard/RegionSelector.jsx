@@ -587,7 +587,7 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
           Select Entire World
         </button>
       </div>
-      
+
       {/* Add top-down visualization */}
       <div className="map-visualization">
         <h4>Top-Down Map View</h4>
@@ -895,8 +895,8 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
           </div>
           <div className="input-control">
             <label>Depth (Z):</label>
-            <input
-              type="number"
+          <input
+            type="number"
               min="1"
               max={MAX_IMPORT_SIZE_Z}
               value={size.z}
@@ -912,12 +912,12 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
         <div className="center-inputs">
           <div className="input-control">
             <label>Center X:</label>
-            <input
-              type="number"
+          <input
+            type="number"
               value={center.x}
               onChange={(e) => handleCenterChange('x', e.target.value)}
-            />
-          </div>
+          />
+        </div>
           <div className="input-control">
             <label>Center Y:</label>
             <input
@@ -931,8 +931,8 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
           </div>
           <div className="input-control">
             <label>Center Z:</label>
-            <input
-              type="number"
+          <input
+            type="number"
               value={center.z}
               onChange={(e) => handleCenterChange('z', e.target.value)}
             />

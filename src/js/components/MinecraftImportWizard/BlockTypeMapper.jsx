@@ -138,29 +138,25 @@ const BlockTypeMapper = ({ worldData, selectedRegion, onMappingsUpdated, initial
     Object.keys(updatedMappings).forEach(blockType => {
       // Only process blocks that are currently set to skip
       if (updatedMappings[blockType].action === 'skip') {
-        // Use the enhanced suggestMapping function to get a good match
+        // Try to get a suggestion first
         const suggestion = suggestMapping(blockType);
         
-        if (suggestion && suggestion.action !== 'skip') {
-          // Apply the suggested mapping
-          updatedMappings[blockType] = {
-            ...updatedMappings[blockType],
-            action: suggestion.action,
-            targetBlockId: suggestion.id
-          };
-          
-          changesCount++;
-        }
+        // For blocks that are still set to skip (no obvious match),
+        // force map them to a default block (grass - ID 7)
+        updatedMappings[blockType] = {
+          ...updatedMappings[blockType],
+          action: 'map',
+          targetBlockId: suggestion.action === 'map' ? suggestion.id : 7
+        };
+        
+        changesCount++;
       }
     });
     
-    // Update the mappings if any changes were made
-    if (changesCount > 0) {
-      setMappings(updatedMappings);
-      onMappingsUpdated(updatedMappings);
-    }
-    
-    return changesCount;
+    // Update state with new mappings
+    setMappings(updatedMappings);
+    onMappingsUpdated(updatedMappings);
+    console.log(`Applied default mappings to ${changesCount} previously unmapped blocks`);
   };
   
   const countBlocks = (action) => {
