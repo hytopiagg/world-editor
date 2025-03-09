@@ -108,45 +108,59 @@ export const processCustomBlock = (block) => {
 		return;
 	}
 
-	// Find existing block with same name
-	const existingBlock = blockTypesArray.find(b => b.name === block.name);
+	// Find existing block with same name or ID
+	let existingBlock = null;
+	
+	// If block has an ID, try to find by ID first
+	if (block.id) {
+		existingBlock = blockTypesArray.find(b => b.id === block.id);
+		if (existingBlock) {
+			console.log(`Found existing block with ID ${block.id}`);
+		}
+	}
+	
+	// If not found by ID, try to find by name
+	if (!existingBlock) {
+		existingBlock = blockTypesArray.find(b => b.name === block.name);
+		if (existingBlock) {
+			console.log(`Found existing block with name ${block.name}`);
+		}
+	}
 
 	if (existingBlock) {
-		// If block exists and has missing texture, update it
-		if (existingBlock.hasMissingTexture) {
-			existingBlock.textureUri = block.textureUri;
-			existingBlock.hasMissingTexture = false;
-			existingBlock.isMultiTexture = block.isMultiTexture || false;
-			existingBlock.sideTextures = block.sideTextures || {};
+		// If block exists, update it
+		existingBlock.textureUri = block.textureUri;
+		existingBlock.hasMissingTexture = false;
+		existingBlock.isMultiTexture = block.isMultiTexture || false;
+		existingBlock.sideTextures = block.sideTextures || {};
+		existingBlock.isCustom = true;
 
-			/// if the texture uri is not a data uri, then we need to set it to the error texture
-			if(!existingBlock.textureUri.startsWith('data:image/'))
-			{
-				console.error(`Texture failed to load for block ${existingBlock.name}, using error texture`);
-				existingBlock.textureUri = "./assets/blocks/error.png";
-				existingBlock.hasMissingTexture = true;
-			}
-		
-			// Save only custom blocks to database
-			const customBlocksOnly = blockTypesArray.filter(b => b.isCustom);
-			DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', customBlocksOnly)
-				.catch(error => console.error("Error saving updated blocks:", error));
-			
-			meshesNeedsRefresh = true;
-			console.log("Updated missing texture for block:", block.name);
-		} else {
-			console.log("Block already exists:", block.name);
+		/// if the texture uri is not a data uri, then we need to set it to the error texture
+		if(!existingBlock.textureUri.startsWith('data:image/'))
+		{
+			console.error(`Texture failed to load for block ${existingBlock.name}, using error texture`);
+			existingBlock.textureUri = "./assets/blocks/error.png";
+			existingBlock.hasMissingTexture = true;
 		}
-		return;
+	
+		// Save only custom blocks to database
+		const customBlocksOnly = blockTypesArray.filter(b => b.isCustom);
+		DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', customBlocksOnly)
+			.catch(error => console.error("Error saving updated blocks:", error));
+		
+		meshesNeedsRefresh = true;
+		console.log("Updated block:", existingBlock.name);
+		return existingBlock;
 	}
 
 	// Add new block with ID in custom block range (100-199)
 	const newBlock = {
-		id: Math.max(...blockTypesArray.filter(b => b.id >= 100).map(b => b.id), 99) + 1, // Start at 100 if no custom blocks exist
+		id: block.id || Math.max(...blockTypesArray.filter(b => b.id >= 100).map(b => b.id), 99) + 1, // Use provided ID or generate new one
 		name: block.name,
 		textureUri: block.textureUri,
 		isCustom: true,
 		isMultiTexture: block.isMultiTexture || false,
+		
 		sideTextures: block.sideTextures || {},
 		hasMissingTexture: false
 	};
@@ -175,6 +189,9 @@ export const processCustomBlock = (block) => {
 
 	meshesNeedsRefresh = true;
 	refreshBlockTools();
+	
+	console.log("Added new custom block:", newBlock);
+	return newBlock;
 };
 
 // Add function to remove custom blocks

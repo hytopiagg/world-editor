@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MinecraftToHytopiaConverter } from '../../utils/MinecraftToHytopiaConverter';
+import { processCustomBlock, getCustomBlocks } from '../../TerrainBuilder';
 
 const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) => {
   const [importing, setImporting] = useState(false);
@@ -31,46 +32,86 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
     setError(null);
     
     try {
-      // Create converter
-      const converter = new MinecraftToHytopiaConverter(worldData, selectedRegion, blockMappings);
+      // Process any custom textures first
+      const customMappings = Object.entries(blockMappings)
+        .filter(([_, mapping]) => mapping.action === 'custom')
+        .map(([blockType, mapping]) => ({
+          blockType,
+          name: mapping.name || formatBlockName(blockType),
+          textureUri: mapping.customTexture,
+          customTextureId: mapping.customTextureId
+        }));
       
-      // Set up progress tracking
-      converter.setProgressCallback((progressValue) => {
-        setProgress(progressValue);
-      });
+      if (customMappings.length > 0) {
+        console.log("Processing custom textures:", customMappings);
+        
+        // Process each custom texture
+        for (const mapping of customMappings) {
+          // Only process if it has a texture URI
+          if (mapping.textureUri) {
+            // Check if this custom texture already exists
+            const existingCustomBlocks = getCustomBlocks();
+            const existingBlock = existingCustomBlocks.find(block => 
+              block.id === mapping.customTextureId
+            );
+            
+            if (!existingBlock) {
+              console.log(`Processing custom texture for ${mapping.blockType}`);
+              // Process the custom block to ensure it exists
+              await processCustomBlock({
+                id: mapping.customTextureId,
+                name: mapping.name,
+                textureUri: mapping.textureUri,
+                isCustom: true
+              });
+            } else {
+              console.log(`Custom texture already exists for ${mapping.blockType}`);
+            }
+          }
+        }
+      }
+      
+      // Create converter
+      const converter = new MinecraftToHytopiaConverter(
+        worldData,
+        selectedRegion,
+        blockMappings
+      );
+      
+      // Set progress callback
+      converter.setProgressCallback(setProgress);
       
       // Start conversion
       const conversionResult = await converter.convert();
       
-      // Process result
-      setResult({
-        success: true,
-        hytopiaMap: conversionResult.hytopiaMap,
-        stats: conversionResult.stats
-      });
+      // Set result
+      setResult(conversionResult);
       
-      // Notify parent component
-      onComplete({
-        success: true,
-        hytopiaMap: conversionResult.hytopiaMap,
-        stats: conversionResult.stats || {
-          processedBlocks: 0,
-          skippedBlocks: 0,
-          uniqueBlockTypes: []
-        }
-      });
+      // Call onComplete with result
+      onComplete(conversionResult);
     } catch (err) {
-      console.error('Conversion error:', err);
-      setError(err.message || 'An unknown error occurred during conversion');
-      
-      // Notify parent of failure
+      console.error("Import error:", err);
+      setError(err.message || "An error occurred during import");
+      setResult({
+        success: false,
+        error: err.message || "An error occurred during import"
+      });
       onComplete({
         success: false,
-        error: err.message
+        error: err.message || "An error occurred during import"
       });
     } finally {
       setImporting(false);
     }
+  };
+  
+  // Helper function to format block names
+  const formatBlockName = (mcBlockName) => {
+    return mcBlockName
+      .replace('minecraft:', '')
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
   
   return (

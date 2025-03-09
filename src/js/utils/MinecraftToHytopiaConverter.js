@@ -39,11 +39,27 @@ export class MinecraftToHytopiaConverter {
         blockType = getHytopiaBlockById(parseInt(mapping.targetBlockId, 10));
       } else if (mapping.action === 'custom') {
         // Create new block type with custom texture
-        blockType = {
-          id: generateUniqueBlockId(hytopiaMap.blockTypes),
-          name: mapping.name || this.formatBlockName(mcBlockType),
-          textureUri: mapping.customTexture || 'blocks/unknown.png'
-        };
+        // For custom blocks, use the customTextureId if available
+        if (mapping.customTextureId) {
+          // Use the existing custom block ID
+          const customBlockId = mapping.customTextureId;
+          blockType = {
+            id: customBlockId,
+            name: mapping.name || this.formatBlockName(mcBlockType),
+            textureUri: mapping.customTexture || 'blocks/unknown.png',
+            isCustom: true
+          };
+          console.log(`Using existing custom block ID ${customBlockId} for ${mcBlockType}`);
+        } else {
+          // Generate a new ID if customTextureId is not available
+          blockType = {
+            id: generateUniqueBlockId(hytopiaMap.blockTypes),
+            name: mapping.name || this.formatBlockName(mcBlockType),
+            textureUri: mapping.customTexture || 'blocks/unknown.png',
+            isCustom: true
+          };
+          console.log(`Generated new ID ${blockType.id} for custom block ${mcBlockType}`);
+        }
       }
       
       if (blockType) {
@@ -61,14 +77,27 @@ export class MinecraftToHytopiaConverter {
     for (const [mcBlockType, mapping] of Object.entries(this.blockMappings)) {
       if (mapping.action === 'skip') continue;
       
-      const matchingBlockType = hytopiaMap.blockTypes.find(bt => 
-        (mapping.action === 'map' && bt.id === parseInt(mapping.targetBlockId, 10)) ||
-        (mapping.action === 'custom' && bt.name === (mapping.name || this.formatBlockName(mcBlockType)))
-      );
-      
-      if (matchingBlockType) {
-        blockTypeIdMap[mcBlockType] = matchingBlockType.id;
+      if (mapping.action === 'map') {
+        // For mapped blocks, use the targetBlockId
+        blockTypeIdMap[mcBlockType] = parseInt(mapping.targetBlockId, 10);
+      } else if (mapping.action === 'custom') {
+        // For custom blocks, use the customTextureId if available
+        if (mapping.customTextureId) {
+          blockTypeIdMap[mcBlockType] = mapping.customTextureId;
+        } else {
+          // Otherwise find the block in hytopiaMap.blockTypes by name
+          const matchingBlockType = hytopiaMap.blockTypes.find(bt => 
+            bt.name === (mapping.name || this.formatBlockName(mcBlockType))
+          );
+          
+          if (matchingBlockType) {
+            blockTypeIdMap[mcBlockType] = matchingBlockType.id;
+          }
+        }
       }
+      
+      // Log the mapping for debugging
+      console.log(`Block mapping for ${mcBlockType}: ${blockTypeIdMap[mcBlockType]}`);
     }
     
     // Calculate region dimensions (respecting maximum limits)

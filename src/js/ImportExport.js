@@ -16,7 +16,7 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
           // get the data from the event, and convert it to a json object
           const importData = JSON.parse(event.target.result);
 
-          console.log(importData);
+          console.log("Importing map data:", importData);
           
           let terrainData = {};
           let environmentData = [];
@@ -24,8 +24,38 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
           // Lets make sure there is data at all
           if (importData.blocks) {
               
-            /// process any custom blocks
-            importData.blockTypes.forEach(processCustomBlock);
+            // Process any custom blocks first
+            if (importData.blockTypes && importData.blockTypes.length > 0) {
+              console.log(`Processing ${importData.blockTypes.length} block types from import`);
+              
+              // Process each block type, ensuring custom blocks are properly handled
+              for (const blockType of importData.blockTypes) {
+                // Only process blocks that are custom or have IDs in the custom range (100-199)
+                if (blockType.isCustom || (blockType.id >= 100 && blockType.id < 200)) {
+                  console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
+                  
+                  // Make sure the block has all required properties
+                  const processedBlock = {
+                    id: blockType.id,
+                    name: blockType.name,
+                    textureUri: blockType.textureUri,
+                    isCustom: true,
+                    isMultiTexture: blockType.isMultiTexture || false,
+                    sideTextures: blockType.sideTextures || {}
+                  };
+                  
+                  // Process the custom block
+                  await processCustomBlock(processedBlock);
+                }
+              }
+              
+              // Dispatch event to notify that custom blocks have been loaded
+              window.dispatchEvent(new CustomEvent('custom-blocks-loaded', {
+                detail: { 
+                  blocks: importData.blockTypes.filter(b => b.isCustom || (b.id >= 100 && b.id < 200))
+                }
+              }));
+            }
 
             // Now process terrain data
             terrainData = Object.entries(importData.blocks).reduce((acc, [key, blockId]) => {
@@ -95,6 +125,7 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
           
           resolve();
         } catch (error) {
+          console.error("Error processing import:", error);
           reject(error);
         }
       };
@@ -133,22 +164,33 @@ export const exportMapFile = async (terrainBuilderRef) => {
     }, {});
 
     const allBlockTypes = getBlockTypes();
+    console.log("Exporting block types:", allBlockTypes);
 
-    // Create the export object
+    // Create the export object with properly formatted block types
     const exportData = {
-      blockTypes: Array.from(
-        new Map(
-          allBlockTypes.map((block) => [
-            block.id,
-            {
-              id: block.id,
-              name: block.name,
-              textureUri: block.isMultiTexture ? `blocks/${block.name}` : `blocks/${block.name}.png`,
-              isCustom: block.isCustom || false,
-            },
-          ])
-        ).values()
-      ),
+      blockTypes: allBlockTypes.map(block => {
+        // For custom blocks, preserve the exact texture URI
+        if (block.isCustom || block.id >= 100) {
+          return {
+            id: block.id,
+            name: block.name,
+            textureUri: block.textureUri, // Keep the original texture URI for custom blocks
+            isCustom: true,
+            isMultiTexture: block.isMultiTexture || false,
+            sideTextures: block.sideTextures || {}
+          };
+        } else {
+          // For standard blocks, use the normalized path format
+          return {
+            id: block.id,
+            name: block.name,
+            textureUri: block.isMultiTexture ? `blocks/${block.name}` : `blocks/${block.name}.png`,
+            isCustom: false,
+            isMultiTexture: block.isMultiTexture || false,
+            sideTextures: block.sideTextures || {}
+          };
+        }
+      }),
       blocks: simplifiedTerrain,
       entities: environmentObjects.reduce((acc, obj) => {
         const entityType = environmentModels.find((model) => model.modelUrl === obj.modelUrl);
@@ -185,6 +227,7 @@ export const exportMapFile = async (terrainBuilderRef) => {
         }
         return acc;
       }, {}),
+      version: version || "1.0.0"
     };
 
     // Convert to JSON and create a blob
