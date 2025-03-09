@@ -312,7 +312,7 @@ const optimizeRenderer = (gl) => {
   }
 };
 
-function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
+function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, sendTotalBlocks, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
 
 	// Scene setup
 	const { camera, scene, raycaster, pointer, gl } = useThree();
@@ -1705,6 +1705,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			totalBlocks: totalBlocksRef.current,
 			isGroundPlane: previewIsGroundPlaneRef.current,
 		});
+		
+		// Send total blocks to App component
+		if (sendTotalBlocks) {
+			sendTotalBlocks(totalBlocksRef.current);
+		}
 	}
 
 	const clearMap = () => {

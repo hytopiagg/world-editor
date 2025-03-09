@@ -10,6 +10,383 @@ import {
 // Minecraft 1.21 constants - bottom of the world is at Y=-69
 const MINECRAFT_BOTTOM_Y = -69;
 
+// Add CSS for the vertical slider
+const sliderStyles = `
+  .region-selector .vertical-slider-container {
+    display: flex;
+    align-items: stretch;
+    height: 300px;
+    margin: 20px 0;
+  }
+  
+  .region-selector .y-axis-labels {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-right: 10px;
+    font-weight: bold;
+    color: white;
+  }
+  
+  .region-selector .vertical-slider {
+    position: relative;
+    width: 80px;
+    background-color: #222;
+    border: 1px solid #444;
+    border-radius: 4px;
+    flex-grow: 1;
+    overflow: visible;
+  }
+  
+  .region-selector .y-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-left: 15px;
+    color: white;
+  }
+  
+  .region-selector .vertical-slider .info-item {
+    margin: 5px 0;
+  }
+  
+  .region-selector .vertical-slider .slider-handle {
+    z-index: 10;
+    user-select: none;
+    touch-action: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    transition: background-color 0.2s;
+  }
+  
+  .region-selector .vertical-slider .slider-handle:hover {
+    background-color: rgba(255, 255, 255, 0.5) !important;
+  }
+  
+  .region-selector .vertical-slider .slider-handle.dragging {
+    background-color: rgba(255, 255, 255, 0.6) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+  }
+  
+  .region-selector .vertical-slider .selected-height-bar {
+    transition: top 0.1s, height 0.1s;
+  }
+`;
+
+// Add CSS for the vertical range bars
+const rangeStyles = `
+  .region-selector .y-range-container {
+    display: flex;
+    align-items: stretch;
+    margin: 20px 0;
+    padding: 15px;
+    background-color: #222;
+    border-radius: 4px;
+  }
+  
+  .region-selector .y-axis-labels {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    padding-right: 20px;
+    color: white;
+    font-weight: bold;
+    min-width: 150px;
+  }
+  
+  .region-selector .vertical-range-bars {
+    display: flex;
+    justify-content: space-around;
+    flex-grow: 1;
+    padding: 0 20px;
+  }
+  
+  .region-selector .range-bar-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 15px;
+  }
+  
+  .region-selector .range-bar-container label {
+    margin-bottom: 10px;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+  }
+  
+  .region-selector .vertical-range {
+    -webkit-appearance: slider-vertical;
+    width: 60px;
+    height: 250px;
+    margin: 0;
+    padding: 0;
+    writing-mode: bt-lr; /* IE */
+    -webkit-appearance: slider-vertical; /* WebKit */
+    appearance: slider-vertical;
+  }
+  
+  /* Firefox-specific styles */
+  @-moz-document url-prefix() {
+    .region-selector .vertical-range {
+      transform: rotate(270deg);
+      width: 250px;
+      height: 60px;
+      margin: 95px -95px;
+    }
+    
+    .region-selector .range-bar-container {
+      height: 250px;
+      position: relative;
+    }
+  }
+  
+  .region-selector .top-range::-webkit-slider-thumb {
+    background-color: #4caf50;
+  }
+  
+  .region-selector .bottom-range::-webkit-slider-thumb {
+    background-color: #ff9800;
+  }
+  
+  .region-selector .y-info {
+    padding-left: 20px;
+    border-left: 1px solid #444;
+    color: white;
+    min-width: 200px;
+  }
+  
+  .region-selector .minecraft-info h5 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #2196f3;
+  }
+  
+  .region-selector .minecraft-info p {
+    margin: 5px 0;
+  }
+  
+  .region-selector .minecraft-info ul {
+    margin: 5px 0;
+    padding-left: 20px;
+  }
+  
+  .region-selector .minecraft-info li {
+    margin: 3px 0;
+  }
+`;
+
+// Add CSS for the Y selection with numeric inputs
+const ySelectionStyles = `
+  .region-selector .y-selection-container {
+    background-color: #222;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+  
+  .region-selector .y-info-panel {
+    color: white;
+  }
+  
+  .region-selector .y-info-panel h5 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #2196f3;
+    font-size: 16px;
+  }
+  
+  .region-selector .y-info-panel p {
+    margin: 5px 0;
+  }
+  
+  .region-selector .y-info-panel ul {
+    margin: 5px 0 15px 0;
+    padding-left: 20px;
+  }
+  
+  .region-selector .y-info-panel li {
+    margin: 3px 0;
+  }
+  
+  .region-selector .y-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .region-selector .y-input-group {
+    flex: 1;
+    min-width: 200px;
+  }
+  
+  .region-selector .y-input-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+  }
+  
+  .region-selector .y-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 2px solid #444;
+    border-radius: 4px;
+    background-color: #333;
+    color: white;
+    font-size: 16px;
+  }
+  
+  .region-selector .top-y {
+    border-color: #4caf50;
+  }
+  
+  .region-selector .bottom-y {
+    border-color: #ff9800;
+  }
+  
+  .region-selector .y-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #444;
+  }
+  
+  .region-selector .stat-item {
+    background-color: #333;
+    padding: 8px 12px;
+    border-radius: 4px;
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
+  }
+  
+  .region-selector .stat-label {
+    font-weight: bold;
+    margin-right: 5px;
+  }
+  
+  .region-selector .stat-value {
+    color: #2196f3;
+  }
+`;
+
+// Add CSS for the vertical box
+const verticalBoxStyles = `
+  .region-selector .vertical-box-container {
+    display: flex;
+    align-items: stretch;
+    margin: 20px 0;
+  }
+  
+  .region-selector .y-axis-labels {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-right: 10px;
+    font-weight: bold;
+    color: white;
+    min-width: 40px;
+  }
+  
+  .region-selector .vertical-box-wrapper {
+    position: relative;
+    width: 150px;
+    height: 300px;
+    margin-right: 20px;
+  }
+  
+  .region-selector .world-height-box {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #333;
+    border: 1px dashed #666;
+    border-radius: 4px;
+  }
+  
+  .region-selector .selected-height-box {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    background-color: rgba(33, 150, 243, 0.3);
+    border: 2px solid #2196f3;
+    box-sizing: border-box;
+    transition: top 0.1s, height 0.1s;
+  }
+  
+  .region-selector .y-handle {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 35px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border: 3px solid #2196f3;
+    cursor: ns-resize;
+    box-sizing: border-box;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+    transition: background-color 0.2s;
+  }
+  
+  .region-selector .y-handle:before {
+    content: "≡";
+    font-size: 20px;
+    color: white;
+    font-weight: bold;
+  }
+  
+  .region-selector .y-handle:hover {
+    background-color: rgba(255, 255, 255, 0.6) !important;
+  }
+  
+  .region-selector .top-handle {
+    top: 0;
+    transform: translateY(-50%);
+    border-color: #4caf50;
+  }
+  
+  .region-selector .bottom-handle {
+    bottom: 0;
+    transform: translateY(50%);
+    border-color: #ff9800;
+  }
+  
+  .region-selector .handle-label {
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  
+  .region-selector .y-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    color: white;
+  }
+  
+  .region-selector .info-item {
+    margin: 5px 0;
+  }
+  
+  .region-selector .info-label {
+    font-weight: bold;
+    margin-right: 5px;
+  }
+  
+  .region-selector .info-value {
+    color: #2196f3;
+  }
+`;
+
 const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
   // State for region bounds
   const [bounds, setBounds] = useState({
@@ -53,9 +430,7 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
 
   // State for the visualization
   const [viewBox, setViewBox] = useState('-10 -10 20 20');
-  const [sideViewBox, setSideViewBox] = useState('-10 -10 20 20');
   const svgRef = useRef(null);
-  const sideSvgRef = useRef(null);
   const worldSize = {
     width: worldData?.bounds ? worldData.bounds.maxX - worldData.bounds.minX + 1 : 100,
     depth: worldData?.bounds ? worldData.bounds.maxZ - worldData.bounds.minZ + 1 : 100,
@@ -68,7 +443,6 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
   
   // State for hover coordinates
   const [hoverCoords, setHoverCoords] = useState({ x: 0, z: 0, y: 0, show: false });
-  const [sideHoverCoords, setSideHoverCoords] = useState({ x: 0, y: 0, show: false });
 
   // Initialize from worldData or initialRegion
   useEffect(() => {
@@ -391,21 +765,12 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     }
   };
 
-  // Handle mouse move on the map to show coordinates
+  // Handle map mouse move
   const handleMapMouseMove = (e) => {
-    // Get point in SVG coordinates
-    const point = svgCoordinatesFromEvent(e);
-    if (!point) {
-      setHoverCoords({ x: null, z: null, show: false });
-      return;
-    }
+    // Get SVG coordinates
+    const coords = svgCoordinatesFromEvent(e);
     
-    // Round to integers since we're dealing with block coordinates
-    const x = Math.round(point.x);
-    const z = Math.round(point.y);
-    
-    // Update hover coordinates
-    setHoverCoords({ x, z, show: true });
+    // No need to update hover coordinates anymore
   };
   
   // Handle mouse leave
@@ -574,6 +939,117 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     }
   };
 
+  // Handle Y-axis drag move
+  const handleYDragMove = (e) => {
+    if (!yDragOperation || !isDragging) return;
+    
+    // Get the vertical box element
+    const boxElement = document.querySelector('.world-height-box');
+    if (!boxElement) return;
+    
+    // Get box position and dimensions
+    const boxRect = boxElement.getBoundingClientRect();
+    
+    // Calculate percentage based on mouse position
+    const mouseY = e.clientY;
+    const percentage = (mouseY - boxRect.top) / boxRect.height;
+    const clampedPercentage = Math.max(0, Math.min(1, percentage));
+    
+    // Calculate Y value based on world bounds
+    const worldMinY = worldData?.bounds?.minY || 0;
+    const worldMaxY = worldData?.bounds?.maxY || 100;
+    const worldHeight = worldMaxY - worldMinY;
+    
+    // Calculate new Y position (higher Y at top, lower Y at bottom)
+    const newY = Math.round(worldMaxY - (clampedPercentage * worldHeight));
+    
+    // Create a copy of the current bounds
+    const newBounds = { ...bounds };
+    
+    // Update only the bound being dragged
+    if (yDragOperation === 'top') {
+      // Update the top bound (maxY)
+      newBounds.maxY = newY;
+      
+      // Ensure maxY is greater than minY
+      if (newBounds.maxY <= newBounds.minY) {
+        newBounds.maxY = newBounds.minY + 1;
+      }
+      
+      // Ensure maxY is not greater than world maxY
+      if (worldData?.bounds && newBounds.maxY > worldData.bounds.maxY) {
+        newBounds.maxY = worldData.bounds.maxY;
+      }
+      
+      // Ensure size doesn't exceed MAX_IMPORT_SIZE_Y
+      if (newBounds.maxY - newBounds.minY + 1 > MAX_IMPORT_SIZE_Y) {
+        newBounds.maxY = newBounds.minY + MAX_IMPORT_SIZE_Y - 1;
+      }
+      
+      // Update only the necessary state
+      setBounds(newBounds);
+      
+      // Update size
+      setSize(prev => ({
+        ...prev,
+        y: newBounds.maxY - newBounds.minY + 1
+      }));
+      
+      // Update center
+      setCenter(prev => ({
+        ...prev,
+        y: Math.floor((newBounds.minY + newBounds.maxY) / 2)
+      }));
+      
+      // Notify parent component
+      onRegionSelected({
+        ...newBounds,
+        offsetX: offsets.x,
+        offsetZ: offsets.z
+      });
+    } else if (yDragOperation === 'bottom') {
+      // Update the bottom bound (minY)
+      newBounds.minY = newY;
+      
+      // Ensure minY is less than maxY
+      if (newBounds.minY >= newBounds.maxY) {
+        newBounds.minY = newBounds.maxY - 1;
+      }
+      
+      // Ensure minY is not less than world minY
+      if (worldData?.bounds && newBounds.minY < worldData.bounds.minY) {
+        newBounds.minY = worldData.bounds.minY;
+      }
+      
+      // Ensure size doesn't exceed MAX_IMPORT_SIZE_Y
+      if (newBounds.maxY - newBounds.minY + 1 > MAX_IMPORT_SIZE_Y) {
+        newBounds.minY = newBounds.maxY - MAX_IMPORT_SIZE_Y + 1;
+      }
+      
+      // Update only the necessary state
+      setBounds(newBounds);
+      
+      // Update size
+      setSize(prev => ({
+        ...prev,
+        y: newBounds.maxY - newBounds.minY + 1
+      }));
+      
+      // Update center
+      setCenter(prev => ({
+        ...prev,
+        y: Math.floor((newBounds.minY + newBounds.maxY) / 2)
+      }));
+      
+      // Notify parent component
+      onRegionSelected({
+        ...newBounds,
+        offsetX: offsets.x,
+        offsetZ: offsets.z
+      });
+    }
+  };
+  
   // Handle Y-axis drag start
   const handleYDragStart = (e, direction) => {
     e.preventDefault();
@@ -582,159 +1058,51 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     setYDragOperation(direction);
     setIsDragging(true);
     
-    const coords = sideSvgCoordinatesFromEvent(e);
-    setDragStartCoords({ ...dragStartCoords, x: coords.x, y: coords.y });
-    setDragStartBounds({ ...bounds });
+    // Add event listeners to document for drag move and end
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleYDragEnd);
   };
   
-  // Handle Y-axis drag move
-  const handleYDragMove = (e) => {
-    if (!yDragOperation || !isDragging) return;
-    
-    const coords = sideSvgCoordinatesFromEvent(e);
-    const deltaY = coords.y - dragStartCoords.y;
-    
-    const newBounds = { ...bounds };
-    
-    switch(yDragOperation) {
-      case 'top': // Top edge
-        newBounds.maxY = dragStartBounds.maxY + deltaY;
-        break;
-      case 'bottom': // Bottom edge
-        newBounds.minY = dragStartBounds.minY + deltaY;
-        break;
+  // Handle document mouse move for Y-axis dragging
+  const handleDocumentMouseMove = (e) => {
+    if (yDragOperation && isDragging) {
+      handleYDragMove(e);
     }
-    
-    // Ensure bounds remain valid (minY < maxY)
-    if (newBounds.minY >= newBounds.maxY) {
-      if (yDragOperation === 'bottom') {
-        newBounds.minY = newBounds.maxY - 1;
-      } else {
-        newBounds.maxY = newBounds.minY + 1;
-      }
-    }
-    
-    // Calculate new size and center based on bounds
-    const newSize = { ...size };
-    newSize.y = newBounds.maxY - newBounds.minY + 1;
-    
-    // Check if size exceeds limits
-    if (newSize.y > MAX_IMPORT_SIZE_Y) {
-      if (yDragOperation === 'top') {
-        newBounds.maxY = newBounds.minY + MAX_IMPORT_SIZE_Y - 1;
-      } else {
-        newBounds.minY = newBounds.maxY - MAX_IMPORT_SIZE_Y + 1;
-      }
-      newSize.y = MAX_IMPORT_SIZE_Y;
-    }
-    
-    // Update center Y
-    const newCenter = { ...center };
-    newCenter.y = Math.floor((newBounds.minY + newBounds.maxY) / 2);
-    
-    // Update state
-    setBounds(newBounds);
-    setSize(newSize);
-    setCenter(newCenter);
-    
-    // Notify parent component
-    onRegionSelected({
-      ...newBounds,
-      offsetX: offsets.x,
-      offsetZ: offsets.z
-    });
   };
   
   // Handle Y-axis drag end
   const handleYDragEnd = (e) => {
-    setYDragOperation(null);
-    setIsDragging(false);
-    setJustFinishedDrag(true);
-    
-    // Reset after a short delay to prevent immediate click events
-    setTimeout(() => {
-      setJustFinishedDrag(false);
-    }, 100);
-  };
-  
-  // Convert SVG coordinates for side view
-  const sideSvgCoordinatesFromEvent = (event) => {
-    if (!sideSvgRef.current) return { x: 0, y: 0 };
-    
-    const svg = sideSvgRef.current;
-    const pt = svg.createSVGPoint();
-    pt.x = event.clientX;
-    pt.y = event.clientY;
-    
-    const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
-    return { x: Math.round(svgP.x), y: Math.round(svgP.y) };
-  };
-  
-  // Handle side view mouse move
-  const handleSideViewMouseMove = (e) => {
-    const coords = sideSvgCoordinatesFromEvent(e);
-    setSideHoverCoords({
-      x: coords.x,
-      y: coords.y,
-      show: true
-    });
-  };
-  
-  // Handle side view mouse leave
-  const handleSideViewMouseLeave = () => {
-    setSideHoverCoords({
-      ...sideHoverCoords,
-      show: false
-    });
-  };
-  
-  // Handle side view click
-  const handleSideViewClick = (e) => {
-    if (isDragging || justFinishedDrag) return;
-    
-    const coords = sideSvgCoordinatesFromEvent(e);
-    
-    // Update center Y
-    const newCenter = { ...center };
-    newCenter.y = coords.y;
-    
-    // Calculate new bounds based on center and size
-    const halfSizeY = Math.floor(size.y / 2);
-    const newBounds = { ...bounds };
-    newBounds.minY = newCenter.y - halfSizeY;
-    newBounds.maxY = newCenter.y + halfSizeY;
-    
-    // Ensure bounds are within world limits if world data exists
-    if (worldData && worldData.bounds) {
-      if (newBounds.minY < worldData.bounds.minY) {
-        const diff = worldData.bounds.minY - newBounds.minY;
-        newBounds.minY += diff;
-        newBounds.maxY += diff;
-        newCenter.y += diff;
-      }
+    if (yDragOperation && isDragging) {
+      // Clean up event listeners
+      document.removeEventListener('mousemove', handleYDragMove);
+      document.removeEventListener('mouseup', handleYDragEnd);
       
-      if (newBounds.maxY > worldData.bounds.maxY) {
-        const diff = newBounds.maxY - worldData.bounds.maxY;
-        newBounds.minY -= diff;
-        newBounds.maxY -= diff;
-        newCenter.y -= diff;
-      }
+      // Reset drag state
+      setYDragOperation(null);
+      setIsDragging(false);
+      setJustFinishedDrag(true);
+      
+      // Reset after a short delay to prevent immediate click events
+      setTimeout(() => {
+        setJustFinishedDrag(false);
+      }, 100);
     }
-    
-    // Update state
-    setBounds(newBounds);
-    setCenter(newCenter);
-    
-    // Notify parent component
-    onRegionSelected({
-      ...newBounds,
-      offsetX: offsets.x,
-      offsetZ: offsets.z
-    });
   };
 
   return (
     <div className="region-selector">
+      {/* Add style tag for vertical slider */}
+      <style>{sliderStyles}</style>
+      
+      {/* Add style tag for vertical range bars */}
+      <style>{rangeStyles}</style>
+      
+      {/* Add style tag for Y selection with numeric inputs */}
+      <style>{ySelectionStyles}</style>
+      
+      {/* Add style tag for vertical box */}
+      <style>{verticalBoxStyles}</style>
+      
       <div className="region-header">
         <h3>Select Region to Import</h3>
         <div className="region-info-compact">
@@ -762,9 +1130,9 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
         </div>
       )}
       
-      <div className="y-mapping-info compact">
-        <span className="mapping-label">Y-Level:</span>
-        <span className="mapping-value"><span className="minecraft-y">MC Y={bounds.minY}</span> → <span className="hytopia-y">Hytopia Y=0</span> | <span className="minecraft-y">MC Y={bounds.maxY}</span> → <span className="hytopia-y">Hytopia Y={height-1}</span></span>
+      <div className="region-info">
+        <h4>Selected Region</h4>
+        <p>Current selection: X: {bounds.minX} to {bounds.maxX}, Y: {bounds.minY} (bottom) to {bounds.maxY} (top), Z: {bounds.minZ} to {bounds.maxZ}</p>
       </div>
 
       <div className="region-selector-actions">
@@ -1007,31 +1375,6 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
               >
                 {bounds.maxZ}
               </text>
-              
-              {/* Hover coordinates */}
-              {hoverCoords.show && (
-                <g className="hover-coords">
-                  <rect
-                    x={hoverCoords.x - Math.max(worldSize.width, worldSize.depth) * 0.05}
-                    y={hoverCoords.z - Math.max(worldSize.width, worldSize.depth) * 0.05}
-                    width={Math.max(worldSize.width, worldSize.depth) * 0.1}
-                    height={Math.max(worldSize.width, worldSize.depth) * 0.05}
-                    fill="rgba(0, 0, 0, 0.7)"
-                    rx={Math.max(worldSize.width, worldSize.depth) * 0.01}
-                    ry={Math.max(worldSize.width, worldSize.depth) * 0.01}
-                  />
-                  <text
-                    x={hoverCoords.x}
-                    y={hoverCoords.z}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fill="#fff"
-                    fontSize={Math.max(worldSize.width, worldSize.depth) * 0.025}
-                  >
-                    ({hoverCoords.x}, {hoverCoords.z})
-                  </text>
-                </g>
-              )}
             </svg>
             <div className="map-legend">
               <div className="legend-item">
@@ -1047,173 +1390,91 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
                 <span>Center Point</span>
               </div>
             </div>
-            {hoverCoords.show && (
-              <div className="current-coords">
-                Hovering at: X: {hoverCoords.x}, Z: {hoverCoords.z}
-              </div>
-            )}
           </div>
         </div>
         
-        {/* Side view visualization */}
-        <div className="map-visualization side-view">
-          <h4>Side View (X-Y)</h4>
-          <p>Click to set Y center, drag top/bottom to adjust height.</p>
-          <div className="map-container">
-            <svg 
-              ref={sideSvgRef}
-              viewBox={`${bounds.minX - padding} ${worldData?.bounds?.minY - heightPadding || -10} ${worldSize.width + padding * 2} ${worldSize.height + heightPadding * 2}`} 
-              preserveAspectRatio="xMidYMid meet" 
-              className="map-svg side-svg"
-              onClick={handleSideViewClick}
-              onMouseMove={(e) => {
-                handleSideViewMouseMove(e);
-                if (yDragOperation) {
-                  handleYDragMove(e);
-                }
-              }}
-              onMouseLeave={(e) => {
-                handleSideViewMouseLeave();
-                if (yDragOperation) {
-                  handleYDragEnd(e);
-                }
-              }}
-              onMouseUp={(e) => {
-                if (yDragOperation) {
-                  handleYDragEnd(e);
-                }
-              }}
-            >
-              {/* World boundary */}
+        {/* Y-axis visualization - Vertical box */}
+        <div className="map-visualization">
+          <h4>Height Selection (Y-Axis)</h4>
+          <p>Drag top/bottom edges to adjust height.</p>
+          <div className="vertical-box-container">
+            <div className="y-axis-labels">
               {worldData?.bounds && (
-                <rect
-                  x={worldData.bounds.minX}
-                  y={worldData.bounds.minY}
-                  width={worldData.bounds.maxX - worldData.bounds.minX}
-                  height={worldData.bounds.maxY - worldData.bounds.minY}
-                  fill="#333"
-                  stroke="#666"
-                  strokeWidth={Math.max(worldSize.width, worldSize.height) * 0.005}
-                  strokeDasharray="5,5"
-                />
+                <>
+                  <div className="y-label top">{worldData.bounds.maxY}</div>
+                  <div className="y-label bottom">{worldData.bounds.minY}</div>
+                </>
               )}
-              
-              {/* Selected region */}
-              <rect
-                x={bounds.minX}
-                y={bounds.minY}
-                width={bounds.maxX - bounds.minX}
-                height={bounds.maxY - bounds.minY}
-                fill="rgba(33, 150, 243, 0.3)"
-                stroke="#2196f3"
-                strokeWidth={Math.max(worldSize.width, worldSize.height) * 0.01}
-                className={yDragOperation ? "dragging" : ""}
-              />
-              
-              {/* Top handle */}
-              <rect
-                x={bounds.minX}
-                y={bounds.maxY - Math.max(worldSize.width, worldSize.height) * 0.015}
-                width={bounds.maxX - bounds.minX}
-                height={Math.max(worldSize.width, worldSize.height) * 0.03}
-                fill="rgba(255, 255, 255, 0.3)"
-                stroke="#2196f3"
-                strokeWidth={1}
-                style={{ cursor: 'ns-resize' }}
-                className="drag-handle"
-                onMouseDown={(e) => handleYDragStart(e, 'top')}
-              />
-              
-              {/* Bottom handle */}
-              <rect
-                x={bounds.minX}
-                y={bounds.minY - Math.max(worldSize.width, worldSize.height) * 0.015}
-                width={bounds.maxX - bounds.minX}
-                height={Math.max(worldSize.width, worldSize.height) * 0.03}
-                fill="rgba(255, 255, 255, 0.3)"
-                stroke="#2196f3"
-                strokeWidth={1}
-                style={{ cursor: 'ns-resize' }}
-                className="drag-handle"
-                onMouseDown={(e) => handleYDragStart(e, 'bottom')}
-              />
-              
-              {/* Center point */}
-              <circle
-                cx={(bounds.minX + bounds.maxX) / 2}
-                cy={center.y}
-                r={Math.max(worldSize.width, worldSize.height) * 0.015}
-                fill="#ff4081"
-                stroke="#fff"
-                strokeWidth={Math.max(worldSize.width, worldSize.height) * 0.005}
-              />
-              
-              {/* Y-axis labels */}
-              <text
-                x={bounds.minX - heightPadding * 0.1}
-                y={bounds.minY}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fill="#fff"
-                fontSize={Math.max(worldSize.width, worldSize.height) * 0.03}
-              >
-                {bounds.minY}
-              </text>
-              <text
-                x={bounds.minX - heightPadding * 0.1}
-                y={bounds.maxY}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fill="#fff"
-                fontSize={Math.max(worldSize.width, worldSize.height) * 0.03}
-              >
-                {bounds.maxY}
-              </text>
-              
-              {/* Hover coordinates */}
-              {sideHoverCoords.show && (
-                <g className="hover-coords">
-                  <rect
-                    x={sideHoverCoords.x - Math.max(worldSize.width, worldSize.height) * 0.05}
-                    y={sideHoverCoords.y - Math.max(worldSize.width, worldSize.height) * 0.05}
-                    width={Math.max(worldSize.width, worldSize.height) * 0.1}
-                    height={Math.max(worldSize.width, worldSize.height) * 0.05}
-                    fill="rgba(0, 0, 0, 0.7)"
-                    rx={Math.max(worldSize.width, worldSize.height) * 0.01}
-                    ry={Math.max(worldSize.width, worldSize.height) * 0.01}
-                  />
-                  <text
-                    x={sideHoverCoords.x}
-                    y={sideHoverCoords.y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fill="#fff"
-                    fontSize={Math.max(worldSize.width, worldSize.height) * 0.025}
+            </div>
+            
+            <div className="vertical-box-wrapper">
+              {/* World height background */}
+              <div className="world-height-box">
+                {/* Selected height box */}
+                <div 
+                  className="selected-height-box"
+                  style={{
+                    top: `${worldData?.bounds ? 
+                      ((worldData.bounds.maxY - bounds.maxY) / (worldData.bounds.maxY - worldData.bounds.minY)) * 100 : 0}%`,
+                    height: `${worldData?.bounds ? 
+                      ((bounds.maxY - bounds.minY) / (worldData.bounds.maxY - worldData.bounds.minY)) * 100 : 50}%`
+                  }}
+                >
+                  {/* Top handle */}
+                  <div 
+                    className="y-handle top-handle"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      
+                      // Start dragging the top handle
+                      setYDragOperation('top');
+                      setIsDragging(true);
+                      
+                      // Add document event listeners
+                      document.addEventListener('mousemove', handleYDragMove);
+                      document.addEventListener('mouseup', handleYDragEnd);
+                    }}
                   >
-                    ({sideHoverCoords.x}, {sideHoverCoords.y})
-                  </text>
-                </g>
-              )}
-            </svg>
-            <div className="map-legend">
-              <div className="legend-item">
-                <div className="legend-color" style={{ backgroundColor: "#666", border: "1px dashed #999" }}></div>
-                <span>World Height</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-color" style={{ backgroundColor: "rgba(33, 150, 243, 0.3)", border: "2px solid #2196f3" }}></div>
-                <span>Selected Height</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-color" style={{ backgroundColor: "#ff4081", borderRadius: "50%", border: "2px solid #fff" }}></div>
-                <span>Center Y</span>
+                    <div className="handle-label">{bounds.maxY}</div>
+                  </div>
+                  
+                  {/* Bottom handle */}
+                  <div 
+                    className="y-handle bottom-handle"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      
+                      // Start dragging the bottom handle
+                      setYDragOperation('bottom');
+                      setIsDragging(true);
+                      
+                      // Add document event listeners
+                      document.addEventListener('mousemove', handleYDragMove);
+                      document.addEventListener('mouseup', handleYDragEnd);
+                    }}
+                  >
+                    <div className="handle-label">{bounds.minY}</div>
+                  </div>
+                </div>
               </div>
             </div>
-            {sideHoverCoords.show && (
-              <div className="current-coords">
-                Hovering at: X: {sideHoverCoords.x}, Y: {sideHoverCoords.y}
+            
+            <div className="y-info">
+              <div className="info-item">
+                <span className="info-label">Height:</span>
+                <span className="info-value">{size.y} blocks</span>
               </div>
-            )}
+              <div className="info-item">
+                <span className="info-label">Center Y:</span>
+                <span className="info-value">{center.y}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Range:</span>
+                <span className="info-value">{bounds.minY} to {bounds.maxY}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1250,40 +1511,6 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
               max={MAX_IMPORT_SIZE_Z}
               value={size.z}
               onChange={(e) => handleSizeChange('z', e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-      
-      <div className="center-controls">
-        <h4>Center Point</h4>
-        <p>Set the center point of the region to import in Minecraft coordinates.</p>
-        <div className="center-inputs">
-          <div className="input-control">
-            <label>Center X:</label>
-            <input
-              type="number"
-              value={center.x}
-              onChange={(e) => handleCenterChange('x', e.target.value)}
-            />
-          </div>
-          <div className="input-control">
-            <label>Center Y:</label>
-            <input
-              type="number"
-              value={center.y}
-              onChange={(e) => handleCenterChange('y', e.target.value)}
-            />
-            <div className="y-info">
-              Minecraft Y: {center.y}, Hytopia Y: {adjustYForHytopia(center.y)}
-            </div>
-          </div>
-          <div className="input-control">
-            <label>Center Z:</label>
-            <input
-              type="number"
-              value={center.z}
-              onChange={(e) => handleCenterChange('z', e.target.value)}
             />
           </div>
         </div>
