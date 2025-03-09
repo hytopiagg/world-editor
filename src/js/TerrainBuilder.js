@@ -21,7 +21,7 @@ const FRUSTUM_BUFFER_DISTANCE = 16; // Additional buffer distance to reduce popp
 const MAX_SELECTION_DISTANCE = 32; // Maximum distance for block selection (in blocks)
 
 // Selection distance for raycasting
-let selectionDistance = MAX_SELECTION_DISTANCE;
+let selectionDistance = MAX_SELECTION_DISTANCE; // Store the current value
 export const getSelectionDistance = () => selectionDistance;
 export const setSelectionDistance = (distance) => {
   const newDistance = Math.max(16, Math.min(256, distance)); // Clamp between 16 and 256
@@ -380,6 +380,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Toggle use of spatial hash for ray casting
 	const useSpatialHashRef = useRef(true); // Default to true
 	
+	// Chunk update queue refs
+	const chunkUpdateQueueRef = useRef([]);
+	const isProcessingChunkQueueRef = useRef(false);
+	const lastChunkProcessTimeRef = useRef(0);
+	
 	const toggleSpatialHashRayCasting = (enabled) => {
 		if (enabled === undefined) {
 			// Toggle if no value provided
@@ -544,31 +549,38 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// A version of rebuildChunk that doesn't update visibility (for batch processing)
 	const rebuildChunkNoVisibilityUpdate = (chunkKey) => {
-		// Skip if already being processed or scene not ready
+		// Skip if scene not ready
 		if (!scene || !meshesInitializedRef.current) return;
 		
-		// Performance tracking
-		const startTime = performance.now();
-		
 		try {
-			// Get all blocks in this chunk
-			const chunksBlocks = chunksRef.current.get(chunkKey) || {};
-			
 			// Clean up existing chunk meshes for this specific chunk
 			if (chunkMeshesRef.current[chunkKey]) {
 				Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
 					safeRemoveFromScene(mesh);
-					// Don't dispose geometries here, they are cached and reused
 				});
 			}
 			chunkMeshesRef.current[chunkKey] = {};
 			
-			// If no blocks in this chunk, we're done
-			if (Object.keys(chunksBlocks).length === 0) {
+			// If chunk doesn't exist in our tracking, nothing to do
+			if (!chunksRef.current.has(chunkKey)) {
 				return;
 			}
 			
-			// Try to use greedy meshing first if enabled
+			// Get blocks for this chunk
+			const chunkBlocks = chunksRef.current.get(chunkKey) || {};
+			
+			// If no blocks in this chunk, we're done
+			if (Object.keys(chunkBlocks).length === 0) {
+				return;
+			}
+			
+			// Format chunk data for mesh generation
+			const chunksBlocks = {};
+			Object.entries(chunkBlocks).forEach(([posKey, blockId]) => {
+				chunksBlocks[posKey] = blockId;
+			});
+			
+			// Try to use greedy meshing first if enabled (most efficient)
 			if (GREEDY_MESHING_ENABLED) {
 				try {
 				const meshes = createGreedyMeshForChunk(chunksBlocks);
@@ -585,13 +597,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					safeAddToScene(mesh);
 				});
 				
-						// Record performance
-				const endTime = performance.now();
-						const duration = endTime - startTime;
-						if (duration > 16) {
-							console.log(`Greedy mesh chunk rebuild took ${duration.toFixed(2)}ms`);
-						}
-						
 						return;
 					}
 				} catch (error) {
@@ -599,12 +604,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				}
 			}
 			
-			// If greedy meshing is disabled or failed, use instanced or standard rendering
+			// Fall back to instanced rendering (second most efficient)
 			if (PERFORMANCE_SETTINGS.instancingEnabled) {
-				// Use object pooling for matrices if enabled
-				const matrixPool = PERFORMANCE_SETTINGS.objectPooling ? [] : null;
-				
-				// Group blocks by type (to reduce number of instanced meshes)
+				// Group blocks by type
 				const blockTypes = {};
 				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
 					if (!blockTypes[blockId]) {
@@ -634,21 +636,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					instancedMesh.castShadow = true;
 					instancedMesh.receiveShadow = true;
 					
-					// Create a temp matrix for reuse if using object pooling
-					const tempMatrix = PERFORMANCE_SETTINGS.objectPooling ? new THREE.Matrix4() : null;
+					// Use pooled matrix if available
+					const tempMatrix = new THREE.Matrix4();
 					
 					// Set matrix for each block
 					positions.forEach((posKey, index) => {
 						const [x, y, z] = posKey.split(',').map(Number);
-						
-						// Reuse matrix object if pooling is enabled
-						if (PERFORMANCE_SETTINGS.objectPooling) {
-							tempMatrix.makeTranslation(x, y, z);
-							instancedMesh.setMatrixAt(index, tempMatrix);
-						} else {
-						const matrix = new THREE.Matrix4().setPosition(x, y, z);
-						instancedMesh.setMatrixAt(index, matrix);
-						}
+						tempMatrix.makeTranslation(x, y, z);
+						instancedMesh.setMatrixAt(index, tempMatrix);
 					});
 					
 					// Update mesh
@@ -663,29 +658,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					safeAddToScene(instancedMesh);
 				});
 			} else {
-				// Use standard (non-instanced) rendering - one mesh per block
+				// Individual meshes as last resort
 				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
 					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
 					if (!blockType) return;
 					
-					// Use cached geometry and material
 					const geometry = getCachedGeometry(blockType);
 					const material = getCachedMaterial(blockType);
 					
-					// Create regular mesh
 					const mesh = new THREE.Mesh(geometry, material);
-					
-					// Set position
 					const [x, y, z] = posKey.split(',').map(Number);
 					mesh.position.set(x, y, z);
 					
-					// Set metadata
 					mesh.userData = { blockId: blockType.id, chunkKey, blockPos: posKey };
 					mesh.frustumCulled = true;
-					mesh.castShadow = true;
-					mesh.receiveShadow = true;
 					
-					// Store and add to scene
+					// Add to scene
 					if (!chunkMeshesRef.current[chunkKey]) {
 						chunkMeshesRef.current[chunkKey] = {};
 					}
@@ -695,21 +683,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					if (Array.isArray(chunkMeshesRef.current[chunkKey][blockId])) {
 						chunkMeshesRef.current[chunkKey][blockId].push(mesh);
 					} else {
-						// If it's not an array (e.g., from a previous instanced mesh), make it an array
 						chunkMeshesRef.current[chunkKey][blockId] = [mesh];
 					}
 					safeAddToScene(mesh);
 				});
 			}
-			
-			// Record performance
-			const endTime = performance.now();
-			const duration = endTime - startTime;
-			if (duration > 16) {
-				console.log(`Non-greedy chunk rebuild took ${duration.toFixed(2)}ms`);
-			}
 		} catch (error) {
-			console.error("Error rebuilding chunk:", error, chunkKey);
+			console.error("Error rebuilding chunk:", error);
 		}
 	};
 
@@ -870,12 +850,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const newPlacementPosition = previewPositionRef.current.clone();
 		const positions = getPlacementPositions(newPlacementPosition, placementSizeRef.current);
 		let terrainChanged = false;
-		const chunkUpdates = new Map(); // Track which chunks need updates
+		
+		// Track modified chunk keys to rebuild only those chunks
+		const modifiedChunks = new Set();
+		
+		// Keep track of blocks added and removed
+		const blockUpdates = [];
 
 		positions.forEach((pos) => {
 			const key = `${pos.x},${pos.y},${pos.z}`;
 			const chunkKey = getChunkKey(pos.x, pos.y, pos.z);
 			const blockId = currentBlockTypeRef.current.id;
+			
+			// Add this chunk to the list of modified chunks
+			modifiedChunks.add(chunkKey);
 
 			if (modeRef.current === "add") {
 				if (!terrainRef.current[key]) {
@@ -883,14 +871,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					terrainChanged = true;
 					recentlyPlacedBlocksRef.current.add(key);
 					
-					// Add to spatial hash for faster ray casting
+					// Update spatial hash for faster ray casting
 					spatialHashGridRef.current.set(key, blockId);
 
-					// Track chunk update
-					if (!chunkUpdates.has(chunkKey)) {
-						chunkUpdates.set(chunkKey, { adds: [], removes: [] });
-					}
-					chunkUpdates.get(chunkKey).adds.push({ key, pos, blockId });
+					// Track block updates
+					blockUpdates.push({ type: 'add', key, chunkKey, pos, blockId });
 				}
 			} else if (modeRef.current === "remove") {
 				if (terrainRef.current[key]) {
@@ -901,11 +886,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					// Remove from spatial hash
 					spatialHashGridRef.current.delete(key);
 
-					// Track chunk update
-					if (!chunkUpdates.has(chunkKey)) {
-						chunkUpdates.set(chunkKey, { adds: [], removes: [] });
-					}
-					chunkUpdates.get(chunkKey).removes.push({ key, pos, blockId: oldBlockId });
+					// Track block updates
+					blockUpdates.push({ type: 'remove', key, chunkKey, pos, blockId: oldBlockId });
 				}
 			}
 		});
@@ -918,10 +900,45 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			totalBlocksRef.current = Object.keys(terrainRef.current).length;
 			updateDebugInfo();
 
-			// Process chunk updates
-			chunkUpdates.forEach((updates, chunkKey) => {
-				updateChunkMeshes(chunkKey, updates.adds, updates.removes);
-			});
+			// Update chunks directly - no batching or queuing
+			if (modifiedChunks.size > 0) {
+				// First, make sure chunks data is updated
+				blockUpdates.forEach(update => {
+					const { type, key, chunkKey, blockId } = update;
+					
+					// Make sure chunk exists in our data
+					if (!chunksRef.current.has(chunkKey)) {
+						chunksRef.current.set(chunkKey, {});
+					}
+					
+					// Get the chunk's blocks
+					const chunkBlocks = chunksRef.current.get(chunkKey);
+					
+					// Update the chunk data
+					if (type === 'add') {
+						chunkBlocks[key] = blockId;
+					} else {
+						delete chunkBlocks[key];
+					}
+				});
+				
+				// Now, rebuild only the absolutely required chunks (where blocks were modified)
+				const chunksArray = Array.from(modifiedChunks);
+				
+				// Process up to 3 chunks immediately, queue the rest with higher priority
+				const immediateChunks = chunksArray.slice(0, 3);
+				const queuedChunks = chunksArray.slice(3);
+				
+				// Immediately rebuild the chunks that are most important (where the cursor is)
+				immediateChunks.forEach(chunkKey => {
+					rebuildChunkNoVisibilityUpdate(chunkKey);
+				});
+				
+				// Queue the rest with high priority
+				queuedChunks.forEach(chunkKey => {
+					addChunkToUpdateQueue(chunkKey, 1000); // High priority
+				});
+			}
 
 			// Save terrain to storage asynchronously
 			DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current)
@@ -1794,54 +1811,221 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			chunksBlocks[key] = blockId;
 		});
 		
-		// Signal that this chunk needs rebuilding
-		setTimeout(() => {
-			rebuildChunk(chunkKey);
-		}, 0);
+		// Calculate distance to camera for priority
+		let priority = 1; // Default priority
+		
+		// If we have access to the camera, prioritize chunks closest to the camera
+		if (camera) {
+			// Parse chunk coordinates
+			const [cx, cy, cz] = chunkKey.split(',').map(Number);
+			
+			// Calculate chunk center in world space
+			const centerX = (cx * CHUNK_SIZE) + (CHUNK_SIZE / 2);
+			const centerY = (cy * CHUNK_SIZE) + (CHUNK_SIZE / 2);
+			const centerZ = (cz * CHUNK_SIZE) + (CHUNK_SIZE / 2);
+			
+			// Calculate distance to camera (squared is faster)
+			const dx = centerX - camera.position.x;
+			const dy = centerY - camera.position.y;
+			const dz = centerZ - camera.position.z;
+			const distanceSquared = dx*dx + dy*dy + dz*dz;
+			
+			// Convert to priority (closer = higher priority)
+			priority = 1000 / (1 + distanceSquared);
+			
+			// Extra priority boost for chunks right in front of the camera
+			if (distanceSquared < 100) {
+			  priority *= 2;
+			}
+		}
+		
+		// Add to the priority queue
+		addChunkToUpdateQueue(chunkKey, priority);
+		
+		// Also rebuild neighboring chunks if blocks were added/removed at chunk borders
+		const needsNeighborUpdate = adds.length > 0 || removes.length > 0;
+		if (needsNeighborUpdate) {
+			// Calculate the chunk coordinates
+			const [cx, cy, cz] = chunkKey.split(',').map(Number);
+			
+			// Check for blocks at the chunk borders that would affect neighboring chunks
+			const hasBlocksAtBorder = [...adds, ...removes].some(({pos}) => {
+				if (!pos) return false;
+				
+				// Check if this block is at the edge of the chunk
+				const inChunkX = pos.x % CHUNK_SIZE;
+				const inChunkY = pos.y % CHUNK_SIZE;
+				const inChunkZ = pos.z % CHUNK_SIZE;
+				
+				return inChunkX === 0 || inChunkX === CHUNK_SIZE - 1 ||
+					   inChunkY === 0 || inChunkY === CHUNK_SIZE - 1 ||
+					   inChunkZ === 0 || inChunkZ === CHUNK_SIZE - 1;
+			});
+			
+			// If we have blocks at borders, queue neighboring chunks with lower priority
+			if (hasBlocksAtBorder) {
+				// Check all 6 neighboring chunks (only the ones that exist)
+				const neighbors = [
+					`${cx+1},${cy},${cz}`,
+					`${cx-1},${cy},${cz}`,
+					`${cx},${cy+1},${cz}`,
+					`${cx},${cy-1},${cz}`,
+					`${cx},${cy},${cz+1}`,
+					`${cx},${cy},${cz-1}`
+				];
+				
+				neighbors.forEach(neighborKey => {
+					if (chunksRef.current.has(neighborKey)) {
+						// Lower priority for neighboring chunks
+						addChunkToUpdateQueue(neighborKey, priority * 0.5);
+					}
+				});
+			}
+		}
 	};
 
 	// Function to rebuild a single chunk
 	const rebuildChunk = (chunkKey) => {
-		if (!scene.current) return;
-
-		// Get existing chunk mesh if any
+		// Skip if scene not ready
+		if (!scene || !meshesInitializedRef.current) return;
+		
+		// Performance tracking
+		const startTime = performance.now();
+			
+		try {
+			// Clean up existing chunk meshes for this chunk
 			if (chunkMeshesRef.current[chunkKey]) {
-			safeRemoveFromScene(chunkMeshesRef.current[chunkKey]);
-			delete chunkMeshesRef.current[chunkKey];
-		}
+				Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
+					safeRemoveFromScene(mesh);
+				});
+			}
+			chunkMeshesRef.current[chunkKey] = {};
+			
+			// Get blocks for this chunk
+			const chunksBlocks = {};
+			// Use chunksRef which tracks blocks by chunk
+			const blockRefsData = chunksRef.current.get(chunkKey) || {};
+			
+			// Convert chunk data to the format expected by mesh builders
+			Object.entries(blockRefsData).forEach(([posKey, blockId]) => {
+				chunksBlocks[posKey] = blockId;
+			});
+			
+			// If no blocks in this chunk, we're done
+			if (Object.keys(chunksBlocks).length === 0) {
+				return;
+			}
+			
+			// Try to use greedy meshing first if enabled (most efficient)
+			if (GREEDY_MESHING_ENABLED) {
+				try {
+					const meshes = createGreedyMeshForChunk(chunksBlocks);
+					if (meshes) {
+						if (!chunkMeshesRef.current[chunkKey]) {
+							chunkMeshesRef.current[chunkKey] = {};
+						}
 
-		// Get blocks for this chunk
-		const chunksBlocks = {};
-		// Use chunksRef instead of blockRefs since that's what was previously defined
-		const blockRefsData = chunksRef ? chunksRef.current.get(chunkKey) : {};
-		for (const posKey in blockRefsData) {
-			const [x, y, z] = posKey.split(',').map(Number);
-			// We already have the blocks for this chunk, so we don't need to check the chunk key
-			chunksBlocks[posKey] = blockRefsData[posKey];
-		}
-
-		if (Object.keys(chunksBlocks).length === 0) return;
-
-		// Use the optimized mesh builder if atlas is initialized
-		if (atlasInitialized && !GREEDY_MESHING_ENABLED) {
-			try {
-				const optimizedMesh = chunkMeshBuilder.buildChunkMesh(chunksBlocks, blockTypesArray);
-				if (optimizedMesh) {
-					chunkMeshesRef.current[chunkKey] = optimizedMesh;
-					safeAddToScene(optimizedMesh);
+						// Add all generated meshes
+						Object.entries(meshes).forEach(([key, mesh]) => {
+						mesh.userData = { chunkKey };
+							mesh.frustumCulled = true;
+							chunkMeshesRef.current[chunkKey][key] = mesh;
+						safeAddToScene(mesh);
+					});
+						
 					return;
 				}
-			} catch (error) {
-				console.error("Error using optimized mesh builder:", error);
-				// Fall back to original method
+				} catch (error) {
+					console.error("Error creating greedy mesh:", error);
+				}
 			}
-		}
-
-		// Use greedy meshing or fall back to original method
-		if (GREEDY_MESHING_ENABLED) {
-			// ... existing greedy meshing code ...
-		} else {
-			// ... existing classic mesh building code ...
+			
+			// Fall back to instanced rendering (second most efficient)
+			if (PERFORMANCE_SETTINGS.instancingEnabled) {
+				// Group blocks by type
+				const blockTypes = {};
+				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
+					if (!blockTypes[blockId]) {
+						blockTypes[blockId] = [];
+					}
+					blockTypes[blockId].push(posKey);
+				});
+				
+				// Create instance mesh for each block type
+				Object.entries(blockTypes).forEach(([blockId, positions]) => {
+					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
+					if (!blockType) return;
+					
+					// Use cached geometry and material
+					const geometry = getCachedGeometry(blockType);
+					const material = getCachedMaterial(blockType);
+					
+					// Create instanced mesh with exact capacity
+					const capacity = Math.min(positions.length, CHUNK_BLOCK_CAPACITY);
+					const instancedMesh = new THREE.InstancedMesh(
+						geometry,
+						material,
+						capacity
+					);
+					instancedMesh.userData = { blockTypeId: blockType.id, chunkKey };
+					instancedMesh.frustumCulled = true;
+					instancedMesh.castShadow = true;
+					instancedMesh.receiveShadow = true;
+					
+					// Use pooled matrix if available
+					const tempMatrix = new THREE.Matrix4();
+					
+					// Set matrix for each block
+					positions.forEach((posKey, index) => {
+						const [x, y, z] = posKey.split(',').map(Number);
+						tempMatrix.makeTranslation(x, y, z);
+						instancedMesh.setMatrixAt(index, tempMatrix);
+					});
+					
+					// Update mesh
+					instancedMesh.count = positions.length;
+					instancedMesh.instanceMatrix.needsUpdate = true;
+					
+					// Store and add to scene directly
+					if (!chunkMeshesRef.current[chunkKey]) {
+						chunkMeshesRef.current[chunkKey] = {};
+					}
+					chunkMeshesRef.current[chunkKey][blockId] = instancedMesh;
+					safeAddToScene(instancedMesh);
+				});
+			} else {
+				// Individual meshes as last resort
+				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
+					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
+					if (!blockType) return;
+					
+					const geometry = getCachedGeometry(blockType);
+					const material = getCachedMaterial(blockType);
+					
+					const mesh = new THREE.Mesh(geometry, material);
+					const [x, y, z] = posKey.split(',').map(Number);
+					mesh.position.set(x, y, z);
+					
+					mesh.userData = { blockId: blockType.id, chunkKey, blockPos: posKey };
+					mesh.frustumCulled = true;
+					
+					// Add to scene
+					if (!chunkMeshesRef.current[chunkKey]) {
+						chunkMeshesRef.current[chunkKey] = {};
+					}
+					if (!chunkMeshesRef.current[chunkKey][blockId]) {
+						chunkMeshesRef.current[chunkKey][blockId] = [];
+					}
+					if (Array.isArray(chunkMeshesRef.current[chunkKey][blockId])) {
+						chunkMeshesRef.current[chunkKey][blockId].push(mesh);
+					} else {
+						chunkMeshesRef.current[chunkKey][blockId] = [mesh];
+					}
+					safeAddToScene(mesh);
+				});
+			}
+		} catch (error) {
+			console.error("Error rebuilding chunk:", error);
 		}
 	};
 
@@ -2504,7 +2688,71 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	};
 
 	// Add these getter/setter functions
-	let selectionDistance = MAX_SELECTION_DISTANCE; // Store the current value
+
+	// Add this function to manage the chunk update queue
+	const addChunkToUpdateQueue = (chunkKey, priority = 0) => {
+		// Don't add duplicates
+		if (chunkUpdateQueueRef.current.some(item => item.chunkKey === chunkKey)) {
+			// If it's already in the queue with lower priority, update the priority
+			const existingItem = chunkUpdateQueueRef.current.find(item => item.chunkKey === chunkKey);
+			if (existingItem && priority > existingItem.priority) {
+				existingItem.priority = priority;
+				// Re-sort the queue based on updated priorities
+				chunkUpdateQueueRef.current.sort((a, b) => b.priority - a.priority);
+			}
+			return;
+		}
+		
+		// Add to queue with priority
+		chunkUpdateQueueRef.current.push({
+			chunkKey,
+			priority,
+			addedTime: performance.now()
+		});
+		
+		// Sort by priority (higher first)
+		chunkUpdateQueueRef.current.sort((a, b) => b.priority - a.priority);
+		
+		// Start processing the queue if it's not already running
+		if (!isProcessingChunkQueueRef.current) {
+			processChunkQueue();
+		}
+	};
+
+	// Function to process chunks from the queue with frame timing
+	const processChunkQueue = () => {
+		isProcessingChunkQueueRef.current = true;
+		
+		// If queue is empty, stop processing
+		if (chunkUpdateQueueRef.current.length === 0) {
+			isProcessingChunkQueueRef.current = false;
+			return;
+		}
+		
+		const startTime = performance.now();
+		const maxTimePerFrame = 10; // Max ms to spend processing chunks per frame
+		
+		// Process chunks until time budget is exhausted or queue is empty
+		while (chunkUpdateQueueRef.current.length > 0 && 
+				performance.now() - startTime < maxTimePerFrame) {
+			
+			// Get the highest priority chunk
+			const { chunkKey } = chunkUpdateQueueRef.current.shift();
+			
+			// Rebuild the chunk
+			rebuildChunkNoVisibilityUpdate(chunkKey);
+			
+			// Record last process time
+			lastChunkProcessTimeRef.current = performance.now();
+		}
+		
+		// If there are more chunks to process, continue in the next frame
+		if (chunkUpdateQueueRef.current.length > 0) {
+			requestAnimationFrame(processChunkQueue);
+		} else {
+			isProcessingChunkQueueRef.current = false;
+		}
+	};
 
 	// Main return statement
 	return (
