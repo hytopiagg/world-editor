@@ -964,10 +964,84 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const normalizedMouse = pointer.clone();
 		// Setup raycaster with the normalized coordinates
 		raycaster.setFromCamera(normalizedMouse, camera);
+		
+		// Quick check: see if we're even pointing at any chunks with blocks
+		const dir = raycaster.ray.direction.clone().normalize();
+		const pos = raycaster.ray.origin.clone();
+		
+		// Check if there are any chunks in this direction
+		let hasChunksInDirection = false;
+		const checkedChunks = new Set();
+		
+		// Get camera chunk
+		const camChunkX = Math.floor(pos.x / CHUNK_SIZE);
+		const camChunkY = Math.floor(pos.y / CHUNK_SIZE);
+		const camChunkZ = Math.floor(pos.z / CHUNK_SIZE);
+		
+		// Check a few chunks in the ray direction
+		for (let dist = 1; dist <= 5; dist++) {
+			const checkPos = pos.clone().add(dir.clone().multiplyScalar(dist * CHUNK_SIZE));
+			const chunkX = Math.floor(checkPos.x / CHUNK_SIZE);
+			const chunkY = Math.floor(checkPos.y / CHUNK_SIZE);
+			const chunkZ = Math.floor(checkPos.z / CHUNK_SIZE);
+			
+			// Skip if we've already checked this chunk
+			const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+			if (checkedChunks.has(chunkKey)) continue;
+			checkedChunks.add(chunkKey);
+			
+			// If this chunk exists in our data, we need to do the raycast
+			if (chunksRef.current.has(chunkKey)) {
+				hasChunksInDirection = true;
+				break;
+			}
+		}
+		
+		// If no chunks in this direction, we can skip the raycast entirely
+		if (!hasChunksInDirection) {
+			return null;
+		}
+		
 		// Create a temporary array to store all intersections
 		let allIntersections = [];
-		// Manually check each block in the terrain
-		Object.entries(terrainRef.current).forEach(([posKey, blockId]) => {
+		
+		// Get blocks that are in chunks along the ray direction
+		const blocksToCheck = [];
+		
+		// Collect blocks from chunks that are in the ray direction
+		chunksRef.current.forEach((chunkBlocks, chunkKey) => {
+			const [cx, cy, cz] = chunkKey.split(',').map(Number);
+	  
+			// Calculate chunk center
+			const chunkCenterX = (cx * CHUNK_SIZE) + (CHUNK_SIZE / 2);
+			const chunkCenterY = (cy * CHUNK_SIZE) + (CHUNK_SIZE / 2);
+			const chunkCenterZ = (cz * CHUNK_SIZE) + (CHUNK_SIZE / 2);
+			
+			// Create a vector from camera to chunk center
+			const toCenterX = chunkCenterX - camera.position.x;
+			const toCenterY = chunkCenterY - camera.position.y;
+			const toCenterZ = chunkCenterZ - camera.position.z;
+			
+			// Calculate dot product with ray direction to see if chunk is in front of camera
+			const dotProduct = toCenterX * dir.x + toCenterY * dir.y + toCenterZ * dir.z;
+			
+			// Only check chunks that are in front of the camera and within a reasonable angle
+			if (dotProduct > 0) {
+				// Calculate squared distance to chunk center
+				const distanceSquared = toCenterX * toCenterX + toCenterY * toCenterY + toCenterZ * toCenterZ;
+				
+				// Skip chunks that are too far away
+				if (distanceSquared <= selectionDistanceRef.current * selectionDistanceRef.current) {
+					// Add blocks from this chunk to the check list
+					Object.entries(chunkBlocks).forEach(([posKey, blockId]) => {
+						blocksToCheck.push({ posKey, blockId });
+					});
+				}
+			}
+		});
+		
+		// Manually check each block in the filtered list
+		blocksToCheck.forEach(({ posKey, blockId }) => {
 			// Skip recently placed blocks during placement
 			if (isPlacingRef.current && recentlyPlacedBlocksRef.current.has(posKey)) {
 				return;
@@ -2441,8 +2515,51 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// For performance tracking
 		let iterations = 0;
+		const maxIterations = 1000; // Limit iterations to prevent infinite loops
 		
-		while (distance < maxDistance) {
+		// Track which chunks we've already checked
+		const checkedChunks = new Set();
+		
+		// Fast check: see if we're even pointing at any chunks with blocks
+		const dir = ray.direction.clone().normalize();
+		
+		// Check if there are any chunks in this direction
+		let hasChunksInDirection = false;
+		
+		// Get camera chunk
+		const camChunkX = Math.floor(pos.x / CHUNK_SIZE);
+		const camChunkY = Math.floor(pos.y / CHUNK_SIZE);
+		const camChunkZ = Math.floor(pos.z / CHUNK_SIZE);
+		
+		// Check a few chunks in the ray direction
+		for (let dist = 1; dist <= 5; dist++) {
+			const checkPos = pos.clone().add(dir.clone().multiplyScalar(dist * CHUNK_SIZE));
+			const chunkX = Math.floor(checkPos.x / CHUNK_SIZE);
+			const chunkY = Math.floor(checkPos.y / CHUNK_SIZE);
+			const chunkZ = Math.floor(checkPos.z / CHUNK_SIZE);
+			
+			// Skip if we've already checked this chunk
+			const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+			if (checkedChunks.has(chunkKey)) continue;
+			checkedChunks.add(chunkKey);
+			
+			// If this chunk exists in our data, we need to do the raycast
+			if (chunksRef.current.has(chunkKey)) {
+				hasChunksInDirection = true;
+				break;
+			}
+		}
+		
+		// If no chunks in this direction, we can skip the raycast entirely
+		if (!hasChunksInDirection) {
+			return null;
+		}
+		
+		// Reset checked chunks for the actual raycast
+		checkedChunks.clear();
+		
+		// Main ray marching loop
+		while (distance < maxDistance && iterations < maxIterations) {
 			iterations++;
 			
 			// Get block position (rounded to integers)
@@ -2450,6 +2567,44 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			const blockY = Math.floor(pos.y);
 			const blockZ = Math.floor(pos.z);
 			const blockKey = `${blockX},${blockY},${blockZ}`;
+			
+			// Get chunk key for this position
+			const chunkX = Math.floor(blockX / CHUNK_SIZE);
+			const chunkY = Math.floor(blockY / CHUNK_SIZE);
+			const chunkZ = Math.floor(blockZ / CHUNK_SIZE);
+			const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+			
+			// If we haven't checked this chunk yet, see if it exists
+			if (!checkedChunks.has(chunkKey)) {
+				checkedChunks.add(chunkKey);
+				
+				// If this chunk doesn't exist in our data, we can skip all blocks in it
+				if (!chunksRef.current.has(chunkKey)) {
+					// Skip to the next chunk boundary
+					const nextChunkX = (chunkX + (dir.x > 0 ? 1 : 0)) * CHUNK_SIZE;
+					const nextChunkY = (chunkY + (dir.y > 0 ? 1 : 0)) * CHUNK_SIZE;
+					const nextChunkZ = (chunkZ + (dir.z > 0 ? 1 : 0)) * CHUNK_SIZE;
+					
+					// Calculate distances to each boundary
+					const tX = dir.x !== 0 ? Math.abs((nextChunkX - pos.x) / dir.x) : Infinity;
+					const tY = dir.y !== 0 ? Math.abs((nextChunkY - pos.y) / dir.y) : Infinity;
+					const tZ = dir.z !== 0 ? Math.abs((nextChunkZ - pos.z) / dir.z) : Infinity;
+					
+					// Find the smallest positive distance
+					const tMin = Math.min(
+						tX > 0 ? tX : Infinity,
+						tY > 0 ? tY : Infinity,
+						tZ > 0 ? tZ : Infinity
+					);
+					
+					// Skip to the next chunk boundary
+					if (tMin !== Infinity) {
+						pos.add(dir.clone().multiplyScalar(tMin + 0.01)); // Add a small offset to ensure we're in the next chunk
+						distance += tMin;
+						continue;
+					}
+				}
+			}
 			
 			// Check if there's a block at this position (using spatial hash)
 			if (spatialHashGridRef.current.has(blockKey)) {
@@ -2474,8 +2629,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				else if (py > 1-epsilon) normal.set(0, 1, 0);
 				else if (pz < epsilon) normal.set(0, 0, -1);
 				else normal.set(0, 0, 1);
-				
-				// console.log(`Ray hit block at ${blockKey} after ${iterations} steps`);
 				
 				return {
 					point,
