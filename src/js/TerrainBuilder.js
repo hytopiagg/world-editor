@@ -13,12 +13,6 @@ import { TextureAtlas, ChunkMeshBuilder, ChunkLoadManager } from "./TextureAtlas
 // Import tools
 import { ToolManager, WallTool } from "./tools";
 
-// Import the ViewDependentChunkManager
-import { ViewDependentChunkManager } from './ViewDependentChunkManager';
-
-// Import the ChunkWorkerManager
-import { ChunkWorkerManager } from './ChunkWorkerManager';
-
 // Define chunk constants
 const CHUNK_SIZE = 32;
 const CHUNK_BLOCK_CAPACITY = BLOCK_INSTANCED_MESH_CAPACITY / 8; // Smaller capacity per chunk
@@ -211,13 +205,11 @@ export const blockTypes = blockTypesArray;
 let textureAtlas = null;
 let chunkMeshBuilder = null;
 let chunkLoadManager = null;
-let chunkWorkerManager = null;
 
 // Track if the atlas is initialized
 let atlasInitialized = false;
-let workersInitialized = false;
 
-// Initialize the texture atlas and worker system
+// Initialize the texture atlas
 const initTextureAtlas = async (blockTypes) => {
   if (atlasInitialized) return;
   
@@ -226,18 +218,8 @@ const initTextureAtlas = async (blockTypes) => {
   await textureAtlas.initialize(blockTypes);
   
   chunkMeshBuilder = new ChunkMeshBuilder(textureAtlas);
-  
-  // Initialize worker manager
-  if (!workersInitialized) {
-    console.log("Initializing worker system...");
-    chunkWorkerManager = new ChunkWorkerManager();
-    chunkWorkerManager.setTextureAtlas(textureAtlas);
-    chunkWorkerManager.setBlockTypes(blockTypes);
-    workersInitialized = true;
-  }
-  
   atlasInitialized = true;
-  console.log("Texture atlas and worker system initialized");
+  console.log("Texture atlas initialized");
   
   return textureAtlas.getAtlasTexture();
 };
@@ -1487,7 +1469,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Add spatial hash toggle
 		toggleSpatialHashRayCasting,
 		isSpatialHashRayCastingEnabled: () => useSpatialHashRef.current,
-		toggleWorkerUsage,
 	}));
 
 	// Add resize listener to update canvasRect
@@ -1589,7 +1570,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	};
 
 	// Function to rebuild a single chunk
-	const rebuildChunk = async (chunkKey) => {
+	const rebuildChunk = (chunkKey) => {
 		if (!scene.current) return;
 
 		// Get existing chunk mesh if any
@@ -1600,6 +1581,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 		// Get blocks for this chunk
 		const chunksBlocks = {};
+		// Use chunksRef instead of blockRefs since that's what was previously defined
 		const blockRefsData = chunksRef ? chunksRef.current.get(chunkKey) : {};
 		for (const posKey in blockRefsData) {
 			const [x, y, z] = posKey.split(',').map(Number);
@@ -1609,41 +1591,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 		if (Object.keys(chunksBlocks).length === 0) return;
 
-		// Performance measurement
-		const startTime = performance.now();
-		let endTime;
-		
-		// Use worker-based mesh generation if available and enabled
-		if (workersInitialized && useWorkers && chunkWorkerManager) {
-			try {
-				// Generate mesh using worker
-				const geometry = await chunkWorkerManager.generateChunkMesh(chunkKey, chunksBlocks);
-				
-				// Create mesh
-				const mesh = chunkWorkerManager.createMeshFromGeometry(geometry);
-				
-				// Add to scene
-				chunkMeshesRef.current[chunkKey] = mesh;
-						safeAddToScene(mesh);
-				
-				// Performance logging
-				endTime = performance.now();
-				if (setDebugInfo) {
-					setDebugInfo(prev => ({
-						...prev,
-						lastChunkTime: `${(endTime - startTime).toFixed(1)}ms (Worker)`
-					}));
-				}
-				
-					return;
-			} catch (error) {
-				console.error("Error using worker-based mesh generation:", error);
-				// Fall back to normal methods
-			}
-		}
-
-		// ... rest of existing chunk rebuilding code ...
-		
 		// Use the optimized mesh builder if atlas is initialized
 		if (atlasInitialized && !GREEDY_MESHING_ENABLED) {
 			try {
@@ -1651,16 +1598,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				if (optimizedMesh) {
 					chunkMeshesRef.current[chunkKey] = optimizedMesh;
 					safeAddToScene(optimizedMesh);
-					
-					// Performance logging
-					endTime = performance.now();
-					if (setDebugInfo) {
-						setDebugInfo(prev => ({
-							...prev,
-							lastChunkTime: `${(endTime - startTime).toFixed(1)}ms (Main thread)`
-						}));
-					}
-					
 					return;
 				}
 			} catch (error) {
@@ -1918,28 +1855,25 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		return null;
 	};
 
-	// Toggle greedy meshing and rebuild all chunks
+	// Toggle greedy meshing on/off
 	const toggleGreedyMeshing = (enabled) => {
-		const oldValue = GREEDY_MESHING_ENABLED;
-		
-		// If toggling on, make sure performance info is displayed
-		if (enabled && !oldValue) {
-			GREEDY_MESHING_ENABLED = true;
-			// Force rebuild of all chunks
-			buildUpdateTerrain();
-			// Return success
-			return true;
-		} else if (!enabled && oldValue) {
-			// Disable greedy meshing
-			GREEDY_MESHING_ENABLED = false;
-			// Force rebuild of all chunks
-			buildUpdateTerrain();
-			// Return success
-			return true;
-		}
-		
-		// No change
-		return false;
+	  console.log(`Setting greedy meshing to ${enabled}`);
+	  const changed = setGreedyMeshingEnabled(enabled);
+	  
+	  // Also update the ChunkMeshBuilder if it exists
+	  if (chunkMeshBuilder) {
+	    chunkMeshBuilder.setGreedyMeshing(enabled);
+	  }
+	  
+	  // If changed, rebuild all chunks
+	  if (changed) {
+	    console.log("Rebuilding all chunks with greedy meshing", enabled ? "enabled" : "disabled");
+	    Object.keys(chunkMeshesRef.current).forEach(chunkKey => {
+	      rebuildChunk(chunkKey);
+	    });
+	  }
+	  
+	  return changed;
 	};
 
 	// Update spatial hash when terrain changes
@@ -2070,164 +2004,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			initAtlas();
 		}
 	}, [meshesInitializedRef && meshesInitializedRef.current]);
-
-	// Add a ref for view-dependent chunk manager
-	const viewDependentChunkManager = useRef(null);
-	
-	// Initialize the view-dependent chunk manager
-	useEffect(() => {
-		viewDependentChunkManager.current = new ViewDependentChunkManager(CHUNK_SIZE, FRUSTUM_CULLING_DISTANCE);
-		console.log("View-dependent chunk manager initialized");
-	}, []);
-	
-	// Update the updateVisibleChunks function to use the view-dependent manager
-	const updateVisibleChunksWithViewDependency = () => {
-		if (!camera.current || !scene.current) return;
-		
-		// Skip if view-dependent chunk manager isn't initialized
-		if (!viewDependentChunkManager.current) return;
-		
-		// Update the camera information for priority calculations
-		viewDependentChunkManager.current.updateCamera(camera.current);
-		
-		// Use ChunkLoadManager for prioritized chunk loading
-		if (chunkLoadManager) {
-			// Clear existing queue
-			chunkLoadManager.clearQueue();
-			
-			// Get all available chunks
-			const chunks = Array.from(chunksRef.current.keys());
-			
-			// Skip if no chunks
-			if (chunks.length === 0) return;
-			
-			// Get chunks sorted by view-dependent priority
-			const prioritizedChunks = viewDependentChunkManager.current.getPrioritizedChunks(
-				chunks, 
-				camera.current.position,
-				chunks.length // Process all chunks but in priority order
-			);
-			
-			// Add chunks to queue with their calculated priorities
-			for (const { chunkKey, priority } of prioritizedChunks) {
-				chunkLoadManager.addChunkToQueue(chunkKey, priority * 100); // Scale priority for the queue
-			}
-			
-			// Debug info - show loading sequence
-			if (setDebugInfo && prioritizedChunks.length > 0) {
-				const debugChunkInfo = prioritizedChunks.slice(0, 5).map(({ chunkKey, priority }) => 
-					`${chunkKey}: ${priority.toFixed(2)}`
-				).join(', ');
-				setDebugInfo(prev => ({ 
-					...prev, 
-					chunkLoading: `Loading ${prioritizedChunks.length} chunks. Top 5: ${debugChunkInfo}`
-				}));
-			}
-		}
-		
-		// Original frustum culling code can go here if needed
-		// But our new priority-based system handles most of this already
-	};
-	
-	// ... Rest of existing code ...
-	
-	// Optional: Add a debug visualization for chunk priorities
-	const renderChunkPriorities = (debugMode = false) => {
-		if (!debugMode || !viewDependentChunkManager.current || !scene.current) return;
-		
-		// Remove any existing debug visuals
-		const existingDebug = scene.current.getObjectByName("chunkPriorityDebug");
-		if (existingDebug) {
-			scene.current.remove(existingDebug);
-		}
-		
-		// Create a container for all debug visuals
-		const debugContainer = new THREE.Group();
-		debugContainer.name = "chunkPriorityDebug";
-		
-		// Get all chunks
-		const chunks = Array.from(chunksRef.current.keys());
-		
-		// Create a small box for each chunk showing its priority
-		for (const chunkKey of chunks) {
-			const [cx, cy, cz] = chunkKey.split(',').map(Number);
-			const priority = viewDependentChunkManager.current.getChunkPriority(
-				cx, cy, cz, camera.current.position
-			);
-			
-			// Create a cube representing the chunk
-			const geometry = new THREE.BoxGeometry(4, 4, 4);
-			const color = viewDependentChunkManager.current.getPriorityDebugColor(priority);
-			const material = new THREE.MeshBasicMaterial({ 
-				color, 
-				wireframe: true,
-				transparent: true,
-				opacity: 0.7
-			});
-			
-			const cube = new THREE.Mesh(geometry, material);
-			cube.position.set(
-				cx * CHUNK_SIZE + CHUNK_SIZE/2,
-				cy * CHUNK_SIZE + CHUNK_SIZE/2,
-				cz * CHUNK_SIZE + CHUNK_SIZE/2
-			);
-			
-			debugContainer.add(cube);
-		}
-		
-		scene.current.add(debugContainer);
-	};
-	
-	// ... existing code ...
-	
-	// Update camera movement event handler to refresh chunk priorities
-	useEffect(() => {
-		if (!camera.current || !scene.current) return;
-		
-		const handler = () => {
-			updateVisibleChunksWithViewDependency();
-			// Uncomment to enable priority visualization (may impact performance)
-			// renderChunkPriorities(true); 
-		};
-		
-		orbitControlsRef.current?.addEventListener('change', handler);
-		
-		return () => {
-			orbitControlsRef.current?.removeEventListener('change', handler);
-		};
-	}, [camera.current, scene.current, orbitControlsRef.current]);
-	
-	// ... rest of existing code ...
-
-	// Add state to track worker usage
-	const [useWorkers, setUseWorkers] = useState(true);
-	
-	// Add method to toggle worker usage
-	const toggleWorkerUsage = (enabled) => {
-		setUseWorkers(enabled);
-		console.log(`Worker-based chunk generation ${enabled ? 'enabled' : 'disabled'}`);
-	};
-	
-	// Add cleanup for worker system
-	useEffect(() => {
-		return () => {
-			if (chunkWorkerManager) {
-				chunkWorkerManager.dispose();
-			}
-		};
-	}, []);
-	
-	// Add worker stats to debug info
-	useEffect(() => {
-		if (setDebugInfo && workersInitialized) {
-			setDebugInfo(prev => ({
-				...prev,
-				workerStatus: `Workers: ${useWorkers ? 'Enabled' : 'Disabled'} (${chunkWorkerManager?.maxWorkers || 0} threads)`
-			}));
-		}
-	}, [useWorkers, workersInitialized, setDebugInfo]);
-	
-	// ... existing code ...
 
 	// Main return statement
 	return (

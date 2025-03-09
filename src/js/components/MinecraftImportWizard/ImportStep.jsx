@@ -77,12 +77,7 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
     <div className="import-step">
       <h3>Import Minecraft Map</h3>
       
-      <div className="import-summary">
-        <p>Selected region: {regionWidth}×{regionHeight}×{regionDepth} blocks</p>
-        <p>Block types to import: {mappedBlockTypes} (out of {blockTypeCount})</p>
-        <p>Estimated blocks to process: {potentialBlockCount.toLocaleString()}</p>
-      </div>
-      
+      {/* Progress indicator - now at the top */}
       {importing && (
         <div className="import-progress">
           <p>Converting Minecraft map to HYTOPIA format...</p>
@@ -93,6 +88,12 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
           <p className="hint-text">This may take a few moments for large maps...</p>
         </div>
       )}
+      
+      <div className="import-summary">
+        <p>Selected region: {regionWidth}×{regionHeight}×{regionDepth} blocks</p>
+        <p>Block types to import: {mappedBlockTypes} (out of {blockTypeCount})</p>
+        <p>Estimated blocks to process: {potentialBlockCount.toLocaleString()}</p>
+      </div>
       
       {result && (
         <div className="import-result">

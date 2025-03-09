@@ -108,6 +108,16 @@ const UploadStep = ({ onWorldLoaded }) => {
       <h3>Upload Your Minecraft World</h3>
       <p>Select a Minecraft Java Edition world ZIP file from version 1.21.x or newer.</p>
       
+      {uploading && (
+        <div className="upload-progress">
+          <p>{progressMessage || 'Processing your world...'}</p>
+          <div className="progress-bar">
+            <div className="progress-bar-inner" style={{ width: `${progress}%` }}></div>
+          </div>
+          <p>{progress}% complete</p>
+        </div>
+      )}
+      
       <div 
         className="upload-area"
         onDragOver={handleDragOver}
@@ -144,16 +154,6 @@ const UploadStep = ({ onWorldLoaded }) => {
           <li>For best results, use a freshly generated world in Minecraft 1.21+</li>
         </ul>
       </div>
-      
-      {uploading && (
-        <div className="upload-progress">
-          <p>{progressMessage || 'Processing your world...'}</p>
-          <div className="progress-bar">
-            <div className="progress-bar-inner" style={{ width: `${progress}%` }}></div>
-          </div>
-          <p>{progress}% complete</p>
-        </div>
-      )}
       
       {error && (
         <div className="error-message">

@@ -62,6 +62,8 @@
   display: flex;
   padding: 16px 24px;
   border-bottom: 1px solid #333;
+  position: relative;
+  z-index: 1;
 }
 
 .step {
@@ -69,6 +71,7 @@
   align-items: center;
   flex: 1;
   position: relative;
+  z-index: 2;
 }
 
 .step:not(:last-child)::after {
@@ -80,7 +83,7 @@
   height: 2px;
   background-color: #444;
   transform: translateY(-50%);
-  z-index: 1;
+  z-index: -1;
 }
 
 .step.completed:not(:last-child)::after {
@@ -247,10 +250,18 @@
 }
 
 .region-stats {
-  background-color: #333;
-  padding: 12px;
-  border-radius: 4px;
+  background-color: #2a2a2a;
+  padding: 16px;
+  border-radius: 8px;
   margin-top: 16px;
+}
+
+.region-stats p {
+  margin: 8px 0;
+}
+
+.region-stats strong {
+  color: #2196f3;
 }
 
 /* Block mapping styles */
@@ -286,10 +297,23 @@
 }
 
 /* Import step styles */
-.import-summary {
-  background-color: #333;
+.import-step {
+  display: flex;
+  flex-direction: column;
+}
+
+.import-progress {
+  order: -1; /* Move to the top */
+  margin-bottom: 20px;
+  background-color: #2a2a2a;
   padding: 16px;
-  border-radius: 4px;
+  border-radius: 8px;
+}
+
+.import-summary {
+  background-color: #2a2a2a;
+  padding: 16px;
+  border-radius: 8px;
   margin-bottom: 16px;
 }
 
@@ -378,13 +402,23 @@
 }
 
 .auto-map-container button {
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  width: 100%;
 }
 
 .auto-map-container p {
   margin: 0;
   color: #aaa;
   font-size: 14px;
+}
+
+.map-unmapped-button {
+  margin-top: 10px;
+  background-color: #555;
+}
+
+.map-unmapped-button:hover:not(:disabled) {
+  background-color: #666;
 }
 
 .mapping-stats {
@@ -441,17 +475,22 @@
 }
 
 .world-bounds-info {
-  margin-top: 20px;
-  padding: 15px;
-  background-color: #f0f9ff;
-  border: 1px solid #91d5ff;
+  background-color: #333;
   border-radius: 4px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-left: 3px solid #4caf50;
 }
 
 .world-bounds-info h4 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  color: #0050b3;
+  margin: 0 0 4px 0;
+  font-size: 0.9em;
+  color: #4caf50;
+}
+
+.world-bounds-info p {
+  margin: 4px 0;
+  font-size: 0.9em;
 }
 
 .bounds-diagram {
@@ -497,4 +536,227 @@
 .offset-inputs {
   display: flex;
   gap: 15px;
+}
+
+/* New styles for size controls */
+.size-controls, 
+.center-controls, 
+.offset-controls {
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.size-controls h4, 
+.center-controls h4, 
+.offset-controls h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #2196f3;
+}
+
+.size-inputs, 
+.center-inputs, 
+.offset-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.input-control {
+  display: flex;
+  flex-direction: column;
+}
+
+.input-control label {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.input-control input {
+  background-color: #333;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 8px;
+  width: 100%;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Map visualization styles */
+.map-visualization {
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.map-visualization h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #2196f3;
+}
+
+.map-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.map-svg {
+  background-color: #1a1a1a;
+  width: 100%;
+  height: 300px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  cursor: crosshair;
+}
+
+.map-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+}
+
+/* Make the text color in the visualization more visible */
+.map-svg text {
+  font-family: sans-serif;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+/* Coordinate display */
+.current-coords {
+  text-align: center;
+  font-family: monospace;
+  color: #2196f3;
+  margin-top: 8px;
+  background-color: rgba(33, 150, 243, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Minecraft info text */
+.minecraft-info {
+  background-color: rgba(255, 152, 0, 0.1);
+  border-left: 3px solid #ff9800;
+  padding: 8px 12px;
+  margin: 12px 0;
+  color: #ff9800;
+  font-size: 14px;
+}
+
+/* Y-level info under the input */
+.y-info {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* Y-level mapping information */
+.y-mapping-info {
+  background-color: #2a2a2a;
+  border-radius: 6px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.y-mapping-info.compact {
+  padding: 8px 12px;
+  margin: 8px 0;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+}
+
+.y-mapping-info.compact p {
+  margin: 4px 0;
+  font-size: 0.9em;
+}
+
+.y-mapping-info h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: #2196f3;
+}
+
+.y-mapping-info p {
+  margin: 8px 0;
+  font-size: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.y-mapping-info p::before,
+.y-mapping-info p::after {
+  content: '';
+  height: 1px;
+  background-color: #444;
+  flex-grow: 1;
+  margin: 0 16px;
+}
+
+.minecraft-y {
+  color: #4caf50;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.hytopia-y {
+  color: #2196f3;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+.y-mapping-note {
+  font-size: 14px;
+  color: #999;
+  margin-top: 12px;
+  font-style: italic;
+}
+
+/* Drag handle styles */
+.drag-handle {
+  opacity: 0.1;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.drag-handle:hover, .drag-handle.dragging {
+  opacity: 0.8;
+}
+
+.drag-handle.corner {
+  opacity: 0.2;
+}
+
+.drag-handle.corner:hover {
+  opacity: 0.9;
+}
+
+rect.dragging {
+  stroke-width: 3px;
+  stroke-dasharray: 5,5;
 } 

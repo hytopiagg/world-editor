@@ -8,7 +8,6 @@ import {
   FaDatabase,
 } from "react-icons/fa";
 import Tooltip from "./js/components/Tooltip";
-import SettingsMenu from "./js/components/SettingsMenu";
 import hytopiaLogo from "./images/hytopia_logo_white.png";
 import "./css/App.css";
 import {toggleMute, isMuted} from "./js/Sound";
@@ -215,11 +214,6 @@ function App() {
       >
         <FaDatabase />
       </button>
-
-      <SettingsMenu 
-        terrainBuilder={terrainBuilderRef.current} 
-        environmentBuilder={environmentBuilderRef.current} 
-      />
     </div>
   );
 }

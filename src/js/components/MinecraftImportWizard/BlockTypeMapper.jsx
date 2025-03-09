@@ -128,6 +128,41 @@ const BlockTypeMapper = ({ worldData, selectedRegion, onMappingsUpdated, initial
     setAutoMapped(true);
   };
   
+  // New function to map all unmapped/skipped blocks to defaults
+  const handleMapUnmapped = () => {
+    // Create a copy of the existing mappings
+    const updatedMappings = { ...mappings };
+    let changesCount = 0;
+    
+    // Process each block in the mappings
+    Object.keys(updatedMappings).forEach(blockType => {
+      // Only process blocks that are currently set to skip
+      if (updatedMappings[blockType].action === 'skip') {
+        // Use the enhanced suggestMapping function to get a good match
+        const suggestion = suggestMapping(blockType);
+        
+        if (suggestion && suggestion.action !== 'skip') {
+          // Apply the suggested mapping
+          updatedMappings[blockType] = {
+            ...updatedMappings[blockType],
+            action: suggestion.action,
+            targetBlockId: suggestion.id
+          };
+          
+          changesCount++;
+        }
+      }
+    });
+    
+    // Update the mappings if any changes were made
+    if (changesCount > 0) {
+      setMappings(updatedMappings);
+      onMappingsUpdated(updatedMappings);
+    }
+    
+    return changesCount;
+  };
+  
   const countBlocks = (action) => {
     return Object.values(mappings).filter(m => m.action === action).length;
   };
@@ -155,6 +190,15 @@ const BlockTypeMapper = ({ worldData, selectedRegion, onMappingsUpdated, initial
           {autoMapped ? "Auto-Mapped" : "Auto-Map All Blocks"}
         </button>
         <p>Click to automatically map all Minecraft blocks to the closest HYTOPIA equivalent</p>
+        
+        <button 
+          className="secondary-button map-unmapped-button" 
+          onClick={handleMapUnmapped}
+          disabled={skippedCount === 0}
+        >
+          Map Unmapped Blocks ({skippedCount})
+        </button>
+        <p>Assign default blocks to any currently unmapped blocks, making a best guess based on block names</p>
       </div>
       
       <div className="mapping-stats">
