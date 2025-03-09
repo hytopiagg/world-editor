@@ -3,7 +3,8 @@ import {
   MAX_IMPORT_SIZE_X, 
   MAX_IMPORT_SIZE_Y, 
   MAX_IMPORT_SIZE_Z,
-  DEFAULT_IMPORT_SIZE 
+  DEFAULT_IMPORT_SIZE,
+  version 
 } from '../../Constants';
 
 // Minecraft 1.21 constants - bottom of the world is at Y=-69
@@ -36,10 +37,13 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
   
   // State for drag operation
   const [dragOperation, setDragOperation] = useState(null);
-  const [dragStartCoords, setDragStartCoords] = useState({ x: 0, z: 0 });
+  const [dragStartCoords, setDragStartCoords] = useState({ x: 0, z: 0, y: 0 });
   const [dragStartBounds, setDragStartBounds] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [justFinishedDrag, setJustFinishedDrag] = useState(false);
+  
+  // State for Y-axis drag operation
+  const [yDragOperation, setYDragOperation] = useState(null);
   
   const [isValid, setIsValid] = useState(false);
   // Add ref to track previous values to avoid infinite loops
@@ -49,14 +53,22 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
 
   // State for the visualization
   const [viewBox, setViewBox] = useState('-10 -10 20 20');
+  const [sideViewBox, setSideViewBox] = useState('-10 -10 20 20');
   const svgRef = useRef(null);
+  const sideSvgRef = useRef(null);
   const worldSize = {
     width: worldData?.bounds ? worldData.bounds.maxX - worldData.bounds.minX + 1 : 100,
-    depth: worldData?.bounds ? worldData.bounds.maxZ - worldData.bounds.minZ + 1 : 100
+    depth: worldData?.bounds ? worldData.bounds.maxZ - worldData.bounds.minZ + 1 : 100,
+    height: worldData?.bounds ? worldData.bounds.maxY - worldData.bounds.minY + 1 : 100
   };
 
   // Add padding around the world bounds
   const padding = Math.max(worldSize.width, worldSize.depth) * 0.1;
+  const heightPadding = worldSize.height * 0.1;
+  
+  // State for hover coordinates
+  const [hoverCoords, setHoverCoords] = useState({ x: 0, z: 0, y: 0, show: false });
+  const [sideHoverCoords, setSideHoverCoords] = useState({ x: 0, y: 0, show: false });
 
   // Initialize from worldData or initialRegion
   useEffect(() => {
@@ -379,9 +391,6 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     }
   };
 
-  // State for hover position
-  const [hoverCoords, setHoverCoords] = useState({ x: null, z: null, show: false });
-  
   // Handle mouse move on the map to show coordinates
   const handleMapMouseMove = (e) => {
     // Get point in SVG coordinates
@@ -415,7 +424,7 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     // Set drag operation information
     setDragOperation(direction);
     setIsDragging(true);
-    setDragStartCoords({ x: Math.round(point.x), z: Math.round(point.y) });
+    setDragStartCoords({ ...dragStartCoords, x: Math.round(point.x), z: Math.round(point.y) });
     setDragStartBounds({ ...bounds });
   };
   
@@ -565,21 +574,197 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     }
   };
 
+  // Handle Y-axis drag start
+  const handleYDragStart = (e, direction) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setYDragOperation(direction);
+    setIsDragging(true);
+    
+    const coords = sideSvgCoordinatesFromEvent(e);
+    setDragStartCoords({ ...dragStartCoords, x: coords.x, y: coords.y });
+    setDragStartBounds({ ...bounds });
+  };
+  
+  // Handle Y-axis drag move
+  const handleYDragMove = (e) => {
+    if (!yDragOperation || !isDragging) return;
+    
+    const coords = sideSvgCoordinatesFromEvent(e);
+    const deltaY = coords.y - dragStartCoords.y;
+    
+    const newBounds = { ...bounds };
+    
+    switch(yDragOperation) {
+      case 'top': // Top edge
+        newBounds.maxY = dragStartBounds.maxY + deltaY;
+        break;
+      case 'bottom': // Bottom edge
+        newBounds.minY = dragStartBounds.minY + deltaY;
+        break;
+    }
+    
+    // Ensure bounds remain valid (minY < maxY)
+    if (newBounds.minY >= newBounds.maxY) {
+      if (yDragOperation === 'bottom') {
+        newBounds.minY = newBounds.maxY - 1;
+      } else {
+        newBounds.maxY = newBounds.minY + 1;
+      }
+    }
+    
+    // Calculate new size and center based on bounds
+    const newSize = { ...size };
+    newSize.y = newBounds.maxY - newBounds.minY + 1;
+    
+    // Check if size exceeds limits
+    if (newSize.y > MAX_IMPORT_SIZE_Y) {
+      if (yDragOperation === 'top') {
+        newBounds.maxY = newBounds.minY + MAX_IMPORT_SIZE_Y - 1;
+      } else {
+        newBounds.minY = newBounds.maxY - MAX_IMPORT_SIZE_Y + 1;
+      }
+      newSize.y = MAX_IMPORT_SIZE_Y;
+    }
+    
+    // Update center Y
+    const newCenter = { ...center };
+    newCenter.y = Math.floor((newBounds.minY + newBounds.maxY) / 2);
+    
+    // Update state
+    setBounds(newBounds);
+    setSize(newSize);
+    setCenter(newCenter);
+    
+    // Notify parent component
+    onRegionSelected({
+      ...newBounds,
+      offsetX: offsets.x,
+      offsetZ: offsets.z
+    });
+  };
+  
+  // Handle Y-axis drag end
+  const handleYDragEnd = (e) => {
+    setYDragOperation(null);
+    setIsDragging(false);
+    setJustFinishedDrag(true);
+    
+    // Reset after a short delay to prevent immediate click events
+    setTimeout(() => {
+      setJustFinishedDrag(false);
+    }, 100);
+  };
+  
+  // Convert SVG coordinates for side view
+  const sideSvgCoordinatesFromEvent = (event) => {
+    if (!sideSvgRef.current) return { x: 0, y: 0 };
+    
+    const svg = sideSvgRef.current;
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX;
+    pt.y = event.clientY;
+    
+    const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return { x: Math.round(svgP.x), y: Math.round(svgP.y) };
+  };
+  
+  // Handle side view mouse move
+  const handleSideViewMouseMove = (e) => {
+    const coords = sideSvgCoordinatesFromEvent(e);
+    setSideHoverCoords({
+      x: coords.x,
+      y: coords.y,
+      show: true
+    });
+  };
+  
+  // Handle side view mouse leave
+  const handleSideViewMouseLeave = () => {
+    setSideHoverCoords({
+      ...sideHoverCoords,
+      show: false
+    });
+  };
+  
+  // Handle side view click
+  const handleSideViewClick = (e) => {
+    if (isDragging || justFinishedDrag) return;
+    
+    const coords = sideSvgCoordinatesFromEvent(e);
+    
+    // Update center Y
+    const newCenter = { ...center };
+    newCenter.y = coords.y;
+    
+    // Calculate new bounds based on center and size
+    const halfSizeY = Math.floor(size.y / 2);
+    const newBounds = { ...bounds };
+    newBounds.minY = newCenter.y - halfSizeY;
+    newBounds.maxY = newCenter.y + halfSizeY;
+    
+    // Ensure bounds are within world limits if world data exists
+    if (worldData && worldData.bounds) {
+      if (newBounds.minY < worldData.bounds.minY) {
+        const diff = worldData.bounds.minY - newBounds.minY;
+        newBounds.minY += diff;
+        newBounds.maxY += diff;
+        newCenter.y += diff;
+      }
+      
+      if (newBounds.maxY > worldData.bounds.maxY) {
+        const diff = newBounds.maxY - worldData.bounds.maxY;
+        newBounds.minY -= diff;
+        newBounds.maxY -= diff;
+        newCenter.y -= diff;
+      }
+    }
+    
+    // Update state
+    setBounds(newBounds);
+    setCenter(newCenter);
+    
+    // Notify parent component
+    onRegionSelected({
+      ...newBounds,
+      offsetX: offsets.x,
+      offsetZ: offsets.z
+    });
+  };
+
   return (
     <div className="region-selector">
-      <h3>Select Region to Import</h3>
-      <p>Define the boundaries of the area you want to import. Maximum size: {MAX_IMPORT_SIZE_X}×{MAX_IMPORT_SIZE_Y}×{MAX_IMPORT_SIZE_Z} blocks.</p>
+      <div className="region-header">
+        <h3>Select Region to Import</h3>
+        <div className="region-info-compact">
+          <div className="info-item">
+            <span className="info-label">Map Version:</span>
+            <span className="info-value">{version}</span>
+          </div>
+          {worldData?.worldVersion && (
+            <div className="info-item">
+              <span className="info-label">MC Version:</span>
+              <span className="info-value">{worldData.worldVersion}</span>
+            </div>
+          )}
+          <div className="info-item">
+            <span className="info-label">Max Size:</span>
+            <span className="info-value">{MAX_IMPORT_SIZE_X}×{MAX_IMPORT_SIZE_Y}×{MAX_IMPORT_SIZE_Z}</span>
+          </div>
+        </div>
+      </div>
       
       {worldData?.bounds && (
-        <div className="world-bounds-info">
-          <h4>World Range</h4>
-          <p>X: {worldData.bounds.minX} to {worldData.bounds.maxX} | Y: {worldData.bounds.minY} to {worldData.bounds.maxY} | Z: {worldData.bounds.minZ} to {worldData.bounds.maxZ}</p>
+        <div className="world-bounds-info compact">
+          <span className="bounds-label">World Range:</span>
+          <span className="bounds-value">X: {worldData.bounds.minX} to {worldData.bounds.maxX} | Y: {worldData.bounds.minY} to {worldData.bounds.maxY} | Z: {worldData.bounds.minZ} to {worldData.bounds.maxZ}</span>
         </div>
       )}
       
       <div className="y-mapping-info compact">
-        <p><strong>Y-Level Mapping:</strong> <span className="minecraft-y">Minecraft Y={bounds.minY}</span> → <span className="hytopia-y">Hytopia Y=0</span> | <span className="minecraft-y">Minecraft Y={bounds.maxY}</span> → <span className="hytopia-y">Hytopia Y={height-1}</span></p>
-        <p className="y-mapping-note">Bottom level maps to Y=0 in Hytopia regardless of Minecraft Y-level</p>
+        <span className="mapping-label">Y-Level:</span>
+        <span className="mapping-value"><span className="minecraft-y">MC Y={bounds.minY}</span> → <span className="hytopia-y">Hytopia Y=0</span> | <span className="minecraft-y">MC Y={bounds.maxY}</span> → <span className="hytopia-y">Hytopia Y={height-1}</span></span>
       </div>
 
       <div className="region-selector-actions">
@@ -588,284 +773,448 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
         </button>
       </div>
 
-      {/* Add top-down visualization */}
-      <div className="map-visualization">
-        <h4>Top-Down Map View</h4>
-        <p>Click anywhere on the map to set the center point of your selection. Drag the edges or corners to resize.</p>
-        <div className="map-container">
-          <svg 
-            ref={svgRef}
-            viewBox={viewBox} 
-            preserveAspectRatio="xMidYMid meet" 
-            className="map-svg"
-            onClick={handleMapClick}
-            onMouseMove={(e) => {
-              handleMapMouseMove(e);
-              if (dragOperation) {
-                handleDragMove(e);
-              }
-            }}
-            onMouseLeave={(e) => {
-              handleMapMouseLeave();
-              if (dragOperation) {
-                handleDragEnd(e);
-              }
-            }}
-            onMouseUp={(e) => {
-              if (dragOperation) {
-                handleDragEnd(e);
-              }
-            }}
-          >
-            {/* World boundary */}
-            {worldData?.bounds && (
-              <rect
-                x={worldData.bounds.minX}
-                y={worldData.bounds.minZ}
-                width={worldData.bounds.maxX - worldData.bounds.minX}
-                height={worldData.bounds.maxZ - worldData.bounds.minZ}
-                fill="#333"
-                stroke="#666"
-                strokeWidth={Math.max(worldSize.width, worldSize.depth) * 0.005}
-                strokeDasharray="5,5"
-              />
-            )}
-            
-            {/* Selected region */}
-            <rect
-              x={bounds.minX}
-              y={bounds.minZ}
-              width={bounds.maxX - bounds.minX}
-              height={bounds.maxZ - bounds.minZ}
-              fill="rgba(33, 150, 243, 0.3)"
-              stroke="#2196f3"
-              strokeWidth={Math.max(worldSize.width, worldSize.depth) * 0.01}
-              className={dragOperation ? "dragging" : ""}
-            />
-            
-            {/* Drag handles */}
-            {/* North (top) */}
-            <rect
-              x={bounds.minX}
-              y={bounds.minZ - Math.max(worldSize.width, worldSize.depth) * 0.015}
-              width={bounds.maxX - bounds.minX}
-              height={Math.max(worldSize.width, worldSize.depth) * 0.03}
-              fill="rgba(255, 255, 255, 0.3)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'ns-resize' }}
-              className="drag-handle"
-              onMouseDown={(e) => handleDragStart(e, 'n')}
-            />
-            
-            {/* South (bottom) */}
-            <rect
-              x={bounds.minX}
-              y={bounds.maxZ - Math.max(worldSize.width, worldSize.depth) * 0.015}
-              width={bounds.maxX - bounds.minX}
-              height={Math.max(worldSize.width, worldSize.depth) * 0.03}
-              fill="rgba(255, 255, 255, 0.3)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'ns-resize' }}
-              className="drag-handle"
-              onMouseDown={(e) => handleDragStart(e, 's')}
-            />
-            
-            {/* East (right) */}
-            <rect
-              x={bounds.maxX - Math.max(worldSize.width, worldSize.depth) * 0.015}
-              y={bounds.minZ}
-              width={Math.max(worldSize.width, worldSize.depth) * 0.03}
-              height={bounds.maxZ - bounds.minZ}
-              fill="rgba(255, 255, 255, 0.3)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'ew-resize' }}
-              className="drag-handle"
-              onMouseDown={(e) => handleDragStart(e, 'e')}
-            />
-            
-            {/* West (left) */}
-            <rect
-              x={bounds.minX - Math.max(worldSize.width, worldSize.depth) * 0.015}
-              y={bounds.minZ}
-              width={Math.max(worldSize.width, worldSize.depth) * 0.03}
-              height={bounds.maxZ - bounds.minZ}
-              fill="rgba(255, 255, 255, 0.3)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'ew-resize' }}
-              className="drag-handle"
-              onMouseDown={(e) => handleDragStart(e, 'w')}
-            />
-            
-            {/* Corner handles (NE, NW, SE, SW) */}
-            {/* Northeast (top-right) */}
-            <rect
-              x={bounds.maxX - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              y={bounds.minZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              width={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              height={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              fill="rgba(255, 255, 255, 0.5)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'nesw-resize' }}
-              className="drag-handle corner"
-              onMouseDown={(e) => handleDragStart(e, 'ne')}
-            />
-            
-            {/* Northwest (top-left) */}
-            <rect
-              x={bounds.minX - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              y={bounds.minZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              width={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              height={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              fill="rgba(255, 255, 255, 0.5)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'nwse-resize' }}
-              className="drag-handle corner"
-              onMouseDown={(e) => handleDragStart(e, 'nw')}
-            />
-            
-            {/* Southeast (bottom-right) */}
-            <rect
-              x={bounds.maxX - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              y={bounds.maxZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              width={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              height={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              fill="rgba(255, 255, 255, 0.5)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'nwse-resize' }}
-              className="drag-handle corner"
-              onMouseDown={(e) => handleDragStart(e, 'se')}
-            />
-            
-            {/* Southwest (bottom-left) */}
-            <rect
-              x={bounds.minX - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              y={bounds.maxZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
-              width={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              height={Math.max(worldSize.width, worldSize.depth) * 0.04}
-              fill="rgba(255, 255, 255, 0.5)"
-              stroke="#2196f3"
-              strokeWidth={1}
-              style={{ cursor: 'nesw-resize' }}
-              className="drag-handle corner"
-              onMouseDown={(e) => handleDragStart(e, 'sw')}
-            />
-            
-            {/* Center point */}
-            <circle
-              cx={center.x}
-              cy={center.z}
-              r={Math.max(worldSize.width, worldSize.depth) * 0.015}
-              fill="#ff4081"
-              stroke="#fff"
-              strokeWidth={Math.max(worldSize.width, worldSize.depth) * 0.005}
-            />
-            
-            {/* North indicator */}
-            <polygon
-              points={`${center.x},${bounds.minZ - padding * 0.3} ${center.x - padding * 0.1},${bounds.minZ - padding * 0.1} ${center.x + padding * 0.1},${bounds.minZ - padding * 0.1}`}
-              fill="#fff"
-            />
-            <text
-              x={center.x}
-              y={bounds.minZ - padding * 0.4}
-              textAnchor="middle"
-              fill="#fff"
-              fontSize={Math.max(worldSize.width, worldSize.depth) * 0.05}
+      <div className="map-visualizations">
+        {/* Top-down visualization */}
+        <div className="map-visualization">
+          <h4>Top-Down Map View (X-Z)</h4>
+          <p>Click to set center, drag edges to resize.</p>
+          <div className="map-container">
+            <svg 
+              ref={svgRef}
+              viewBox={viewBox} 
+              preserveAspectRatio="xMidYMid meet" 
+              className="map-svg"
+              onClick={handleMapClick}
+              onMouseMove={(e) => {
+                handleMapMouseMove(e);
+                if (dragOperation) {
+                  handleDragMove(e);
+                }
+              }}
+              onMouseLeave={(e) => {
+                handleMapMouseLeave();
+                if (dragOperation) {
+                  handleDragEnd(e);
+                }
+              }}
+              onMouseUp={(e) => {
+                if (dragOperation) {
+                  handleDragEnd(e);
+                }
+              }}
             >
-              N
-            </text>
-            
-            {/* Coordinate labels */}
-            <text
-              x={bounds.minX}
-              y={bounds.minZ - padding * 0.1}
-              textAnchor="middle"
-              fill="#fff"
-              fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
-            >
-              {bounds.minX}
-            </text>
-            <text
-              x={bounds.maxX}
-              y={bounds.minZ - padding * 0.1}
-              textAnchor="middle"
-              fill="#fff"
-              fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
-            >
-              {bounds.maxX}
-            </text>
-            <text
-              x={bounds.minX - padding * 0.1}
-              y={bounds.minZ}
-              textAnchor="end"
-              dominantBaseline="middle"
-              fill="#fff"
-              fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
-            >
-              {bounds.minZ}
-            </text>
-            <text
-              x={bounds.minX - padding * 0.1}
-              y={bounds.maxZ}
-              textAnchor="end"
-              dominantBaseline="middle"
-              fill="#fff"
-              fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
-            >
-              {bounds.maxZ}
-            </text>
-            
-            {/* Hover coordinates */}
-            {hoverCoords.show && (
-              <g className="hover-coords">
+              {/* World boundary */}
+              {worldData?.bounds && (
                 <rect
-                  x={hoverCoords.x - Math.max(worldSize.width, worldSize.depth) * 0.05}
-                  y={hoverCoords.z - Math.max(worldSize.width, worldSize.depth) * 0.05}
-                  width={Math.max(worldSize.width, worldSize.depth) * 0.1}
-                  height={Math.max(worldSize.width, worldSize.depth) * 0.05}
-                  fill="rgba(0, 0, 0, 0.7)"
-                  rx={Math.max(worldSize.width, worldSize.depth) * 0.01}
-                  ry={Math.max(worldSize.width, worldSize.depth) * 0.01}
+                  x={worldData.bounds.minX}
+                  y={worldData.bounds.minZ}
+                  width={worldData.bounds.maxX - worldData.bounds.minX}
+                  height={worldData.bounds.maxZ - worldData.bounds.minZ}
+                  fill="#333"
+                  stroke="#666"
+                  strokeWidth={Math.max(worldSize.width, worldSize.depth) * 0.005}
+                  strokeDasharray="5,5"
                 />
-                <text
-                  x={hoverCoords.x}
-                  y={hoverCoords.z}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill="#fff"
-                  fontSize={Math.max(worldSize.width, worldSize.depth) * 0.025}
-                >
-                  ({hoverCoords.x}, {hoverCoords.z})
-                </text>
-              </g>
+              )}
+              
+              {/* Selected region */}
+              <rect
+                x={bounds.minX}
+                y={bounds.minZ}
+                width={bounds.maxX - bounds.minX}
+                height={bounds.maxZ - bounds.minZ}
+                fill="rgba(33, 150, 243, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={Math.max(worldSize.width, worldSize.depth) * 0.01}
+                className={dragOperation ? "dragging" : ""}
+              />
+              
+              {/* Drag handles */}
+              {/* North (top) */}
+              <rect
+                x={bounds.minX}
+                y={bounds.minZ - Math.max(worldSize.width, worldSize.depth) * 0.015}
+                width={bounds.maxX - bounds.minX}
+                height={Math.max(worldSize.width, worldSize.depth) * 0.03}
+                fill="rgba(255, 255, 255, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'ns-resize' }}
+                className="drag-handle"
+                onMouseDown={(e) => handleDragStart(e, 'n')}
+              />
+              
+              {/* South (bottom) */}
+              <rect
+                x={bounds.minX}
+                y={bounds.maxZ - Math.max(worldSize.width, worldSize.depth) * 0.015}
+                width={bounds.maxX - bounds.minX}
+                height={Math.max(worldSize.width, worldSize.depth) * 0.03}
+                fill="rgba(255, 255, 255, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'ns-resize' }}
+                className="drag-handle"
+                onMouseDown={(e) => handleDragStart(e, 's')}
+              />
+              
+              {/* East (right) */}
+              <rect
+                x={bounds.maxX - Math.max(worldSize.width, worldSize.depth) * 0.015}
+                y={bounds.minZ}
+                width={Math.max(worldSize.width, worldSize.depth) * 0.03}
+                height={bounds.maxZ - bounds.minZ}
+                fill="rgba(255, 255, 255, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'ew-resize' }}
+                className="drag-handle"
+                onMouseDown={(e) => handleDragStart(e, 'e')}
+              />
+              
+              {/* West (left) */}
+              <rect
+                x={bounds.minX - Math.max(worldSize.width, worldSize.depth) * 0.015}
+                y={bounds.minZ}
+                width={Math.max(worldSize.width, worldSize.depth) * 0.03}
+                height={bounds.maxZ - bounds.minZ}
+                fill="rgba(255, 255, 255, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'ew-resize' }}
+                className="drag-handle"
+                onMouseDown={(e) => handleDragStart(e, 'w')}
+              />
+              
+              {/* Corner handles (NE, NW, SE, SW) */}
+              {/* Northeast (top-right) */}
+              <rect
+                x={bounds.maxX - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                y={bounds.minZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                width={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                height={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                fill="rgba(255, 255, 255, 0.5)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'nesw-resize' }}
+                className="drag-handle corner"
+                onMouseDown={(e) => handleDragStart(e, 'ne')}
+              />
+              
+              {/* Northwest (top-left) */}
+              <rect
+                x={bounds.minX - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                y={bounds.minZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                width={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                height={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                fill="rgba(255, 255, 255, 0.5)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'nwse-resize' }}
+                className="drag-handle corner"
+                onMouseDown={(e) => handleDragStart(e, 'nw')}
+              />
+              
+              {/* Southeast (bottom-right) */}
+              <rect
+                x={bounds.maxX - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                y={bounds.maxZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                width={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                height={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                fill="rgba(255, 255, 255, 0.5)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'nwse-resize' }}
+                className="drag-handle corner"
+                onMouseDown={(e) => handleDragStart(e, 'se')}
+              />
+              
+              {/* Southwest (bottom-left) */}
+              <rect
+                x={bounds.minX - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                y={bounds.maxZ - Math.max(worldSize.width, worldSize.depth) * 0.02}
+                width={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                height={Math.max(worldSize.width, worldSize.depth) * 0.04}
+                fill="rgba(255, 255, 255, 0.5)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'nesw-resize' }}
+                className="drag-handle corner"
+                onMouseDown={(e) => handleDragStart(e, 'sw')}
+              />
+              
+              {/* Center point */}
+              <circle
+                cx={center.x}
+                cy={center.z}
+                r={Math.max(worldSize.width, worldSize.depth) * 0.015}
+                fill="#ff4081"
+                stroke="#fff"
+                strokeWidth={Math.max(worldSize.width, worldSize.depth) * 0.005}
+              />
+              
+              {/* North indicator */}
+              <polygon
+                points={`${center.x},${bounds.minZ - padding * 0.3} ${center.x - padding * 0.1},${bounds.minZ - padding * 0.1} ${center.x + padding * 0.1},${bounds.minZ - padding * 0.1}`}
+                fill="#fff"
+              />
+              <text
+                x={center.x}
+                y={bounds.minZ - padding * 0.4}
+                textAnchor="middle"
+                fill="#fff"
+                fontSize={Math.max(worldSize.width, worldSize.depth) * 0.05}
+              >
+                N
+              </text>
+              
+              {/* Coordinate labels */}
+              <text
+                x={bounds.minX}
+                y={bounds.minZ - padding * 0.1}
+                textAnchor="middle"
+                fill="#fff"
+                fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
+              >
+                {bounds.minX}
+              </text>
+              <text
+                x={bounds.maxX}
+                y={bounds.minZ - padding * 0.1}
+                textAnchor="middle"
+                fill="#fff"
+                fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
+              >
+                {bounds.maxX}
+              </text>
+              <text
+                x={bounds.minX - padding * 0.1}
+                y={bounds.minZ}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="#fff"
+                fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
+              >
+                {bounds.minZ}
+              </text>
+              <text
+                x={bounds.minX - padding * 0.1}
+                y={bounds.maxZ}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="#fff"
+                fontSize={Math.max(worldSize.width, worldSize.depth) * 0.03}
+              >
+                {bounds.maxZ}
+              </text>
+              
+              {/* Hover coordinates */}
+              {hoverCoords.show && (
+                <g className="hover-coords">
+                  <rect
+                    x={hoverCoords.x - Math.max(worldSize.width, worldSize.depth) * 0.05}
+                    y={hoverCoords.z - Math.max(worldSize.width, worldSize.depth) * 0.05}
+                    width={Math.max(worldSize.width, worldSize.depth) * 0.1}
+                    height={Math.max(worldSize.width, worldSize.depth) * 0.05}
+                    fill="rgba(0, 0, 0, 0.7)"
+                    rx={Math.max(worldSize.width, worldSize.depth) * 0.01}
+                    ry={Math.max(worldSize.width, worldSize.depth) * 0.01}
+                  />
+                  <text
+                    x={hoverCoords.x}
+                    y={hoverCoords.z}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill="#fff"
+                    fontSize={Math.max(worldSize.width, worldSize.depth) * 0.025}
+                  >
+                    ({hoverCoords.x}, {hoverCoords.z})
+                  </text>
+                </g>
+              )}
+            </svg>
+            <div className="map-legend">
+              <div className="legend-item">
+                <div className="legend-color" style={{ backgroundColor: "#666", border: "1px dashed #999" }}></div>
+                <span>World Boundary</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-color" style={{ backgroundColor: "rgba(33, 150, 243, 0.3)", border: "2px solid #2196f3" }}></div>
+                <span>Selected Region</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-color" style={{ backgroundColor: "#ff4081", borderRadius: "50%", border: "2px solid #fff" }}></div>
+                <span>Center Point</span>
+              </div>
+            </div>
+            {hoverCoords.show && (
+              <div className="current-coords">
+                Hovering at: X: {hoverCoords.x}, Z: {hoverCoords.z}
+              </div>
             )}
-          </svg>
-          <div className="map-legend">
-            <div className="legend-item">
-              <div className="legend-color" style={{ backgroundColor: "#666", border: "1px dashed #999" }}></div>
-              <span>World Boundary</span>
-            </div>
-            <div className="legend-item">
-              <div className="legend-color" style={{ backgroundColor: "rgba(33, 150, 243, 0.3)", border: "2px solid #2196f3" }}></div>
-              <span>Selected Region</span>
-            </div>
-            <div className="legend-item">
-              <div className="legend-color" style={{ backgroundColor: "#ff4081", borderRadius: "50%", border: "2px solid #fff" }}></div>
-              <span>Center Point</span>
-            </div>
           </div>
-          {hoverCoords.show && (
-            <div className="current-coords">
-              Hovering at: X: {hoverCoords.x}, Z: {hoverCoords.z}
+        </div>
+        
+        {/* Side view visualization */}
+        <div className="map-visualization side-view">
+          <h4>Side View (X-Y)</h4>
+          <p>Click to set Y center, drag top/bottom to adjust height.</p>
+          <div className="map-container">
+            <svg 
+              ref={sideSvgRef}
+              viewBox={`${bounds.minX - padding} ${worldData?.bounds?.minY - heightPadding || -10} ${worldSize.width + padding * 2} ${worldSize.height + heightPadding * 2}`} 
+              preserveAspectRatio="xMidYMid meet" 
+              className="map-svg side-svg"
+              onClick={handleSideViewClick}
+              onMouseMove={(e) => {
+                handleSideViewMouseMove(e);
+                if (yDragOperation) {
+                  handleYDragMove(e);
+                }
+              }}
+              onMouseLeave={(e) => {
+                handleSideViewMouseLeave();
+                if (yDragOperation) {
+                  handleYDragEnd(e);
+                }
+              }}
+              onMouseUp={(e) => {
+                if (yDragOperation) {
+                  handleYDragEnd(e);
+                }
+              }}
+            >
+              {/* World boundary */}
+              {worldData?.bounds && (
+                <rect
+                  x={worldData.bounds.minX}
+                  y={worldData.bounds.minY}
+                  width={worldData.bounds.maxX - worldData.bounds.minX}
+                  height={worldData.bounds.maxY - worldData.bounds.minY}
+                  fill="#333"
+                  stroke="#666"
+                  strokeWidth={Math.max(worldSize.width, worldSize.height) * 0.005}
+                  strokeDasharray="5,5"
+                />
+              )}
+              
+              {/* Selected region */}
+              <rect
+                x={bounds.minX}
+                y={bounds.minY}
+                width={bounds.maxX - bounds.minX}
+                height={bounds.maxY - bounds.minY}
+                fill="rgba(33, 150, 243, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={Math.max(worldSize.width, worldSize.height) * 0.01}
+                className={yDragOperation ? "dragging" : ""}
+              />
+              
+              {/* Top handle */}
+              <rect
+                x={bounds.minX}
+                y={bounds.maxY - Math.max(worldSize.width, worldSize.height) * 0.015}
+                width={bounds.maxX - bounds.minX}
+                height={Math.max(worldSize.width, worldSize.height) * 0.03}
+                fill="rgba(255, 255, 255, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'ns-resize' }}
+                className="drag-handle"
+                onMouseDown={(e) => handleYDragStart(e, 'top')}
+              />
+              
+              {/* Bottom handle */}
+              <rect
+                x={bounds.minX}
+                y={bounds.minY - Math.max(worldSize.width, worldSize.height) * 0.015}
+                width={bounds.maxX - bounds.minX}
+                height={Math.max(worldSize.width, worldSize.height) * 0.03}
+                fill="rgba(255, 255, 255, 0.3)"
+                stroke="#2196f3"
+                strokeWidth={1}
+                style={{ cursor: 'ns-resize' }}
+                className="drag-handle"
+                onMouseDown={(e) => handleYDragStart(e, 'bottom')}
+              />
+              
+              {/* Center point */}
+              <circle
+                cx={(bounds.minX + bounds.maxX) / 2}
+                cy={center.y}
+                r={Math.max(worldSize.width, worldSize.height) * 0.015}
+                fill="#ff4081"
+                stroke="#fff"
+                strokeWidth={Math.max(worldSize.width, worldSize.height) * 0.005}
+              />
+              
+              {/* Y-axis labels */}
+              <text
+                x={bounds.minX - heightPadding * 0.1}
+                y={bounds.minY}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="#fff"
+                fontSize={Math.max(worldSize.width, worldSize.height) * 0.03}
+              >
+                {bounds.minY}
+              </text>
+              <text
+                x={bounds.minX - heightPadding * 0.1}
+                y={bounds.maxY}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="#fff"
+                fontSize={Math.max(worldSize.width, worldSize.height) * 0.03}
+              >
+                {bounds.maxY}
+              </text>
+              
+              {/* Hover coordinates */}
+              {sideHoverCoords.show && (
+                <g className="hover-coords">
+                  <rect
+                    x={sideHoverCoords.x - Math.max(worldSize.width, worldSize.height) * 0.05}
+                    y={sideHoverCoords.y - Math.max(worldSize.width, worldSize.height) * 0.05}
+                    width={Math.max(worldSize.width, worldSize.height) * 0.1}
+                    height={Math.max(worldSize.width, worldSize.height) * 0.05}
+                    fill="rgba(0, 0, 0, 0.7)"
+                    rx={Math.max(worldSize.width, worldSize.height) * 0.01}
+                    ry={Math.max(worldSize.width, worldSize.height) * 0.01}
+                  />
+                  <text
+                    x={sideHoverCoords.x}
+                    y={sideHoverCoords.y}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill="#fff"
+                    fontSize={Math.max(worldSize.width, worldSize.height) * 0.025}
+                  >
+                    ({sideHoverCoords.x}, {sideHoverCoords.y})
+                  </text>
+                </g>
+              )}
+            </svg>
+            <div className="map-legend">
+              <div className="legend-item">
+                <div className="legend-color" style={{ backgroundColor: "#666", border: "1px dashed #999" }}></div>
+                <span>World Height</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-color" style={{ backgroundColor: "rgba(33, 150, 243, 0.3)", border: "2px solid #2196f3" }}></div>
+                <span>Selected Height</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-color" style={{ backgroundColor: "#ff4081", borderRadius: "50%", border: "2px solid #fff" }}></div>
+                <span>Center Y</span>
+              </div>
             </div>
-          )}
+            {sideHoverCoords.show && (
+              <div className="current-coords">
+                Hovering at: X: {sideHoverCoords.x}, Y: {sideHoverCoords.y}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       
@@ -895,8 +1244,8 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
           </div>
           <div className="input-control">
             <label>Depth (Z):</label>
-          <input
-            type="number"
+            <input
+              type="number"
               min="1"
               max={MAX_IMPORT_SIZE_Z}
               value={size.z}
@@ -912,12 +1261,12 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
         <div className="center-inputs">
           <div className="input-control">
             <label>Center X:</label>
-          <input
-            type="number"
+            <input
+              type="number"
               value={center.x}
               onChange={(e) => handleCenterChange('x', e.target.value)}
-          />
-        </div>
+            />
+          </div>
           <div className="input-control">
             <label>Center Y:</label>
             <input
@@ -931,8 +1280,8 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
           </div>
           <div className="input-control">
             <label>Center Z:</label>
-          <input
-            type="number"
+            <input
+              type="number"
               value={center.z}
               onChange={(e) => handleCenterChange('z', e.target.value)}
             />
