@@ -1,8 +1,14 @@
 import * as THREE from 'three';
 
+// Add THREE if needed
+const BufferGeometry = THREE.BufferGeometry;
+const Float32BufferAttribute = THREE.Float32BufferAttribute;
+const MeshStandardMaterial = THREE.MeshStandardMaterial;
+const Mesh = THREE.Mesh;
+
 // Texture Atlas Manager for block textures
 export class TextureAtlas {
-  constructor(options = {}) {
+  constructor() {
     this.atlas = null;           // The THREE.Texture for the atlas
     this.atlasSize = 2048;       // Size of atlas texture (power of 2)
     this.blockSize = 64;         // Size of individual block texture
@@ -15,23 +21,11 @@ export class TextureAtlas {
     this.atlasCanvas.height = this.atlasSize;
     this.atlasContext = this.atlasCanvas.getContext('2d');
     this.usedSlots = new Set();  // Track used slots
-    
-    // Texture quality settings
-    this.mipmappingEnabled = options.mipmappingEnabled !== undefined ? options.mipmappingEnabled : true;
-    this.anisotropyLevel = options.anisotropyLevel || 16; // Default to high quality
-    this.mipmapQuality = options.mipmapQuality || 'high'; // 'none', 'low', 'medium', 'high'
   }
 
   // Initialize the texture atlas with block types
-  async initialize(blockTypes, options = {}) {
-    // Override settings with any passed options
-    if (options.mipmappingEnabled !== undefined) this.mipmappingEnabled = options.mipmappingEnabled;
-    if (options.anisotropyLevel) this.anisotropyLevel = options.anisotropyLevel;
-    if (options.mipmapQuality) this.mipmapQuality = options.mipmapQuality;
-    
+  async initialize(blockTypes) {
     console.log('Initializing texture atlas with', blockTypes.length, 'block types');
-    console.log(`Texture settings: mipmapping=${this.mipmappingEnabled}, quality=${this.mipmapQuality}, anisotropy=${this.anisotropyLevel}`);
-    
     this.atlasContext.fillStyle = 'rgba(255, 0, 255, 0.5)'; // Default color (magenta semi-transparent)
     this.atlasContext.fillRect(0, 0, this.atlasSize, this.atlasSize);
     
@@ -57,38 +51,10 @@ export class TextureAtlas {
     this.atlas = new THREE.CanvasTexture(this.atlasCanvas);
     this.atlas.wrapS = THREE.ClampToEdgeWrapping;
     this.atlas.wrapT = THREE.ClampToEdgeWrapping;
-    
-    // Always use nearest filter for magnification to preserve pixel art look
     this.atlas.magFilter = THREE.NearestFilter;
-    
-    // Set minification filter based on quality setting
-    if (!this.mipmappingEnabled) {
-      // No mipmapping - just use nearest filter
-      this.atlas.minFilter = THREE.NearestFilter;
-      this.atlas.generateMipmaps = false;
-    } else {
-      // Set filter based on quality
-      switch (this.mipmapQuality) {
-        case 'low':
-          this.atlas.minFilter = THREE.NearestMipmapNearestFilter;
-          break;
-        case 'medium':
-          this.atlas.minFilter = THREE.LinearMipmapNearestFilter;
-          break;
-        case 'high':
-        default:
-          this.atlas.minFilter = THREE.LinearMipmapLinearFilter; // Trilinear filtering
-          break;
-      }
-      this.atlas.generateMipmaps = true;
-    }
-    
-    // Set anisotropic filtering level if available
-    const renderer = THREE.WebGLRenderer ? new THREE.WebGLRenderer() : null;
-    const maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
-    this.atlas.anisotropy = Math.min(this.anisotropyLevel, maxAnisotropy);
-    
-    console.log(`Texture atlas created with mipmapping=${this.mipmappingEnabled}, quality=${this.mipmapQuality}, anisotropy=${this.atlas.anisotropy}`);
+    this.atlas.minFilter = THREE.NearestMipmapNearestFilter;
+    this.atlas.generateMipmaps = true;
+    console.log('Texture atlas creation complete');
     
     return this.atlas;
   }
@@ -181,6 +147,12 @@ export class ChunkMeshBuilder {
     this.enableLod = true; // Enable Level of Detail
     this.lodDistances = [3, 6, 10, 16]; // Chunk distances for different LOD levels
     this.lodScales = [1, 2, 4, 8]; // Corresponding detail reduction factors
+    
+    // Memory pools for greedy meshing to reduce garbage collection
+    this.maskPool = {};
+    this.mergedPool = {};
+    this.textureIdPool = {};
+    this.blockCoordsCaches = {};
   }
   
   // Toggle greedy meshing
@@ -411,7 +383,7 @@ export class ChunkMeshBuilder {
   }
   
   // Build a greedy meshed geometry
-  buildGreedyMesh(blockData, blockGrid, faceDirections, bounds, positions, normals, uvs, indices, blockTypeMap) {
+  buildGreedyMesh(blockData, blockGrid, faceDirections, bounds, positions, normals, uvs, indices, blockTypeMap, startVertex = 0, progressCallback = null) {
     console.time('greedyMesh');
     const { minX, minY, minZ, maxX, maxY, maxZ } = bounds;
     
@@ -421,8 +393,26 @@ export class ChunkMeshBuilder {
     const sizeZ = maxZ - minZ + 1;
     
     // Used for tracking merged faces
-    let vertexCount = 0;
+    let vertexCount = startVertex || 0;
     let processedQuads = 0;
+    
+    // Create a cache for fast block lookups
+    const blockLookupCache = new Map();
+    const visibilityCache = new Map();
+    
+    // Pre-fill the block lookup cache for faster access
+    blockData.forEach((block, key) => {
+      blockLookupCache.set(key, block);
+      
+      // Pre-compute face visibility for each block
+      if (!block.skip) {
+        const visibleFaceMap = {};
+        block.visibleFaces.forEach(face => {
+          visibleFaceMap[face.name] = true;
+        });
+        visibilityCache.set(key, visibleFaceMap);
+      }
+    });
     
     // For each face direction, build a 2D grid and merge adjacent faces
     for (const faceDir of faceDirections) {
@@ -458,12 +448,16 @@ export class ChunkMeshBuilder {
       
       // For each layer along the face normal direction (depth)
       for (let d = 0; d < depth; d++) {
-        // Create a 2D mask of visible faces
-        const mask = Array(width * height).fill(null);
+        // Create a 2D mask of visible faces using typed arrays for better performance
+        const maskSize = width * height;
+        const mask = this.getFromPool('maskPool', 'Uint8Array', maskSize); // 0 = empty, 1 = occupied
+        const textureIds = this.getFromPool('textureIdPool', 'Int16Array', maskSize).fill(-1); // Store texture IDs separately
+        const blockCoords = this.getFromPool('blockCoordsCaches', 'Array', maskSize); // Store block coordinates for lookup
         
-        // Fill the mask with block data for visible faces
+        // Fill the mask with block data for visible faces - optimized inner loop
+        let maskIndex = 0;
         for (let h = 0; h < height; h++) {
-          for (let w = 0; w < width; w++) {
+          for (let w = 0; w < width; w++, maskIndex++) {
             // Convert 2D + depth to 3D coordinates
             let x = minX, y = minY, z = minZ;
             
@@ -487,84 +481,81 @@ export class ChunkMeshBuilder {
             }
             
             const posKey = `${x},${y},${z}`;
-            const block = blockData.get(posKey);
             
-            // Skip if no block or block is skipped
-            if (!block || block.skip) continue;
+            // Use the cached block data for faster lookup
+            const faceVisibility = visibilityCache.get(posKey);
+            if (!faceVisibility) continue; // No block or block is skipped
             
-            // Check if this face is visible
-            const hasFace = block.visibleFaces.some(f => f.name === faceName);
-            if (!hasFace) continue;
+            // Check if this face is visible using the cache
+            if (!faceVisibility[faceName]) continue;
             
-            // Store block info in mask
-            mask[w + h * width] = {
-              x, y, z,
-              blockId: block.id,
-              textureId: block.id // Using blockId as textureId for now, could be more specific with textures
-            };
+            // Get the block data from cache
+            const block = blockLookupCache.get(posKey);
+            
+            // Store block info in mask and auxiliary arrays
+            mask[maskIndex] = 1; // Mark as occupied using faster index
+            textureIds[maskIndex] = block.id; // Store the texture ID
+            blockCoords[maskIndex] = { x, y, z }; // Store the coordinates
           }
         }
         
-        // Now perform greedy meshing on the 2D mask
+        // Now perform greedy meshing on the 2D mask with bit-level optimizations
         // This merges adjacent faces with the same texture
         
         // Track which positions have been merged already
-        const merged = new Set();
+        const merged = this.getFromPool('mergedPool', 'Uint8Array', maskSize); // 0 = not merged, 1 = merged
         
-        // For each position in the mask
+        // For each position in the mask - optimized for better cache locality
+        maskIndex = 0;
         for (let h = 0; h < height; h++) {
-          for (let w = 0; w < width; w++) {
-            const index = w + h * width;
+          for (let w = 0; w < width; w++, maskIndex++) {
+            // Skip if no block or already merged - using direct bit check is faster
+            if (mask[maskIndex] === 0 || merged[maskIndex] === 1) continue;
             
-            // Skip if no block or already merged
-            if (!mask[index] || merged.has(index)) continue;
+            const textureId = textureIds[maskIndex];
             
-            const blockInfo = mask[index];
-            const { textureId } = blockInfo;
-            
-            // Try to expand in width direction as far as possible
+            // Try to expand in width direction as far as possible - with fast bit-level checks
             let currentWidth = 1;
             while (
               w + currentWidth < width && 
-              mask[index + currentWidth] && 
-              !merged.has(index + currentWidth) && 
-              mask[index + currentWidth].textureId === textureId
+              mask[maskIndex + currentWidth] === 1 && 
+              merged[maskIndex + currentWidth] === 0 && 
+              textureIds[maskIndex + currentWidth] === textureId
             ) {
               currentWidth++;
             }
             
-            // Try to expand in height direction as far as possible
+            // Try to expand in height direction as far as possible - optimized inner loop
             let currentHeight = 1;
             let canExpandHeight = true;
             
-            while (canExpandHeight && h + currentHeight < height) {
-              // Check if an entire row can be added
+            expandHeight: while (canExpandHeight && h + currentHeight < height) {
+              const rowIndex = (h + currentHeight) * width + w;
+              
+              // Fast check for an entire row using typed array operations
               for (let dx = 0; dx < currentWidth; dx++) {
-                const checkIndex = (w + dx) + (h + currentHeight) * width;
-                if (
-                  !mask[checkIndex] || 
-                  merged.has(checkIndex) || 
-                  mask[checkIndex].textureId !== textureId
-                ) {
+                const checkIndex = rowIndex + dx;
+                
+                // Combined condition for faster evaluation
+                if (mask[checkIndex] === 0 || merged[checkIndex] === 1 || textureIds[checkIndex] !== textureId) {
                   canExpandHeight = false;
-                  break;
+                  break expandHeight;
                 }
               }
               
-              if (canExpandHeight) {
-                currentHeight++;
-              }
+              currentHeight++;
             }
             
-            // Mark all cells in the merged quad as processed
+            // Mark all cells in the merged quad as processed - using faster typed array access
             for (let dy = 0; dy < currentHeight; dy++) {
+              const rowOffset = (h + dy) * width + w;
               for (let dx = 0; dx < currentWidth; dx++) {
-                merged.add((w + dx) + (h + dy) * width);
+                merged[rowOffset + dx] = 1;
               }
             }
             
-            // Create the merged quad
-            const { x, y, z } = blockInfo;
+            // Get the block coordinates
+            const { x, y, z } = blockCoords[maskIndex];
             
             // Convert the 2D dimensions back to 3D for creating the quad
             let x1 = x, y1 = y, z1 = z;
@@ -604,6 +595,13 @@ export class ChunkMeshBuilder {
     
     console.log(`Generated ${processedQuads} merged quads with greedy meshing`);
     console.timeEnd('greedyMesh');
+    
+    // Call the progress callback if provided
+    if (progressCallback) {
+      progressCallback(vertexCount - startVertex, processedQuads);
+    }
+    
+    return { vertexCount, processedQuads };
   }
   
   // Add a quad spanning from (x1,y1,z1) to (x2,y2,z2)
@@ -788,6 +786,177 @@ export class ChunkMeshBuilder {
       baseVertex, baseVertex + 1, baseVertex + 2,
       baseVertex, baseVertex + 2, baseVertex + 3
     );
+  }
+  
+  // Get a reusable typed array from the pool, or create if needed
+  getFromPool(poolName, type, size) {
+    if (!this[poolName][size]) {
+      // Create a new array of the specified type and size
+      switch (type) {
+        case 'Uint8Array':
+          this[poolName][size] = new Uint8Array(size);
+          break;
+        case 'Int16Array':
+          this[poolName][size] = new Int16Array(size);
+          break;
+        default:
+          this[poolName][size] = new Array(size);
+      }
+    }
+    
+    // Reset the array (zero for typed arrays, null for regular arrays)
+    if (type === 'Uint8Array' || type === 'Int16Array') {
+      this[poolName][size].fill(0);
+    } else {
+      this[poolName][size].fill(null);
+    }
+    
+    return this[poolName][size];
+  }
+
+  // Process multiple chunks in batch for improved performance 
+  batchProcessChunks(chunksData, blockTypes) {
+    console.time('batchProcessing');
+    
+    // Arrays to hold all geometry data
+    const allPositions = [];
+    const allNormals = [];
+    const allUvs = [];
+    const allIndices = [];
+    
+    let totalVertexCount = 0;
+    let totalQuads = 0;
+    let chunksProcessed = 0;
+    
+    // Process each chunk and combine the geometry
+    Object.entries(chunksData).forEach(([chunkKey, chunkBlocks]) => {
+      // Skip empty chunks
+      if (!chunkBlocks || chunkBlocks.size === 0) return;
+      
+      // Extract chunk bounds from blocks
+      const bounds = this.calculateChunkBounds(chunkBlocks);
+      
+      // Create temporary arrays for this chunk
+      const positions = [];
+      const normals = [];
+      const uvs = [];
+      const indices = [];
+      
+      // Process the chunk with greedy meshing
+      const { vertexCount, quads } = this.processChunkGreedy(
+        chunkBlocks, 
+        blockTypes, 
+        bounds, 
+        positions, 
+        normals, 
+        uvs, 
+        indices, 
+        totalVertexCount
+      );
+      
+      // Add this chunk's data to the combined arrays
+      if (positions.length > 0) {
+        allPositions.push(...positions);
+        allNormals.push(...normals);
+        allUvs.push(...uvs);
+        allIndices.push(...indices);
+        
+        totalVertexCount += vertexCount;
+        totalQuads += quads;
+        chunksProcessed++;
+      }
+    });
+    
+    // Create a single combined geometry
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(allPositions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(allNormals, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(allUvs, 2));
+    geometry.setIndex(allIndices);
+    
+    // Create a material with the texture atlas
+    const material = new THREE.MeshStandardMaterial({
+      map: this.textureAtlas.getAtlasTexture(),
+      side: THREE.FrontSide,
+      transparent: false,
+      alphaTest: 0.5
+    });
+    
+    // Create the final mesh
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    console.log(`Batch processed ${chunksProcessed} chunks with ${totalQuads} quads`);
+    console.timeEnd('batchProcessing');
+    
+    return mesh;
+  }
+
+  // Calculate bounds of a chunk
+  calculateChunkBounds(chunkBlocks) {
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    
+    chunkBlocks.forEach((block, key) => {
+      const [x, y, z] = key.split(',').map(Number);
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      minZ = Math.min(minZ, z);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      maxZ = Math.max(maxZ, z);
+    });
+    
+    return { minX, minY, minZ, maxX, maxY, maxZ };
+  }
+
+  // Process a single chunk with greedy meshing
+  processChunkGreedy(chunkBlocks, blockTypes, bounds, positions, normals, uvs, indices, startVertex = 0) {
+    const blockGrid = new Map();
+    const faceDirections = this.getFaceDirections();
+    
+    // Create a grid representation for neighbor checking
+    chunkBlocks.forEach((block, key) => {
+      blockGrid.set(key, block);
+    });
+    
+    // Process with greedy meshing
+    let currentVertex = startVertex;
+    let quadsGenerated = 0;
+    
+    // Build the greedy mesh
+    const result = this.buildGreedyMesh(
+      chunkBlocks,
+      blockGrid,
+      faceDirections,
+      bounds,
+      positions,
+      normals,
+      uvs,
+      indices,
+      null, // No blockTypeMap needed
+      currentVertex,
+      (addedVertices, addedQuads) => {
+        currentVertex += addedVertices;
+        quadsGenerated += addedQuads;
+      }
+    );
+    
+    return {
+      vertexCount: currentVertex - startVertex,
+      quads: quadsGenerated
+    };
+  }
+
+  // Get face directions for greedy meshing
+  getFaceDirections() {
+    return [
+      { name: 'right', dir: [1, 0, 0], normal: [1, 0, 0], axis: 0 },
+      { name: 'left', dir: [-1, 0, 0], normal: [-1, 0, 0], axis: 0 },
+      { name: 'top', dir: [0, 1, 0], normal: [0, 1, 0], axis: 1 },
+      { name: 'bottom', dir: [0, -1, 0], normal: [0, -1, 0], axis: 1 },
+      { name: 'front', dir: [0, 0, 1], normal: [0, 0, 1], axis: 2 },
+      { name: 'back', dir: [0, 0, -1], normal: [0, 0, -1], axis: 2 }
+    ];
   }
 }
 

@@ -239,26 +239,17 @@ let atlasInitialized = false;
 
 // Initialize the texture atlas
 const initTextureAtlas = async (blockTypes) => {
-  try {
-    if (!blockTypes || blockTypes.length === 0) return null;
-    
-    console.log("Initializing texture atlas...");
-    textureAtlas = new TextureAtlas({
-      mipmappingEnabled: PERFORMANCE_SETTINGS.mipmappingEnabled,
-      mipmapQuality: PERFORMANCE_SETTINGS.mipmapQuality,
-      anisotropyLevel: PERFORMANCE_SETTINGS.anisotropyLevel
-    });
-    await textureAtlas.initialize(blockTypes);
-    
-    chunkMeshBuilder = new ChunkMeshBuilder(textureAtlas);
-    
-    console.log("Texture atlas initialized");
-    
-    return textureAtlas.getAtlasTexture();
-  } catch (error) {
-    console.error("Error initializing texture atlas:", error);
-    return null;
-  }
+  if (atlasInitialized) return;
+  
+  console.log("Initializing texture atlas...");
+  textureAtlas = new TextureAtlas();
+  await textureAtlas.initialize(blockTypes);
+  
+  chunkMeshBuilder = new ChunkMeshBuilder(textureAtlas);
+  atlasInitialized = true;
+  console.log("Texture atlas initialized");
+  
+  return textureAtlas.getAtlasTexture();
 };
 
 // Replace the createGreedyMesh function with our optimized version
@@ -293,14 +284,12 @@ const NEIGHBOR_CHECK_DIRECTIONS = [
 
 // Add performance optimization settings
 const PERFORMANCE_SETTINGS = {
-  instancingEnabled: true,      // Use instanced meshes for similar blocks
-  lodEnabled: true,             // Level of Detail system
-  maxChunksPerFrame: 5,         // Maximum chunks to process per frame
-  useGreedyMeshing: true,       // Use greedy meshing algorithm (faster)
-  selectionDistance: 64,        // Selection ray distance in blocks
-  mipmappingEnabled: true,      // Use mipmapping for textures
-  mipmapQuality: 'high',        // Quality level: 'low', 'medium', 'high'
-  anisotropyLevel: 16           // Anisotropic filtering level (1-16)
+  maxChunksPerFrame: 5,          // Max chunks to process in a single frame
+  objectPooling: true,           // Reuse geometry/material objects
+  batchedGeometry: true,         // Combine similar geometries
+  occlusionCulling: true,        // Skip rendering fully hidden chunks
+  instancingEnabled: true,       // Use instanced meshes when possible
+  shadowDistance: 96            // Distance at which to disable shadows
 };
 
 // Function to toggle instanced rendering
@@ -2026,15 +2015,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			selectionDistanceRef.current = newDistance;
 			return newDistance;
 		},
-		// Add mipmapping toggle
-		toggleMipmapping,
-		getMipmappingEnabled,
-		getMipmapQuality,
-		setMipmapQuality,
-		setAnisotropyLevel,
-		getAnisotropyLevel,
-		// Add texture update subscription
-		onTextureUpdate,
 	}));
 
 	// Add resize listener to update canvasRect
@@ -3266,60 +3246,5 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 // Convert to forwardRef
 export default forwardRef(TerrainBuilder);
-
-export const getMipmappingEnabled = () => PERFORMANCE_SETTINGS.mipmappingEnabled;
-export const getMipmapQuality = () => PERFORMANCE_SETTINGS.mipmapQuality;
-export const getAnisotropyLevel = () => PERFORMANCE_SETTINGS.anisotropyLevel;
-
-export const toggleMipmapping = (enabled) => {
-  if (PERFORMANCE_SETTINGS.mipmappingEnabled !== enabled) {
-    console.log(`Setting mipmapping to ${enabled}`);
-    PERFORMANCE_SETTINGS.mipmappingEnabled = enabled;
-    // Signal that textures need to be rebuilt
-    triggerTextureUpdate();
-  }
-};
-
-export const setMipmapQuality = (quality) => {
-  if (PERFORMANCE_SETTINGS.mipmapQuality !== quality) {
-    console.log(`Setting mipmap quality to ${quality}`);
-    PERFORMANCE_SETTINGS.mipmapQuality = quality;
-    // Signal that textures need to be rebuilt
-    triggerTextureUpdate();
-  }
-};
-
-export const setAnisotropyLevel = (level) => {
-  const newLevel = Math.min(Math.max(1, level), 16); // Clamp between 1-16
-  if (PERFORMANCE_SETTINGS.anisotropyLevel !== newLevel) {
-    console.log(`Setting anisotropy level to ${newLevel}`);
-    PERFORMANCE_SETTINGS.anisotropyLevel = newLevel;
-    // Signal that textures need to be rebuilt
-    triggerTextureUpdate();
-  }
-};
-
-// Keep track of texture update subscribers
-const textureUpdateSubscribers = [];
-
-// Function to register for texture updates
-export const onTextureUpdate = (callback) => {
-  textureUpdateSubscribers.push(callback);
-  return () => {
-    const index = textureUpdateSubscribers.indexOf(callback);
-    if (index !== -1) {
-      textureUpdateSubscribers.splice(index, 1);
-    }
-  };
-};
-
-// Function to trigger texture updates
-const triggerTextureUpdate = () => {
-  textureUpdateSubscribers.forEach(callback => callback({
-    mipmappingEnabled: PERFORMANCE_SETTINGS.mipmappingEnabled,
-    mipmapQuality: PERFORMANCE_SETTINGS.mipmapQuality,
-    anisotropyLevel: PERFORMANCE_SETTINGS.anisotropyLevel
-  }));
-};
 
 
