@@ -591,4 +591,89 @@ export class AnvilParser {
 		
 		return false;
 	}
+
+	/**
+	 * Fast extraction of Y-bounds from a region file without fully parsing blocks
+	 * Used during initial world size scanning
+	 * @param {ArrayBuffer} buffer - Region file buffer
+	 * @param {number} regionX - Region X coordinate
+	 * @param {number} regionZ - Region Z coordinate
+	 * @returns {Object|null} Y bounds if found (minY, maxY)
+	 */
+	extractYBoundsFromRegion(buffer, regionX, regionZ) {
+		try {
+			let minY = Infinity;
+			let maxY = -Infinity;
+			
+			// Convert buffer to Uint8Array for processing
+			const dataView = new DataView(buffer);
+			
+			// Check only a sample of chunks (1 out of 4) for speed
+			for (let localX = 0; localX < 32; localX += 2) {
+				for (let localZ = 0; localZ < 32; localZ += 2) {
+					const headerOffset = 4 * (localX + localZ * 32);
+					
+					// Read chunk offset and size from header
+					const offsetData = dataView.getUint32(headerOffset);
+					if (offsetData === 0) continue; // Chunk not present
+					
+					const offset = (offsetData >> 8) * 4096; // Get offset in bytes
+					
+					// Skip empty chunks
+					if (offset === 0) continue;
+					
+					try {
+						// Read chunk data length
+						const length = dataView.getUint32(offset);
+						if (length === 0) continue;
+						
+						// Read compression type (should be 2 for zlib)
+						const compressionType = dataView.getUint8(offset + 4);
+						if (compressionType !== 2) continue;
+						
+						// Extract compressed chunk data
+						const compressedDataOffset = offset + 5;
+						const compressedDataLength = length - 1;
+						
+						// Create a new buffer with just the compressed data
+						const compressedData = buffer.slice(compressedDataOffset, compressedDataOffset + compressedDataLength);
+						
+						// Parse the NBT data to extract section Y values
+						const nbtParser = new NBTParser();
+						const chunkData = nbtParser.parseCompressed(compressedData);
+						
+						// Check if the chunk has Y sections data
+						if (this.hasValidYSections(chunkData)) {
+							// Process sections to find Y bounds
+							const sections = chunkData.sections || [];
+							for (const section of sections) {
+								// Section Y in 1.21 is absolute, not relative
+								const sectionY = section.Y || 0;
+								
+								// Only count sections that have blocks
+								if (section.block_states && section.block_states.data && section.block_states.data.length > 0) {
+									// Sections are 16 blocks tall
+									minY = Math.min(minY, sectionY * 16);
+									maxY = Math.max(maxY, (sectionY + 1) * 16 - 1);
+								}
+							}
+						}
+					} catch (e) {
+						// Ignore errors in individual chunks
+						continue;
+					}
+				}
+			}
+			
+			// Return bounds if we found any valid sections
+			if (minY !== Infinity && maxY !== -Infinity) {
+				return { minY, maxY };
+			}
+			
+			return null;
+		} catch (error) {
+			console.warn(`Error extracting Y-bounds from region (${regionX}, ${regionZ}):`, error);
+			return null;
+		}
+	}
 }

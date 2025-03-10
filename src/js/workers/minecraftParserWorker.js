@@ -6,7 +6,31 @@ import { AnvilParser } from '../utils/minecraft/AnvilParser';
 self.onmessage = async function(event) {
   const { type, data } = event.data;
   
-  if (type === 'parseWorld') {
+  if (type === 'scanWorldSize') {
+    try {
+      const zipData = data.zipFile;
+      
+      self.postMessage({
+        type: 'progress', 
+        data: { 
+          message: `Scanning world size...`, 
+          progress: 5 
+        } 
+      });
+      
+      const worldSizeInfo = await scanWorldSize(zipData);
+      
+      self.postMessage({
+        type: 'worldSizeScanned',
+        data: worldSizeInfo
+      });
+    } catch (error) {
+      self.postMessage({
+        type: 'error',
+        error: error.message || 'Unknown error during world scanning'
+      });
+    }
+  } else if (type === 'parseWorld') {
     try {
       const zipData = data.zipFile;
       const options = data.options || {}; // Extract options from the message
@@ -33,6 +57,309 @@ self.onmessage = async function(event) {
     }
   }
 };
+
+/**
+ * Scan a Minecraft world to determine its size and boundaries without fully parsing it
+ * @param {ArrayBuffer} zipData - The world ZIP file data
+ * @returns {Object} World size information including boundaries
+ */
+async function scanWorldSize(zipData) {
+  try {
+    // Load the ZIP file
+    const zip = await JSZip.loadAsync(zipData);
+    
+    // Debug: Log the files in the ZIP
+    const filesInZip = Object.keys(zip.files);
+    console.log('Files in ZIP:', filesInZip);
+    self.postMessage({ 
+      type: 'progress', 
+      data: { 
+        message: `Found ${filesInZip.length} files in ZIP`, 
+        progress: 10 
+      } 
+    });
+    
+    // Find region files
+    const possibleRegionPaths = [
+      /^region\/r\.-?\d+\.-?\d+\.mca$/,           // Direct region folder
+      /^.+\/region\/r\.-?\d+\.-?\d+\.mca$/,       // World folder/region
+      /^saves\/.+\/region\/r\.-?\d+\.-?\d+\.mca$/ // saves/world folder/region
+    ];
+    
+    let regionFiles = [];
+    
+    // Try each possible path pattern
+    for (const pattern of possibleRegionPaths) {
+      const matchingFiles = Object.keys(zip.files).filter(path => path.match(pattern));
+      if (matchingFiles.length > 0) {
+        regionFiles = matchingFiles;
+        self.postMessage({ 
+          type: 'progress',
+          data: { 
+            message: `Found ${regionFiles.length} region files with pattern ${pattern}`,
+            progress: 30
+          }
+        });
+        break;
+      }
+    }
+    
+    // If still no region files, look for any .mca files
+    if (regionFiles.length === 0) {
+      regionFiles = Object.keys(zip.files).filter(path => path.endsWith('.mca'));
+      self.postMessage({ 
+        type: 'progress',
+        data: { 
+          message: `Found ${regionFiles.length} .mca files by extension`,
+          progress: 30
+        }
+      });
+    }
+    
+    if (regionFiles.length === 0) {
+      throw new Error('No region files found in the uploaded world. The file may not be a valid Minecraft world ZIP or the region files might be stored in an unexpected location.');
+    }
+    
+    // Process region coordinates
+    let regionCoords = [];
+    
+    for (const regionPath of regionFiles) {
+      const regionMatch = regionPath.match(/r\.(-?\d+)\.(-?\d+)\.mca$/);
+      if (regionMatch) {
+        regionCoords.push({
+          path: regionPath,
+          x: parseInt(regionMatch[1]),
+          z: parseInt(regionMatch[2])
+        });
+      }
+    }
+    
+    // Calculate region bounds
+    let minRegionX = Infinity, maxRegionX = -Infinity;
+    let minRegionZ = Infinity, maxRegionZ = -Infinity;
+    
+    for (const region of regionCoords) {
+      minRegionX = Math.min(minRegionX, region.x);
+      maxRegionX = Math.max(maxRegionX, region.x);
+      minRegionZ = Math.min(minRegionZ, region.z);
+      maxRegionZ = Math.max(maxRegionZ, region.z);
+    }
+    
+    // Calculate block coordinates
+    // Each region is 512x512 blocks (32 chunks x 16 blocks)
+    const minBlockX = minRegionX * 512;
+    const maxBlockX = (maxRegionX + 1) * 512 - 1;
+    const minBlockZ = minRegionZ * 512;
+    const maxBlockZ = (maxRegionZ + 1) * 512 - 1;
+    
+    // Y-range is typically -64 to 320 in 1.21+ worlds
+    const minBlockY = -64;
+    const maxBlockY = 320;
+    
+    // Sample data from a few regions to analyze height distribution
+    const sampleRegions = getRepresentativeRegions(regionCoords);
+    
+    self.postMessage({ 
+      type: 'progress',
+      data: { 
+        message: `Sampling ${sampleRegions.length} regions to analyze height distribution...`,
+        progress: 50
+      }
+    });
+    
+    let actualMinY = minBlockY;
+    let actualMaxY = maxBlockY;
+    
+    // If we have sample regions, try to get more accurate Y bounds
+    if (sampleRegions.length > 0) {
+      const sampleYBounds = await getSampleYBounds(zip, sampleRegions);
+      if (sampleYBounds) {
+        actualMinY = sampleYBounds.minY;
+        actualMaxY = sampleYBounds.maxY;
+      }
+    }
+    
+    // Calculate world size
+    const worldWidthBlocks = maxBlockX - minBlockX + 1;
+    const worldHeightBlocks = actualMaxY - actualMinY + 1;
+    const worldDepthBlocks = maxBlockZ - minBlockZ + 1;
+    
+    // Calculate region count
+    const regionWidth = maxRegionX - minRegionX + 1;
+    const regionDepth = maxRegionZ - minRegionZ + 1;
+    const regionCount = regionWidth * regionDepth;
+    
+    // Calculate approximate world size in MB (rough estimation)
+    // Average region file is about 1-5MB, we'll use 2MB as a conservative estimate
+    const approximateSizeMB = regionCount * 2;
+    
+    // Create object with world size info
+    const worldSizeInfo = {
+      bounds: {
+        minX: minBlockX,
+        maxX: maxBlockX,
+        minY: actualMinY,
+        maxY: actualMaxY,
+        minZ: minBlockZ,
+        maxZ: maxBlockZ
+      },
+      size: {
+        width: worldWidthBlocks,
+        height: worldHeightBlocks,
+        depth: worldDepthBlocks,
+        regionCount: regionCount,
+        regionWidth: regionWidth,
+        regionDepth: regionDepth,
+        approximateSizeMB: approximateSizeMB
+      },
+      regionCoords: regionCoords,
+      worldFolder: detectWorldFolder(regionFiles[0])
+    };
+    
+    self.postMessage({ 
+      type: 'progress',
+      data: { 
+        message: `World scan complete. Size: ${worldWidthBlocks}x${worldHeightBlocks}x${worldDepthBlocks} blocks across ${regionCount} regions`,
+        progress: 100
+      }
+    });
+    
+    return worldSizeInfo;
+  } catch (error) {
+    console.error('Error in scanWorldSize:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get a representative sample of regions to analyze for Y-bounds
+ * @param {Array} regionCoords - All region coordinates
+ * @returns {Array} A subset of regions to sample
+ */
+function getRepresentativeRegions(regionCoords) {
+  // If few regions, sample all of them
+  if (regionCoords.length <= 3) {
+    return regionCoords;
+  }
+  
+  // Otherwise, sample the center region and a few others spread out
+  // Calculate center
+  let sumX = 0, sumZ = 0;
+  regionCoords.forEach(region => {
+    sumX += region.x;
+    sumZ += region.z;
+  });
+  
+  const centerX = Math.round(sumX / regionCoords.length);
+  const centerZ = Math.round(sumZ / regionCoords.length);
+  
+  // Find center region or closest to center
+  let centerRegion = null;
+  let minDistToCenter = Infinity;
+  
+  regionCoords.forEach(region => {
+    const dist = Math.sqrt(Math.pow(region.x - centerX, 2) + Math.pow(region.z - centerZ, 2));
+    if (dist < minDistToCenter) {
+      minDistToCenter = dist;
+      centerRegion = region;
+    }
+  });
+  
+  // Also select regions from different quadrants if available
+  const quadrants = [
+    [], // Q1: positive X, positive Z
+    [], // Q2: negative X, positive Z
+    [], // Q3: negative X, negative Z
+    []  // Q4: positive X, negative Z
+  ];
+  
+  regionCoords.forEach(region => {
+    if (region.x >= 0 && region.z >= 0) quadrants[0].push(region);
+    else if (region.x < 0 && region.z >= 0) quadrants[1].push(region);
+    else if (region.x < 0 && region.z < 0) quadrants[2].push(region);
+    else quadrants[3].push(region);
+  });
+  
+  // Get one region from each non-empty quadrant
+  const samples = [centerRegion];
+  
+  quadrants.forEach(quadrant => {
+    if (quadrant.length > 0) {
+      // Pick a region randomly from this quadrant
+      const randomIndex = Math.floor(Math.random() * quadrant.length);
+      const region = quadrant[randomIndex];
+      
+      // Don't duplicate the center region
+      if (region.x !== centerRegion.x || region.z !== centerRegion.z) {
+        samples.push(region);
+      }
+    }
+  });
+  
+  // Limit to at most 5 sample regions
+  return samples.slice(0, 5);
+}
+
+/**
+ * Extract representative Y bounds by sampling a few chunks from each provided region
+ * @param {JSZip} zip - The world ZIP
+ * @param {Array} sampleRegions - Regions to sample
+ * @returns {Object|null} An object with minY and maxY if found
+ */
+async function getSampleYBounds(zip, sampleRegions) {
+  try {
+    let minY = Infinity;
+    let maxY = -Infinity;
+    
+    // Use a lightweight NBT parser just to get section Y values
+    const parser = new AnvilParser({
+      skipBlockLoading: true // Special option to only read section headers
+    });
+    
+    // Sample a few regions
+    for (const region of sampleRegions) {
+      try {
+        // Load region file data
+        const regionFileBuffer = await zip.files[region.path].async('arraybuffer');
+        
+        // Call a special method to just extract Y-bounds
+        const yBounds = parser.extractYBoundsFromRegion(regionFileBuffer, region.x, region.z);
+        
+        if (yBounds) {
+          minY = Math.min(minY, yBounds.minY);
+          maxY = Math.max(maxY, yBounds.maxY);
+        }
+      } catch (e) {
+        console.warn(`Error sampling Y-bounds from region (${region.x}, ${region.z}):`, e);
+      }
+    }
+    
+    // If we found valid bounds, return them
+    if (minY !== Infinity && maxY !== -Infinity) {
+      return { minY, maxY };
+    }
+    
+    // Default to standard range if sampling failed
+    return null;
+  } catch (e) {
+    console.warn("Error sampling Y-bounds:", e);
+    return null;
+  }
+}
+
+/**
+ * Detect the world folder name from a region file path
+ * @param {string} regionPath - Path to a region file
+ * @returns {string} The detected world folder name or null
+ */
+function detectWorldFolder(regionPath) {
+  // Try to extract world name from path
+  const worldFolderMatch = regionPath.match(/(?:saves\/)?([^\/]+)\/region\//);
+  if (worldFolderMatch && worldFolderMatch[1]) {
+    return worldFolderMatch[1];
+  }
+  return null;
+}
 
 async function parseMinecraftWorld(zipData, options = {}) {
   try {
