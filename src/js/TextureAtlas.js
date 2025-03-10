@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 // Texture Atlas Manager for block textures
 export class TextureAtlas {
-  constructor() {
+  constructor(options = {}) {
     this.atlas = null;           // The THREE.Texture for the atlas
     this.atlasSize = 2048;       // Size of atlas texture (power of 2)
     this.blockSize = 64;         // Size of individual block texture
@@ -15,11 +15,23 @@ export class TextureAtlas {
     this.atlasCanvas.height = this.atlasSize;
     this.atlasContext = this.atlasCanvas.getContext('2d');
     this.usedSlots = new Set();  // Track used slots
+    
+    // Texture quality settings
+    this.mipmappingEnabled = options.mipmappingEnabled !== undefined ? options.mipmappingEnabled : true;
+    this.anisotropyLevel = options.anisotropyLevel || 16; // Default to high quality
+    this.mipmapQuality = options.mipmapQuality || 'high'; // 'none', 'low', 'medium', 'high'
   }
 
   // Initialize the texture atlas with block types
-  async initialize(blockTypes) {
+  async initialize(blockTypes, options = {}) {
+    // Override settings with any passed options
+    if (options.mipmappingEnabled !== undefined) this.mipmappingEnabled = options.mipmappingEnabled;
+    if (options.anisotropyLevel) this.anisotropyLevel = options.anisotropyLevel;
+    if (options.mipmapQuality) this.mipmapQuality = options.mipmapQuality;
+    
     console.log('Initializing texture atlas with', blockTypes.length, 'block types');
+    console.log(`Texture settings: mipmapping=${this.mipmappingEnabled}, quality=${this.mipmapQuality}, anisotropy=${this.anisotropyLevel}`);
+    
     this.atlasContext.fillStyle = 'rgba(255, 0, 255, 0.5)'; // Default color (magenta semi-transparent)
     this.atlasContext.fillRect(0, 0, this.atlasSize, this.atlasSize);
     
@@ -45,10 +57,38 @@ export class TextureAtlas {
     this.atlas = new THREE.CanvasTexture(this.atlasCanvas);
     this.atlas.wrapS = THREE.ClampToEdgeWrapping;
     this.atlas.wrapT = THREE.ClampToEdgeWrapping;
+    
+    // Always use nearest filter for magnification to preserve pixel art look
     this.atlas.magFilter = THREE.NearestFilter;
-    this.atlas.minFilter = THREE.NearestMipmapNearestFilter;
-    this.atlas.generateMipmaps = true;
-    console.log('Texture atlas creation complete');
+    
+    // Set minification filter based on quality setting
+    if (!this.mipmappingEnabled) {
+      // No mipmapping - just use nearest filter
+      this.atlas.minFilter = THREE.NearestFilter;
+      this.atlas.generateMipmaps = false;
+    } else {
+      // Set filter based on quality
+      switch (this.mipmapQuality) {
+        case 'low':
+          this.atlas.minFilter = THREE.NearestMipmapNearestFilter;
+          break;
+        case 'medium':
+          this.atlas.minFilter = THREE.LinearMipmapNearestFilter;
+          break;
+        case 'high':
+        default:
+          this.atlas.minFilter = THREE.LinearMipmapLinearFilter; // Trilinear filtering
+          break;
+      }
+      this.atlas.generateMipmaps = true;
+    }
+    
+    // Set anisotropic filtering level if available
+    const renderer = THREE.WebGLRenderer ? new THREE.WebGLRenderer() : null;
+    const maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
+    this.atlas.anisotropy = Math.min(this.anisotropyLevel, maxAnisotropy);
+    
+    console.log(`Texture atlas created with mipmapping=${this.mipmappingEnabled}, quality=${this.mipmapQuality}, anisotropy=${this.atlas.anisotropy}`);
     
     return this.atlas;
   }

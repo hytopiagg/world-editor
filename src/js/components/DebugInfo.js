@@ -5,6 +5,9 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
   const [instancingEnabled, setInstancingEnabled] = useState(true);
   const [greedyMeshingEnabled, setGreedyMeshingEnabled] = useState(true);
   const [selectionDistance, setSelectionDistance] = useState(64); // Default to 64
+  const [mipmappingEnabled, setMipmappingEnabled] = useState(true); // Default to true
+  const [mipmapQuality, setMipmapQuality] = useState('high'); // Default to high
+  const [anisotropyLevel, setAnisotropyLevel] = useState(16); // Default to 16
   const [fps, setFps] = useState(0);
   const [frameTime, setFrameTime] = useState(0);
   const [maxFrameTime, setMaxFrameTime] = useState(0);
@@ -25,6 +28,19 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
       // Initialize selection distance if available
       if (terrainBuilderRef.current.getSelectionDistance) {
         setSelectionDistance(terrainBuilderRef.current.getSelectionDistance());
+      }
+      
+      // Initialize mipmapping settings if available
+      if (terrainBuilderRef.current.getMipmappingEnabled) {
+        setMipmappingEnabled(terrainBuilderRef.current.getMipmappingEnabled());
+      }
+      
+      if (terrainBuilderRef.current.getMipmapQuality) {
+        setMipmapQuality(terrainBuilderRef.current.getMipmapQuality());
+      }
+      
+      if (terrainBuilderRef.current.getAnisotropyLevel) {
+        setAnisotropyLevel(terrainBuilderRef.current.getAnisotropyLevel());
       }
     }
   }, [terrainBuilderRef]);
@@ -110,6 +126,33 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
     setMaxFrameTime(0);
   };
 
+  const handleMipmappingToggle = (e) => {
+    const newValue = e.target.checked;
+    setMipmappingEnabled(newValue);
+    
+    if (terrainBuilderRef && terrainBuilderRef.current && terrainBuilderRef.current.toggleMipmapping) {
+      terrainBuilderRef.current.toggleMipmapping(newValue);
+    }
+  };
+  
+  const handleMipmapQualityChange = (e) => {
+    const newValue = e.target.value;
+    setMipmapQuality(newValue);
+    
+    if (terrainBuilderRef && terrainBuilderRef.current && terrainBuilderRef.current.setMipmapQuality) {
+      terrainBuilderRef.current.setMipmapQuality(newValue);
+    }
+  };
+  
+  const handleAnisotropyChange = (e) => {
+    const newValue = parseInt(e.target.value);
+    setAnisotropyLevel(newValue);
+    
+    if (terrainBuilderRef && terrainBuilderRef.current && terrainBuilderRef.current.setAnisotropyLevel) {
+      terrainBuilderRef.current.setAnisotropyLevel(newValue);
+    }
+  };
+
   return (
     <div className="debug-info">
       <div className="debug-row">
@@ -171,36 +214,83 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
         </span>
         
         {showPerformanceDetails && (
-          <div className="debug-value performance-toggles">
-            <label className="toggle-label">
-              <input 
-                type="checkbox" 
-                checked={instancingEnabled} 
-                onChange={handleInstancingToggle}
-              />
-              Instanced Rendering
-            </label>
-            <label className="toggle-label">
-              <input 
-                type="checkbox" 
-                checked={greedyMeshingEnabled} 
-                onChange={handleGreedyMeshingToggle}
-              />
-              Greedy Meshing
-            </label>
-            
-            <div className="slider-container">
-              <span className="slider-label">Selection Distance: {selectionDistance}</span>
-              <input
-                type="range"
-                min="16"
-                max="128"
-                step="8"
-                value={selectionDistance}
-                onChange={handleSelectionDistanceChange}
-                className="range-slider"
-              />
+          <div className="performance-toggles">
+            <div className="performance-toggle">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={instancingEnabled}
+                  onChange={handleInstancingToggle}
+                />
+                Use instancing
+              </label>
+              <div className="toggle-description">
+                More efficient rendering for repeated blocks. Improves FPS but may cause visual glitches on some GPUs.
+              </div>
             </div>
+            
+            <div className="performance-toggle">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={greedyMeshingEnabled}
+                  onChange={handleGreedyMeshingToggle}
+                />
+                Use greedy meshing
+              </label>
+              <div className="toggle-description">
+                Combines adjacent blocks of the same type. Significantly improves performance for large flat areas.
+              </div>
+            </div>
+            
+            {/* Mipmapping controls */}
+            <div className="performance-toggle">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={mipmappingEnabled}
+                  onChange={handleMipmappingToggle}
+                />
+                Enable mipmapping
+              </label>
+              <div className="toggle-description">
+                Improves texture quality at different distances. May reduce pixelation but can slightly blur textures.
+              </div>
+            </div>
+            
+            {mipmappingEnabled && (
+              <>
+                <div className="performance-toggle">
+                  <label>
+                    Mipmap quality:
+                    <select value={mipmapQuality} onChange={handleMipmapQualityChange}>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </label>
+                  <div className="toggle-description">
+                    Higher quality looks better at angles but uses more GPU memory.
+                  </div>
+                </div>
+                
+                <div className="performance-toggle">
+                  <label>
+                    Anisotropic filtering:
+                    <select value={anisotropyLevel} onChange={handleAnisotropyChange}>
+                      <option value="1">Disabled</option>
+                      <option value="2">2x</option>
+                      <option value="4">4x</option>
+                      <option value="8">8x</option>
+                      <option value="16">16x</option>
+                    </select>
+                  </label>
+                  <div className="toggle-description">
+                    Improves texture clarity at steep angles. Higher values use more GPU resources.
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
