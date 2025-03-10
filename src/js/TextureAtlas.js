@@ -25,88 +25,147 @@ export class TextureAtlas {
 
   // Initialize the texture atlas with block types
   async initialize(blockTypes) {
-    console.log('Initializing texture atlas with', blockTypes.length, 'block types');
-    this.atlasContext.fillStyle = 'rgba(255, 0, 255, 0.5)'; // Default color (magenta semi-transparent)
-    this.atlasContext.fillRect(0, 0, this.atlasSize, this.atlasSize);
-    
-    // Load all textures in parallel
-    for (const blockType of blockTypes) {
-      if (blockType.isMultiTexture) {
-        // For multi-texture blocks, load each side texture
-        const sides = ['px', 'nx', 'py', 'ny', 'pz', 'nz']; // +x, -x, +y, -y, +z, -z
-        for (const side of sides) {
-          const textureUri = blockType.sideTextures[side] || blockType.textureUri;
-          this.addTextureToLoad(blockType.id, textureUri, side);
-        }
-      } else {
-        // For single texture blocks, use the same texture for all sides
-        this.addTextureToLoad(blockType.id, blockType.textureUri);
+    try {
+      console.log('Initializing texture atlas with', blockTypes.length, 'block types');
+      
+      // Clear any existing data if re-initializing
+      this.blockUVs = new Map();
+      this.textureLoadPromises = [];
+      this.usedSlots = new Set();
+      
+      // Reset canvas
+      this.atlasContext.clearRect(0, 0, this.atlasSize, this.atlasSize);
+      this.atlasContext.fillStyle = 'rgba(255, 0, 255, 0.5)'; // Default color (magenta semi-transparent)
+      this.atlasContext.fillRect(0, 0, this.atlasSize, this.atlasSize);
+      
+      if (!blockTypes || blockTypes.length === 0) {
+        console.warn('No block types provided for texture atlas');
+        return null;
       }
+      
+      // Load all textures in parallel
+      let texturePromisesCount = 0;
+      for (const blockType of blockTypes) {
+        if (!blockType) continue;
+        
+        if (blockType.isMultiTexture) {
+          // For multi-texture blocks, load each side texture
+          const sides = ['px', 'nx', 'py', 'ny', 'pz', 'nz']; // +x, -x, +y, -y, +z, -z
+          for (const side of sides) {
+            const textureUri = blockType.sideTextures?.[side] || blockType.textureUri;
+            if (textureUri) {
+              this.addTextureToLoad(blockType.id, textureUri, side);
+              texturePromisesCount++;
+            }
+          }
+        } else {
+          // For single-texture blocks, load one texture for all sides
+          if (blockType.textureUri) {
+            this.addTextureToLoad(blockType.id, blockType.textureUri);
+            texturePromisesCount++;
+          }
+        }
+      }
+      
+      console.log(`Added ${texturePromisesCount} textures to load queue`);
+      
+      // Wait for all textures to load
+      if (this.textureLoadPromises.length > 0) {
+        const results = await Promise.allSettled(this.textureLoadPromises);
+        
+        // Check if any textures failed to load
+        const failedCount = results.filter(result => result.status === 'rejected').length;
+        if (failedCount > 0) {
+          console.warn(`${failedCount} out of ${results.length} textures failed to load`);
+        }
+        
+        console.log(`Successfully loaded ${results.length - failedCount} textures`);
+      } else {
+        console.warn('No textures were added to the load queue');
+      }
+      
+      // Create the THREE texture from the canvas
+      this.atlas = new THREE.CanvasTexture(this.atlasCanvas);
+      this.atlas.wrapS = THREE.ClampToEdgeWrapping;
+      this.atlas.wrapT = THREE.ClampToEdgeWrapping;
+      this.atlas.magFilter = THREE.NearestFilter;
+      this.atlas.minFilter = THREE.NearestMipmapNearestFilter;
+      this.atlas.generateMipmaps = true;
+      
+      console.log('Texture atlas creation complete with', this.blockUVs.size, 'block textures');
+      
+      return this.atlas;
+    } catch (error) {
+      console.error('Error initializing texture atlas:', error);
+      return null;
     }
-    
-    // Wait for all textures to load
-    await Promise.all(this.textureLoadPromises);
-    
-    // Create the THREE texture from the canvas
-    this.atlas = new THREE.CanvasTexture(this.atlasCanvas);
-    this.atlas.wrapS = THREE.ClampToEdgeWrapping;
-    this.atlas.wrapT = THREE.ClampToEdgeWrapping;
-    this.atlas.magFilter = THREE.NearestFilter;
-    this.atlas.minFilter = THREE.NearestMipmapNearestFilter;
-    this.atlas.generateMipmaps = true;
-    console.log('Texture atlas creation complete');
-    
-    return this.atlas;
   }
   
   // Add a texture to be loaded
   addTextureToLoad(blockId, textureUri, side = null) {
+    if (!textureUri) {
+      console.warn(`No texture URI provided for block ${blockId}, side ${side || 'default'}`);
+      return;
+    }
+    
     const promise = new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       
+      // Set timeout to avoid hanging forever
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Texture load timeout for ${textureUri}`));
+      }, 10000); // 10 second timeout
+      
       img.onload = () => {
-        const slotId = this.getNextAvailableSlot();
-        if (slotId === -1) {
-          console.error('Texture atlas full - cannot add more textures');
-          reject(new Error('Texture atlas full'));
-          return;
+        clearTimeout(timeoutId);
+        
+        try {
+          const slotId = this.getNextAvailableSlot();
+          if (slotId === -1) {
+            console.warn('No available slots for texture in atlas');
+            reject(new Error('Texture atlas is full'));
+            return;
+          }
+          
+          // Calculate position in atlas
+          const col = slotId % this.gridSize;
+          const row = Math.floor(slotId / this.gridSize);
+          const x = col * (this.blockSize + this.padding * 2) + this.padding;
+          const y = row * (this.blockSize + this.padding * 2) + this.padding;
+          
+          // Draw the image to the atlas
+          this.atlasContext.drawImage(img, x, y, this.blockSize, this.blockSize);
+          
+          // Calculate normalized UV coordinates
+          const uvX = x / this.atlasSize;
+          const uvY = y / this.atlasSize;
+          const uvWidth = this.blockSize / this.atlasSize;
+          const uvHeight = this.blockSize / this.atlasSize;
+          
+          // Store UVs for this block
+          const key = side ? `${blockId}:${side}` : `${blockId}`;
+          this.blockUVs.set(key, { x: uvX, y: uvY, width: uvWidth, height: uvHeight });
+          
+          resolve();
+        } catch (error) {
+          console.error(`Error adding texture to atlas: ${error.message}`);
+          reject(error);
         }
-        
-        const x = (slotId % this.gridSize) * (this.blockSize + this.padding * 2) + this.padding;
-        const y = Math.floor(slotId / this.gridSize) * (this.blockSize + this.padding * 2) + this.padding;
-        
-        // Draw the texture to the canvas
-        this.atlasContext.drawImage(img, x, y, this.blockSize, this.blockSize);
-        
-        // Calculate UV coordinates (0-1 range)
-        const uvLeft = x / this.atlasSize;
-        const uvTop = y / this.atlasSize;
-        const uvRight = (x + this.blockSize) / this.atlasSize;
-        const uvBottom = (y + this.blockSize) / this.atlasSize;
-        
-        // Store UV coordinates for this block/side
-        const key = side ? `${blockId}_${side}` : `${blockId}`;
-        this.blockUVs.set(key, {
-          left: uvLeft,
-          top: uvTop,
-          right: uvRight,
-          bottom: uvBottom
-        });
-        
-        resolve();
       };
       
-      img.onerror = () => {
-        console.error(`Failed to load texture: ${textureUri}`);
+      img.onerror = (error) => {
+        clearTimeout(timeoutId);
+        console.warn(`Failed to load texture: ${textureUri}`);
         reject(new Error(`Failed to load texture: ${textureUri}`));
       };
       
-      // Set image source - handle data URIs and regular URLs
-      if (textureUri.startsWith('data:')) {
-        img.src = textureUri;
+      // Handle invalid texture URLs
+      if (!textureUri.startsWith('http') && !textureUri.startsWith('data:') && !textureUri.startsWith('/')) {
+        // Try to make path absolute if relative
+        img.src = `/assets/textures/${textureUri}`;
       } else {
-        img.src = `${process.env.PUBLIC_URL}/${textureUri.replace(/^\.\//, '')}`;
+        img.src = textureUri;
       }
     });
     
@@ -127,8 +186,31 @@ export class TextureAtlas {
   
   // Get UV coordinates for a specific block
   getUVsForBlock(blockId, side = null) {
-    const key = side ? `${blockId}_${side}` : `${blockId}`;
-    return this.blockUVs.get(key) || this.blockUVs.get(`${blockId}`);
+    const key = side ? `${blockId}:${side}` : `${blockId}`;
+    // First try with the new separator ":"
+    let uvs = this.blockUVs.get(key);
+    
+    // If not found, try with the old "_" separator for backwards compatibility
+    if (!uvs && side) {
+      uvs = this.blockUVs.get(`${blockId}_${side}`);
+    }
+    
+    // If still not found, try with just the blockId
+    if (!uvs) {
+      uvs = this.blockUVs.get(`${blockId}`);
+    }
+    
+    // If we found UVs but they're in the new format, convert them to the old format
+    if (uvs && 'x' in uvs && 'width' in uvs) {
+      return {
+        left: uvs.x,
+        top: uvs.y,
+        right: uvs.x + uvs.width,
+        bottom: uvs.y + uvs.height
+      };
+    }
+    
+    return uvs;
   }
   
   // Get the THREE.Texture atlas
@@ -205,7 +287,7 @@ export class ChunkMeshBuilder {
   
   // Build optimized mesh for a chunk with LOD support
   buildChunkMesh(chunksBlocks, blockTypes, chunkKey, camera) {
-    console.time('buildChunkMesh');
+   // console.time('buildChunkMesh');
     
     // Determine LOD level based on distance
     const lodLevel = this.enableLod && camera ? this.getLodLevel(chunkKey, camera) : 0;
@@ -264,7 +346,7 @@ export class ChunkMeshBuilder {
     }
     
     if (blockData.size === 0) {
-      console.timeEnd('buildChunkMesh');
+      //console.timeEnd('buildChunkMesh');
       return null;
     }
     
@@ -313,7 +395,7 @@ export class ChunkMeshBuilder {
       }
     }
     
-    console.log(`Visible faces: ${visibleFaceCount}, Skipped blocks: ${skippedBlockCount}`);
+    //console.log(`Visible faces: ${visibleFaceCount}, Skipped blocks: ${skippedBlockCount}`);
     
     // Prepare buffers for geometry
     const positions = [];
@@ -358,7 +440,7 @@ export class ChunkMeshBuilder {
     
     // Early exit if no geometry
     if (positions.length === 0) {
-      console.timeEnd('buildChunkMesh');
+      //console.timeEnd('buildChunkMesh');
       return null;
     }
     
@@ -378,13 +460,13 @@ export class ChunkMeshBuilder {
     });
     
     const mesh = new THREE.Mesh(geometry, material);
-    console.timeEnd('buildChunkMesh');
+    //console.timeEnd('buildChunkMesh');
     return mesh;
   }
   
   // Build a greedy meshed geometry
   buildGreedyMesh(blockData, blockGrid, faceDirections, bounds, positions, normals, uvs, indices, blockTypeMap, startVertex = 0, progressCallback = null) {
-    console.time('greedyMesh');
+    //console.time('greedyMesh');
     const { minX, minY, minZ, maxX, maxY, maxZ } = bounds;
     
     // Size of the 3D grid
@@ -593,8 +675,8 @@ export class ChunkMeshBuilder {
       }
     }
     
-    console.log(`Generated ${processedQuads} merged quads with greedy meshing`);
-    console.timeEnd('greedyMesh');
+    //console.log(`Generated ${processedQuads} merged quads with greedy meshing`);
+    //console.timeEnd('greedyMesh');
     
     // Call the progress callback if provided
     if (progressCallback) {
@@ -816,7 +898,7 @@ export class ChunkMeshBuilder {
 
   // Process multiple chunks in batch for improved performance 
   batchProcessChunks(chunksData, blockTypes) {
-    console.time('batchProcessing');
+    //console.time('batchProcessing');
     
     // Arrays to hold all geometry data
     const allPositions = [];
@@ -886,7 +968,7 @@ export class ChunkMeshBuilder {
     const mesh = new THREE.Mesh(geometry, material);
     
     console.log(`Batch processed ${chunksProcessed} chunks with ${totalQuads} quads`);
-    console.timeEnd('batchProcessing');
+    //console.timeEnd('batchProcessing');
     
     return mesh;
   }
@@ -979,6 +1061,10 @@ export class ChunkLoadManager {
     this.maxConcurrentLoads = 4;
     this.onChunkLoaded = onChunkLoaded;
     this.isProcessing = false;
+    this.pauseProcessing = false;
+    this.processStartTime = 0;
+    this.chunkProcessTime = 0; // Average time to process a chunk (ms)
+    this.processingTimeLimit = 16; // Max time to spend processing chunks per frame (ms)
   }
   
   // Add a chunk to the load queue
@@ -999,37 +1085,77 @@ export class ChunkLoadManager {
     this.loadQueue.sort((a, b) => b.priority - a.priority);
     
     // Start processing if not already
-    if (!this.isProcessing) {
+    if (!this.isProcessing && !this.pauseProcessing) {
       this.processQueue();
     }
   }
   
   // Process the queue
   async processQueue() {
-    if (this.loadQueue.length === 0 || this.processingChunks.size >= this.maxConcurrentLoads) {
+    if (this.loadQueue.length === 0 || this.processingChunks.size >= this.maxConcurrentLoads || this.pauseProcessing) {
       this.isProcessing = false;
       return;
     }
     
     this.isProcessing = true;
+    this.processStartTime = performance.now();
     
     // Process up to maxConcurrentLoads chunks
-    while (this.loadQueue.length > 0 && this.processingChunks.size < this.maxConcurrentLoads) {
+    const initialCount = Math.min(this.maxConcurrentLoads - this.processingChunks.size, this.loadQueue.length);
+    
+    // Process initial batch without waiting to fill the pipeline
+    for (let i = 0; i < initialCount; i++) {
+      if (this.loadQueue.length === 0) break;
+      
       const { chunkKey } = this.loadQueue.shift();
       this.processingChunks.add(chunkKey);
       
       // Process chunk (don't await here to allow parallel processing)
       this.processChunk(chunkKey).then(() => {
         this.processingChunks.delete(chunkKey);
-        this.processQueue(); // Process next chunk when done
+        
+        // If we have more time budget and more chunks, process the next one
+        if (performance.now() - this.processStartTime < this.processingTimeLimit && this.loadQueue.length > 0) {
+          const nextChunk = this.loadQueue.shift();
+          this.processChunk(nextChunk.chunkKey).then(() => {
+            this.processingChunks.delete(nextChunk.chunkKey);
+          });
+        }
+        
+        // Continue processing in the next frame
+        if (this.loadQueue.length > 0 || this.processingChunks.size > 0) {
+          requestAnimationFrame(() => this.processQueue());
+        } else {
+          this.isProcessing = false;
+        }
       });
     }
   }
   
   // Process a single chunk
   async processChunk(chunkKey) {
+    const startTime = performance.now();
+    
     try {
       await this.onChunkLoaded(chunkKey);
+      
+      // Update the average processing time with a weighted average
+      const processingTime = performance.now() - startTime;
+      if (this.chunkProcessTime === 0) {
+        this.chunkProcessTime = processingTime;
+      } else {
+        // 80% previous average, 20% new value
+        this.chunkProcessTime = this.chunkProcessTime * 0.8 + processingTime * 0.2;
+      }
+      
+      // Adjust the time limit based on processing time
+      if (this.chunkProcessTime > 8) {
+        // If chunks are taking a long time, reduce concurrent processing
+        this.processingTimeLimit = Math.min(this.processingTimeLimit, 33); // Max 30 FPS
+      } else {
+        // If chunks are quick, increase time budget
+        this.processingTimeLimit = Math.min(this.processingTimeLimit * 1.1, 33);
+      }
     } catch (error) {
       console.error(`Error processing chunk ${chunkKey}:`, error);
     }
@@ -1040,5 +1166,28 @@ export class ChunkLoadManager {
     this.loadQueue = [];
     this.processingChunks.clear();
     this.isProcessing = false;
+  }
+  
+  // Pause processing (e.g. during camera movement)
+  pause() {
+    this.pauseProcessing = true;
+  }
+  
+  // Resume processing
+  resume() {
+    this.pauseProcessing = false;
+    if (this.loadQueue.length > 0 && !this.isProcessing) {
+      this.processQueue();
+    }
+  }
+  
+  // Get queue statistics
+  getStats() {
+    return {
+      queueLength: this.loadQueue.length,
+      processing: this.processingChunks.size,
+      avgProcessTime: this.chunkProcessTime.toFixed(2),
+      timeLimit: this.processingTimeLimit.toFixed(2)
+    };
   }
 } 

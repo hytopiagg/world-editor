@@ -239,21 +239,62 @@ let atlasInitialized = false;
 
 // Initialize the texture atlas
 const initTextureAtlas = async (blockTypes) => {
-  if (atlasInitialized) return;
+  if (!blockTypes || blockTypes.length === 0) {
+    console.warn("Cannot initialize texture atlas: No block types provided");
+    return null;
+  }
   
-  console.log("Initializing texture atlas...");
-  textureAtlas = new TextureAtlas();
-  await textureAtlas.initialize(blockTypes);
+  if (atlasInitialized && textureAtlas) {
+    console.log("Texture atlas already initialized, returning existing instance");
+    return textureAtlas.getAtlasTexture();
+  }
   
-  chunkMeshBuilder = new ChunkMeshBuilder(textureAtlas);
-  atlasInitialized = true;
-  console.log("Texture atlas initialized");
+  console.log(`Initializing texture atlas with ${blockTypes.length} block types...`);
   
-  return textureAtlas.getAtlasTexture();
+  try {
+    // Reset initialization flag until complete
+    atlasInitialized = false;
+    
+    // Create new instances if they don't exist
+    if (!textureAtlas) {
+      textureAtlas = new TextureAtlas();
+    }
+    
+    // Wait for the atlas to be initialized
+    const atlas = await textureAtlas.initialize(blockTypes);
+    
+    if (!atlas) {
+      throw new Error("Texture atlas initialization failed: No atlas returned");
+    }
+    
+    // Only create chunk mesh builder if the atlas was successfully initialized
+    if (!chunkMeshBuilder) {
+      chunkMeshBuilder = new ChunkMeshBuilder(textureAtlas);
+    } else {
+      // Update existing mesh builder with new atlas
+      chunkMeshBuilder.textureAtlas = textureAtlas;
+    }
+    
+    // Only set initialized flag when everything is complete
+    atlasInitialized = true;
+    console.log("Texture atlas successfully initialized with:", 
+      textureAtlas ? `${textureAtlas.blockUVs.size} block textures` : "no textures");
+    
+    return atlas;
+  } catch (error) {
+    console.error("Texture atlas initialization failed with error:", error);
+    atlasInitialized = false;
+    return null;
+  }
 };
 
 // Replace the createGreedyMesh function with our optimized version
 const generateGreedyMesh = (chunksBlocks, blockTypes) => {
+    // Skip if texture atlas is disabled
+    if (!TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
+        return null; // Fall back to basic rendering
+    }
+    
     if (!atlasInitialized) {
         console.warn("Texture atlas not initialized, falling back to original mesh generation");
         // Call original implementation or initialize texture atlas first
@@ -2642,7 +2683,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Implement createGreedyMeshForChunk to use our optimized version
 	const createGreedyMeshForChunk = (chunksBlocks) => {
-		if (atlasInitialized) {
+		// Skip texture atlas if disabled
+		if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas && atlasInitialized) {
 			try {
 				const optimizedMesh = chunkMeshBuilder.buildChunkMesh(chunksBlocks, blockTypesArray);
 				if (optimizedMesh) {
@@ -2898,32 +2940,113 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Add texture atlas initialization effect
 	useEffect(() => {
+		// Skip texture atlas initialization if disabled
+		if (!TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
+			console.log("Texture atlas disabled in settings");
+			return;
+		}
+		
 		// Initialize texture atlas
 		const initAtlas = async () => {
-			if (!atlasInitialized) {
-				console.log("Initializing texture atlas in TerrainBuilder...");
+			if (!blockTypesArray || blockTypesArray.length === 0) {
+				console.warn("Cannot initialize texture atlas: no block types available");
+				return;
+			}
+			
+			console.log("Initializing texture atlas in TerrainBuilder with", blockTypesArray.length, "block types");
+			try {
+				// Clear any previous initialization state
+				atlasInitialized = false;
+				
+				// Initialize the texture atlas and wait for it to complete
 				const atlas = await initTextureAtlas(blockTypesArray);
 				
-				// Setup chunk load manager with rebuildChunk callback
-				chunkLoadManager = new ChunkLoadManager(async (chunkKey) => {
-					await rebuildChunk(chunkKey);
-				});
+				if (!atlas) {
+					throw new Error("Texture atlas initialization returned null");
+				}
 				
-				// Force rebuild all chunks to use the new atlas
-				console.log("Texture atlas ready, rebuilding chunks...");
+				console.log("Texture atlas initialization complete!");
 				
-				// Use the correct refs
+				// Setup chunk load manager if it doesn't exist
+				if (!chunkLoadManager) {
+					// Apply concurrent rebuild setting
+					const maxConcurrent = TEXTURE_ATLAS_SETTINGS.maxConcurrentChunkRebuilds;
+					chunkLoadManager = new ChunkLoadManager(async (chunkKey) => {
+						await rebuildChunk(chunkKey);
+					});
+					chunkLoadManager.maxConcurrentLoads = maxConcurrent;
+				}
+				
+				// Only rebuild chunks if we have any
 				const chunkMeshesData = chunkMeshesRef ? chunkMeshesRef.current : {};
-				Object.keys(chunkMeshesData).forEach(chunkKey => {
-					chunkLoadManager.addChunkToQueue(chunkKey, 100);
-				});
+				const chunkKeys = Object.keys(chunkMeshesData);
+				
+				if (chunkKeys.length > 0) {
+					console.log(`Texture atlas ready, rebuilding ${chunkKeys.length} chunks...`);
+					
+					// If batch rebuilding is disabled, rebuild all chunks at once
+					if (!TEXTURE_ATLAS_SETTINGS.batchedChunkRebuilding) {
+						console.log("Batch rebuilding disabled, rebuilding all chunks at once");
+						// Use a slight delay to allow UI to update
+						setTimeout(() => {
+							chunkKeys.forEach(chunkKey => {
+								rebuildChunk(chunkKey);
+							});
+						}, TEXTURE_ATLAS_SETTINGS.initialRebuildDelay);
+					} else {
+						// Queue chunks for rebuilding with priorities
+						const rebuildChunks = () => {
+							chunkKeys.forEach((chunkKey, index) => {
+								let priority = 100 - (index % 10);
+								
+								// Prioritize by distance if enabled
+								if (TEXTURE_ATLAS_SETTINGS.prioritizeChunksByDistance && camera) {
+									const [chunkX, chunkY, chunkZ] = chunkKey.split(',').map(Number);
+									const cameraPos = camera.position;
+									const distance = Math.sqrt(
+										Math.pow(chunkX*16 - cameraPos.x, 2) + 
+										Math.pow(chunkY*16 - cameraPos.y, 2) + 
+										Math.pow(chunkZ*16 - cameraPos.z, 2)
+									);
+									// Higher priority for closer chunks (0-100 range)
+									priority = Math.max(0, 100 - Math.min(100, Math.floor(distance / 10)));
+								}
+								
+								chunkLoadManager.addChunkToQueue(chunkKey, priority);
+							});
+						};
+						
+						// Delay initial rebuild if enabled
+						if (TEXTURE_ATLAS_SETTINGS.delayInitialRebuild) {
+							setTimeout(rebuildChunks, TEXTURE_ATLAS_SETTINGS.initialRebuildDelay);
+						} else {
+							rebuildChunks();
+						}
+					}
+				} else {
+					console.log("Texture atlas ready, no chunks to rebuild");
+				}
+			} catch (error) {
+				console.error("Failed to initialize texture atlas:", error);
+				// Reset the flag so we can try again
+				atlasInitialized = false;
 			}
 		};
 		
-		if (meshesInitializedRef && meshesInitializedRef.current) {
-			initAtlas();
-		}
-	}, [meshesInitializedRef && meshesInitializedRef.current]);
+		// Call the async function
+		initAtlas().catch(error => {
+			console.error("Texture atlas initialization failed:", error);
+			atlasInitialized = false;
+		});
+		
+		// Cleanup function
+		return () => {
+			// Cancel any pending operations if component unmounts
+			if (chunkLoadManager) {
+				chunkLoadManager.clearQueue();
+			}
+		};
+	}, [blockTypesArray]); // Re-run if block types change
 
 	// Add a polyfill for requestIdleCallback for browsers that don't support it
 	const requestIdleCallbackPolyfill = window.requestIdleCallback || 
@@ -3146,6 +3269,25 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 	};
 
+	// Handle camera movement to pause chunk processing during navigation
+	const handleCameraMove = () => {
+		// Pause chunk processing during camera movement to prevent stutters
+		if (chunkLoadManager && TEXTURE_ATLAS_SETTINGS.batchedChunkRebuilding) {
+			chunkLoadManager.pause();
+			
+			// Resume after a short delay when camera stops moving
+			clearTimeout(cameraMovementTimeoutRef.current);
+			cameraMovementTimeoutRef.current = setTimeout(() => {
+				if (chunkLoadManager) {
+					chunkLoadManager.resume();
+				}
+			}, 200); // Resume 200ms after camera stops moving
+		}
+	};
+
+	// Reference for camera movement timeout
+	const cameraMovementTimeoutRef = useRef(null);
+
 	// Main return statement
 	return (
 		<>
@@ -3158,6 +3300,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					MIDDLE: THREE.MOUSE.PAN,
 					RIGHT: THREE.MOUSE.ROTATE,
 				}}
+				onChange={handleCameraMove}
 			/>
 
 			{/* Shadow directional light */}
@@ -3246,5 +3389,110 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 // Convert to forwardRef
 export default forwardRef(TerrainBuilder);
+
+// Performance settings for the texture atlas and chunk loading
+const TEXTURE_ATLAS_SETTINGS = {
+  // Whether to use batched chunk rebuilding (smooth but can cause stutters on large maps)
+  batchedChunkRebuilding: true,
+  
+  // Maximum number of concurrent chunk rebuilds (lower = smoother but slower)
+  maxConcurrentChunkRebuilds: 4,
+  
+  // Whether to prioritize chunks by distance (helps with camera movement fluidity)
+  prioritizeChunksByDistance: true,
+  
+  // Whether to delay chunk rebuilding when atlas is initialized (reduces initial stutter)
+  delayInitialRebuild: true,
+  
+  // Initial delay before starting chunk rebuilds (ms)
+  initialRebuildDelay: 100,
+  
+  // Whether to use texture atlas at all (disable for very low-end devices)
+  useTextureAtlas: false
+};
+
+// Export settings getter/setter functions
+export const getTextureAtlasSettings = () => TEXTURE_ATLAS_SETTINGS;
+
+export const setTextureAtlasSetting = (setting, value) => {
+  if (setting in TEXTURE_ATLAS_SETTINGS) {
+    TEXTURE_ATLAS_SETTINGS[setting] = value;
+    
+    // Update chunk load manager concurrency if it exists
+    if (setting === 'maxConcurrentChunkRebuilds' && chunkLoadManager) {
+      chunkLoadManager.maxConcurrentLoads = value;
+    }
+    
+    console.log(`Updated texture atlas setting: ${setting} = ${value}`);
+    return true;
+  }
+  return false;
+};
+
+// Reset chunk renderer with new settings
+export const resetChunkRenderer = (settings = {}) => {
+	// Update settings
+	Object.entries(settings).forEach(([key, value]) => {
+		setTextureAtlasSetting(key, value);
+	});
+	
+	// Clear chunk load manager if it exists
+	if (chunkLoadManager) {
+		chunkLoadManager.clearQueue();
+	}
+	
+	// If disabling texture atlas, clear the atlas
+	if (settings.hasOwnProperty('useTextureAtlas') && !settings.useTextureAtlas) {
+		atlasInitialized = false;
+		textureAtlas = null;
+		chunkMeshBuilder = null;
+	}
+	
+	// Set flag to rebuild all meshes
+	meshesNeedsRefresh = true;
+	
+	console.log("Chunk renderer reset with new settings:", settings);
+};
+
+// Get default performance preset based on device capabilities
+export const getRecommendedPerformancePreset = () => {
+	// Check for low-end device indicators
+	const isLowEnd = 
+		navigator.hardwareConcurrency <= 2 || 
+		navigator.deviceMemory <= 2;
+	
+	// Check for high-end device indicators
+	const isHighEnd = 
+		navigator.hardwareConcurrency >= 8 || 
+		navigator.deviceMemory >= 8;
+	
+	if (isLowEnd) {
+		// Lowest performance settings for weak devices
+		return {
+			useTextureAtlas: false,
+			batchedChunkRebuilding: false,
+			maxConcurrentChunkRebuilds: 1
+		};
+	} else if (isHighEnd) {
+		// Highest performance for powerful devices
+		return {
+			useTextureAtlas: true,
+			batchedChunkRebuilding: true,
+			maxConcurrentChunkRebuilds: 8,
+			prioritizeChunksByDistance: true,
+			delayInitialRebuild: false
+		};
+	} else {
+		// Medium performance for average devices
+		return {
+			useTextureAtlas: true,
+			batchedChunkRebuilding: true,
+			maxConcurrentChunkRebuilds: 2,
+			prioritizeChunksByDistance: true,
+			delayInitialRebuild: true,
+			initialRebuildDelay: 200
+		};
+	}
+};
 
 
