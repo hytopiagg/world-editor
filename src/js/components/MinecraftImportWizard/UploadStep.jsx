@@ -222,7 +222,8 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           
           // Combine all chunks into one blocks object
           console.log('[CHUNKS] Combining all chunks into one blocks object');
-          loadingManager.showLoading('Combining block data chunks...', 0);
+          // Don't show a new loading screen, just update the progress message
+          setProgressMessage('Combining block data chunks...');
           
           const combinedBlocks = {};
           
@@ -242,7 +243,9 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
               
               // Set initial world data to indicate loading
               setWorldData(initialWorldData);
-              onWorldLoaded(initialWorldData);
+              
+              // DO NOT call onWorldLoaded here with the initial data
+              // We'll only call it after chunks are fully combined
               
               // Process chunks in batches of 1
               for (let i = 1; i <= totalChunks; i++) {
@@ -254,6 +257,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
                   // Update loading progress
                   processedChunks++;
                   const progress = Math.floor((processedChunks / totalChunks) * 80);
+                  // Just update the existing loading screen, don't create a new one
                   loadingManager.updateLoading(`Combining chunks: ${processedChunks}/${totalChunks}`, progress);
                   
                   // Allow UI to update between chunks
@@ -302,23 +306,27 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
               // Update local state
               setWorldData(worldDataWithRegion);
               
-              // Pass data to parent but don't advance step
-              console.log('[TIMING] UploadStep: About to call onWorldLoaded with lightweight worldData');
-              onWorldLoaded(worldDataWithRegion);
+              // IMPORTANT: Just update the existing loading screen
+              loadingManager.updateLoading('Preparing block mapping...', 90);
               
-              // Hide loading when done - user will click Next to continue
+              // Wait a moment to ensure all data is ready before transitioning
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // Now hide the loading screen
               loadingManager.hideLoading();
+              
+              // Only NOW call onWorldLoaded to transition to the next step
+              // This happens after the "[CHUNKS] Combined X blocks from Y chunks" log message
+              console.log('[TIMING] UploadStep: About to call onWorldLoaded with complete worldData');
+              onWorldLoaded(worldDataWithRegion);
               
               // Set progress to 100% to show completion
               setProgress(100);
               setProgressMessage('World loading complete! Click Next to continue.');
               
-              // After processing is complete, ensure any loading screens are hidden
-              loadingManager.forceHideAll();
-              
             } catch (error) {
               console.error("Error processing chunks:", error);
-              loadingManager.forceHideAll(); // Make sure loading screen is hidden on error
+              loadingManager.hideLoading(); // Make sure loading screen is hidden on error
               setError('Error combining block data: ' + error.message);
             }
           };
