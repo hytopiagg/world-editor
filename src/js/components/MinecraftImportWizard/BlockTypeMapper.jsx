@@ -122,7 +122,7 @@ const customTextureLibraryStyles = `
   }
 `;
 
-const BlockTypeMapper = ({ worldData, selectedRegion, onMappingsUpdated, initialMappings }) => {
+const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
   const [mappings, setMappings] = useState({});
   const [availableHytopiaBlocks, setAvailableHytopiaBlocks] = useState([]);
   const [customTextureFiles, setCustomTextureFiles] = useState({});
@@ -130,6 +130,9 @@ const BlockTypeMapper = ({ worldData, selectedRegion, onMappingsUpdated, initial
   const [customTextures, setCustomTextures] = useState([]);
   const fileInputRef = useRef(null);
   const dropAreaRef = useRef(null);
+  
+  // Get selectedRegion from worldData
+  const selectedRegion = worldData?.selectedRegion;
   
   // Initialize available HYTOPIA blocks and custom textures
   useEffect(() => {

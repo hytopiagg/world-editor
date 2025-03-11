@@ -1,13 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import '../../../css/MinecraftImport.css';
 import UploadStep from './UploadStep';
-import RegionSelector from './RegionSelector';
 import BlockTypeMapper from './BlockTypeMapper';
 import ImportStep from './ImportStep';
 
 const STEPS = [
   { id: 'upload', title: 'Upload World' },
-  { id: 'region', title: 'Select Region' },
   { id: 'blocks', title: 'Map Blocks' },
   { id: 'import', title: 'Import Map' }
 ];
@@ -15,7 +13,6 @@ const STEPS = [
 const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [worldData, setWorldData] = useState(null);
-  const [selectedRegion, setSelectedRegion] = useState(null);
   const [blockMappings, setBlockMappings] = useState({});
   const [importResult, setImportResult] = useState(null);
   
@@ -24,8 +21,18 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   }, []);
   
   const handlePrevStep = useCallback(() => {
+    // If going back from the blocks step (step 1) to the upload step (step 0),
+    // reset the state to allow starting over
+    if (currentStep === 1) {
+      // Clear world data to free memory
+      setWorldData(null);
+      // Reset other state
+      setBlockMappings({});
+    }
+    
+    // Go back to the previous step
     setCurrentStep(prev => Math.max(prev - 1, 0));
-  }, []);
+  }, [currentStep]);
   
   const handleComplete = useCallback(() => {
     if (importResult && importResult.hytopiaMap) {
@@ -37,12 +44,18 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
     onClose();
   }, [importResult, onComplete, onClose, terrainBuilderRef]);
   
+  // Auto-advance to next step when worldData is set
+  useEffect(() => {
+    if (worldData && currentStep === 0) {
+      // If we're on the upload step and worldData is set, advance to the next step
+      handleNextStep();
+    }
+  }, [worldData, currentStep, handleNextStep]);
+  
   const canProceed = () => {
     switch (STEPS[currentStep].id) {
       case 'upload':
         return !!worldData;
-      case 'region':
-        return !!selectedRegion;
       case 'blocks':
         // Always allow proceeding from block mapping step since we auto-map
         return true;
@@ -58,42 +71,20 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
     switch (STEPS[currentStep].id) {
       case 'upload':
         return <UploadStep onWorldLoaded={setWorldData} />;
-      case 'region':
-        return <RegionSelector 
-                 worldData={worldData} 
-                 onRegionSelected={setSelectedRegion} 
-                 initialRegion={selectedRegion} />;
       case 'blocks':
         return <BlockTypeMapper 
                  worldData={worldData}
-                 selectedRegion={selectedRegion}
                  onMappingsUpdated={setBlockMappings}
                  initialMappings={blockMappings} />;
       case 'import':
         return <ImportStep 
                  worldData={worldData}
-                 selectedRegion={selectedRegion}
                  blockMappings={blockMappings}
-                 onComplete={setImportResult} />;
+                 onImportComplete={setImportResult} />;
       default:
-        return <div>Unknown step</div>;
+        return null;
     }
   };
-  
-  // Initialize region when world data changes
-  useEffect(() => {
-    if (worldData && worldData.bounds && !selectedRegion) {
-      // Set a default region when world data is loaded (whole world)
-      setSelectedRegion({
-        minX: worldData.bounds.minX,
-        minY: worldData.bounds.minY,
-        minZ: worldData.bounds.minZ,
-        maxX: worldData.bounds.maxX,
-        maxY: worldData.bounds.maxY,
-        maxZ: worldData.bounds.maxZ
-      });
-    }
-  }, [worldData, selectedRegion]);
   
   if (!isOpen) return null;
   

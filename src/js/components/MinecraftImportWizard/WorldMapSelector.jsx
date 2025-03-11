@@ -22,7 +22,10 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
   
   // Calculate display bounds
   const getDisplayBounds = () => {
-    if (!worldBounds) return { minX: -256, maxX: 256, minZ: -256, maxZ: 256 };
+    if (!worldBounds || !worldBounds.minX || !worldBounds.maxX || 
+        !worldBounds.minZ || !worldBounds.maxZ) {
+      return { minX: -256, maxX: 256, minZ: -256, maxZ: 256 };
+    }
     
     // Add some padding around the world bounds
     const padding = 0.1; // 10% padding
@@ -83,68 +86,46 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
   const updateSelectionRect = () => {
     if (!mapRef.current || !selectionRef.current || !selectedBounds) return;
     
-    const { minX, maxX, minZ, maxZ } = selectedBounds;
+    // Get values with null safety
+    const minX = selectedBounds.minX ?? 0;
+    const maxX = selectedBounds.maxX ?? 300;
+    const minZ = selectedBounds.minZ ?? 0;
+    const maxZ = selectedBounds.maxZ ?? 300;
     
-    const topLeft = worldToSvg(minX, minZ);
-    const bottomRight = worldToSvg(maxX, maxZ);
+    // Check if any values are invalid or out of typical range
+    if (isNaN(minX) || isNaN(maxX) || isNaN(minZ) || isNaN(maxZ) ||
+        minX > maxX || minZ > maxZ) {
+      console.warn("Invalid selection bounds, skipping update:", selectedBounds);
+      return;
+    }
     
-    selectionRef.current.style.left = `${topLeft.x}px`;
-    selectionRef.current.style.top = `${topLeft.y}px`;
-    selectionRef.current.style.width = `${bottomRight.x - topLeft.x}px`;
-    selectionRef.current.style.height = `${bottomRight.y - topLeft.y}px`;
-    
-    // Add selection dimensions as a data attribute for tooltip
-    selectionRef.current.setAttribute('data-dimensions', 
-      `${maxX - minX + 1} × ${maxZ - minZ + 1}`);
+    try {
+      const topLeft = worldToSvg(minX, minZ);
+      const bottomRight = worldToSvg(maxX, maxZ);
+      
+      selectionRef.current.style.left = `${topLeft.x}px`;
+      selectionRef.current.style.top = `${topLeft.y}px`;
+      selectionRef.current.style.width = `${bottomRight.x - topLeft.x}px`;
+      selectionRef.current.style.height = `${bottomRight.y - topLeft.y}px`;
+      
+      // Add selection dimensions as a data attribute for tooltip
+      const width = maxX - minX + 1;
+      const depth = maxZ - minZ + 1;
+      selectionRef.current.setAttribute('data-dimensions', `${width} × ${depth}`);
+    } catch (error) {
+      console.error("Error updating selection rectangle:", error);
+    }
   };
   
   // Handle map click
   const handleMapClick = (e) => {
-    // Skip if we just finished dragging or resizing
-    if (isDragging || isResizing) return;
-    
-    // Track if this is a genuine click vs. the end of a pan operation
-    if (e.target !== mapRef.current) return;
-    
-    // Don't trigger on mouseup events after panning or dragging the selection
-    if (viewCenter.wasPanning || viewCenter.wasDragging) {
-      setViewCenter(prev => ({ 
-        ...prev, 
-        wasPanning: false,
-        wasDragging: false
-      }));
-      return;
-    }
-    
-    // Get coordinates within the map SVG
-    const mapRect = mapRef.current.getBoundingClientRect();
-    const svgX = e.clientX - mapRect.left;
-    const svgY = e.clientY - mapRect.top;
-    
-    // Convert to world coordinates
-    const worldCoords = svgToWorld(svgX, svgY);
-    
-    // Default to 300x300 size if no previous selection
-    const selectionWidth = selectedBounds ? (selectedBounds.maxX - selectedBounds.minX) : 300;
-    const selectionDepth = selectedBounds ? (selectedBounds.maxZ - selectedBounds.minZ) : 300;
-    
-    const newBounds = {
-      minX: Math.floor(worldCoords.x - selectionWidth / 2),
-      maxX: Math.floor(worldCoords.x + selectionWidth / 2),
-      minZ: Math.floor(worldCoords.z - selectionDepth / 2),
-      maxZ: Math.floor(worldCoords.z + selectionDepth / 2),
-      // Keep Y bounds the same
-      minY: selectedBounds ? selectedBounds.minY : 10,
-      maxY: selectedBounds ? selectedBounds.maxY : 100
-    };
-    
-    onBoundsChange(newBounds);
+    // Disabled - we don't want to move the selection on click
+    return;
   };
   
   // Handle selection drag start
   const handleSelectionDragStart = (e) => {
     e.preventDefault();
-    e.stopPropagation(); // Prevent triggering map click
     if (isResizing) return;
     
     setIsDragging(true);
@@ -180,22 +161,10 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
       onBoundsChange(newBounds);
     };
     
-    const handleMouseUp = (moveEvent) => {
-      // Flag to prevent map click from triggering
-      setViewCenter(prev => ({ ...prev, wasDragging: true }));
+    const handleMouseUp = () => {
       setIsDragging(false);
-      
-      // Handle final movement
-      handleMouseMove(moveEvent);
-      
-      // Clean up
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      
-      // Reset the flag after a short delay
-      setTimeout(() => {
-        setViewCenter(prev => ({ ...prev, wasDragging: false }));
-      }, 100);
     };
     
     document.addEventListener('mousemove', handleMouseMove);
@@ -265,22 +234,11 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
       onBoundsChange(newBounds);
     };
     
-    const handleMouseUp = (moveEvent) => {
-      // Flag to prevent map click from triggering
-      setViewCenter(prev => ({ ...prev, wasDragging: true }));
+    const handleMouseUp = () => {
       setIsResizing(false);
       setResizeDirection(null);
-      
-      // Handle final movement
-      handleMouseMove(moveEvent);
-      
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      
-      // Reset the flag after a short delay
-      setTimeout(() => {
-        setViewCenter(prev => ({ ...prev, wasDragging: false }));
-      }, 100);
     };
     
     document.addEventListener('mousemove', handleMouseMove);
@@ -313,9 +271,6 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
     
     e.preventDefault();
     
-    // Mark that we're starting a pan operation
-    setViewCenter(prev => ({ ...prev, wasPanning: true }));
-    
     // Store initial cursor position
     const startX = e.clientX;
     const startY = e.clientY;
@@ -337,8 +292,7 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
       // Update view center
       setViewCenter({
         x: initialViewCenter.x + viewDeltaX,
-        z: initialViewCenter.z + viewDeltaZ,
-        wasPanning: true
+        z: initialViewCenter.z + viewDeltaZ
       });
     };
     
@@ -464,7 +418,6 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
       <div 
         className="map-container"
         ref={mapRef}
-        onClick={handleMapClick}
         onMouseDown={handleMapDragStart}
       >
         {/* World boundary */}

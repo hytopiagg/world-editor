@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { FaCloudUploadAlt, FaCog, FaMapMarkedAlt, FaCheck, FaTimes } from 'react-icons/fa';
 import WorldMapSelector from './WorldMapSelector';
 
@@ -46,10 +46,39 @@ const UploadStep = ({ onWorldLoaded }) => {
   const [worldSizeInfo, setWorldSizeInfo] = useState(null);
   const [showSizeSelector, setShowSizeSelector] = useState(false);
   const [selectedBounds, setSelectedBounds] = useState(null);
+  const [worldData, setWorldData] = useState(null); // Add state for worldData
   
   const fileInputRef = useRef(null);
   const workerRef = useRef(null);
   const zipDataRef = useRef(null); // Store the zip data for later use
+  
+  // Reset state when we go back to this step
+  useEffect(() => {
+    // If we had world data before but don't now, we're going back to start over
+    if (!worldData) {
+      // Reset all state
+      setUploading(false);
+      setError(null);
+      setProgress(0);
+      setProgressMessage('');
+      setShowAdvanced(false);
+      setOptions({ ...DEFAULT_OPTIONS });
+      setMemoryUsage(null);
+      setFilterStats(null);
+      setWorldSizeInfo(null);
+      setShowSizeSelector(false);
+      setSelectedBounds(null);
+      
+      // Clean up any worker
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      
+      // Clean up any stored zip data
+      zipDataRef.current = null;
+    }
+  }, [worldData]);
   
   // Clean up worker on unmount
   React.useEffect(() => {
@@ -121,25 +150,70 @@ const UploadStep = ({ onWorldLoaded }) => {
           
           // Set initial selected bounds with 300x300 XZ area centered around the origin
           // and Y range from 10 to 100
-          const centerX = Math.floor((data.bounds.minX + data.bounds.maxX) / 2);
-          const centerZ = Math.floor((data.bounds.minZ + data.bounds.maxZ) / 2);
-          
-          setSelectedBounds({
-            minX: centerX - 150, // 300/2 = 150
-            maxX: centerX + 149, // 300/2 = 150 (minus 1 to account for inclusive bounds)
-            minY: 10,
-            maxY: 100,
-            minZ: centerZ - 150,
-            maxZ: centerZ + 149
-          });
+          if (data && data.bounds) {
+            const centerX = Math.floor(((data.bounds.minX || 0) + (data.bounds.maxX || 0)) / 2);
+            const centerZ = Math.floor(((data.bounds.minZ || 0) + (data.bounds.maxZ || 0)) / 2);
+            
+            setSelectedBounds({
+              minX: centerX - 150, // 300/2 = 150
+              maxX: centerX + 149, // 300/2 = 150 (minus 1 to account for inclusive bounds)
+              minY: 10,
+              maxY: 100,
+              minZ: centerZ - 150,
+              maxZ: centerZ + 149
+            });
+          } else {
+            // Fallback if bounds data is missing
+            console.warn("World size data missing bounds, using defaults");
+            setSelectedBounds({
+              minX: -150,
+              maxX: 149,
+              minY: 10,
+              maxY: 100,
+              minZ: -150,
+              maxZ: 149
+            });
+          }
         } else if (type === 'worldParsed') {
           // Second phase complete - got full world data
           setUploading(false);
           setProgress(100);
           setProgressMessage('World loading complete!');
+          setShowSizeSelector(false); // Hide region selector after parsing
+          
+          // Ensure we have valid bounds
+          if (!selectedBounds) {
+            console.warn("No bounds selected, using defaults from world size info");
+            // Set default bounds if none were selected
+            const worldBounds = data.bounds || {
+              minX: -150, maxX: 150, minY: 10, maxY: 100, minZ: -150, maxZ: 150
+            };
+            
+            setSelectedBounds(worldBounds);
+          }
+          
+          // Use bounds with null protection
+          const bounds = selectedBounds || data.bounds || {
+            minX: -150, maxX: 150, minY: 10, maxY: 100, minZ: -150, maxZ: 150
+          };
+          
+          // Save the selected bounds in the world data to use instead of the separate region selection step
+          const worldDataWithRegion = {
+            ...data,
+            // Add selected region info with safe calculations
+            selectedRegion: {
+              ...bounds,
+              width: (bounds.maxX - bounds.minX + 1) || 300,
+              height: (bounds.maxY - bounds.minY + 1) || 90,
+              depth: (bounds.maxZ - bounds.minZ + 1) || 300
+            }
+          };
+          
+          // Update local state
+          setWorldData(worldDataWithRegion);
           
           // Auto-progress to the next step
-          onWorldLoaded(data);
+          onWorldLoaded(worldDataWithRegion);
         } else if (type === 'error') {
           setUploading(false);
           setProgress(0);
@@ -207,9 +281,6 @@ const UploadStep = ({ onWorldLoaded }) => {
       minZ: selectedBounds.minZ,
       maxZ: selectedBounds.maxZ
     };
-    
-    // Log the options being used for debugging
-    console.log('Parsing with options:', updatedOptions);
     
     // Start the second phase - parse world with selected bounds
     workerRef.current.postMessage({
@@ -365,6 +436,7 @@ const UploadStep = ({ onWorldLoaded }) => {
         </div>
       )}
       
+      {/* Show the progress if we're uploading/parsing */}
       {uploading && (
         <div className="upload-progress">
           <p>{progressMessage || 'Processing your world...'}</p>
@@ -403,7 +475,18 @@ const UploadStep = ({ onWorldLoaded }) => {
         </div>
       )}
       
-      {(!uploading && !showSizeSelector) && (
+      {/* Show success message if parsing is complete */}
+      {worldData && !uploading && !showSizeSelector && (
+        <div className="success-message">
+          <div className="success-icon">✓</div>
+          <h3>World Parsing Complete!</h3>
+          <p>Your selected region has been processed successfully.</p>
+          <p>Advancing to block mapping...</p>
+        </div>
+      )}
+      
+      {/* Only show the drag & drop area when we're at the initial state (no processing and no selector shown) */}
+      {(!uploading && !showSizeSelector && !worldData) && (
         <div 
           className="upload-area"
           onDragOver={handleDragOver}
@@ -430,7 +513,8 @@ const UploadStep = ({ onWorldLoaded }) => {
         </div>
       )}
       
-      {(!showSizeSelector && !uploading) && (
+      {/* Only show advanced options in the initial state */}
+      {(!showSizeSelector && !uploading && !worldData) && (
         <div className="advanced-options">
           <button 
             className="advanced-button" 
@@ -618,6 +702,27 @@ const UploadStep = ({ onWorldLoaded }) => {
           font-size: 12px;
           color: #aaa;
           font-style: italic;
+        }
+        
+        .success-message {
+          margin: 40px 0;
+          padding: 30px;
+          background-color: rgba(76, 175, 80, 0.15);
+          border: 1px solid #4caf50;
+          border-radius: 8px;
+          text-align: center;
+          animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        .success-icon {
+          font-size: 60px;
+          color: #4caf50;
+          margin-bottom: 20px;
+        }
+        
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         
         .error-message {

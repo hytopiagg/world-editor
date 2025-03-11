@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { MinecraftToHytopiaConverter } from '../../utils/MinecraftToHytopiaConverter';
 import { processCustomBlock, getCustomBlocks } from '../../TerrainBuilder';
 
-const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) => {
+const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  
+  // Get selectedRegion from worldData
+  const selectedRegion = worldData?.selectedRegion;
   
   // Count stats for display
   const blockTypeCount = Object.keys(blockMappings).length;
@@ -74,7 +77,7 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
       // Create converter
       const converter = new MinecraftToHytopiaConverter(
         worldData,
-        selectedRegion,
+        worldData.selectedRegion,
         blockMappings
       );
       
@@ -87,8 +90,8 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
       // Set result
       setResult(conversionResult);
       
-      // Call onComplete with result
-      onComplete(conversionResult);
+      // Call onImportComplete with result
+      onImportComplete(conversionResult);
     } catch (err) {
       console.error("Import error:", err);
       setError(err.message || "An error occurred during import");
@@ -96,7 +99,7 @@ const ImportStep = ({ worldData, selectedRegion, blockMappings, onComplete }) =>
         success: false,
         error: err.message || "An error occurred during import"
       });
-      onComplete({
+      onImportComplete({
         success: false,
         error: err.message || "An error occurred during import"
       });
