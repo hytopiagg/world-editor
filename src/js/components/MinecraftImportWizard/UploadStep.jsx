@@ -11,6 +11,8 @@ const createWorker = () => {
 const DEFAULT_OPTIONS = {
   // Filter out transparent blocks
   excludeTransparentBlocks: true,
+  // Filter out water blocks (default is false - include water)
+  excludeWaterBlocks: false,
   // Only load central regions if too many
   limitRegions: true,
   // Max number of regions to load
@@ -537,7 +539,18 @@ const UploadStep = ({ onWorldLoaded }) => {
                     checked={options.excludeTransparentBlocks}
                     onChange={(e) => handleOptionChange('excludeTransparentBlocks', e.target.checked)}
                   />
-                  Skip transparent blocks (air, glass, water)
+                  Skip transparent blocks (air, glass)
+                </label>
+              </div>
+              
+              <div className="option-row">
+                <label>
+                  <input 
+                    type="checkbox" 
+                    checked={options.excludeWaterBlocks}
+                    onChange={(e) => handleOptionChange('excludeWaterBlocks', e.target.checked)}
+                  />
+                  Skip water blocks
                 </label>
               </div>
               

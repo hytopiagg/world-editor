@@ -3,6 +3,7 @@ import '../../../css/MinecraftImport.css';
 import UploadStep from './UploadStep';
 import BlockTypeMapper from './BlockTypeMapper';
 import ImportStep from './ImportStep';
+import { loadingManager } from '../../LoadingManager';
 
 const STEPS = [
   { id: 'upload', title: 'Upload World' },
@@ -36,12 +37,23 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   
   const handleComplete = useCallback(() => {
     if (importResult && importResult.hytopiaMap) {
-      // Update the terrain with imported data
-      terrainBuilderRef.current?.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
+      // Show loading screen with initial message
+      loadingManager.showLoading('Preparing to import Minecraft world...');
+      
+      // Close dialog right away to avoid UI freeze
+      onComplete && onComplete(importResult);
+      onClose();
+      
+      // Reduce delay to make loading more responsive
+      setTimeout(() => {
+        // Update the terrain with imported data - loading will be managed inside updateTerrainFromToolBar
+        terrainBuilderRef.current?.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
+      }, 50); // Reduced from 150ms for faster response
+    } else {
+      // If no import result, just close normally
+      onComplete && onComplete(importResult);
+      onClose();
     }
-    
-    onComplete && onComplete(importResult);
-    onClose();
   }, [importResult, onComplete, onClose, terrainBuilderRef]);
   
   // Auto-advance to next step when worldData is set

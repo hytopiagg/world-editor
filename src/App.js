@@ -20,6 +20,7 @@ import UnderConstruction from "./js/components/UnderConstruction";
 import UndoRedoManager from "./js/UndoRedo";
 import QuickTips from './js/components/QuickTips';
 import {getCustomBlocks} from "./js/TerrainBuilder";
+import GlobalLoadingScreen from './js/components/GlobalLoadingScreen';
 
 function App() {
   const undoRedoManagerRef = useRef(null);
@@ -98,6 +99,9 @@ function App() {
       
       {/* Loading Screen */}
       {!pageIsLoaded && <LoadingScreen />}
+
+      {/* Global Loading Screen for heavy operations */}
+      <GlobalLoadingScreen />
 
       {/* Hytopia Logo */}
       <div className="hytopia-logo-wrapper">

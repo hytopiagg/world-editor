@@ -19,6 +19,8 @@ export class AnvilParser {
 		this.options = {
 			// Filter out non-solid blocks to reduce memory usage
 			excludeTransparentBlocks: options.excludeTransparentBlocks ?? true,
+			// New option for water blocks - default to false (include water)
+			excludeWaterBlocks: options.excludeWaterBlocks ?? false,
 			// Load only specific region bounds
 			regionBounds: options.regionBounds || null, // {minX, minZ, maxX, maxZ}
 			// Maximum number of blocks to load (0 = unlimited)
@@ -35,17 +37,42 @@ export class AnvilParser {
 			// Block types to include (if empty, include all)
 			includeBlocks: options.includeBlocks || [],
 			// Chunk sampling factor (1 = every chunk, 2 = every other chunk, etc.)
-			chunkSamplingFactor: options.chunkSamplingFactor || 1
+			chunkSamplingFactor: options.chunkSamplingFactor || 1,
+			// Additional options from parameter
+			limitRegions: options.limitRegions ?? true,
+			maxRegions: options.maxRegions ?? 25,
+			memoryLimit: options.memoryLimit ?? 1000
 		};
 		
-		// Common transparent/unimportant blocks to filter out
+		// Common transparent/unimportant blocks to filter out (excluding water)
 		this.transparentBlocks = new Set([
 			'minecraft:air', 'minecraft:cave_air', 'minecraft:void_air',
 			'minecraft:glass', 'minecraft:glass_pane',
-			'minecraft:water', 'minecraft:bubble_column', 'minecraft:lava',
 			'minecraft:grass', 'minecraft:tall_grass', 'minecraft:seagrass', 'minecraft:tall_seagrass',
 			'minecraft:torch', 'minecraft:wall_torch',
 			'minecraft:light'
+		]);
+		
+		// Water-related blocks
+		this.waterBlocks = new Set([
+			'minecraft:water', 
+			'minecraft:bubble_column', 
+			'minecraft:flowing_water',
+			'water',
+			'flowing_water',
+			'bubble_column',
+			'minecraft:kelp',
+			'minecraft:kelp_plant',
+			'kelp',
+			'kelp_plant'
+		]);
+		
+		// Lava blocks (still filtered with transparentBlocks)
+		this.lavaBlocks = new Set([
+			'minecraft:lava', 
+			'minecraft:flowing_lava',
+			'lava',
+			'flowing_lava'
 		]);
 		
 		// Initialize counters for skipped chunks
@@ -53,6 +80,16 @@ export class AnvilParser {
 			yBounds: 0,
 			xzBounds: 0,
 			regionBounds: 0
+		};
+
+		// Add filter stats for debugging
+		this.filterStats = {
+			transparentBlocksSkipped: 0,
+			waterBlocksSkipped: 0,
+			lavaBlocksSkipped: 0,
+			includedBlocksSkipped: 0,
+			totalBlocksProcessed: 0,
+			totalBlocksIncluded: 0
 		};
 	}
 
@@ -327,16 +364,34 @@ export class AnvilParser {
 			for (let i = 0; i < blockNames.length; i++) {
 				const blockName = blockNames[i];
 				
+				// Update total blocks processed count
+				this.filterStats.totalBlocksProcessed++;
+				
 				// Skip transparent blocks if option is enabled
 				if (this.options.excludeTransparentBlocks && this.transparentBlocks.has(blockName)) {
+					this.filterStats.transparentBlocksSkipped++;
+					continue;
+				}
+				
+				// Skip water blocks if that option is enabled (separate from other transparent blocks)
+				if (this.options.excludeWaterBlocks && this.waterBlocks.has(blockName)) {
+					this.filterStats.waterBlocksSkipped++;
+					continue;
+				}
+				
+				// Skip lava blocks if transparent blocks are excluded (included with transparent)
+				if (this.options.excludeTransparentBlocks && this.lavaBlocks.has(blockName)) {
+					this.filterStats.lavaBlocksSkipped++;
 					continue;
 				}
 				
 				// Skip blocks not in the include list (if specified)
-				if (this.options.includeBlocks.length > 0 && !this.options.includeBlocks.includes(blockName)) {
+				if (this.options.includeBlocks?.length > 0 && !this.options.includeBlocks.includes(blockName)) {
+					this.filterStats.includedBlocksSkipped++;
 					continue;
 				}
 				
+				// This block passes all filters
 				includedBlockIndices.add(i);
 			}
 			
@@ -357,7 +412,7 @@ export class AnvilParser {
 					
 					// Add a single object to represent the entire section instead of individual blocks
 					// This saves memory for homogenous sections
-					this.addSectionBlock(chunkX * 16, sectionY * 16, chunkZ * 16, 16, 16, 16, blockName);
+					this.addSectionBlock(chunkX * 16, sectionY * 16, chunkZ * 16, 16, 16, 16, blockNames[0]);
 				}
 				return;
 			}
@@ -485,18 +540,16 @@ export class AnvilParser {
 				}
 				
 				// Add each position to the chunks array
-				for (const [posX, posY, posZ] of positions) {
-					if (posX < startX + blockWidth && posY < startY + blockHeight && posZ < startZ + blockDepth) {
-						chunks.push({
-							x: posX,
-							y: posY,
-							z: posZ,
-							type: blockData.type
-						});
-					}
+				for (const [xPos, yPos, zPos] of positions) {
+					chunks.push({
+						x: xPos,
+						y: yPos,
+						z: zPos,
+						type: blockData.type
+					});
 				}
 			} else {
-				// Regular block, split the key to get x,y,z
+				// Regular blocks
 				const [x, y, z] = key.split(',').map(Number);
 				const blockData = this.blocks[key];
 				chunks.push({
@@ -507,6 +560,11 @@ export class AnvilParser {
 				});
 			}
 		}
+		
+		// Count total blocks
+		this.filterStats.totalBlocksIncluded = chunks.length;
+		
+		console.log('Filter statistics:', this.filterStats);
 		
 		return {
 			blockTypes: Array.from(this.blockTypes),
@@ -533,7 +591,8 @@ export class AnvilParser {
 					coordsFiltering: this.options.filterByCoordinates,
 					xRange: [this.options.minX, this.options.maxX],
 					zRange: [this.options.minZ, this.options.maxZ]
-				}
+				},
+				blocks: this.filterStats // Add our new block filtering stats
 			}
 		};
 	}
