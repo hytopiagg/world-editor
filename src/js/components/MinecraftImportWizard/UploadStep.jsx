@@ -254,24 +254,30 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
               // DO NOT call onWorldLoaded here with the initial data
               // We'll only call it after chunks are fully combined
               
-              // Process chunks in batches of 1
-              for (let i = 1; i <= totalChunks; i++) {
-                const chunkBlocks = globalWorldDataStorage.chunkedBlocksData[i];
-                if (chunkBlocks) {
-                  // Process this chunk's blocks
-                  Object.assign(combinedBlocks, chunkBlocks);
-                  
-                  // Update loading progress
-                  processedChunks++;
-                  const progress = Math.floor((processedChunks / totalChunks) * 80);
-                  // Just update the existing loading screen, don't create a new one
-                  loadingManager.updateLoading(`Combining chunks: ${processedChunks}/${totalChunks}`, progress);
-                  
-                  // Allow UI to update between chunks
-                  await new Promise(resolve => setTimeout(resolve, 0));
-                } else {
-                  console.warn(`Missing chunk ${i}`);
+              // Process chunks in batches of 5 for better performance
+              const BATCH_SIZE = 5;
+              for (let i = 1; i <= totalChunks; i += BATCH_SIZE) {
+                // Process a batch of chunks
+                const batchEnd = Math.min(i + BATCH_SIZE - 1, totalChunks);
+                
+                for (let j = i; j <= batchEnd; j++) {
+                  const chunkBlocks = globalWorldDataStorage.chunkedBlocksData[j];
+                  if (chunkBlocks) {
+                    // Process this chunk's blocks
+                    Object.assign(combinedBlocks, chunkBlocks);
+                    processedChunks++;
+                  } else {
+                    console.warn(`Missing chunk ${j}`);
+                  }
                 }
+                
+                // Update loading progress after each batch
+                const progress = Math.floor((processedChunks / totalChunks) * 80);
+                // Just update the existing loading screen, don't create a new one
+                loadingManager.updateLoading(`Combining chunks: ${processedChunks}/${totalChunks}`, progress);
+                
+                // Allow UI to update between batches
+                await new Promise(resolve => setTimeout(resolve, 0));
               }
               
               // Store the combined data
@@ -501,20 +507,9 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
           
           {filterStats && (
             <div className="filter-stats">
-              <p><strong>Block Filtering:</strong></p>
-              <ul>
-                {filterStats.transparentBlocks > 0 && (
-                  <li>Skipped {filterStats.transparentBlocks.toLocaleString()} transparent blocks</li>
-                )}
-                {filterStats.waterBlocks > 0 && (
-                  <li>Skipped {filterStats.waterBlocks.toLocaleString()} water blocks</li>
-                )}
-                {filterStats.outOfBoundsBlocks > 0 && (
-                  <li>Skipped {filterStats.outOfBoundsBlocks.toLocaleString()} blocks outside selected bounds</li>
-                )}
-              </ul>
+              <p><strong>Overall Progress:</strong> {Math.round(progress)}% complete</p>
               {filterStats.totalSkipped > 0 && (
-                <p className="filter-tip">Filtering reduced memory usage by approximately {Math.round(filterStats.totalSkipped / (filterStats.totalBlocks || 1) * 100)}%</p>
+                <p className="filter-tip">Optimized by removing {filterStats.totalSkipped.toLocaleString()} blocks ({Math.round(filterStats.totalSkipped / (filterStats.totalBlocks || 1) * 100)}% of total)</p>
               )}
             </div>
           )}
@@ -1080,19 +1075,25 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
         
         .filter-stats {
           margin-top: 15px;
-          padding-top: 15px;
+          padding: 15px;
           border-top: 1px solid #444;
+          background-color: #2a2a2a;
+          border-radius: 8px;
         }
         
-        .filter-stats ul {
+        .filter-stats p {
           margin: 10px 0;
-          padding-left: 20px;
+          font-size: 16px;
+        }
+        
+        .filter-stats p strong {
+          color: #4a90e2;
         }
         
         .filter-tip {
-          font-size: 12px;
+          font-size: 13px;
           color: #aaa;
-          font-style: italic;
+          margin-top: 8px !important;
         }
         
         .success-message {

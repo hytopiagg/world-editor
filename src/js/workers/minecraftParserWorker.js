@@ -673,15 +673,17 @@ async function parseMinecraftWorld(zipData, options = {}) {
     
     // Extract blocks into a separate object to send in chunks
     const blocksData = worldData.blocks || {};
-    const blockKeys = Object.keys(blocksData);
-    const totalBlocks = blockKeys.length;
     
     // Create a simplified worldData object without the large blocks property
     const worldDataWithoutBlocks = { ...worldData };
     delete worldDataWithoutBlocks.blocks;
     
-    // Calculate the number of blocks per chunk (adjust as needed)
-    const CHUNK_SIZE = 50000; // Blocks per chunk
+    // Send blocks in chunks to avoid message size limits
+    const blockEntries = Object.entries(blocksData);
+    const totalBlocks = blockEntries.length;
+    
+    // Increase chunk size for better performance
+    const CHUNK_SIZE = 100000; // Blocks per chunk (increased from 50000)
     const totalChunks = Math.ceil(totalBlocks / CHUNK_SIZE);
     
     console.log(`[CHUNKS] Sending ${totalBlocks} blocks in ${totalChunks} chunks of ${CHUNK_SIZE} blocks each`);
@@ -694,8 +696,8 @@ async function parseMinecraftWorld(zipData, options = {}) {
       // Create a chunk of blocks
       const chunkBlocks = {};
       for (let i = startIndex; i < endIndex; i++) {
-        const key = blockKeys[i];
-        chunkBlocks[key] = blocksData[key];
+        const [key, value] = blockEntries[i];
+        chunkBlocks[key] = value;
       }
       
       // Send this chunk to the main thread
