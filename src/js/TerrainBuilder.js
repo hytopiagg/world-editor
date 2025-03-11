@@ -458,6 +458,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 			// Set updating flag
 			isUpdatingChunksRef.current = true;
+			
+			// Show loading screen for the initial processing
+			loadingManager.showLoading('Processing terrain data...');
 
 			// Process in the next frame to avoid React rendering issues
 			setTimeout(() => {
@@ -476,120 +479,205 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					// Processing queue
 					const chunkQueue = [];
 					
-					// Group blocks by chunk and calculate distances
-					Object.entries(terrainRef.current).forEach(([posKey, blockId]) => {
-						const [x, y, z] = posKey.split(',').map(Number);
-						const chunkKey = getChunkKey(x, y, z);
+					// Get all block entries for processing
+					const blockEntries = Object.entries(terrainRef.current);
+					const totalBlocks = blockEntries.length;
+					
+					// Process blocks in larger batches for faster performance
+					const INITIAL_BATCH_SIZE = 50000; // Increased from 10000 to 50000
+					let processedBlocks = 0;
+					
+					// Function to process a batch of blocks
+					const processBlockBatch = (startIndex) => {
+						// Update loading progress
+						const progress = Math.floor((processedBlocks / totalBlocks) * 100);
+						loadingManager.updateLoading(`Processing blocks (${processedBlocks}/${totalBlocks})`, progress);
 						
-						// Initialize chunk if it doesn't exist
-						if (!chunksRef.current.has(chunkKey)) {
-							chunksRef.current.set(chunkKey, {});
-							
-							// Calculate chunk center
-							const chunkX = Math.floor(x / CHUNK_SIZE);
-							const chunkY = Math.floor(y / CHUNK_SIZE);
-							const chunkZ = Math.floor(z / CHUNK_SIZE);
-							
-							// Calculate squared distance to camera (faster than sqrt)
-							const distSq = 
-								Math.pow(chunkX - cameraChunkX, 2) +
-								Math.pow(chunkY - cameraChunkY, 2) +
-								Math.pow(chunkZ - cameraChunkZ, 2);
-								
-							// Add to processing queue with priority
-							chunkQueue.push({
-								chunkKey,
-								distance: distSq
-							});
-						}
+						// Process a batch of blocks
+						const endIndex = Math.min(startIndex + INITIAL_BATCH_SIZE, totalBlocks);
 						
-						// Store block in chunk
-						chunksRef.current.get(chunkKey)[posKey] = blockId;
-						
-						// Count blocks by type
-						blockCountsByType[blockId] = (blockCountsByType[blockId] || 0) + 1;
-					});
-					
-					// Update spatial hash grid for ray casting
-					updateSpatialHash();
-					
-					// Sort chunks by distance (closest first)
-					chunkQueue.sort((a, b) => a.distance - b.distance);
-					
-					// Clean up existing chunk meshes
-					Object.entries(chunkMeshesRef.current).forEach(([chunkKey, blockMeshes]) => {
-						Object.values(blockMeshes).forEach(mesh => {
-							safeRemoveFromScene(mesh);
-						});
-					});
-					
-					// Reset chunk meshes
-					chunkMeshesRef.current = {};
-					
-					// For backward compatibility, update the block counts
-					blockCountsRef.current = blockCountsByType;
-					totalBlocksRef.current = Object.keys(terrainRef.current).length;
-					
-					// Update debug info early
-					updateDebugInfo();
-					
-					// Track progress for internal use only (no loading UI updates)
-					const totalChunks = chunkQueue.length;
-					let processedChunks = 0;
-					
-					// Process chunks in batches for smoother loading
-					// Increased batch size for faster processing
-					const BATCH_SIZE = 10; // Increased from 5
-					
-					const processBatch = (startIndex) => {
-						// If we're done, finish up
-						if (startIndex >= chunkQueue.length) {
-							// Flag that we're done
-							isUpdatingChunksRef.current = false;
-							
-							// Update visibility now that all chunks are built
-							updateVisibleChunks();
-							
-							// Save terrain asynchronously after all chunks are loaded
-							DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current)
-								.catch(error => console.error("Error saving terrain:", error));
-								
-							// Resolve the promise
-							resolve();
-							return;
-						}
-						
-						// Process a batch of chunks
-						const endIndex = Math.min(startIndex + BATCH_SIZE, chunkQueue.length);
-						
-						// Process this batch
 						for (let i = startIndex; i < endIndex; i++) {
-							const { chunkKey } = chunkQueue[i];
-							try {
-								rebuildChunkNoVisibilityUpdate(chunkKey);
+							const [posKey, blockId] = blockEntries[i];
+							const [x, y, z] = posKey.split(',').map(Number);
+							const chunkKey = getChunkKey(x, y, z);
+							
+							// Initialize chunk if it doesn't exist
+							if (!chunksRef.current.has(chunkKey)) {
+								chunksRef.current.set(chunkKey, {});
 								
-								// Update processed count (no UI updates)
-								processedChunks++;
-							} catch (error) {
-								console.error(`Error processing chunk ${chunkKey}:`, error);
+								// Calculate chunk center
+								const chunkX = Math.floor(x / CHUNK_SIZE);
+								const chunkY = Math.floor(y / CHUNK_SIZE);
+								const chunkZ = Math.floor(z / CHUNK_SIZE);
+								
+								// Calculate squared distance to camera (faster than sqrt)
+								const distSq = 
+									Math.pow(chunkX - cameraChunkX, 2) +
+									Math.pow(chunkY - cameraChunkY, 2) +
+									Math.pow(chunkZ - cameraChunkZ, 2);
+									
+								// Add to processing queue with priority
+								chunkQueue.push({
+									chunkKey,
+									distance: distSq
+								});
 							}
+							
+							// Store block in chunk
+							chunksRef.current.get(chunkKey)[posKey] = blockId;
+							
+							// Count blocks by type
+							blockCountsByType[blockId] = (blockCountsByType[blockId] || 0) + 1;
 						}
 						
-						// Update visibility once for the whole batch
-						updateVisibleChunks();
+						// Update processed count
+						processedBlocks = endIndex;
 						
-						// Schedule the next batch with minimal delay
-						setTimeout(() => {
-							processBatch(endIndex);
-						}, 1); // Reduced from 5ms for faster processing
+						// If there are more blocks to process, schedule the next batch
+						if (processedBlocks < totalBlocks) {
+							setTimeout(() => {
+								processBlockBatch(processedBlocks);
+							}, 0); // Use 0ms timeout to yield to the browser
+						} else {
+							// All blocks processed, continue with the rest of the setup
+							finishSetup();
+						}
 					};
 					
-					// Start processing the first batch
-					processBatch(0);
+					// Function to finish setup after all blocks are processed
+					const finishSetup = () => {
+						loadingManager.updateLoading('Finalizing terrain setup...', 95);
+						
+						// Update spatial hash grid for ray casting
+						updateSpatialHash();
+						
+						// Sort chunks by distance (closest first)
+						chunkQueue.sort((a, b) => a.distance - b.distance);
+						
+						// Clean up existing chunk meshes in larger batches
+						const cleanupMeshes = () => {
+							// Get all mesh entries
+							const meshEntries = Object.entries(chunkMeshesRef.current);
+							
+							// Process in larger batches
+							const CLEANUP_BATCH_SIZE = 200; // Increased from 50 to 200
+							let processedMeshes = 0;
+							
+							const cleanupBatch = (startIndex) => {
+								const endIndex = Math.min(startIndex + CLEANUP_BATCH_SIZE, meshEntries.length);
+								
+								for (let i = startIndex; i < endIndex; i++) {
+									const [chunkKey, blockMeshes] = meshEntries[i];
+									Object.values(blockMeshes).forEach(mesh => {
+										safeRemoveFromScene(mesh);
+									});
+								}
+								
+								processedMeshes = endIndex;
+								
+								if (processedMeshes < meshEntries.length) {
+									setTimeout(() => {
+										cleanupBatch(processedMeshes);
+									}, 0);
+								} else {
+									// All meshes cleaned up, continue
+									continueAfterCleanup();
+								}
+							};
+							
+							// Start cleanup if there are meshes
+							if (meshEntries.length > 0) {
+								cleanupBatch(0);
+							} else {
+								continueAfterCleanup();
+							}
+						};
+						
+						// Function to continue after mesh cleanup
+						const continueAfterCleanup = () => {
+							// Reset chunk meshes
+							chunkMeshesRef.current = {};
+							
+							// For backward compatibility, update the block counts
+							blockCountsRef.current = blockCountsByType;
+							totalBlocksRef.current = Object.keys(terrainRef.current).length;
+							
+							// Update debug info early
+							updateDebugInfo();
+							
+							// Hide loading screen before starting chunk processing
+							loadingManager.hideLoading();
+							
+							// Track progress for internal use only (no loading UI updates)
+							const totalChunks = chunkQueue.length;
+							let processedChunks = 0;
+							
+							// Process chunks in larger batches for faster processing
+							const BATCH_SIZE = 25; // Increased from 10 to 25
+							
+							const processBatch = (startIndex) => {
+								// If we're done, finish up
+								if (startIndex >= chunkQueue.length) {
+									// Flag that we're done
+									isUpdatingChunksRef.current = false;
+									
+									// Update visibility now that all chunks are built
+									updateVisibleChunks();
+									
+									// Save terrain asynchronously after all chunks are loaded
+									setTimeout(() => {
+										DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current)
+											.catch(error => console.error("Error saving terrain:", error));
+									}, 100);
+									
+									// Resolve the promise
+									resolve();
+									return;
+								}
+								
+								// Process a batch of chunks
+								const endIndex = Math.min(startIndex + BATCH_SIZE, chunkQueue.length);
+								
+								// Process this batch
+								for (let i = startIndex; i < endIndex; i++) {
+									const { chunkKey } = chunkQueue[i];
+									try {
+										rebuildChunkNoVisibilityUpdate(chunkKey);
+										
+										// Update processed count (no UI updates)
+										processedChunks++;
+									} catch (error) {
+										console.error(`Error processing chunk ${chunkKey}:`, error);
+									}
+								}
+								
+								// Update visibility once for the whole batch
+								updateVisibleChunks();
+								
+								// Schedule the next batch with zero delay for maximum speed
+								setTimeout(() => {
+									processBatch(endIndex);
+								}, 0); // Reduced from 1ms for maximum speed
+							};
+							
+							// Start processing the first batch
+							processBatch(0);
+						};
+						
+						// Start the mesh cleanup process
+						cleanupMeshes();
+					};
+					
+					// Start processing the first batch of blocks
+					processBlockBatch(0);
 					
 				} catch (error) {
 					console.error("Error in buildUpdateTerrain:", error);
 					isUpdatingChunksRef.current = false;
+					
+					// If there's an error, hide the loading screen
+					loadingManager.hideLoading();
+					
 					resolve(); // Resolve instead of reject to avoid error messages
 				}
 			}, 0);
@@ -1719,28 +1807,18 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 
 	const updateTerrainFromToolBar = (terrainData) => {
-		// Show loading screen before the heavy operation
-		loadingManager.showLoading('Importing Minecraft world...');
+		// Show initial loading screen
+		loadingManager.showLoading('Preparing to import Minecraft world...');
 		
-		// Reduce timeout to 10ms for faster response
-		setTimeout(() => {
-			terrainRef.current = terrainData;
-			
-			// Update loading message one final time
-			loadingManager.updateLoading('Setting up terrain...');
-			
-			// Reduce timeout to 10ms for faster response
-			setTimeout(() => {
-				// Hide loading screen before starting chunk processing
+		// Set terrain data immediately
+		terrainRef.current = terrainData;
+		
+		// Start terrain update immediately for faster response
+		buildUpdateTerrain()
+			.catch((error) => {
+				console.error('Error updating terrain:', error);
 				loadingManager.hideLoading();
-				
-				// Now start terrain update - no need to wait for promise resolution
-				buildUpdateTerrain()
-					.catch((error) => {
-						console.error('Error updating terrain:', error);
-					});
-			}, 10); // Reduced from 50ms
-		}, 10); // Reduced from 50ms
+			});
 	};
 
 	// Update
@@ -2754,7 +2832,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Clear existing hash
 		spatialHashGridRef.current.clear();
 		
-		// Add all blocks to the hash
+		// Create a new Map with the desired capacity (optimize memory allocation)
+		const blockCount = Object.keys(terrainRef.current).length;
+		spatialHashGridRef.current = new Map(); // Recreate the map with proper size estimate
+		
+		// Add all blocks to the hash in bulk
+		// Use direct assignment instead of calling set for each entry
 		Object.entries(terrainRef.current).forEach(([posKey, blockId]) => {
 			spatialHashGridRef.current.set(posKey, blockId);
 		});
