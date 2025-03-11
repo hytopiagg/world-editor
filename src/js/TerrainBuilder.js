@@ -341,6 +341,229 @@ const optimizeRenderer = (gl) => {
   }
 };
 
+// Add this class definition near the top of the file, outside the component
+class SpatialHashGrid {
+	constructor() {
+		// Use a sparse 3D grid for better performance
+		// First level: x coordinate (divided by chunk size)
+		// Second level: y coordinate (divided by chunk size)
+		// Third level: z coordinate (divided by chunk size)
+		// Fourth level: actual blocks within the chunk
+		this.grid = new Map();
+		this.size = 0;
+		this.chunkSize = 16; // Use smaller chunks for the spatial hash
+	}
+	
+	// Get chunk coordinates for a block
+	getChunkCoords(x, y, z) {
+		return [
+			Math.floor(x / this.chunkSize),
+			Math.floor(y / this.chunkSize),
+			Math.floor(z / this.chunkSize)
+		];
+	}
+	
+	// Get local coordinates within a chunk
+	getLocalCoords(x, y, z) {
+		return [
+			x % this.chunkSize,
+			y % this.chunkSize,
+			z % this.chunkSize
+		];
+	}
+	
+	// Get a unique key for a block within a chunk
+	getLocalKey(lx, ly, lz) {
+		return (lx * this.chunkSize * this.chunkSize) + (ly * this.chunkSize) + lz;
+	}
+	
+	// Set a block in the grid
+	set(key, blockId) {
+		const [x, y, z] = key.split(',').map(Number);
+		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
+		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(lx, ly, lz);
+		
+		// Get or create the x level
+		if (!this.grid.has(cx)) {
+			this.grid.set(cx, new Map());
+		}
+		const xLevel = this.grid.get(cx);
+		
+		// Get or create the y level
+		if (!xLevel.has(cy)) {
+			xLevel.set(cy, new Map());
+		}
+		const yLevel = xLevel.get(cy);
+		
+		// Get or create the z level
+		if (!yLevel.has(cz)) {
+			yLevel.set(cz, new Map());
+		}
+		const zLevel = yLevel.get(cz);
+		
+		// Check if this is a new block
+		if (!zLevel.has(localKey)) {
+			this.size++;
+		}
+		
+		// Set the block
+		zLevel.set(localKey, blockId);
+	}
+	
+	// Get a block from the grid
+	get(key) {
+		const [x, y, z] = key.split(',').map(Number);
+		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
+		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(lx, ly, lz);
+		
+		// Check if the chunk exists
+		if (!this.grid.has(cx)) return undefined;
+		const xLevel = this.grid.get(cx);
+		
+		if (!xLevel.has(cy)) return undefined;
+		const yLevel = xLevel.get(cy);
+		
+		if (!yLevel.has(cz)) return undefined;
+		const zLevel = yLevel.get(cz);
+		
+		// Return the block if it exists
+		return zLevel.get(localKey);
+	}
+	
+	// Check if a block exists in the grid
+	has(key) {
+		const [x, y, z] = key.split(',').map(Number);
+		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
+		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(lx, ly, lz);
+		
+		// Check if the chunk exists
+		if (!this.grid.has(cx)) return false;
+		const xLevel = this.grid.get(cx);
+		
+		if (!xLevel.has(cy)) return false;
+		const yLevel = xLevel.get(cy);
+		
+		if (!yLevel.has(cz)) return false;
+		const zLevel = yLevel.get(cz);
+		
+		// Check if the block exists
+		return zLevel.has(localKey);
+	}
+	
+	// Delete a block from the grid
+	delete(key) {
+		const [x, y, z] = key.split(',').map(Number);
+		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
+		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(lx, ly, lz);
+		
+		// Check if the chunk exists
+		if (!this.grid.has(cx)) return false;
+		const xLevel = this.grid.get(cx);
+		
+		if (!xLevel.has(cy)) return false;
+		const yLevel = xLevel.get(cy);
+		
+		if (!yLevel.has(cz)) return false;
+		const zLevel = yLevel.get(cz);
+		
+		// Delete the block if it exists
+		if (zLevel.has(localKey)) {
+			zLevel.delete(localKey);
+			this.size--;
+			
+			// Clean up empty chunks
+			if (zLevel.size === 0) {
+				yLevel.delete(cz);
+				
+				if (yLevel.size === 0) {
+					xLevel.delete(cy);
+					
+					if (xLevel.size === 0) {
+						this.grid.delete(cx);
+					}
+				}
+			}
+			
+			return true;
+		}
+		
+		return false;
+	}
+	
+	// Clear the grid
+	clear() {
+		this.grid.clear();
+		this.size = 0;
+	}
+	
+	// Get all blocks in the grid
+	getBlocks() {
+		const blocks = [];
+		
+		this.grid.forEach((xLevel, cx) => {
+			xLevel.forEach((yLevel, cy) => {
+				yLevel.forEach((zLevel, cz) => {
+					zLevel.forEach((blockId, localKey) => {
+						// Convert local key back to local coordinates
+						const lx = Math.floor(localKey / (this.chunkSize * this.chunkSize));
+						const ly = Math.floor((localKey % (this.chunkSize * this.chunkSize)) / this.chunkSize);
+						const lz = localKey % this.chunkSize;
+						
+						// Convert to world coordinates
+						const x = cx * this.chunkSize + lx;
+						const y = cy * this.chunkSize + ly;
+						const z = cz * this.chunkSize + lz;
+						
+						blocks.push({
+							key: `${x},${y},${z}`,
+							blockId
+						});
+					});
+				});
+			});
+		});
+		
+		return blocks;
+	}
+	
+	// Get blocks in a specific chunk
+	getChunkBlocks(cx, cy, cz) {
+		if (!this.grid.has(cx)) return [];
+		const xLevel = this.grid.get(cx);
+		
+		if (!xLevel.has(cy)) return [];
+		const yLevel = xLevel.get(cy);
+		
+		if (!yLevel.has(cz)) return [];
+		const zLevel = yLevel.get(cz);
+		
+		const blocks = [];
+		
+		zLevel.forEach((blockId, localKey) => {
+			// Convert local key back to local coordinates
+			const lx = Math.floor(localKey / (this.chunkSize * this.chunkSize));
+			const ly = Math.floor((localKey % (this.chunkSize * this.chunkSize)) / this.chunkSize);
+			const lz = localKey % this.chunkSize;
+			
+			// Convert to world coordinates
+			const x = cx * this.chunkSize + lx;
+			const y = cy * this.chunkSize + ly;
+			const z = cz * this.chunkSize + lz;
+			
+			blocks.push({
+				key: `${x},${y},${z}`,
+				blockId
+			});
+		});
+		
+		return blocks;
+	}
+}
+
 function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, sendTotalBlocks, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
 
 	// Scene setup
@@ -405,7 +628,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const materialCache = useRef(new Map());
 
 	// Add spatial hash grid ref for efficient ray casting
-	const spatialHashGridRef = useRef(new Map());
+	const spatialHashGridRef = useRef(new SpatialHashGrid());
 
 	// Toggle use of spatial hash for ray casting
 	const useSpatialHashRef = useRef(true); // Default to true
@@ -1066,9 +1289,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					terrainChanged = true;
 					recentlyPlacedBlocksRef.current.add(key);
 					
-					// Update spatial hash for faster ray casting
-					spatialHashGridRef.current.set(key, blockId);
-
 					// Track block updates
 					blockUpdates.push({ type: 'add', key, chunkKey, pos, blockId });
 				}
@@ -1078,9 +1298,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					delete terrainRef.current[key];
 					terrainChanged = true;
 					
-					// Remove from spatial hash
-					spatialHashGridRef.current.delete(key);
-
 					// Track block updates
 					blockUpdates.push({ type: 'remove', key, chunkKey, pos, blockId: oldBlockId });
 				}
@@ -1094,6 +1311,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		if (terrainChanged) {
 			totalBlocksRef.current = Object.keys(terrainRef.current).length;
 			updateDebugInfo();
+
+			// Update spatial hash for all changed blocks at once
+			updateSpatialHashForBlocks(
+				blockUpdates.filter(update => update.type === 'add'),
+				blockUpdates.filter(update => update.type === 'remove')
+			);
 
 			// Update chunks directly - no batching or queuing
 			if (modifiedChunks.size > 0) {
@@ -1134,7 +1357,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					addChunkToUpdateQueue(chunkKey, 1000); // High priority
 				});
 			}
-
+			
 			// Save terrain to storage asynchronously
 			DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current)
 				.catch(error => console.error("Error saving terrain:", error));
@@ -2824,10 +3047,44 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	  return changed;
 	};
 
-	// Update spatial hash when terrain changes
+	// Add these variables near the top of the component
+	const spatialHashLastUpdateRef = useRef(0);
+	const spatialHashUpdateQueuedRef = useRef(false);
+	const SPATIAL_HASH_UPDATE_THROTTLE = 1000; // 1 second minimum between updates
+
+	// Replace the updateSpatialHash function with this throttled version
 	const updateSpatialHash = () => {
+		const now = performance.now();
+		
+		// If an update is already queued, don't queue another one
+		if (spatialHashUpdateQueuedRef.current) {
+			return;
+		}
+		
+		// If it's been less than the throttle time since the last update, queue an update
+		if (now - spatialHashLastUpdateRef.current < SPATIAL_HASH_UPDATE_THROTTLE) {
+			spatialHashUpdateQueuedRef.current = true;
+			
+			// Schedule an update after the throttle time has passed
+			setTimeout(() => {
+				spatialHashUpdateQueuedRef.current = false;
+				updateSpatialHashImpl();
+			}, SPATIAL_HASH_UPDATE_THROTTLE - (now - spatialHashLastUpdateRef.current));
+			
+			return;
+		}
+		
+		// Otherwise, update immediately
+		updateSpatialHashImpl();
+	};
+
+	// Implement the actual spatial hash update logic
+	const updateSpatialHashImpl = () => {
 		console.log("Updating spatial hash grid");
 		const startTime = performance.now();
+		
+		// Update the last update time
+		spatialHashLastUpdateRef.current = startTime;
 		
 		// Clear existing hash
 		spatialHashGridRef.current.clear();
@@ -2836,8 +3093,32 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const blockCount = Object.keys(terrainRef.current).length;
 		spatialHashGridRef.current = new Map(); // Recreate the map with proper size estimate
 		
-		// Add all blocks to the hash in bulk
-		// Use direct assignment instead of calling set for each entry
+		// If there are too many blocks, use a chunked approach
+		if (blockCount > 100000) {
+			// Schedule the chunked update
+			updateSpatialHashChunked();
+			
+			// Return early with a partial update for immediate interaction
+			// Just add blocks from visible chunks for now
+			const visibleChunks = getVisibleChunks();
+			let visibleBlockCount = 0;
+			
+			visibleChunks.forEach(chunkKey => {
+				const chunkBlocks = chunksRef.current.get(chunkKey);
+				if (chunkBlocks) {
+					Object.entries(chunkBlocks).forEach(([posKey, blockId]) => {
+						spatialHashGridRef.current.set(posKey, blockId);
+						visibleBlockCount++;
+					});
+				}
+			});
+			
+			const endTime = performance.now();
+			console.log(`Spatial hash partially updated with ${visibleBlockCount} visible blocks in ${(endTime - startTime).toFixed(2)}ms. Full update scheduled.`);
+			return;
+		}
+		
+		// For smaller maps, add all blocks to the hash in bulk
 		Object.entries(terrainRef.current).forEach(([posKey, blockId]) => {
 			spatialHashGridRef.current.set(posKey, blockId);
 		});
@@ -2845,7 +3126,93 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const endTime = performance.now();
 		console.log(`Spatial hash updated with ${spatialHashGridRef.current.size} blocks in ${(endTime - startTime).toFixed(2)}ms`);
 	};
-	
+
+	// Get visible chunks based on camera position and frustum
+	const getVisibleChunks = () => {
+		if (!camera || !scene) return [];
+		
+		// Create frustum from camera
+		const frustum = new THREE.Frustum();
+		const projScreenMatrix = new THREE.Matrix4();
+		projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+		frustum.setFromProjectionMatrix(projScreenMatrix);
+		
+		// Get chunks within view distance
+		const cameraChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+		const cameraChunkY = Math.floor(camera.position.y / CHUNK_SIZE);
+		const cameraChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+		
+		// Collect visible chunks
+		const visibleChunks = [];
+		const viewDistance = 5; // Chunks
+		
+		// Check all chunks in our data
+		chunksRef.current.forEach((_, chunkKey) => {
+			// Check if this chunk is visible
+			if (isChunkVisible(chunkKey, camera, frustum)) {
+				visibleChunks.push(chunkKey);
+			}
+		});
+		
+		// If we have very few visible chunks, add some nearby chunks
+		if (visibleChunks.length < 5) {
+			// Add chunks in a small radius around the camera
+			for (let x = -2; x <= 2; x++) {
+				for (let y = -2; y <= 2; y++) {
+					for (let z = -2; z <= 2; z++) {
+						const chunkKey = `${cameraChunkX + x},${cameraChunkY + y},${cameraChunkZ + z}`;
+						if (chunksRef.current.has(chunkKey) && !visibleChunks.includes(chunkKey)) {
+							visibleChunks.push(chunkKey);
+						}
+					}
+				}
+			}
+		}
+		
+		return visibleChunks;
+	};
+
+	// Update spatial hash in chunks to avoid blocking the main thread
+	const updateSpatialHashChunked = () => {
+		const blockEntries = Object.entries(terrainRef.current);
+		const totalBlocks = blockEntries.length;
+		let processedBlocks = 0;
+		const BATCH_SIZE = 50000;
+		
+		// Function to process a batch of blocks
+		const processBatch = (startIndex) => {
+			const endIndex = Math.min(startIndex + BATCH_SIZE, totalBlocks);
+			
+			for (let i = startIndex; i < endIndex; i++) {
+				const [posKey, blockId] = blockEntries[i];
+				spatialHashGridRef.current.set(posKey, blockId);
+			}
+			
+			// Update processed count
+			processedBlocks = endIndex;
+			
+			// If there are more blocks to process, schedule the next batch
+			if (processedBlocks < totalBlocks) {
+				// Use requestIdleCallback if available, otherwise setTimeout
+				if (window.requestIdleCallback) {
+					window.requestIdleCallback(() => {
+						processBatch(processedBlocks);
+					}, { timeout: 100 });
+				} else {
+					setTimeout(() => {
+						processBatch(processedBlocks);
+					}, 0);
+				}
+			} else {
+				// All blocks processed
+				console.log(`Spatial hash fully updated with ${spatialHashGridRef.current.size} blocks`);
+			}
+		};
+		
+		// Start processing
+		processBatch(0);
+	};
+
 	// Call this in buildUpdateTerrain after updating terrainRef
 	
 	// Optimized ray intersection using spatial hash
@@ -2856,7 +3223,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const ray = raycaster.ray.clone();
 		
 		// First, check for ground plane intersection to have it as a fallback
-		//const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 		const rayOrigin = ray.origin;
 		const rayDirection = ray.direction;
 		
@@ -2892,9 +3258,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			return groundIntersection;
 		}
 		
+		// If spatial hash is empty or still being built, return ground intersection
+		if (spatialHashGridRef.current.size === 0) {
+			return groundIntersection;
+		}
+		
 		// Parameters for ray marching
 		const maxDistance = selectionDistanceRef.current; // Use the configurable selection distance
-		const precision = 0.1;
+		const precision = 0.5; // Use a larger step size for better performance
 		
 		// Start at camera position
 		let pos = ray.origin.clone();
@@ -2905,39 +3276,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		let iterations = 0;
 		const maxIterations = 1000; // Limit iterations to prevent infinite loops
 		
-		// Track which chunks we've already checked
-		const checkedChunks = new Set();
-		
-		// Fast check: see if we're even pointing at any chunks with blocks
-		const dir = ray.direction.clone().normalize();
-		
-		// Check if there are any chunks in this direction
-		let hasChunksInDirection = false;
-		
-		
-		// Check a few chunks in the ray direction
-		for (let dist = 1; dist <= 5; dist++) {
-			const checkPos = pos.clone().add(dir.clone().multiplyScalar(dist * CHUNK_SIZE));
-			const chunkX = Math.floor(checkPos.x / CHUNK_SIZE);
-			const chunkY = Math.floor(checkPos.y / CHUNK_SIZE);
-			const chunkZ = Math.floor(checkPos.z / CHUNK_SIZE);
-			
-			// Skip if we've already checked this chunk
-			const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
-			if (checkedChunks.has(chunkKey)) continue;
-			checkedChunks.add(chunkKey);
-			
-			// If this chunk exists in our data, we need to do the raycast
-			if (chunksRef.current.has(chunkKey)) {
-				hasChunksInDirection = true;
-				break;
-			}
-		}
-		
-		// If no chunks in this direction, return the ground intersection if we have one
-		if (!hasChunksInDirection) {
-			return groundIntersection;
-		}
+		// Track which blocks we've checked
+		const checkedBlocks = new Set();
 		
 		// Ray marching loop
 		while (distance < maxDistance && iterations < maxIterations) {
@@ -2957,6 +3297,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			// Create block key
 			const blockKey = `${blockX},${blockY},${blockZ}`;
+			
+			// Skip if we've already checked this block
+			if (checkedBlocks.has(blockKey)) {
+				pos.add(step);
+				distance += precision;
+				continue;
+			}
+			
+			// Add to checked blocks
+			checkedBlocks.add(blockKey);
 			
 			// Skip recently placed blocks during placement
 			if (isPlacingRef.current && recentlyPlacedBlocksRef.current.has(blockKey)) {
@@ -2995,7 +3345,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					normal,
 					block: { x: blockX, y: blockY, z: blockZ },
 					blockId,
-					
 					distance,
 					isGroundPlane: false
 				};
@@ -3359,6 +3708,28 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Reference for camera movement timeout
 	const cameraMovementTimeoutRef = useRef(null);
+
+	// Add this function to efficiently update the spatial hash for a batch of blocks
+	const updateSpatialHashForBlocks = (addedBlocks = [], removedBlocks = []) => {
+		// Skip if spatial hash is disabled
+		if (!useSpatialHashRef.current) return;
+		
+		// If we have a lot of updates, it might be more efficient to rebuild the entire hash
+		if (addedBlocks.length + removedBlocks.length > 1000) {
+			// Queue a full update with throttling
+			updateSpatialHash();
+			return;
+		}
+		
+		// Otherwise, just update the specific blocks
+		addedBlocks.forEach(({ key, blockId }) => {
+			spatialHashGridRef.current.set(key, blockId);
+		});
+		
+		removedBlocks.forEach(({ key }) => {
+			spatialHashGridRef.current.delete(key);
+		});
+	};
 
 	// Main return statement
 	return (
