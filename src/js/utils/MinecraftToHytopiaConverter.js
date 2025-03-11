@@ -48,73 +48,90 @@ export class MinecraftToHytopiaConverter {
     // Final map for editor (x,y,z -> blockId)
     const editorMap = {};
     
-    // Process blocks using the appropriate format
+    // Track progress
     let processedBlocks = 0;
     const totalBlocks = this.calculateTotalPotentialBlocks();
+    let lastProgressUpdate = Date.now();
     
-    // Process blocks using the appropriate format
-    if (Array.isArray(blockSource)) {
-      // Process the array format (chunks)
-      for (const blockData of blockSource) {
-        const { x, y, z, type: mcBlockType } = blockData;
-        
-        // Calculate final position after centering and offsets
-        const finalX = x - offsetX + additionalOffsetX;
-        const finalY = y - offsetY; // Bottom of map is now at y=0
-        const finalZ = z - offsetZ + additionalOffsetZ;
-        
-        // Check if block is within the selected region and respects size limits
-        if (this.isInFinalRegion(finalX, finalY, finalZ, regionWidth, regionHeight, regionDepth)) {
-          // Process this block - same as original
-          this.processBlock(editorMap, mcBlockType, finalX, finalY, finalZ);
-        }
-        
-        // Update progress
-        processedBlocks++;
-        if (processedBlocks % 10000 === 0 && this.progressCallback) {
-          this.progressCallback((processedBlocks / blockSource.length) * 100);
-        }
+    // Function to process blocks in batches with throttling to prevent UI freezes
+    const processBlockBatch = async (batchSize, batchIndex, totalBatches) => {
+      // Update progress at the beginning of each batch
+      if (this.progressCallback) {
+        this.progressCallback((batchIndex / totalBatches) * 100);
       }
-    } else {
-      // Process the object format (blocks)
-      let processedKeys = 0;
-      const totalKeys = Object.keys(blockSource).length;
       
-      for (const key in blockSource) {
-        if (key.startsWith('section:')) {
-          // Handle section blocks
-          const [prefix, x, y, z, width, height, depth] = key.split(':')[1].split(',');
-          const blockData = blockSource[key];
-          const startX = parseInt(x);
-          const startY = parseInt(y);
-          const startZ = parseInt(z);
-          const blockWidth = parseInt(width);
-          const blockHeight = parseInt(height);
-          const blockDepth = parseInt(depth);
+      // Small delay between batches to allow UI updates but keep it minimal
+      if (batchIndex > 0 && batchIndex % 5 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      
+      let batchStartIndex = batchIndex * batchSize;
+      let batchEndIndex = Math.min(batchStartIndex + batchSize, blockCount);
+      
+      // Process the current batch of blocks
+      if (Array.isArray(blockSource)) {
+        // Process array-based blocks in this batch
+        for (let i = batchStartIndex; i < batchEndIndex; i++) {
+          const blockData = blockSource[i];
+          const { x, y, z, type: mcBlockType } = blockData;
           
-          // Check if any part of this section is within our region
-          // Calculate section bounds after transformation
-          const sectionMinX = startX - offsetX + additionalOffsetX;
-          const sectionMinY = startY - offsetY;
-          const sectionMinZ = startZ - offsetZ + additionalOffsetZ;
-          const sectionMaxX = sectionMinX + blockWidth - 1;
-          const sectionMaxY = sectionMinY + blockHeight - 1;
-          const sectionMaxZ = sectionMinZ + blockDepth - 1;
+          // Calculate final position after centering and offsets
+          const finalX = x - offsetX + additionalOffsetX;
+          const finalY = y - offsetY; // Bottom of map is now at y=0
+          const finalZ = z - offsetZ + additionalOffsetZ;
           
-          // If section intersects with our region, process it
-          if (this.sectionsIntersect(
-            sectionMinX, sectionMinY, sectionMinZ, sectionMaxX, sectionMaxY, sectionMaxZ,
-            worldBounds.minX, worldBounds.minY, worldBounds.minZ, 
-            worldBounds.maxX, worldBounds.maxY, worldBounds.maxZ
-          )) {
+          // Check if block is within the selected region and respects size limits
+          if (this.isInFinalRegion(finalX, finalY, finalZ, regionWidth, regionHeight, regionDepth)) {
+            // Process this block - same as original
+            this.processBlock(editorMap, mcBlockType, finalX, finalY, finalZ);
+            processedBlocks++;
+          }
+        }
+      } else {
+        // For object format, we need a different approach
+        // Convert object keys to array for batch processing
+        const blockKeys = Object.keys(blockSource);
+        
+        for (let i = batchStartIndex; i < batchEndIndex && i < blockKeys.length; i++) {
+          const key = blockKeys[i];
+          
+          if (key.startsWith('section:')) {
+            // Handle section blocks more efficiently with fewer string operations
+            const parts = key.split(':')[1].split(',');
+            const startX = parseInt(parts[0]);
+            const startY = parseInt(parts[1]);
+            const startZ = parseInt(parts[2]);
+            const blockWidth = parseInt(parts[3]);
+            const blockHeight = parseInt(parts[4]);
+            const blockDepth = parseInt(parts[5]);
+            const blockData = blockSource[key];
+            
+            // Calculate section bounds after transformation
+            const sectionMinX = startX - offsetX + additionalOffsetX;
+            const sectionMinY = startY - offsetY;
+            const sectionMinZ = startZ - offsetZ + additionalOffsetZ;
+            const sectionMaxX = sectionMinX + blockWidth - 1;
+            const sectionMaxY = sectionMinY + blockHeight - 1;
+            const sectionMaxZ = sectionMinZ + blockDepth - 1;
+            
+            // Skip sections completely outside our region
+            if (!this.sectionsIntersect(
+              sectionMinX, sectionMinY, sectionMinZ, sectionMaxX, sectionMaxY, sectionMaxZ,
+              worldBounds.minX, worldBounds.minY, worldBounds.minZ, 
+              worldBounds.maxX, worldBounds.maxY, worldBounds.maxZ
+            )) {
+              continue; 
+            }
+            
             // Process blocks in this section that fall within our region
-            for (let dx = 0; dx < blockWidth; dx++) {
-              const finalX = sectionMinX + dx;
-              if (finalX < worldBounds.minX || finalX > worldBounds.maxX) continue;
+            // Optimize loop order for better memory access patterns (y first)
+            for (let dy = 0; dy < blockHeight; dy++) {
+              const finalY = sectionMinY + dy;
+              if (finalY < worldBounds.minY || finalY > worldBounds.maxY) continue;
               
-              for (let dy = 0; dy < blockHeight; dy++) {
-                const finalY = sectionMinY + dy;
-                if (finalY < worldBounds.minY || finalY > worldBounds.maxY) continue;
+              for (let dx = 0; dx < blockWidth; dx++) {
+                const finalX = sectionMinX + dx;
+                if (finalX < worldBounds.minX || finalX > worldBounds.maxX) continue;
                 
                 for (let dz = 0; dz < blockDepth; dz++) {
                   const finalZ = sectionMinZ + dz;
@@ -126,35 +143,46 @@ export class MinecraftToHytopiaConverter {
                 }
               }
             }
+          } else {
+            // Handle individual blocks
+            const [x, y, z] = key.split(',').map(Number);
+            const blockData = blockSource[key];
+            
+            // Calculate final position after centering and offsets
+            const finalX = x - offsetX + additionalOffsetX;
+            const finalY = y - offsetY; // Bottom of map is now at y=0
+            const finalZ = z - offsetZ + additionalOffsetZ;
+            
+            // Check if block is within the selected region and respects size limits
+            if (this.isInFinalRegion(finalX, finalY, finalZ, regionWidth, regionHeight, regionDepth)) {
+              // Process this block
+              this.processBlock(editorMap, blockData.type, finalX, finalY, finalZ);
+              processedBlocks++;
+            }
           }
-        } else {
-          // Handle individual blocks
-          const [x, y, z] = key.split(',').map(Number);
-          const blockData = blockSource[key];
-          
-          // Calculate final position after centering and offsets
-          const finalX = x - offsetX + additionalOffsetX;
-          const finalY = y - offsetY; // Bottom of map is now at y=0
-          const finalZ = z - offsetZ + additionalOffsetZ;
-          
-          // Check if block is within the selected region and respects size limits
-          if (this.isInFinalRegion(finalX, finalY, finalZ, regionWidth, regionHeight, regionDepth)) {
-            // Process this block
-            this.processBlock(editorMap, blockData.type, finalX, finalY, finalZ);
-            processedBlocks++;
-          }
-        }
-        
-        // Update progress
-        processedKeys++;
-        if (processedKeys % 1000 === 0 && this.progressCallback) {
-          this.progressCallback((processedKeys / totalKeys) * 100);
         }
       }
-    }
+      
+      // Update progress less frequently for better performance
+      const now = Date.now();
+      if (this.progressCallback && now - lastProgressUpdate > 250) {
+        this.progressCallback(Math.min(((batchIndex + 1) / totalBatches) * 100, 99));
+        lastProgressUpdate = now;
+      }
+      
+      // If there are more batches to process, continue with the next batch
+      if (batchIndex + 1 < totalBatches) {
+        return processBlockBatch(batchSize, batchIndex + 1, totalBatches);
+      }
+      
+      // All batches processed, create final output
+      return this.createEditorData(editorMap, worldBounds);
+    };
     
-    // Now convert to the editor's expected format
-    return this.createEditorData(editorMap, worldBounds);
+    // Start batch processing with much larger batch size for speed
+    const batchSize = 50000; // Much larger batch size for better performance
+    const totalBatches = Math.ceil(blockCount / batchSize);
+    return processBlockBatch(batchSize, 0, totalBatches);
   }
   
   // Helper methods for the enhanced functionality
