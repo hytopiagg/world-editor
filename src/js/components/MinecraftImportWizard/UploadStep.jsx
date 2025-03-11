@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { FaCloudUploadAlt, FaCog, FaMapMarkedAlt, FaCheck, FaTimes } from 'react-icons/fa';
 import WorldMapSelector from './WorldMapSelector';
+import { loadingManager } from '../../LoadingManager';
 
 // Create Web Worker
 const createWorker = () => {
@@ -34,7 +35,18 @@ const DEFAULT_OPTIONS = {
   maxBlocks: 7000000
 };
 
-const UploadStep = ({ onWorldLoaded }) => {
+// Add this global storage object for chunks
+const globalWorldDataStorage = {
+  currentBlocksData: null,
+  chunkedBlocksData: {},
+  receivedChunks: 0,
+  totalChunks: 0
+};
+
+// Export the function to get the global blocks data
+export const getCurrentBlocksData = () => globalWorldDataStorage.currentBlocksData;
+
+const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState(0);
@@ -53,6 +65,9 @@ const UploadStep = ({ onWorldLoaded }) => {
   const fileInputRef = useRef(null);
   const workerRef = useRef(null);
   const zipDataRef = useRef(null); // Store the zip data for later use
+  
+  // Add state for tracking chunk progress
+  const [chunkProgress, setChunkProgress] = useState({ received: 0, total: 0 });
   
   // Reset state when we go back to this step
   useEffect(() => {
@@ -83,10 +98,13 @@ const UploadStep = ({ onWorldLoaded }) => {
   }, [worldData]);
   
   // Clean up worker on unmount
-  React.useEffect(() => {
+  useEffect(() => {
+    // When component unmounts, make sure any loading screens are hidden
     return () => {
+      loadingManager.forceHideAll();
       if (workerRef.current) {
         workerRef.current.terminate();
+        workerRef.current = null;
       }
     };
   }, []);
@@ -176,50 +194,142 @@ const UploadStep = ({ onWorldLoaded }) => {
               maxZ: 149
             });
           }
+        } else if (type === 'blockChunk') {
+          // Receive a chunk of blocks
+          console.log(`[CHUNKS] Received chunk ${data.chunkId} of ${data.totalChunks} (${Object.keys(data.blocks).length} blocks)`);
+          
+          // Store the chunk in our global storage
+          globalWorldDataStorage.chunkedBlocksData[data.chunkId] = data.blocks;
+          globalWorldDataStorage.receivedChunks = data.chunkId;
+          globalWorldDataStorage.totalChunks = data.totalChunks;
+          
+          // Update chunk progress state for UI
+          setChunkProgress({
+            received: data.chunkId,
+            total: data.totalChunks
+          });
+          
+          // Update progress message with chunk information
+          const percentComplete = Math.floor((data.chunkId / data.totalChunks) * 100);
+          setProgressMessage(`Processing block data: ${percentComplete}% (Chunk ${data.chunkId}/${data.totalChunks})`);
         } else if (type === 'worldParsed') {
-          // Second phase complete - got full world data
+          // All chunks received, now combine them
+          console.log('[TIMING] UploadStep: worldParsed event received, all chunks complete');
           setUploading(false);
           setProgress(100);
-          setProgressMessage('World loading complete!');
+          setProgressMessage('World loading complete! Click Next to continue.');
           setShowSizeSelector(false); // Hide region selector after parsing
           
-          // Ensure we have valid bounds
-          if (!selectedBounds) {
-            console.warn("No bounds selected, using defaults from world size info");
-            // Set default bounds if none were selected
-            const worldBounds = data.bounds || {
-              minX: -150, maxX: 150, minY: 10, maxY: 100, minZ: -150, maxZ: 150
-            };
-            
-            setSelectedBounds(worldBounds);
-          }
+          // Combine all chunks into one blocks object
+          console.log('[CHUNKS] Combining all chunks into one blocks object');
+          loadingManager.showLoading('Combining block data chunks...', 0);
           
-          // Use bounds with null protection
-          const bounds = selectedBounds || data.bounds || {
-            minX: -150, maxX: 150, minY: 10, maxY: 100, minZ: -150, maxZ: 150
-          };
+          const combinedBlocks = {};
           
-          // Save the selected bounds in the world data to use instead of the separate region selection step
-          const worldDataWithRegion = {
-            ...data,
-            // Add selected region info with safe calculations
-            selectedRegion: {
-              ...bounds,
-              width: (bounds.maxX - bounds.minX + 1) || 300,
-              height: (bounds.maxY - bounds.minY + 1) || 90,
-              depth: (bounds.maxZ - bounds.minZ + 1) || 300
+          // Process in smaller batches to avoid UI freeze
+          const processChunks = async () => {
+            try {
+              const totalChunks = globalWorldDataStorage.totalChunks;
+              let processedChunks = 0;
+              
+              // Create a lightweight world data object that indicates loading is in progress
+              const initialWorldData = {
+                ...data,
+                blocksCount: 0,
+                blocks: null,
+                loading: true // Add this flag to indicate loading state
+              };
+              
+              // Set initial world data to indicate loading
+              setWorldData(initialWorldData);
+              onWorldLoaded(initialWorldData);
+              
+              // Process chunks in batches of 1
+              for (let i = 1; i <= totalChunks; i++) {
+                const chunkBlocks = globalWorldDataStorage.chunkedBlocksData[i];
+                if (chunkBlocks) {
+                  // Process this chunk's blocks
+                  Object.assign(combinedBlocks, chunkBlocks);
+                  
+                  // Update loading progress
+                  processedChunks++;
+                  const progress = Math.floor((processedChunks / totalChunks) * 80);
+                  loadingManager.updateLoading(`Combining chunks: ${processedChunks}/${totalChunks}`, progress);
+                  
+                  // Allow UI to update between chunks
+                  await new Promise(resolve => setTimeout(resolve, 0));
+                } else {
+                  console.warn(`Missing chunk ${i}`);
+                }
+              }
+              
+              // Store the combined data
+              console.log(`[CHUNKS] Combined ${Object.keys(combinedBlocks).length} blocks from ${totalChunks} chunks`);
+              globalWorldDataStorage.currentBlocksData = combinedBlocks;
+              
+              // Clear the chunked data to free memory
+              globalWorldDataStorage.chunkedBlocksData = {};
+              
+              // Ensure we have valid bounds
+              if (!selectedBounds) {
+                console.warn("No bounds selected, using defaults from world size info");
+                const worldBounds = data.bounds || {
+                  minX: -150, maxX: 150, minY: 10, maxY: 100, minZ: -150, maxZ: 150
+                };
+                
+                setSelectedBounds(worldBounds);
+              }
+              
+              // Use bounds with null protection
+              const bounds = selectedBounds || data.bounds || {
+                minX: -150, maxX: 150, minY: 10, maxY: 100, minZ: -150, maxZ: 150
+              };
+              
+              // Create the final world data object without the loading flag
+              const worldDataWithRegion = {
+                ...data,
+                blocksCount: Object.keys(combinedBlocks).length,
+                blocks: null, // Don't include the blocks in React state
+                loading: false, // Set loading to false now that processing is complete
+                selectedRegion: {
+                  ...bounds,
+                  width: (bounds.maxX - bounds.minX + 1) || 300,
+                  height: (bounds.maxY - bounds.minY + 1) || 90,
+                  depth: (bounds.maxZ - bounds.minZ + 1) || 300
+                }
+              };
+              
+              // Update local state
+              setWorldData(worldDataWithRegion);
+              
+              // Pass data to parent but don't advance step
+              console.log('[TIMING] UploadStep: About to call onWorldLoaded with lightweight worldData');
+              onWorldLoaded(worldDataWithRegion);
+              
+              // Hide loading when done - user will click Next to continue
+              loadingManager.hideLoading();
+              
+              // Set progress to 100% to show completion
+              setProgress(100);
+              setProgressMessage('World loading complete! Click Next to continue.');
+              
+              // After processing is complete, ensure any loading screens are hidden
+              loadingManager.forceHideAll();
+              
+            } catch (error) {
+              console.error("Error processing chunks:", error);
+              loadingManager.forceHideAll(); // Make sure loading screen is hidden on error
+              setError('Error combining block data: ' + error.message);
             }
           };
           
-          // Update local state
-          setWorldData(worldDataWithRegion);
-          
-          // Auto-progress to the next step
-          onWorldLoaded(worldDataWithRegion);
+          // Start processing chunks
+          processChunks();
         } else if (type === 'error') {
           setUploading(false);
           setProgress(0);
           setError(error || 'An unknown error occurred');
+          loadingManager.hideLoading();
         } else if (type === 'memoryUpdate') {
           setMemoryUsage(data);
         }
@@ -241,7 +351,7 @@ const UploadStep = ({ onWorldLoaded }) => {
       setProgress(0);
       setError('Error processing file: ' + e.message);
     }
-  }, [onWorldLoaded]);
+  }, [onWorldLoaded, onAdvanceStep]);
   
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
@@ -304,6 +414,42 @@ const UploadStep = ({ onWorldLoaded }) => {
   // Update selected bounds
   const handleBoundsChange = (bounds) => {
     setSelectedBounds(bounds);
+  };
+  
+  // Add chunk progress to the UI if needed
+  const renderUploadProgress = () => {
+    return (
+      <div className="upload-progress">
+        <h3>{progressMessage}</h3>
+        <div className="progress-bar">
+          <div 
+            className="progress-bar-inner" 
+            style={{ width: `${progress}%` }}
+          ></div>
+        </div>
+        
+        {chunkProgress.total > 0 && (
+          <div className="chunk-progress">
+            <p>Receiving data in chunks: {chunkProgress.received}/{chunkProgress.total}</p>
+          </div>
+        )}
+        
+        {memoryUsage && (
+          <div className="memory-usage">
+            <p>Memory usage: {Math.round(memoryUsage.used / (1024 * 1024))} MB / {Math.round(memoryUsage.limit / (1024 * 1024))} MB</p>
+            <div className="memory-bar">
+              <div 
+                className="memory-bar-inner" 
+                style={{ width: `${(memoryUsage.used / memoryUsage.limit) * 100}%` }}
+              ></div>
+            </div>
+            {memoryUsage.used > memoryUsage.limit * 0.8 && (
+              <p className="memory-tip">Memory usage is high - try reducing the region size or filtering more blocks.</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
   
   return (
@@ -440,41 +586,7 @@ const UploadStep = ({ onWorldLoaded }) => {
       
       {/* Show the progress if we're uploading/parsing */}
       {uploading && (
-        <div className="upload-progress">
-          <p>{progressMessage || 'Processing your world...'}</p>
-          <div className="progress-bar">
-            <div className="progress-bar-inner" style={{ width: `${progress}%` }}></div>
-          </div>
-          <p>{progress}% complete</p>
-          
-          {memoryUsage && (
-            <div className="memory-usage">
-              <div className="memory-bar">
-                <div 
-                  className="memory-bar-inner" 
-                  style={{ 
-                    width: `${Math.min(100, (memoryUsage.used / memoryUsage.limit) * 100)}%`,
-                    backgroundColor: memoryUsage.used > memoryUsage.limit * 0.8 ? '#ff6b6b' : '#4a90e2'
-                  }}
-                ></div>
-              </div>
-              <p>Memory: {memoryUsage.used.toFixed(0)} MB / {memoryUsage.limit} MB</p>
-              <p className="memory-tip">Tip: Reduce Y-range or increase chunk sampling to use less memory</p>
-            </div>
-          )}
-          
-          {filterStats && (
-            <div className="filter-stats">
-              <h4>Filtering Stats:</h4>
-              <ul>
-                <li>Chunks skipped by Y-range: <strong>{filterStats.yBounds}</strong></li>
-                <li>Chunks skipped by X/Z-range: <strong>{filterStats.xzBounds}</strong></li>
-                <li>Regions skipped completely: <strong>{filterStats.regionBounds}</strong></li>
-              </ul>
-              <p className="filter-tip">Effective filtering significantly reduces memory usage</p>
-            </div>
-          )}
-        </div>
+        renderUploadProgress()
       )}
       
       {/* Show success message if parsing is complete */}

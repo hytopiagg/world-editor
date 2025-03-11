@@ -5,10 +5,14 @@ class LoadingManager {
     this.isLoading = false;
     this.message = '';
     this.progress = null;
+    this.loadingTimers = new Set(); // Track any loading timers
   }
 
   // Show the loading screen with a message and optional progress
   showLoading(message = 'Loading...', progress = null) {
+    // Clear any pending timers first to avoid conflicts
+    this.clearTimers();
+    
     this.isLoading = true;
     this.message = message;
     this.progress = progress;
@@ -34,6 +38,20 @@ class LoadingManager {
     this.message = '';
     this.progress = null;
     this.notifyListeners();
+  }
+
+  // Force hide all loading screens and clear any pending timers
+  forceHideAll() {
+    this.clearTimers();
+    this.hideLoading();
+  }
+  
+  // Clear any pending timers
+  clearTimers() {
+    this.loadingTimers.forEach(timerId => {
+      clearTimeout(timerId);
+    });
+    this.loadingTimers.clear();
   }
 
   // Add a listener to be notified of loading state changes

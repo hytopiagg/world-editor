@@ -33,7 +33,7 @@ self.onmessage = async function(event) {
   } else if (type === 'parseWorld') {
     try {
       const zipData = data.zipFile;
-      const options = data.options || {}; // Extract options from the message
+      const options = data.options || {};
       
       self.postMessage({
         type: 'progress', 
@@ -43,12 +43,10 @@ self.onmessage = async function(event) {
         } 
       });
       
-      const worldData = await parseMinecraftWorld(zipData, options);
+      // Call the parseMinecraftWorld function - it will handle sending data in chunks
+      await parseMinecraftWorld(zipData, options);
       
-      self.postMessage({
-        type: 'worldParsed',
-        data: worldData
-      });
+      // The worldParsed message is now sent from within parseMinecraftWorld
     } catch (error) {
       self.postMessage({
         type: 'error',
@@ -670,16 +668,66 @@ async function parseMinecraftWorld(zipData, options = {}) {
     // Log stats
     console.log(`Processed ${processedRegions} regions out of ${regionCoords.length}, errors: ${errorRegions}, total blocks: ${worldData.totalBlocks}`);
     
+    // Send the blocks data in chunks to avoid UI freezing
+    console.log('[CHUNKS] Splitting blocks data into chunks');
+    
+    // Extract blocks into a separate object to send in chunks
+    const blocksData = worldData.blocks || {};
+    const blockKeys = Object.keys(blocksData);
+    const totalBlocks = blockKeys.length;
+    
+    // Create a simplified worldData object without the large blocks property
+    const worldDataWithoutBlocks = { ...worldData };
+    delete worldDataWithoutBlocks.blocks;
+    
+    // Calculate the number of blocks per chunk (adjust as needed)
+    const CHUNK_SIZE = 50000; // Blocks per chunk
+    const totalChunks = Math.ceil(totalBlocks / CHUNK_SIZE);
+    
+    console.log(`[CHUNKS] Sending ${totalBlocks} blocks in ${totalChunks} chunks of ${CHUNK_SIZE} blocks each`);
+    
+    // Send the blocks in chunks
+    for (let chunkId = 1; chunkId <= totalChunks; chunkId++) {
+      const startIndex = (chunkId - 1) * CHUNK_SIZE;
+      const endIndex = Math.min(startIndex + CHUNK_SIZE, totalBlocks);
+      
+      // Create a chunk of blocks
+      const chunkBlocks = {};
+      for (let i = startIndex; i < endIndex; i++) {
+        const key = blockKeys[i];
+        chunkBlocks[key] = blocksData[key];
+      }
+      
+      // Send this chunk to the main thread
+      self.postMessage({
+        type: 'blockChunk',
+        data: {
+          chunkId: chunkId,
+          totalChunks: totalChunks,
+          blocks: chunkBlocks
+        }
+      });
+      
+      // Small delay to allow the main thread to process the message
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    
     // Final progress update
     self.postMessage({ 
       type: 'progress', 
       data: { 
-        message: `World parsing complete - found ${worldData.totalBlocks} blocks in ${processedRegions} regions`, 
+        message: `World parsing complete - sent ${totalBlocks} blocks in ${totalChunks} chunks`, 
         progress: 100 
       } 
     });
     
-    return worldData;
+    // Send the world data (without blocks) after all chunks are sent
+    self.postMessage({
+      type: 'worldParsed',
+      data: worldDataWithoutBlocks
+    });
+    
+    return worldDataWithoutBlocks;
   } catch (error) {
     console.error('Error parsing Minecraft world:', error);
     throw error; // Re-throw to be caught by the caller

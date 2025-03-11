@@ -1183,4 +1183,23 @@ rect.dragging {
   font-size: 12px;
   margin: 5px 0 0;
   font-style: italic;
+}
+
+.block-mapping-loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  font-size: 16px;
+  color: #aaa;
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Add styling for the chunk progress indicator */
+.chunk-progress {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #8af;
 } 

@@ -18,8 +18,10 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   const [importResult, setImportResult] = useState(null);
   
   const handleNextStep = useCallback(() => {
+    console.log('[TIMING] Index: handleNextStep called, moving from step', currentStep);
     setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1));
-  }, []);
+    console.log('[TIMING] Index: After setCurrentStep call');
+  }, [currentStep]);
   
   const handlePrevStep = useCallback(() => {
     // If going back from the blocks step (step 1) to the upload step (step 0),
@@ -67,7 +69,8 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   const canProceed = () => {
     switch (STEPS[currentStep].id) {
       case 'upload':
-        return !!worldData;
+        // Only allow proceeding from upload step when world data is fully loaded
+        return !!worldData && !worldData.loading;
       case 'blocks':
         // Always allow proceeding from block mapping step since we auto-map
         return true;
@@ -80,10 +83,21 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   
   // Render the current step
   const renderStep = () => {
+    console.log('[TIMING] Index: renderStep called for step', currentStep, STEPS[currentStep].id);
     switch (STEPS[currentStep].id) {
       case 'upload':
-        return <UploadStep onWorldLoaded={setWorldData} />;
+        console.log('[TIMING] Index: Rendering UploadStep');
+        return <UploadStep 
+                 onWorldLoaded={(data) => {
+                   console.log('[TIMING] Index: onWorldLoaded callback received data');
+                   console.log('[TIMING] Index: Setting worldData, size:', JSON.stringify(data).length, 'bytes');
+                   setWorldData(data);
+                   console.log('[TIMING] Index: After setWorldData call');
+                 }}
+                 onAdvanceStep={handleNextStep} // Pass the step advancement function
+               />;
       case 'blocks':
+        console.log('[TIMING] Index: About to render BlockTypeMapper');
         return <BlockTypeMapper 
                  worldData={worldData}
                  onMappingsUpdated={setBlockMappings}

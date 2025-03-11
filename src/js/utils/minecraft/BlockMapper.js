@@ -258,7 +258,7 @@ export function getHytopiaBlocks() {
     // Use the editor's block types if available (for better variety)
     if (blockTypes && blockTypes.length > 0) {
       // Log block types for debugging
-      console.log("Available editor blocks:", blockTypes.map(b => `${b.name} (ID: ${b.id})`));
+      //console.log("Available editor blocks:", blockTypes.map(b => `${b.name} (ID: ${b.id})`));
       
       // Format them to match the expected structure
       return blockTypes.map(block => ({

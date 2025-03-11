@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { suggestMapping, getHytopiaBlocks } from '../../utils/minecraft/BlockMapper';
 import { getCustomBlocks, processCustomBlock } from '../../TerrainBuilder';
+import { loadingManager } from '../../LoadingManager';
 
 // Add CSS for the custom texture library
 const customTextureLibraryStyles = `
@@ -123,6 +124,9 @@ const customTextureLibraryStyles = `
 `;
 
 const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
+  console.log('[TIMING] BlockTypeMapper: Component function called');
+  
+  const [isInitializing, setIsInitializing] = useState(true);
   const [mappings, setMappings] = useState({});
   const [availableHytopiaBlocks, setAvailableHytopiaBlocks] = useState([]);
   const [customTextureFiles, setCustomTextureFiles] = useState({});
@@ -130,108 +134,155 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
   const [customTextures, setCustomTextures] = useState([]);
   const fileInputRef = useRef(null);
   const dropAreaRef = useRef(null);
+  const initRunRef = useRef(false);
+  const cleanupRef = useRef(null);
   
   // Get selectedRegion from worldData
   const selectedRegion = worldData?.selectedRegion;
   
-  // Initialize available HYTOPIA blocks and custom textures
-  useEffect(() => {
-    // Get the built-in block types
-    const blocks = getHytopiaBlocks();
-    setAvailableHytopiaBlocks(blocks);
-    
-    // Get custom blocks for their textures
-    const customBlocks = getCustomBlocks();
-    setCustomTextures(customBlocks.map(block => ({
-      id: block.id,
-      name: block.name,
-      textureUri: block.textureUri
-    })));
-    
-    // Set up event listener for custom blocks loaded
-    const handleCustomBlocksLoaded = (event) => {
-      const loadedBlocks = event.detail.blocks;
-      setCustomTextures(loadedBlocks.map(block => ({
-        id: block.id,
-        name: block.name,
-        textureUri: block.textureUri
-      })));
-    };
-    
-    // Set up event listener for custom blocks updated
-    const handleCustomBlocksUpdated = (event) => {
-      console.log("Custom blocks updated event received:", event.detail);
-      const updatedBlocks = event.detail.blocks;
-      setCustomTextures(updatedBlocks.map(block => ({
-        id: block.id,
-        name: block.name,
-        textureUri: block.textureUri
-      })));
-    };
-    
-    window.addEventListener('custom-blocks-loaded', handleCustomBlocksLoaded);
-    window.addEventListener('custom-blocks-updated', handleCustomBlocksUpdated);
-    
-    return () => {
-      window.removeEventListener('custom-blocks-loaded', handleCustomBlocksLoaded);
-      window.removeEventListener('custom-blocks-updated', handleCustomBlocksUpdated);
-    };
-  }, []);
-  
   // Initialize mappings from worldData or initial mappings
   useEffect(() => {
-    if (initialMappings && Object.keys(initialMappings).length > 0) {
-      console.log("Using initial mappings:", initialMappings);
-      
-      // Make sure custom textures are loaded before setting mappings
-      const customMappings = Object.entries(initialMappings)
-        .filter(([_, mapping]) => mapping.action === 'custom')
-        .map(([blockType, mapping]) => ({
-          blockType,
-          customTextureId: mapping.customTextureId,
-          customTexture: mapping.customTexture
-        }));
-      
-      if (customMappings.length > 0) {
-        console.log("Found custom mappings:", customMappings);
+    // Make sure any existing loading screens are hidden first
+    loadingManager.forceHideAll();
+    
+    // Removed loading screen popup - no need for overlay when we have UI indicators
+    // We'll rely on the UI's own loading indicators instead
+    
+    // Prevent duplicate initialization
+    if (initRunRef.current) return;
+    initRunRef.current = true;
+    
+    console.log('[TIMING] BlockTypeMapper: Second useEffect (mappings) started');
+    
+    const initializeMappings = async () => {
+      try {
+        setIsInitializing(true);
         
-        // Ensure custom textures are available
-        const availableCustomTextureIds = customTextures.map(texture => texture.id);
+        // First initialize available blocks and custom textures
+        const blocks = getHytopiaBlocks();
+        setAvailableHytopiaBlocks(blocks);
         
-        // Check if all custom texture IDs are available
-        const missingCustomTextureIds = customMappings
-          .filter(mapping => !availableCustomTextureIds.includes(mapping.customTextureId))
-          .map(mapping => mapping.customTextureId);
+        // Get custom blocks for their textures
+        const customBlocks = getCustomBlocks();
+        setCustomTextures(customBlocks.map(block => ({
+          id: block.id,
+          name: block.name,
+          textureUri: block.textureUri
+        })));
         
-        if (missingCustomTextureIds.length > 0) {
-          console.warn("Some custom textures are missing:", missingCustomTextureIds);
+        // Set up event listener for custom blocks loaded
+        const handleCustomBlocksLoaded = (event) => {
+          const loadedBlocks = event.detail.blocks;
+          setCustomTextures(loadedBlocks.map(block => ({
+            id: block.id,
+            name: block.name,
+            textureUri: block.textureUri
+          })));
+        };
+        
+        // Set up event listener for custom blocks updated
+        const handleCustomBlocksUpdated = (event) => {
+          console.log("Custom blocks updated event received:", event.detail);
+          const updatedBlocks = event.detail.blocks;
+          setCustomTextures(updatedBlocks.map(block => ({
+            id: block.id,
+            name: block.name,
+            textureUri: block.textureUri
+          })));
+        };
+        
+        window.addEventListener('custom-blocks-loaded', handleCustomBlocksLoaded);
+        window.addEventListener('custom-blocks-updated', handleCustomBlocksUpdated);
+        
+        // Make sure to remove the event listeners when component unmounts
+        const cleanup = () => {
+          window.removeEventListener('custom-blocks-loaded', handleCustomBlocksLoaded);
+          window.removeEventListener('custom-blocks-updated', handleCustomBlocksUpdated);
+        };
+        
+        // Store cleanup function in ref so we can access it in the useEffect cleanup
+        cleanupRef.current = cleanup;
+        
+        loadingManager.updateLoading('Processing block types...', 30);
+        
+        // Allow UI to update before starting the heavy work
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        if (initialMappings && Object.keys(initialMappings).length > 0) {
+          console.log('[TIMING] BlockTypeMapper: Using initial mappings', Object.keys(initialMappings).length);
+          setMappings(initialMappings);
+        } else if (worldData && worldData.blockTypes && worldData.blockTypes.length > 0) {
+          console.log('[TIMING] BlockTypeMapper: Processing worldData block types, count:', worldData.blockTypes.length);
+          
+          const newMappings = {};
+          const blockTypes = worldData.blockTypes;
+          const totalBlockTypes = blockTypes.length;
+          
+          // Process in batches to avoid UI freezing
+          const BATCH_SIZE = 20;
+          let processedTypes = 0;
+          
+          for (let i = 0; i < totalBlockTypes; i += BATCH_SIZE) {
+            const batchEnd = Math.min(i + BATCH_SIZE, totalBlockTypes);
+            
+            // Process this batch
+            for (let j = i; j < batchEnd; j++) {
+              const blockType = blockTypes[j];
+              const suggestion = suggestMapping(blockType);
+              newMappings[blockType] = {
+                action: suggestion.action,
+                targetBlockId: suggestion.id,
+                name: formatBlockName(blockType)
+              };
+              processedTypes++;
+            }
+            
+            // Update loading progress
+            const progress = Math.floor(30 + (processedTypes / totalBlockTypes) * 60);
+            loadingManager.updateLoading(`Mapping block types: ${processedTypes}/${totalBlockTypes}`, progress);
+            
+            // Allow UI to update between batches
+            if (i + BATCH_SIZE < totalBlockTypes) {
+              await new Promise(resolve => setTimeout(resolve, 0));
+            }
+          }
+          
+          // Set mappings and notify parent
+          setMappings(newMappings);
+          onMappingsUpdated(newMappings);
+          
+          // Auto-map on initialization to prevent getting stuck
+          setAutoMapped(true);
         }
+        
+        // Update loading status before finishing
+        loadingManager.updateLoading('Finalizing block mapping interface...', 95);
+        
+        // Allow UI to finish updating
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (error) {
+        console.error('Error initializing block mappings:', error);
+      } finally {
+        // Don't show overlay loading screen - UI already has its own indicators
+        setIsInitializing(false);
+      }
+    };
+    
+    // Start initialization
+    initializeMappings();
+    
+    // Return cleanup function
+    return () => {
+      // Call the cleanup function if it exists
+      if (cleanupRef.current) {
+        cleanupRef.current();
       }
       
-      setMappings(initialMappings);
-      return;
-    }
-    
-    if (worldData && worldData.blockTypes && worldData.blockTypes.length > 0) {
-      const newMappings = {};
-      
-      // Generate suggested mappings for each Minecraft block type
-      worldData.blockTypes.forEach(blockType => {
-        const suggestion = suggestMapping(blockType);
-        newMappings[blockType] = {
-          action: suggestion.action,
-          targetBlockId: suggestion.id,
-          name: formatBlockName(blockType)
-        };
-      });
-      
-      setMappings(newMappings);
-      onMappingsUpdated(newMappings);
-      
-      // Auto-map on initialization to prevent getting stuck
-      setAutoMapped(true);
-    }
-  }, [worldData, initialMappings, onMappingsUpdated, customTextures]);
+      // Still make sure loading screen is hidden when component unmounts, just in case
+      loadingManager.forceHideAll();
+    };
+  }, [worldData, initialMappings, onMappingsUpdated]);
   
   // Set up drag and drop handlers
   useEffect(() => {
@@ -515,6 +566,13 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
   const customCount = countBlocks('custom');
   const skippedCount = countBlocks('skip');
   const totalCount = Object.keys(mappings).length;
+  
+  // Add a loading indicator
+  if (isInitializing) {
+    // Let the global loading screen handle the loading state
+    // We keep this check to prevent rendering the rest of the component during initialization
+    return <div className="block-mapping-loader">Initializing block mappings...</div>;
+  }
   
   return (
     <div className="block-mapping">
