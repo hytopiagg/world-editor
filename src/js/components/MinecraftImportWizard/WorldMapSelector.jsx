@@ -264,6 +264,28 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
     updateSelectionRect();
   }, [selectedBounds, zoom, viewCenter]);
   
+  // Force an update when the component mounts to ensure proper display
+  useEffect(() => {
+    if (mapRef.current && selectedBounds) {
+      // Force a reflow to ensure proper rendering
+      const forceUpdate = () => {
+        const element = mapRef.current;
+        if (element) {
+          element.style.display = 'none';
+          void element.offsetHeight;
+          element.style.display = 'block';
+          
+          // Update the selection rectangle after the reflow
+          updateSelectionRect();
+        }
+      };
+      
+      // Run immediately and then again after a delay to ensure DOM is ready
+      forceUpdate();
+      setTimeout(forceUpdate, 100);
+    }
+  }, [mapRef.current, selectedBounds]);
+  
   // Handle map panning
   const handleMapDragStart = (e) => {
     if (isDragging || isResizing) return;
@@ -397,6 +419,9 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
   
   return (
     <div className="world-map-selector" ref={containerRef}>
+      <h4>Top View (X/Z-axis)</h4>
+      <p className="selector-description">Click or drag to adjust horizontal bounds</p>
+      
       <div className="map-toolbar">
         <button className="map-tool-button" onClick={handleZoomIn} title="Zoom In">
           <FaExpand />
@@ -458,16 +483,16 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
           width: 100%;
           border-radius: 8px;
           overflow: hidden;
-          background-color: #222;
+          background-color: #2a2a2a;
           display: flex;
           flex-direction: column;
-          margin: 20px 0;
+          margin: 0;
         }
         
         .map-toolbar {
           display: flex;
           padding: 8px;
-          background-color: #333;
+          background-color: #2a2a2a;
           border-bottom: 1px solid #444;
           align-items: center;
         }
@@ -500,7 +525,7 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
         .map-container {
           width: 100%;
           position: relative;
-          background-color: #1e1e1e;
+          background-color: #1a1a1a;
           background-image: 
             linear-gradient(to right, #333 1px, transparent 1px),
             linear-gradient(to bottom, #333 1px, transparent 1px);
@@ -509,7 +534,7 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
           overflow: hidden;
           /* Create a square aspect ratio */
           aspect-ratio: 1 / 1;
-          max-height: 500px;
+          max-height: 300px; /* Match the front-view height */
           max-width: 500px;
           margin: 0 auto;
         }

@@ -16,7 +16,8 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(3px);
 }
 
 .minecraft-import-content {
@@ -24,9 +25,10 @@
   background-color: #1e1e1e;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  width: 800px;
-  max-width: 90%;
-  max-height: 90vh;
+  border: 2px solid #444;
+  width: 900px;
+  max-width: 95%;
+  max-height: 95vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -37,13 +39,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  padding: 12px 20px;
   border-bottom: 1px solid #333;
 }
 
 .minecraft-import-header h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .close-button {
@@ -60,37 +62,29 @@
 
 .minecraft-import-steps {
   display: flex;
-  padding: 16px 24px;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background-color: #222;
   border-bottom: 1px solid #333;
-  position: relative;
-  z-index: 1;
 }
 
 .step {
   display: flex;
-  flex-direction: column;
   align-items: center;
   position: relative;
-  padding: 0 24px;
-  color: #999;
-}
-
-.step.active {
-  color: #ffffff;
-}
-
-.step.completed {
-  color: #4a90e2;
+  flex: 1;
+  text-align: center;
+  justify-content: center;
 }
 
 .step:not(:last-child)::after {
-  content: '';
+  content: "";
   position: absolute;
-  top: 16px;
-  right: -50%;
+  top: 12px;
+  left: 50%;
   width: 100%;
   height: 2px;
-  background-color: #333;
+  background-color: #444;
   z-index: 1;
 }
 
@@ -99,18 +93,19 @@
 }
 
 .step-number {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: #333;
-  color: #999;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #333;
+  color: #999;
+  font-size: 12px;
+  margin-right: 8px;
+  flex-shrink: 0;
   position: relative;
   z-index: 2;
-  font-weight: 500;
 }
 
 .step.active .step-number {
@@ -124,37 +119,66 @@
 }
 
 .step-title {
-  font-size: 14px;
+  font-size: 12px;
   color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+  z-index: 2;
+  background-color: #222;
+  padding: 0 5px;
 }
 
 .step.active .step-title {
-  color: #fff;
+  color: white;
 }
 
 .minecraft-import-step-content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 15px;
   background-color: #1e1e1e;
-  color: #ffffff;
+  border-radius: 0 0 8px 8px;
+}
+
+/* Make scrollbars look better */
+.minecraft-import-step-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.minecraft-import-step-content::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.minecraft-import-step-content::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+.minecraft-import-step-content::-webkit-scrollbar-thumb:hover {
+  background: #444;
 }
 
 .minecraft-import-footer {
   display: flex;
-  justify-content: space-between;
-  padding: 16px 24px;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 20px;
   border-top: 1px solid #333;
-  background-color: #1e1e1e;
+  background-color: #1a1a1a;
 }
 
 .primary-button, .secondary-button {
+  padding: 6px 16px;
   border: none;
-  padding: 10px 20px;
   border-radius: 4px;
-  font-weight: 500;
+  font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s;
+  font-weight: 500;
 }
 
 .primary-button {
@@ -163,22 +187,22 @@
 }
 
 .primary-button:hover {
-  background-color: #3a7bc8;
+  background-color: #3a7bd5;
 }
 
 .primary-button:disabled {
-  background-color: #7baae2;
+  background-color: #666;
+  color: #999;
   cursor: not-allowed;
-  opacity: 0.7;
 }
 
 .secondary-button {
-  background-color: #333;
+  background-color: #555;
   color: white;
 }
 
 .secondary-button:hover {
-  background-color: #444;
+  background-color: #666;
 }
 
 /* Upload step styles */
@@ -497,13 +521,20 @@
 }
 
 .map-container {
+  width: 100%;
   position: relative;
-  flex: 1;
-  min-height: 200px;
-  border: 1px solid #444;
-  border-radius: 4px;
-  overflow: hidden;
   background-color: #1a1a1a;
+  background-image: 
+    linear-gradient(to right, #333 1px, transparent 1px),
+    linear-gradient(to bottom, #333 1px, transparent 1px);
+  background-size: 20px 20px;
+  cursor: grab;
+  overflow: hidden;
+  /* Create a square aspect ratio */
+  aspect-ratio: 1 / 1;
+  max-height: 300px; /* Match the front-view height */
+  max-width: 500px;
+  margin: 0 auto;
 }
 
 .map-svg {
@@ -521,7 +552,94 @@
 .block-mapping {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 15px;
+  padding: 0 10px;
+}
+
+.block-mapping h3 {
+  font-size: 20px;
+  margin-bottom: 5px;
+  color: #4a90e2;
+}
+
+.block-mapping > p {
+  color: #ccc;
+  line-height: 1.4;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+/* Auto-map container styles */
+.auto-map-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: #2a2a2a;
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.auto-map-container button {
+  align-self: flex-start;
+  margin-bottom: 3px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.auto-map-container p {
+  color: #aaa;
+  font-size: 12px;
+  margin: 0 0 5px 0;
+}
+
+.map-unmapped-button {
+  background-color: #2c3e50;
+  margin-top: 5px;
+}
+
+.map-unmapped-button:hover:not(:disabled) {
+  background-color: #34495e;
+}
+
+/* Mapping stats styles */
+.mapping-stats {
+  display: flex;
+  justify-content: space-between;
+  background-color: #222;
+  padding: 10px 15px;
+  border-radius: 8px;
+  margin: 8px 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mapping-stats p {
+  margin: 0;
+  font-size: 13px;
+  color: #ddd;
+}
+
+.mapping-stats p:nth-child(1) {
+  color: #4caf50;
+}
+
+.mapping-stats p:nth-child(2) {
+  color: #2196f3;
+}
+
+.mapping-stats p:nth-child(3) {
+  color: #ff9800;
+}
+
+/* Block mapping table styles */
+.block-mapping-table-container {
+  max-height: 450px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background-color: #1a1a1a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-top: 8px;
 }
 
 .block-mapping-table {
@@ -531,7 +649,7 @@
 
 .block-mapping-table th,
 .block-mapping-table td {
-  padding: 8px 12px;
+  padding: 6px 12px;
   text-align: left;
   border-bottom: 1px solid #333;
 }
@@ -540,13 +658,78 @@
   background-color: #222;
   position: sticky;
   top: 0;
+  font-weight: 600;
+  color: #4a90e2;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 1px 0 #333;
+  z-index: 1;
+}
+
+.block-mapping-table tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Improved select styles for dark theme */
+.block-mapping-table select {
+  padding: 5px 10px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background-color: #2a2a2a;
+  color: #fff;
+  font-size: 13px;
+  width: 100%;
+  max-width: 300px;
+  appearance: none; /* Remove default arrow */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.block-mapping-table select:hover {
+  border-color: #666;
+  background-color: #333;
+}
+
+.block-mapping-table select:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.3);
+}
+
+.block-mapping-table select option {
+  background-color: #2a2a2a;
+  color: #fff;
+  padding: 5px;
+}
+
+/* Custom texture selector styles */
+.custom-texture-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.texture-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: #333;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .block-thumbnail {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 /* Import step styles */
@@ -1202,4 +1385,200 @@ rect.dragging {
   margin-top: 10px;
   font-size: 14px;
   color: #8af;
+}
+
+.selectors-container {
+  display: flex;
+  gap: 20px;
+  padding: 10px 0;
+  margin-bottom: 20px;
+  align-items: stretch;
+}
+
+.front-view-selector {
+  flex: 0 0 250px;
+  background-color: #2a2a2a;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.front-view-selector h4 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  color: #4a90e2;
+}
+
+.front-view-container {
+  display: flex;
+  flex: 1;
+  height: 300px; /* Match the height of the SVG container */
+}
+
+.front-view-svg-container {
+  background-color: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  height: 100%; /* Fill the container height */
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  flex: 1;
+  padding: 15px 0; /* Add padding to top and bottom */
+  box-sizing: border-box;
+}
+
+.reference-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.reference-line-inner {
+  flex: 1;
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.reference-label {
+  position: absolute;
+  left: 5px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 2px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  transform: translateY(-50%); /* Center vertically */
+  z-index: 2; /* Ensure labels appear above lines */
+}
+
+.y-selection-area {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  background-color: rgba(74, 144, 226, 0.2);
+  border-top: 2px solid rgba(74, 144, 226, 0.8);
+  border-bottom: 2px solid rgba(74, 144, 226, 0.8);
+  z-index: 2;
+}
+
+.world-map-selector {
+  flex: 1;
+  background-color: #2a2a2a;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.world-map-selector h4 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  color: #4a90e2;
+}
+
+.selector-description {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.y-handle {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 14px;
+  background-color: rgba(74, 144, 226, 0.5);
+  cursor: ns-resize;
+  z-index: 3;
+}
+
+.y-handle:hover {
+  background-color: rgba(74, 144, 226, 0.8);
+}
+
+.max-handle {
+  top: -7px;
+}
+
+.min-handle {
+  bottom: -7px;
+}
+
+.selection-label {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.y-level-info {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #ccc;
+  text-align: center;
+}
+
+.y-inputs {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #333;
+}
+
+.y-input-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.y-input {
+  flex: 1;
+  max-width: calc(50% - 5px);
+}
+
+.y-input input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ensure map container has consistent styling */
+.map-container {
+  width: 100%;
+  position: relative;
+  background-color: #1a1a1a;
+  background-image: 
+    linear-gradient(to right, #333 1px, transparent 1px),
+    linear-gradient(to bottom, #333 1px, transparent 1px);
+  background-size: 20px 20px;
+  cursor: grab;
+  overflow: hidden;
+  /* Create a square aspect ratio */
+  aspect-ratio: 1 / 1;
+  max-height: 300px; /* Match the front-view height */
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.map-toolbar {
+  display: flex;
+  padding: 8px;
+  background-color: #2a2a2a; /* Match the container background */
+  border-bottom: 1px solid #444;
+  align-items: center;
 } 

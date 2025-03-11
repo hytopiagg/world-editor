@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { FaCloudUploadAlt, FaCog, FaMapMarkedAlt, FaCheck, FaTimes } from 'react-icons/fa';
 import WorldMapSelector from './WorldMapSelector';
+import FrontViewSelector from './FrontViewSelector';
 import { loadingManager } from '../../LoadingManager';
 
 // Create Web Worker
@@ -434,30 +435,39 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
   
   // Update selected bounds
   const handleBoundsChange = (bounds) => {
-    // Ensure the X and Z dimensions are equal for a square selection
-    const xSize = bounds.maxX - bounds.minX;
-    const zSize = bounds.maxZ - bounds.minZ;
+    // Create a new bounds object that preserves all properties
+    const newBounds = {
+      ...selectedBounds,
+      ...bounds
+    };
     
-    // If the sizes are different, adjust to make them equal
-    if (xSize !== zSize) {
-      // Use the larger dimension as the target size
-      const targetSize = Math.max(xSize, zSize);
+    // Ensure the X and Z dimensions are equal for a square selection if both X and Z are being updated
+    if (bounds.minX !== undefined && bounds.maxX !== undefined && 
+        bounds.minZ !== undefined && bounds.maxZ !== undefined) {
+      const xSize = bounds.maxX - bounds.minX;
+      const zSize = bounds.maxZ - bounds.minZ;
       
-      // Adjust the smaller dimension to match
-      if (xSize < zSize) {
-        // Expand X dimension
-        const centerX = (bounds.minX + bounds.maxX) / 2;
-        bounds.minX = Math.floor(centerX - targetSize / 2);
-        bounds.maxX = Math.floor(centerX + targetSize / 2);
-      } else {
-        // Expand Z dimension
-        const centerZ = (bounds.minZ + bounds.maxZ) / 2;
-        bounds.minZ = Math.floor(centerZ - targetSize / 2);
-        bounds.maxZ = Math.floor(centerZ + targetSize / 2);
+      // If the sizes are different, adjust to make them equal
+      if (xSize !== zSize) {
+        // Use the larger dimension as the target size
+        const targetSize = Math.max(xSize, zSize);
+        
+        // Adjust the smaller dimension to match
+        if (xSize < zSize) {
+          // Expand X dimension
+          const centerX = (bounds.minX + bounds.maxX) / 2;
+          newBounds.minX = Math.floor(centerX - targetSize / 2);
+          newBounds.maxX = Math.floor(centerX + targetSize / 2);
+        } else {
+          // Expand Z dimension
+          const centerZ = (bounds.minZ + bounds.maxZ) / 2;
+          newBounds.minZ = Math.floor(centerZ - targetSize / 2);
+          newBounds.maxZ = Math.floor(centerZ + targetSize / 2);
+        }
       }
     }
     
-    setSelectedBounds(bounds);
+    setSelectedBounds(newBounds);
   };
   
   // Add chunk progress to the UI if needed
@@ -632,12 +642,21 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
           </div>
           
           <div className="world-map-container">
-            <WorldMapSelector 
-              bounds={worldSizeInfo.bounds}
-              onBoundsChange={handleBoundsChange}
-              selectedBounds={selectedBounds}
-              regionCoords={worldSizeInfo.regionCoords}
-            />
+            <h3>Select Region to Import</h3>
+            
+            <div className="selectors-container">
+              <FrontViewSelector
+                bounds={worldSizeInfo.bounds}
+                selectedBounds={selectedBounds}
+                onBoundsChange={handleBoundsChange}
+              />
+              <WorldMapSelector 
+                bounds={worldSizeInfo.bounds}
+                onBoundsChange={handleBoundsChange}
+                selectedBounds={selectedBounds}
+                regionCoords={worldSizeInfo.regionCoords}
+              />
+            </div>
             
             <div className="bounds-inputs">
               <div className="bounds-group">
@@ -653,23 +672,6 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
                     type="number" 
                     value={selectedBounds?.maxX || 0}
                     onChange={(e) => setSelectedBounds({...selectedBounds, maxX: parseInt(e.target.value)})}
-                  />
-                </div>
-              </div>
-              
-              <div className="bounds-group">
-                <label>Y Bounds (Min: {worldSizeInfo.bounds.minY}, Max: {worldSizeInfo.bounds.maxY}):</label>
-                <div className="bounds-input-row">
-                  <input 
-                    type="number" 
-                    value={selectedBounds?.minY || 0}
-                    onChange={(e) => setSelectedBounds({...selectedBounds, minY: parseInt(e.target.value)})}
-                  />
-                  <span>to</span>
-                  <input 
-                    type="number" 
-                    value={selectedBounds?.maxY || 0}
-                    onChange={(e) => setSelectedBounds({...selectedBounds, maxY: parseInt(e.target.value)})}
                   />
                 </div>
               </div>

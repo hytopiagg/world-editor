@@ -6,22 +6,25 @@ import { loadingManager } from '../../LoadingManager';
 // Add CSS for the custom texture library
 const customTextureLibraryStyles = `
   .custom-texture-library {
-    margin: 20px 0;
+    margin: 15px 0;
     padding: 15px;
-    background-color: #222;
-    border-radius: 4px;
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
   
   .custom-texture-library h4 {
     margin-top: 0;
     margin-bottom: 10px;
-    color: #2196f3;
+    color: #4a90e2;
+    font-size: 16px;
   }
   
   .texture-instructions {
     color: #ccc;
-    margin-bottom: 15px;
-    line-height: 1.5;
+    margin-bottom: 12px;
+    line-height: 1.4;
+    font-size: 13px;
   }
   
   .texture-instructions strong {
@@ -29,14 +32,13 @@ const customTextureLibraryStyles = `
   }
   
   .texture-library-container {
-    margin-top: 15px;
+    margin-top: 10px;
   }
   
   .texture-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 15px;
-    margin-top: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 10px;
   }
   
   .texture-item {
@@ -45,8 +47,8 @@ const customTextureLibraryStyles = `
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    aspect-ratio: 1/1;
   }
   
   .texture-item:hover {
@@ -55,130 +57,65 @@ const customTextureLibraryStyles = `
   }
   
   .texture-thumbnail {
-    width: 64px;
-    height: 64px;
-    object-fit: contain;
-    margin: 10px;
-    image-rendering: pixelated;
+    width: 100%;
+    height: 70%;
+    object-fit: cover;
   }
   
   .texture-name {
-    width: 100%;
-    padding: 8px;
-    background-color: #444;
-    color: white;
+    padding: 4px;
+    font-size: 10px;
     text-align: center;
-    font-size: 12px;
+    color: #ddd;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    height: 30%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
   .texture-drop-area {
     background-color: #333;
-    border: 2px dashed #666;
+    border: 2px dashed #555;
     border-radius: 4px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 120px;
+    padding: 10px;
     cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
+    transition: all 0.2s ease;
+    aspect-ratio: 1/1;
   }
   
-  .texture-drop-area:hover {
+  .texture-drop-area:hover, .texture-drop-area.drag-over {
     background-color: #3a3a3a;
     border-color: #4a90e2;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  }
-  
-  .texture-drop-area.drag-over {
-    background-color: #2c3e50;
-    border-color: #3498db;
-    box-shadow: 0 0 15px rgba(52, 152, 219, 0.5);
-    transform: scale(1.02);
-  }
-  
-  .texture-drop-area.drag-over::after {
-    content: 'Drop to Upload';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(52, 152, 219, 0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: bold;
-    color: white;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
   
   .drop-icon {
-    font-size: 32px;
-    color: #666;
-    margin-bottom: 5px;
-    transition: color 0.3s ease;
-  }
-  
-  .texture-drop-area:hover .drop-icon {
+    font-size: 20px;
     color: #4a90e2;
+    margin-bottom: 4px;
   }
   
   .drop-text {
-    color: #ccc;
-    font-size: 14px;
-    transition: color 0.3s ease;
-  }
-  
-  .texture-drop-area:hover .drop-text {
     color: #fff;
+    font-size: 12px;
+    margin-bottom: 2px;
   }
   
   .drop-subtext {
     color: #999;
-    font-size: 12px;
-    margin-top: 5px;
-    text-align: center;
-  }
-  
-  .texture-drop-area:hover .drop-subtext {
-    color: #ccc;
-  }
-  
-  .custom-texture-selector {
-    display: flex;
-    align-items: center;
-  }
-  
-  .custom-texture-selector select {
-    flex: 1;
-    margin-right: 10px;
-  }
-  
-  .texture-preview {
-    display: flex;
-    align-items: center;
-  }
-  
-  .block-thumbnail {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    image-rendering: pixelated;
-    background-color: #333;
-    border: 1px solid #444;
+    font-size: 10px;
   }
   
   .no-textures-message {
-    color: #ff9800;
+    color: #999;
     font-style: italic;
+    padding: 4px 0;
   }
 `;
 
