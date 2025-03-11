@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, forwardRef, useMemo, useImperativeHandle } from "react";
+import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -17,7 +17,6 @@ import { ToolManager, WallTool } from "./tools";
 const CHUNK_SIZE = 16;
 const CHUNK_BLOCK_CAPACITY = BLOCK_INSTANCED_MESH_CAPACITY / 8; // Smaller capacity per chunk
 const FRUSTUM_CULLING_DISTANCE = 64; // Increase view distance for less pop-in
-const FRUSTUM_BUFFER_DISTANCE = 16; // Additional buffer distance to reduce popping
 const MAX_SELECTION_DISTANCE = 32; // Maximum distance for block selection (in blocks)
 
 // Selection distance for raycasting
@@ -46,16 +45,6 @@ export const setGreedyMeshingEnabled = (enabled) => {
     GREEDY_MESHING_ENABLED = enabled;
     return changed;
 };
-
-// Greedy meshing constants
-const MESH_SIDES = [
-    { dir: [0, 0, 1], corners: [[0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]], normal: [0, 0, 1] }, // front (+z)
-    { dir: [0, 0, -1], corners: [[1, 0, 0], [0, 0, 0], [1, 1, 0], [0, 1, 0]], normal: [0, 0, -1] }, // back (-z)
-    { dir: [0, 1, 0], corners: [[0, 1, 0], [1, 1, 0], [0, 1, 1], [1, 1, 1]], normal: [0, 1, 0] }, // top (+y)
-    { dir: [0, -1, 0], corners: [[0, 0, 1], [1, 0, 1], [0, 0, 0], [1, 0, 0]], normal: [0, -1, 0] }, // bottom (-y)
-    { dir: [1, 0, 0], corners: [[1, 0, 0], [1, 1, 0], [1, 0, 1], [1, 1, 1]], normal: [1, 0, 0] }, // right (+x)
-    { dir: [-1, 0, 0], corners: [[0, 0, 1], [0, 1, 1], [0, 0, 0], [0, 1, 0]], normal: [-1, 0, 0] }, // left (-x)
-];
 
 // Modify the blockTypes definition to be a function that can be updated
 let blockTypesArray = (() => {
@@ -304,25 +293,6 @@ const generateGreedyMesh = (chunksBlocks, blockTypes) => {
     return chunkMeshBuilder.buildChunkMesh(chunksBlocks, blockTypes);
 };
 
-// LOD System Constants
-const LOD_ENABLED = true;
-const LOD_LEVELS = [
-	{ distance: 3, scale: 1 },    // Level 0: Full detail (1-3 chunks away)
-	{ distance: 6, scale: 2 },    // Level 1: Medium detail (4-6 chunks away)
-	{ distance: 10, scale: 4 },   // Level 2: Low detail (7-10 chunks away)
-	{ distance: 16, scale: 8 }    // Level 3: Very low detail (11-16 chunks away)
-];
-
-// Define face directions for optimized neighbor checking
-const NEIGHBOR_CHECK_DIRECTIONS = [
-    { offset: [1, 0, 0], axis: 0, dir: 1 },   // +X
-    { offset: [-1, 0, 0], axis: 0, dir: -1 }, // -X
-    { offset: [0, 1, 0], axis: 1, dir: 1 },   // +Y
-    { offset: [0, -1, 0], axis: 1, dir: -1 }, // -Y
-    { offset: [0, 0, 1], axis: 2, dir: 1 },   // +Z
-    { offset: [0, 0, -1], axis: 2, dir: -1 }  // -Z
-];
-
 // Add performance optimization settings
 const PERFORMANCE_SETTINGS = {
   maxChunksPerFrame: 5,          // Max chunks to process in a single frame
@@ -424,7 +394,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Add chunk management references
 	const chunksRef = useRef(new Map());
 	const chunkMeshesRef = useRef({});
-	const [chunksNeedUpdate, setChunksNeedUpdate] = useState(false);
+	// State for chunk updates is handled through refs now
 	const isUpdatingChunksRef = useRef(false);
 	const frustumRef = useRef(new THREE.Frustum());
 	const frustumMatrixRef = useRef(new THREE.Matrix4());
@@ -1090,7 +1060,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		// If no block intersection, check for ground plane intersection
-		const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+		//const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 		const rayOrigin = raycaster.ray.origin;
 		const rayDirection = raycaster.ray.direction;
 		
@@ -1137,9 +1107,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const checkedChunks = new Set();
 		
 		// Get camera chunk
-		const camChunkX = Math.floor(pos.x / CHUNK_SIZE);
-		const camChunkY = Math.floor(pos.y / CHUNK_SIZE);
-		const camChunkZ = Math.floor(pos.z / CHUNK_SIZE);
 		
 		// Check a few chunks in the ray direction
 		for (let dist = 1; dist <= 5; dist++) {
@@ -1390,7 +1357,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// SECOND PASS: If no block intersections, check for ground plane intersection
 		if (!blockIntersection) {
 			// Create a ground plane for raycasting
-			const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+			//const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 			const rayOrigin = raycaster.ray.origin;
 			const rayDirection = raycaster.ray.direction;
 			
@@ -2204,107 +2171,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 	}
 
-	// Function to update chunk meshes efficiently
-	const updateChunkMeshes = (chunkKey, adds, removes) => {
-		// Skip if scene not ready
-		if (!scene || !meshesInitializedRef.current) return;
-		
-		// If chunk doesn't exist in our tracking, initialize it
-		if (!chunksRef.current.has(chunkKey)) {
-			chunksRef.current.set(chunkKey, {});
-		}
-		const chunksBlocks = chunksRef.current.get(chunkKey);
-
-		// Process removes first
-		removes.forEach(({ key, blockId }) => {
-			delete chunksBlocks[key];
-		});
-
-		// Process adds
-		adds.forEach(({ key, pos, blockId }) => {
-			chunksBlocks[key] = blockId;
-		});
-		
-		// Calculate distance to camera for priority
-		let priority = 1; // Default priority
-		
-		// If we have access to the camera, prioritize chunks closest to the camera
-		if (camera) {
-			// Parse chunk coordinates
-			const [cx, cy, cz] = chunkKey.split(',').map(Number);
-			
-			// Calculate chunk center in world space
-			const centerX = (cx * CHUNK_SIZE) + (CHUNK_SIZE / 2);
-			const centerY = (cy * CHUNK_SIZE) + (CHUNK_SIZE / 2);
-			const centerZ = (cz * CHUNK_SIZE) + (CHUNK_SIZE / 2);
-			
-			// Calculate distance to camera (squared is faster)
-			const dx = centerX - camera.position.x;
-			const dy = centerY - camera.position.y;
-			const dz = centerZ - camera.position.z;
-			const distanceSquared = dx*dx + dy*dy + dz*dz;
-			
-			// Convert to priority (closer = higher priority)
-			priority = 1000 / (1 + distanceSquared);
-			
-			// Extra priority boost for chunks right in front of the camera
-			if (distanceSquared < 100) {
-			  priority *= 2;
-			}
-		}
-		
-		// Add to the priority queue
-		addChunkToUpdateQueue(chunkKey, priority);
-		
-		// Also rebuild neighboring chunks if blocks were added/removed at chunk borders
-		const needsNeighborUpdate = adds.length > 0 || removes.length > 0;
-		if (needsNeighborUpdate) {
-			// Calculate the chunk coordinates
-			const [cx, cy, cz] = chunkKey.split(',').map(Number);
-			
-			// Check for blocks at the chunk borders that would affect neighboring chunks
-			const hasBlocksAtBorder = [...adds, ...removes].some(({pos}) => {
-				if (!pos) return false;
-				
-				// Check if this block is at the edge of the chunk
-				const inChunkX = pos.x % CHUNK_SIZE;
-				const inChunkY = pos.y % CHUNK_SIZE;
-				const inChunkZ = pos.z % CHUNK_SIZE;
-				
-				return inChunkX === 0 || inChunkX === CHUNK_SIZE - 1 ||
-					   inChunkY === 0 || inChunkY === CHUNK_SIZE - 1 ||
-					   inChunkZ === 0 || inChunkZ === CHUNK_SIZE - 1;
-			});
-			
-			// If we have blocks at borders, queue neighboring chunks with lower priority
-			if (hasBlocksAtBorder) {
-				// Check all 6 neighboring chunks (only the ones that exist)
-				const neighbors = [
-					`${cx+1},${cy},${cz}`,
-					`${cx-1},${cy},${cz}`,
-					`${cx},${cy+1},${cz}`,
-					`${cx},${cy-1},${cz}`,
-					`${cx},${cy},${cz+1}`,
-					`${cx},${cy},${cz-1}`
-				];
-				
-				neighbors.forEach(neighborKey => {
-					if (chunksRef.current.has(neighborKey)) {
-						// Lower priority for neighboring chunks
-						addChunkToUpdateQueue(neighborKey, priority * 0.5);
-					}
-				});
-			}
-		}
-	};
-
+	
 	// Function to rebuild a single chunk
 	const rebuildChunk = (chunkKey) => {
 		// Skip if scene not ready
 		if (!scene || !meshesInitializedRef.current) return;
 		
 		// Performance tracking
-		const startTime = performance.now();
+		//const startTime = performance.now();
 			
 		try {
 			// Clean up existing chunk meshes for this chunk
@@ -2846,7 +2720,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const ray = raycaster.ray.clone();
 		
 		// First, check for ground plane intersection to have it as a fallback
-		const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+		//const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 		const rayOrigin = ray.origin;
 		const rayDirection = ray.direction;
 		
@@ -2904,10 +2778,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Check if there are any chunks in this direction
 		let hasChunksInDirection = false;
 		
-		// Get camera chunk
-		const camChunkX = Math.floor(pos.x / CHUNK_SIZE);
-		const camChunkY = Math.floor(pos.y / CHUNK_SIZE);
-		const camChunkZ = Math.floor(pos.z / CHUNK_SIZE);
 		
 		// Check a few chunks in the ray direction
 		for (let dist = 1; dist <= 5; dist++) {
@@ -3004,15 +2874,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		return groundIntersection;
 	};
 
-	// Efficient ray testing for hovering and interaction
-	const fastRayTest = () => {
-		// Skip if spatial hash is not ready
-		if (!spatialHashGridRef.current.size) return null;
-		
-		// Use optimized ray casting with prioritizeBlocks set to true
-		return getOptimizedRaycastIntersection(true);
-	};
-
+	
 	// Add texture atlas initialization effect
 	useEffect(() => {
 		// Skip texture atlas initialization if disabled
@@ -3135,8 +2997,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	    }, options?.timeout || 1);
 	  });
 
-	const cancelIdleCallbackPolyfill = window.cancelIdleCallback || clearTimeout;
-
+	
 	// Add these variables to track camera movement outside the animate function
 	const lastCameraPosition = new THREE.Vector3();
 	const lastCameraRotation = new THREE.Euler();
