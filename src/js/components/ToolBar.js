@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon } from "react-icons/fa";
+import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon, FaFileImport, FaChevronUp, FaChevronDown } from "react-icons/fa";
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
 import "../../css/ToolBar.css";
@@ -9,6 +9,8 @@ import {
 	importMap,
 } from '../ImportExport';
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from '../Constants';
+import { generateDefaultBlockMap, initMinecraftImport, MinecraftImportModal, MinecraftImportToolButton } from "./MinecraftImport";
+import { blockTypes } from "../TerrainBuilder";
 const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, setAxisLockEnabled, placementSize, setPlacementSize, setGridSize, undoRedoManager, currentBlockType, environmentBuilderRef }) => {
 	const [newGridSize, setNewGridSize] = useState(100);
 	const [showDimensionsModal, setShowDimensionsModal] = useState(false);
@@ -33,6 +35,27 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 		roughness: 85,
 		clearMap: false,
 	});
+
+	const [showMcImportModal, setShowMcImportModal] = useState(false);
+	const [mcImportSettings, setMcImportSettings] = useState({});
+	const [importedMap, setImportedMap] = useState(null); 
+	useEffect(() => {
+        if(!mcImportSettings.blockMap) {
+            setMcImportSettings({
+                ...mcImportSettings,
+                blockMap: generateDefaultBlockMap(blockTypes)
+            });
+        }
+    }, [mcImportSettings]);
+	useEffect(() => {
+        if(importedMap !== null) {
+			DatabaseManager.saveData(STORES.TERRAIN, "current", importedMap).then($ => {
+				terrainBuilderRef.current.refreshTerrainFromDB();
+				setImportedMap(null);
+			})
+		}
+	}, [importedMap])
+
 
 	// Add state for undo/redo button availability
 	const [canUndo, setCanUndo] = useState(true);
@@ -556,6 +579,10 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								<FaTrash />
 							</button>
 						</Tooltip>
+						<MinecraftImportToolButton 
+							setState={setMcImportSettings} 
+							setShowModal={setShowMcImportModal}
+						/>
 					</div>
 					<div className="control-label">Map Tools</div>
 				</div>
@@ -827,6 +854,8 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 					</div>
 				</div>
 			)}
+
+			{showMcImportModal && <MinecraftImportModal state={mcImportSettings} setState={setMcImportSettings} setShowModal={setShowMcImportModal} setImportedMap={setImportedMap}/> }
 		</>
 	);
 };

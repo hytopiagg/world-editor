@@ -146,8 +146,18 @@ button {
   text-align: left;
 }
 
-.modal-input input {
+.modal-input input:not(.small) {
   flex: 0 0 55%;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(241, 241, 241, 0.15);
+  background-color: rgba(30, 30, 30, 0.7);
+  color: #fff;
+}
+
+.modal-input input.small {
+  flex: 1 1 15%;
+  max-width: calc(15%);
   padding: 6px 8px;
   border-radius: 4px;
   border: 1px solid rgba(241, 241, 241, 0.15);

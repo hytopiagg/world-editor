@@ -231,6 +231,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			instancedMesh.count = 0;
 		});
 
+
 		// Process each block in the terrain
 		Object.entries(terrainRef.current).forEach(([position, blockId]) => {
 			const [x, y, z] = position.split(",").map(Number);

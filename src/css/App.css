@@ -55,8 +55,12 @@ button {
   font-weight: bold;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2);
+}
+
+button:hover:disabled {
+  cursor: default;
 }
 
 button.selected {
