@@ -5,17 +5,99 @@ import BlockTypeMapper from './BlockTypeMapper';
 import ImportStep from './ImportStep';
 import { loadingManager } from '../../LoadingManager';
 
+// Define all steps including sub-steps
+const ALL_STEPS = [
+  { id: 'selectWorld', title: 'Select World', mainStep: 'upload' },
+  { id: 'selectRegion', title: 'Select Region', mainStep: 'upload' },
+  { id: 'uploadWorld', title: 'Upload World', mainStep: 'upload' },
+  { id: 'mapBlocks', title: 'Map Blocks', mainStep: 'blocks' },
+  { id: 'importMap', title: 'Import Map', mainStep: 'import' }
+];
+
+// Original steps for the wizard
 const STEPS = [
-  { id: 'upload', title: 'Upload World' },
+  { id: 'upload', title: 'Select World' },
   { id: 'blocks', title: 'Map Blocks' },
   { id: 'import', title: 'Import Map' }
 ];
+
+// Component to display all steps including sub-steps
+const ProgressSteps = ({ currentStep, worldData, showSizeSelector, uploading }) => {
+  // Determine which sub-step of the upload step we're on
+  let currentSubStep = 'selectWorld'; // Default to first sub-step
+  
+  if (currentStep === 0) { // We're in the upload step
+    if (worldData) {
+      // If we have world data, we've completed the upload process
+      currentSubStep = 'uploadWorld';
+    } else if (showSizeSelector) {
+      // If we're showing the size selector, we're in the region selection step
+      currentSubStep = 'selectRegion';
+    } else if (uploading) {
+      // If we're uploading, we're in the upload process
+      currentSubStep = 'uploadWorld';
+    } else {
+      // Otherwise, we're in the initial world selection step
+      currentSubStep = 'selectWorld';
+    }
+  } else if (currentStep === 1) {
+    // We're in the blocks step
+    currentSubStep = 'mapBlocks';
+  } else if (currentStep === 2) {
+    // We're in the import step
+    currentSubStep = 'importMap';
+  }
+  
+  // For debugging
+  console.log('ProgressSteps state:', { currentStep, worldData: !!worldData, showSizeSelector, uploading, currentSubStep });
+  
+  return (
+    <div className="minecraft-import-steps">
+      {ALL_STEPS.map((step, index) => {
+        // Determine if this step is active, completed, or neither
+        const isActive = step.id === currentSubStep;
+        
+        // A step is completed if:
+        // 1. We're past it in the ALL_STEPS sequence
+        // 2. We're in a later main step (currentStep > the step's main step index)
+        const currentStepIndex = ALL_STEPS.findIndex(s => s.id === currentSubStep);
+        const stepMainStepIndex = STEPS.findIndex(s => s.id === step.mainStep);
+        const currentMainStepIndex = STEPS.findIndex(s => s.id === ALL_STEPS.find(s => s.id === currentSubStep)?.mainStep);
+        
+        const isCompleted = 
+          (currentStepIndex > index) || // Past in sequence
+          (currentMainStepIndex > stepMainStepIndex); // In a later main step
+        
+        return (
+          <div 
+            key={step.id} 
+            className={`step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+          >
+            <div className="step-number">{index + 1}</div>
+            <div className="step-title">{step.title}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [worldData, setWorldData] = useState(null);
   const [blockMappings, setBlockMappings] = useState({});
   const [importResult, setImportResult] = useState(null);
+  
+  // Add state to track UploadStep's internal state
+  const [showSizeSelector, setShowSizeSelector] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  
+  // Handle state changes from UploadStep
+  const handleUploadStepStateChange = useCallback(({ uploading: newUploading, showSizeSelector: newShowSizeSelector }) => {
+    console.log('UploadStep state changed:', { uploading: newUploading, showSizeSelector: newShowSizeSelector });
+    setUploading(newUploading);
+    setShowSizeSelector(newShowSizeSelector);
+  }, []);
   
   const handleNextStep = useCallback(() => {
     console.log('[TIMING] Index: handleNextStep called, moving from step', currentStep);
@@ -95,6 +177,7 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
                    console.log('[TIMING] Index: After setWorldData call');
                  }}
                  onAdvanceStep={handleNextStep} // Pass the step advancement function
+                 onStateChange={handleUploadStepStateChange} // Pass the state change handler
                />;
       case 'blocks':
         console.log('[TIMING] Index: About to render BlockTypeMapper');
@@ -123,17 +206,12 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
           <button className="close-button" onClick={onClose}>×</button>
         </div>
         
-        <div className="minecraft-import-steps">
-          {STEPS.map((step, index) => (
-            <div 
-              key={step.id} 
-              className={`step ${index === currentStep ? 'active' : ''} ${index < currentStep ? 'completed' : ''}`}
-            >
-              <div className="step-number">{index + 1}</div>
-              <div className="step-title">{step.title}</div>
-            </div>
-          ))}
-        </div>
+        <ProgressSteps 
+          currentStep={currentStep}
+          worldData={worldData}
+          showSizeSelector={showSizeSelector}
+          uploading={uploading}
+        />
         
         <div className="minecraft-import-step-content">
           {renderStep()}

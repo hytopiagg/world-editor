@@ -46,7 +46,7 @@ const globalWorldDataStorage = {
 // Export the function to get the global blocks data
 export const getCurrentBlocksData = () => globalWorldDataStorage.currentBlocksData;
 
-const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
+const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState(0);
@@ -62,19 +62,26 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
   const [selectedBounds, setSelectedBounds] = useState(null);
   const [worldData, setWorldData] = useState(null); // Add state for worldData
   
+  // Add state for tracking chunk progress
+  const [chunkProgress, setChunkProgress] = useState({ received: 0, total: 0 });
+  
   const fileInputRef = useRef(null);
   const workerRef = useRef(null);
   const zipDataRef = useRef(null); // Store the zip data for later use
   
-  // Add state for tracking chunk progress
-  const [chunkProgress, setChunkProgress] = useState({ received: 0, total: 0 });
+  // Notify parent of initial state
+  useEffect(() => {
+    if (onStateChange) {
+      onStateChange({ uploading, showSizeSelector });
+    }
+  }, [onStateChange, uploading, showSizeSelector]); // Run when these values change
   
   // Reset state when we go back to this step
   useEffect(() => {
     // If we had world data before but don't now, we're going back to start over
     if (!worldData) {
       // Reset all state
-      setUploading(false);
+      setUploadingWithNotify(false);
       setError(null);
       setProgress(0);
       setProgressMessage('');
@@ -83,7 +90,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
       setMemoryUsage(null);
       setFilterStats(null);
       setWorldSizeInfo(null);
-      setShowSizeSelector(false);
+      setShowSizeSelectorWithNotify(false);
       setSelectedBounds(null);
       
       // Clean up any worker
@@ -131,13 +138,13 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
       return;
     }
     
-    setUploading(true);
+    setUploadingWithNotify(true);
     setError(null);
     setProgress(0);
     setProgressMessage('Starting upload...');
     setMemoryUsage(null);
     setWorldSizeInfo(null);
-    setShowSizeSelector(false);
+    setShowSizeSelectorWithNotify(false);
     
     try {
       // Initialize web worker
@@ -162,11 +169,11 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           }
         } else if (type === 'worldSizeScanned') {
           // First phase complete - got world size info
-          setUploading(false);
+          setUploadingWithNotify(false);
           setProgress(100);
           setProgressMessage('World scan complete!');
           setWorldSizeInfo(data);
-          setShowSizeSelector(true);
+          setShowSizeSelectorWithNotify(true);
           
           // Set initial selected bounds with 300x300 XZ area centered around the origin
           // and Y range from 10 to 100
@@ -215,10 +222,10 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
         } else if (type === 'worldParsed') {
           // All chunks received, now combine them
           console.log('[TIMING] UploadStep: worldParsed event received, all chunks complete');
-          setUploading(false);
+          setUploadingWithNotify(false);
           setProgress(100);
           setProgressMessage('World loading complete! Click Next to continue.');
-          setShowSizeSelector(false); // Hide region selector after parsing
+          setShowSizeSelectorWithNotify(false); // Hide region selector after parsing
           
           // Combine all chunks into one blocks object
           console.log('[CHUNKS] Combining all chunks into one blocks object');
@@ -334,7 +341,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           // Start processing chunks
           processChunks();
         } else if (type === 'error') {
-          setUploading(false);
+          setUploadingWithNotify(false);
           setProgress(0);
           setError(error || 'An unknown error occurred');
           loadingManager.hideLoading();
@@ -355,7 +362,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
         }
       });
     } catch (e) {
-      setUploading(false);
+      setUploadingWithNotify(false);
       setProgress(0);
       setError('Error processing file: ' + e.message);
     }
@@ -385,10 +392,10 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
   const handleStartParsing = () => {
     if (!zipDataRef.current || !selectedBounds) return;
     
-    setUploading(true);
+    setUploadingWithNotify(true);
     setProgress(0);
     setProgressMessage('Starting world parsing with selected bounds...');
-    setShowSizeSelector(false);
+    setShowSizeSelectorWithNotify(false);
     
     // Update options with selected bounds
     const updatedOptions = {
@@ -415,7 +422,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
   // Handle the user canceling the import after seeing the size
   const handleCancelImport = () => {
     setWorldSizeInfo(null);
-    setShowSizeSelector(false);
+    setShowSizeSelectorWithNotify(false);
     zipDataRef.current = null;
   };
   
@@ -451,7 +458,15 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
   const renderUploadProgress = () => {
     return (
       <div className="upload-progress">
-        <h3>{progressMessage}</h3>
+        <div className="progress-status">
+          <h3>{progressMessage}</h3>
+          <p className="progress-description">
+            {progress < 100 
+              ? "Please wait while we process your Minecraft world. This may take a few minutes depending on the size."
+              : "Processing complete! Preparing to advance to the next step..."}
+          </p>
+        </div>
+        
         <div className="progress-bar">
           <div 
             className="progress-bar-inner" 
@@ -459,265 +474,99 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           ></div>
         </div>
         
-        {chunkProgress.total > 0 && (
-          <div className="chunk-progress">
-            <p>Receiving data in chunks: {chunkProgress.received}/{chunkProgress.total}</p>
-          </div>
-        )}
-        
-        {memoryUsage && (
-          <div className="memory-usage">
-            <p>Memory usage: {Math.round(memoryUsage.used / (1024 * 1024))} MB / {Math.round(memoryUsage.limit / (1024 * 1024))} MB</p>
-            <div className="memory-bar">
-              <div 
-                className="memory-bar-inner" 
-                style={{ width: `${(memoryUsage.used / memoryUsage.limit) * 100}%` }}
-              ></div>
+        <div className="progress-details">
+          {chunkProgress.total > 0 && (
+            <div className="chunk-progress">
+              <p><strong>Data Chunks:</strong> {chunkProgress.received} of {chunkProgress.total} received ({Math.round((chunkProgress.received / chunkProgress.total) * 100)}%)</p>
             </div>
-            {memoryUsage.used > memoryUsage.limit * 0.8 && (
-              <p className="memory-tip">Memory usage is high - try reducing the region size or filtering more blocks.</p>
-            )}
-          </div>
-        )}
+          )}
+          
+          {memoryUsage && (
+            <div className="memory-usage">
+              <p><strong>Memory Usage:</strong> {Math.round(memoryUsage.used / (1024 * 1024))} MB / {Math.round(memoryUsage.limit / (1024 * 1024))} MB</p>
+              <div className="memory-bar">
+                <div 
+                  className="memory-bar-inner" 
+                  style={{ 
+                    width: `${(memoryUsage.used / memoryUsage.limit) * 100}%`,
+                    backgroundColor: memoryUsage.used > memoryUsage.limit * 0.8 ? '#ff9800' : undefined
+                  }}
+                ></div>
+              </div>
+              {memoryUsage.used > memoryUsage.limit * 0.8 && (
+                <p className="memory-tip">Memory usage is high - try reducing the region size or filtering more blocks.</p>
+              )}
+            </div>
+          )}
+          
+          {filterStats && (
+            <div className="filter-stats">
+              <p><strong>Block Filtering:</strong></p>
+              <ul>
+                {filterStats.transparentBlocks > 0 && (
+                  <li>Skipped {filterStats.transparentBlocks.toLocaleString()} transparent blocks</li>
+                )}
+                {filterStats.waterBlocks > 0 && (
+                  <li>Skipped {filterStats.waterBlocks.toLocaleString()} water blocks</li>
+                )}
+                {filterStats.outOfBoundsBlocks > 0 && (
+                  <li>Skipped {filterStats.outOfBoundsBlocks.toLocaleString()} blocks outside selected bounds</li>
+                )}
+              </ul>
+              {filterStats.totalSkipped > 0 && (
+                <p className="filter-tip">Filtering reduced memory usage by approximately {Math.round(filterStats.totalSkipped / (filterStats.totalBlocks || 1) * 100)}%</p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
   
+  // Create a custom setter for uploading that also notifies the parent
+  const setUploadingWithNotify = (value) => {
+    setUploading(value);
+    // Notify parent component of state change
+    if (onStateChange) {
+      onStateChange({ uploading: value, showSizeSelector });
+    }
+  };
+  
+  // Create a custom setter for showSizeSelector that also notifies the parent
+  const setShowSizeSelectorWithNotify = (value) => {
+    setShowSizeSelector(value);
+    // Notify parent component of state change
+    if (onStateChange) {
+      onStateChange({ uploading, showSizeSelector: value });
+    }
+  };
+  
   return (
     <div className="upload-step">
-      <h2>Upload Minecraft World</h2>
-      <p className="step-description">
-        Import a Minecraft world by uploading a ZIP file of your world folder.
-        You'll be able to select which region to import in the next step.
-      </p>
-      
-      {/* Show the world size selector if we have scanned the world */}
-      {showSizeSelector && worldSizeInfo && (
-        <div className="world-size-selector">
-          <div className="world-info">
-            <h3>World Size Information</h3>
-            <p>Select the region of your world to import:</p>
-            
-            <div className="world-map-container">
-              <WorldMapSelector 
-                bounds={worldSizeInfo.bounds}
-                onBoundsChange={handleBoundsChange}
-                selectedBounds={selectedBounds}
-                regionCoords={worldSizeInfo.regionCoords}
-              />
-              
-              <div className="bounds-inputs">
-                <div className="bounds-group">
-                  <label>X Bounds (Min: {worldSizeInfo.bounds.minX}, Max: {worldSizeInfo.bounds.maxX}):</label>
-                  <div className="bounds-input-row">
-                    <input 
-                      type="number" 
-                      value={selectedBounds?.minX || 0}
-                      onChange={(e) => setSelectedBounds({...selectedBounds, minX: parseInt(e.target.value)})}
-                    />
-                    <span>to</span>
-                    <input 
-                      type="number" 
-                      value={selectedBounds?.maxX || 0}
-                      onChange={(e) => setSelectedBounds({...selectedBounds, maxX: parseInt(e.target.value)})}
-                    />
-                  </div>
-                </div>
-                
-                <div className="bounds-group">
-                  <label>Y Bounds (Min: {worldSizeInfo.bounds.minY}, Max: {worldSizeInfo.bounds.maxY}):</label>
-                  <div className="bounds-input-row">
-                    <input 
-                      type="number" 
-                      value={selectedBounds?.minY || 0}
-                      onChange={(e) => setSelectedBounds({...selectedBounds, minY: parseInt(e.target.value)})}
-                    />
-                    <span>to</span>
-                    <input 
-                      type="number" 
-                      value={selectedBounds?.maxY || 0}
-                      onChange={(e) => setSelectedBounds({...selectedBounds, maxY: parseInt(e.target.value)})}
-                    />
-                  </div>
-                </div>
-                
-                <div className="bounds-group">
-                  <label>Z Bounds (Min: {worldSizeInfo.bounds.minZ}, Max: {worldSizeInfo.bounds.maxZ}):</label>
-                  <div className="bounds-input-row">
-                    <input 
-                      type="number" 
-                      value={selectedBounds?.minZ || 0}
-                      onChange={(e) => setSelectedBounds({...selectedBounds, minZ: parseInt(e.target.value)})}
-                    />
-                    <span>to</span>
-                    <input 
-                      type="number" 
-                      value={selectedBounds?.maxZ || 0}
-                      onChange={(e) => setSelectedBounds({...selectedBounds, maxZ: parseInt(e.target.value)})}
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="selection-size-info">
-                <p>
-                  <strong>Selected Size:</strong> {
-                    selectedBounds ? 
-                    `${selectedBounds.maxX - selectedBounds.minX + 1} x ${selectedBounds.maxY - selectedBounds.minY + 1} x ${selectedBounds.maxZ - selectedBounds.minZ + 1} blocks` : 
-                    'N/A'
-                  }
-                </p>
-                {selectedBounds && (
-                  <p>
-                    <strong>Estimated Block Count:</strong> {
-                      Math.round((selectedBounds.maxX - selectedBounds.minX + 1) * 
-                      (selectedBounds.maxY - selectedBounds.minY + 1) * 
-                      (selectedBounds.maxZ - selectedBounds.minZ + 1) * 0.3).toLocaleString()
-                    } blocks (assuming 30% filled)
-                  </p>
-                )}
-              </div>
-              
-              {/* Advanced options moved to the Region Selection */}
-              <div className="advanced-options">
-                <button 
-                  className="advanced-button" 
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                >
-                  <FaCog /> {showAdvanced ? "Hide" : "Show"} Advanced Options
-                </button>
-                
-                {showAdvanced && (
-                  <div className="options-panel">
-                    <h4>Memory Optimization Settings</h4>
-                    <p className="optimization-warning">
-                      For larger worlds, adjust these settings to reduce memory usage
-                    </p>
-                    
-                    <div className="option-row">
-                      <label>
-                        <input 
-                          type="checkbox" 
-                          checked={options.excludeTransparentBlocks}
-                          onChange={(e) => handleOptionChange('excludeTransparentBlocks', e.target.checked)}
-                        />
-                        Skip transparent blocks (air, glass)
-                      </label>
-                    </div>
-                    
-                    <div className="option-row">
-                      <label>
-                        <input 
-                          type="checkbox" 
-                          checked={options.excludeWaterBlocks}
-                          onChange={(e) => handleOptionChange('excludeWaterBlocks', e.target.checked)}
-                        />
-                        Skip water blocks
-                      </label>
-                    </div>
-                    
-                    <div className="option-row">
-                      <label>
-                        <input 
-                          type="checkbox" 
-                          checked={options.limitRegions}
-                          onChange={(e) => handleOptionChange('limitRegions', e.target.checked)}
-                        />
-                        Limit regions (load only central area)
-                      </label>
-                    </div>
-                    
-                    <div className="option-grid">
-                      <div className="option-col">
-                        <label>
-                          Max regions to load:
-                          <input 
-                            type="number" 
-                            min="1" 
-                            max="100"
-                            value={options.maxRegions}
-                            onChange={(e) => handleOptionChange('maxRegions', e.target.value)}
-                            disabled={!options.limitRegions}
-                          />
-                        </label>
-                        
-                        <label>
-                          Chunk sampling factor:
-                          <select
-                            value={options.chunkSamplingFactor}
-                            onChange={(e) => handleOptionChange('chunkSamplingFactor', e.target.value)}
-                          >
-                            <option value="1">Load all chunks (1:1)</option>
-                            <option value="2">Load every other chunk (1:2)</option>
-                            <option value="4">Load every 4th chunk (1:4)</option>
-                            <option value="8">Load every 8th chunk (1:8)</option>
-                          </select>
-                        </label>
-                      </div>
-                      
-                      <div className="option-col">
-                        <label>
-                          Memory limit (MB):
-                          <input 
-                            type="number" 
-                            min="100" 
-                            max="4000"
-                            value={options.memoryLimit}
-                            onChange={(e) => handleOptionChange('memoryLimit', e.target.value)}
-                          />
-                        </label>
-                        
-                        <label>
-                          Max blocks (millions):
-                          <input 
-                            type="number" 
-                            min="0" 
-                            max="20"
-                            step="0.5"
-                            value={options.maxBlocks / 1000000}
-                            onChange={(e) => handleOptionChange('maxBlocks', Number(e.target.value) * 1000000)}
-                          />
-                          <span className="input-note">0 = unlimited</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <div className="bounds-actions">
-                <button 
-                  className="import-button"
-                  onClick={handleStartParsing}
-                >
-                  <FaCheck /> Import Selected Region
-                </button>
-                
-                <button 
-                  className="cancel-button"
-                  onClick={handleCancelImport}
-                >
-                  <FaTimes /> Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Only show the main header and description in the initial state (not uploading, not showing selector, no world data) */}
+      {(!uploading && !showSizeSelector && !worldData) && (
+        <>
+          <h2>Upload Minecraft World</h2>
+          <p className="step-description">
+            Import a Minecraft world by uploading a ZIP file of your world folder.
+            You'll be able to select which region to import in the next step.
+          </p>
+        </>
       )}
       
-      {/* Show the progress if we're uploading/parsing */}
+      {/* Show region selection header when in region selection mode */}
+      {showSizeSelector && worldSizeInfo && !uploading && (
+        <h2 className="section-header">Select Region to Import</h2>
+      )}
+      
+      {/* Show processing header when uploading/parsing */}
       {uploading && (
-        renderUploadProgress()
+        <h2 className="section-header">Processing Minecraft World</h2>
       )}
       
-      {/* Show success message if parsing is complete */}
+      {/* Show success header when world data is loaded but not in selection mode */}
       {worldData && !uploading && !showSizeSelector && (
-        <div className="success-message">
-          <div className="success-icon">✓</div>
-          <h3>World Parsing Complete!</h3>
-          <p>Your selected region has been processed successfully.</p>
-          <p>Advancing to block mapping...</p>
-        </div>
+        <h2 className="section-header">World Processing Complete</h2>
       )}
       
       {/* Only show the drag & drop area when we're at the initial state (no processing and no selector shown) */}
@@ -748,6 +597,281 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
         </div>
       )}
       
+      {/* Compatibility information - only show in initial state */}
+      {(!uploading && !showSizeSelector && !worldData) && (
+        <div className="compatibility-info">
+          <h3>Compatibility Information</h3>
+          <p><strong>Supported Versions:</strong> Minecraft Java Edition 1.21.x or newer</p>
+          <p><strong>Maximum Import Size:</strong> 500 x 500 blocks (X/Z dimensions)</p>
+          <p><strong>Maximum Block Limit:</strong> {options.maxBlocks.toLocaleString()} blocks (can be adjusted in advanced options)</p>
+          
+          <div className="export-instructions">
+            <h4>How to Export Your Minecraft World:</h4>
+            <ol>
+              <li>Open Minecraft Java Edition and select the world you want to export</li>
+              <li>Click "Edit" then "Export" to create a backup of your world</li>
+              <li>Locate the exported ZIP file (usually in your "saves" folder)</li>
+              <li>Upload the ZIP file using the drag & drop area above</li>
+            </ol>
+            <p className="note">Note: For large worlds, consider using the advanced options to limit the region size or reduce memory usage.</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Show the world size selector if we have scanned the world */}
+      {showSizeSelector && worldSizeInfo && (
+        <>
+          <div className="world-stats">
+            <p><strong>World Name:</strong> {worldSizeInfo.worldFolder || 'Unknown'}</p>
+            <p><strong>Size:</strong> {worldSizeInfo.size.width} x {worldSizeInfo.size.height} x {worldSizeInfo.size.depth} blocks</p>
+            <p><strong>Regions:</strong> {worldSizeInfo.size.regionCount} ({worldSizeInfo.size.regionWidth}x{worldSizeInfo.size.regionDepth})</p>
+            <p><strong>Estimated Size:</strong> {worldSizeInfo.size.approximateSizeMB} MB</p>
+            <p><strong>Maximum Import Size:</strong> 500 x 500 blocks (X/Z dimensions)</p>
+            
+            {worldSizeInfo.size.width * worldSizeInfo.size.depth > 5000 * 5000 && (
+              <div className="warning-box">
+                <p><strong>Warning:</strong> This is a very large world. Importing the entire map may cause performance issues.</p>
+                <p>It's recommended to select a smaller region to import.</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="world-map-container">
+            <WorldMapSelector 
+              bounds={worldSizeInfo.bounds}
+              onBoundsChange={handleBoundsChange}
+              selectedBounds={selectedBounds}
+              regionCoords={worldSizeInfo.regionCoords}
+            />
+            
+            <div className="bounds-inputs">
+              <div className="bounds-group">
+                <label>X Bounds (Min: {worldSizeInfo.bounds.minX}, Max: {worldSizeInfo.bounds.maxX}):</label>
+                <div className="bounds-input-row">
+                  <input 
+                    type="number" 
+                    value={selectedBounds?.minX || 0}
+                    onChange={(e) => setSelectedBounds({...selectedBounds, minX: parseInt(e.target.value)})}
+                  />
+                  <span>to</span>
+                  <input 
+                    type="number" 
+                    value={selectedBounds?.maxX || 0}
+                    onChange={(e) => setSelectedBounds({...selectedBounds, maxX: parseInt(e.target.value)})}
+                  />
+                </div>
+              </div>
+              
+              <div className="bounds-group">
+                <label>Y Bounds (Min: {worldSizeInfo.bounds.minY}, Max: {worldSizeInfo.bounds.maxY}):</label>
+                <div className="bounds-input-row">
+                  <input 
+                    type="number" 
+                    value={selectedBounds?.minY || 0}
+                    onChange={(e) => setSelectedBounds({...selectedBounds, minY: parseInt(e.target.value)})}
+                  />
+                  <span>to</span>
+                  <input 
+                    type="number" 
+                    value={selectedBounds?.maxY || 0}
+                    onChange={(e) => setSelectedBounds({...selectedBounds, maxY: parseInt(e.target.value)})}
+                  />
+                </div>
+              </div>
+              
+              <div className="bounds-group">
+                <label>Z Bounds (Min: {worldSizeInfo.bounds.minZ}, Max: {worldSizeInfo.bounds.maxZ}):</label>
+                <div className="bounds-input-row">
+                  <input 
+                    type="number" 
+                    value={selectedBounds?.minZ || 0}
+                    onChange={(e) => setSelectedBounds({...selectedBounds, minZ: parseInt(e.target.value)})}
+                  />
+                  <span>to</span>
+                  <input 
+                    type="number" 
+                    value={selectedBounds?.maxZ || 0}
+                    onChange={(e) => setSelectedBounds({...selectedBounds, maxZ: parseInt(e.target.value)})}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="selection-size-info">
+              <p>
+                <strong>Selected Size:</strong> {
+                  selectedBounds ? 
+                  `${selectedBounds.maxX - selectedBounds.minX + 1} x ${selectedBounds.maxY - selectedBounds.minY + 1} x ${selectedBounds.maxZ - selectedBounds.minZ + 1} blocks` : 
+                  'N/A'
+                }
+              </p>
+              {selectedBounds && (
+                <p>
+                  <strong>Estimated Block Count:</strong> {
+                    Math.round((selectedBounds.maxX - selectedBounds.minX + 1) * 
+                    (selectedBounds.maxY - selectedBounds.minY + 1) * 
+                    (selectedBounds.maxZ - selectedBounds.minZ + 1) * 0.3).toLocaleString()
+                  } blocks (assuming 30% filled)
+                </p>
+              )}
+              
+              {selectedBounds && 
+               (selectedBounds.maxX - selectedBounds.minX + 1) * (selectedBounds.maxZ - selectedBounds.minZ + 1) > 500 * 500 && (
+                <div className="warning-box">
+                  <p><strong>Warning:</strong> The selected area exceeds the recommended maximum size of 500 x 500 blocks.</p>
+                  <p>This may cause performance issues or fail to import. Consider selecting a smaller area.</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Advanced options */}
+            <div className="advanced-options">
+              <button 
+                className="advanced-button" 
+                onClick={() => setShowAdvanced(!showAdvanced)}
+              >
+                <FaCog /> {showAdvanced ? "Hide" : "Show"} Advanced Options
+              </button>
+              
+              {showAdvanced && (
+                <div className="options-panel">
+                  <h4>Memory Optimization Settings</h4>
+                  <p className="optimization-warning">
+                    For larger worlds, adjust these settings to reduce memory usage
+                  </p>
+                  
+                  <div className="option-row">
+                    <label>
+                      <input 
+                        type="checkbox" 
+                        checked={options.excludeTransparentBlocks}
+                        onChange={(e) => handleOptionChange('excludeTransparentBlocks', e.target.checked)}
+                      />
+                      Skip transparent blocks (air, glass)
+                    </label>
+                  </div>
+                  
+                  <div className="option-row">
+                    <label>
+                      <input 
+                        type="checkbox" 
+                        checked={options.excludeWaterBlocks}
+                        onChange={(e) => handleOptionChange('excludeWaterBlocks', e.target.checked)}
+                      />
+                      Skip water blocks
+                    </label>
+                  </div>
+                  
+                  <div className="option-row">
+                    <label>
+                      <input 
+                        type="checkbox" 
+                        checked={options.limitRegions}
+                        onChange={(e) => handleOptionChange('limitRegions', e.target.checked)}
+                      />
+                      Limit regions (load only central area)
+                    </label>
+                  </div>
+                  
+                  <div className="option-grid">
+                    <div className="option-col">
+                      <label>
+                        Max regions to load:
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max="100"
+                          value={options.maxRegions}
+                          onChange={(e) => handleOptionChange('maxRegions', e.target.value)}
+                          disabled={!options.limitRegions}
+                        />
+                      </label>
+                      
+                      <label>
+                        Chunk sampling factor:
+                        <select
+                          value={options.chunkSamplingFactor}
+                          onChange={(e) => handleOptionChange('chunkSamplingFactor', e.target.value)}
+                        >
+                          <option value="1">Load all chunks (1:1)</option>
+                          <option value="2">Load every other chunk (1:2)</option>
+                          <option value="4">Load every 4th chunk (1:4)</option>
+                          <option value="8">Load every 8th chunk (1:8)</option>
+                        </select>
+                      </label>
+                    </div>
+                    
+                    <div className="option-col">
+                      <label>
+                        Memory limit (MB):
+                        <input 
+                          type="number" 
+                          min="100" 
+                          max="4000"
+                          value={options.memoryLimit}
+                          onChange={(e) => handleOptionChange('memoryLimit', e.target.value)}
+                        />
+                      </label>
+                      
+                      <label>
+                        Max blocks (millions):
+                        <input 
+                          type="number" 
+                          min="0" 
+                          max="20"
+                          step="0.5"
+                          value={options.maxBlocks / 1000000}
+                          onChange={(e) => handleOptionChange('maxBlocks', Number(e.target.value) * 1000000)}
+                        />
+                        <span className="input-note">0 = unlimited</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="bounds-actions">
+              <button 
+                className="import-button"
+                onClick={handleStartParsing}
+              >
+                <FaCheck /> Import Selected Region
+              </button>
+              
+              <button 
+                className="cancel-button"
+                onClick={handleCancelImport}
+              >
+                <FaTimes /> Cancel
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+      
+      {/* Show the progress if we're uploading/parsing */}
+      {uploading && (
+        renderUploadProgress()
+      )}
+      
+      {/* Show success message if parsing is complete */}
+      {worldData && !uploading && !showSizeSelector && (
+        <div className="success-message">
+          <div className="success-icon">✓</div>
+          <h3>World Parsing Complete!</h3>
+          <p>Your selected region has been processed successfully.</p>
+          <p className="next-step-info">Advancing to block mapping step...</p>
+          
+          {worldData.blocksCount && (
+            <div className="import-summary">
+              <p><strong>Imported Blocks:</strong> {worldData.blocksCount.toLocaleString()} blocks</p>
+              <p><strong>Selected Area:</strong> {worldData.selectedRegion.width} x {worldData.selectedRegion.height} x {worldData.selectedRegion.depth} blocks</p>
+            </div>
+          )}
+        </div>
+      )}
+      
       <style jsx>{`
         .upload-step {
           padding: 20px;
@@ -761,6 +885,97 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           color: #aaa;
           font-size: 16px;
           line-height: 1.5;
+        }
+        
+        /* Section header styles */
+        .section-header {
+          color: #4a90e2;
+          font-size: 24px;
+          margin-top: 0;
+          margin-bottom: 20px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid #4a90e2;
+          text-align: center;
+        }
+        
+        /* Compatibility information styles */
+        .compatibility-info {
+          background-color: #2a2a2a;
+          border-radius: 12px;
+          padding: 20px;
+          margin: 20px 0;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .compatibility-info h3 {
+          color: #4a90e2;
+          margin-top: 0;
+          margin-bottom: 15px;
+          border-bottom: 1px solid #444;
+          padding-bottom: 10px;
+        }
+        
+        .compatibility-info p {
+          margin: 10px 0;
+          line-height: 1.5;
+        }
+        
+        .export-instructions {
+          margin-top: 20px;
+          padding-top: 15px;
+          border-top: 1px solid #444;
+        }
+        
+        .export-instructions h4 {
+          color: #4a90e2;
+          margin-top: 0;
+          margin-bottom: 15px;
+        }
+        
+        .export-instructions ol {
+          padding-left: 25px;
+          margin-bottom: 15px;
+        }
+        
+        .export-instructions li {
+          margin-bottom: 8px;
+          line-height: 1.5;
+        }
+        
+        .export-instructions .note {
+          font-style: italic;
+          color: #aaa;
+          font-size: 14px;
+          padding: 10px;
+          background-color: rgba(255, 204, 0, 0.1);
+          border-left: 3px solid #ffcc00;
+          margin-top: 15px;
+        }
+        
+        /* World stats styles */
+        .world-stats {
+          background-color: #2a2a2a;
+          border-radius: 8px;
+          padding: 15px;
+          margin-bottom: 20px;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .world-stats p {
+          margin: 8px 0;
+        }
+        
+        .warning-box {
+          margin-top: 15px;
+          padding: 12px;
+          background-color: rgba(255, 152, 0, 0.1);
+          border: 1px solid #ff9800;
+          border-radius: 8px;
+          color: #ff9800;
+        }
+        
+        .warning-box p {
+          margin: 5px 0;
         }
         
         .upload-area {
@@ -796,6 +1011,16 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         
+        .progress-status {
+          margin-bottom: 15px;
+        }
+        
+        .progress-description {
+          color: #aaa;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+        
         .progress-bar {
           height: 20px;
           background-color: #444;
@@ -810,6 +1035,20 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           background: linear-gradient(90deg, #3a7bd5, #4a90e2);
           transition: width 0.3s ease;
           box-shadow: 0 0 5px rgba(74, 144, 226, 0.5);
+        }
+        
+        .progress-details {
+          margin-top: 15px;
+          padding-top: 15px;
+          border-top: 1px solid #444;
+        }
+        
+        .chunk-progress {
+          margin-bottom: 15px;
+        }
+        
+        .chunk-progress p {
+          margin: 0;
         }
         
         .memory-usage {
@@ -872,6 +1111,25 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           color: #4caf50;
           margin-bottom: 20px;
           filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+        }
+        
+        .next-step-info {
+          color: #aaa;
+          font-style: italic;
+          margin-top: 15px;
+        }
+        
+        .import-summary {
+          margin-top: 20px;
+          padding: 15px;
+          background-color: rgba(76, 175, 80, 0.1);
+          border-radius: 8px;
+          text-align: left;
+          display: inline-block;
+        }
+        
+        .import-summary p {
+          margin: 5px 0;
         }
         
         @keyframes fadeIn {
@@ -976,26 +1234,16 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           margin-top: 5px;
         }
         
-        /* World size selector styles */
-        .world-size-selector {
-          margin: 20px 0;
-          padding: 25px;
-          background-color: #2a2a2a;
-          border-radius: 12px;
-          box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
-        }
-        
-        .world-info-panel {
-          display: flex;
-          flex-direction: column;
-          gap: 15px;
-        }
-        
+        /* World map container styles */
         .world-map-container {
           margin-top: 20px;
           display: flex;
           flex-direction: column;
           align-items: center;
+          background-color: #2a2a2a;
+          border-radius: 8px;
+          padding: 20px;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         
         .bounds-inputs {
@@ -1006,6 +1254,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           padding: 20px;
           background-color: #333;
           border-radius: 8px;
+          width: 100%;
         }
         
         .bounds-group {
@@ -1034,6 +1283,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           background-color: #333;
           border-radius: 8px;
           border-left: 4px solid #4a90e2;
+          width: 100%;
         }
         
         .bounds-actions {
