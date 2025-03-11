@@ -462,41 +462,24 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
   
   return (
     <div className="upload-step">
-      <h3>Upload Your Minecraft World</h3>
-      <p>Select a Minecraft Java Edition world ZIP file from version 1.21.x or newer.</p>
+      <h2>Upload Minecraft World</h2>
+      <p className="step-description">
+        Import a Minecraft world by uploading a ZIP file of your world folder.
+        You'll be able to select which region to import in the next step.
+      </p>
       
-      {/* Show the world size info and selector if we have it */}
+      {/* Show the world size selector if we have scanned the world */}
       {showSizeSelector && worldSizeInfo && (
         <div className="world-size-selector">
-          <h4>World Size Information</h4>
-		  <div className="world-info-panel">
-            <div className="world-stats">
-              <p><strong>World Name:</strong> {worldSizeInfo.worldFolder || 'Unknown'}</p>
-              <p><strong>Size:</strong> {worldSizeInfo.size.width} x {worldSizeInfo.size.height} x {worldSizeInfo.size.depth} blocks</p>
-              <p><strong>Regions:</strong> {worldSizeInfo.size.regionCount} ({worldSizeInfo.size.regionWidth}x{worldSizeInfo.size.regionDepth})</p>
-              <p><strong>Estimated Size:</strong> {worldSizeInfo.size.approximateSizeMB} MB</p>
-              <p><strong>Max Size = 500 x 500</strong></p>
-              {worldSizeInfo.size.width * worldSizeInfo.size.depth > 5000 * 5000 && (
-                <div className="warning-box">
-                  <p><strong>Warning:</strong> This is a very large world. Importing the entire map may cause performance issues.</p>
-                  <p>It's recommended to select a smaller region to import.</p>
-                </div>
-              )}
-            </div>
+          <div className="world-info">
+            <h3>World Size Information</h3>
+            <p>Select the region of your world to import:</p>
             
-            <div className="bounds-selector">
-              <h5>Select Region to Import</h5>
-              
-              {/* Map selector component */}
+            <div className="world-map-container">
               <WorldMapSelector 
-                worldBounds={{
-                  minX: worldSizeInfo.bounds.minX,
-                  maxX: worldSizeInfo.bounds.maxX,
-                  minZ: worldSizeInfo.bounds.minZ,
-                  maxZ: worldSizeInfo.bounds.maxZ
-                }}
-                selectedBounds={selectedBounds}
+                bounds={worldSizeInfo.bounds}
                 onBoundsChange={handleBoundsChange}
+                selectedBounds={selectedBounds}
                 regionCoords={worldSizeInfo.regionCoords}
               />
               
@@ -572,6 +555,113 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
                 )}
               </div>
               
+              {/* Advanced options moved to the Region Selection */}
+              <div className="advanced-options">
+                <button 
+                  className="advanced-button" 
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                >
+                  <FaCog /> {showAdvanced ? "Hide" : "Show"} Advanced Options
+                </button>
+                
+                {showAdvanced && (
+                  <div className="options-panel">
+                    <h4>Memory Optimization Settings</h4>
+                    <p className="optimization-warning">
+                      For larger worlds, adjust these settings to reduce memory usage
+                    </p>
+                    
+                    <div className="option-row">
+                      <label>
+                        <input 
+                          type="checkbox" 
+                          checked={options.excludeTransparentBlocks}
+                          onChange={(e) => handleOptionChange('excludeTransparentBlocks', e.target.checked)}
+                        />
+                        Skip transparent blocks (air, glass)
+                      </label>
+                    </div>
+                    
+                    <div className="option-row">
+                      <label>
+                        <input 
+                          type="checkbox" 
+                          checked={options.excludeWaterBlocks}
+                          onChange={(e) => handleOptionChange('excludeWaterBlocks', e.target.checked)}
+                        />
+                        Skip water blocks
+                      </label>
+                    </div>
+                    
+                    <div className="option-row">
+                      <label>
+                        <input 
+                          type="checkbox" 
+                          checked={options.limitRegions}
+                          onChange={(e) => handleOptionChange('limitRegions', e.target.checked)}
+                        />
+                        Limit regions (load only central area)
+                      </label>
+                    </div>
+                    
+                    <div className="option-grid">
+                      <div className="option-col">
+                        <label>
+                          Max regions to load:
+                          <input 
+                            type="number" 
+                            min="1" 
+                            max="100"
+                            value={options.maxRegions}
+                            onChange={(e) => handleOptionChange('maxRegions', e.target.value)}
+                            disabled={!options.limitRegions}
+                          />
+                        </label>
+                        
+                        <label>
+                          Chunk sampling factor:
+                          <select
+                            value={options.chunkSamplingFactor}
+                            onChange={(e) => handleOptionChange('chunkSamplingFactor', e.target.value)}
+                          >
+                            <option value="1">Load all chunks (1:1)</option>
+                            <option value="2">Load every other chunk (1:2)</option>
+                            <option value="4">Load every 4th chunk (1:4)</option>
+                            <option value="8">Load every 8th chunk (1:8)</option>
+                          </select>
+                        </label>
+                      </div>
+                      
+                      <div className="option-col">
+                        <label>
+                          Memory limit (MB):
+                          <input 
+                            type="number" 
+                            min="100" 
+                            max="4000"
+                            value={options.memoryLimit}
+                            onChange={(e) => handleOptionChange('memoryLimit', e.target.value)}
+                          />
+                        </label>
+                        
+                        <label>
+                          Max blocks (millions):
+                          <input 
+                            type="number" 
+                            min="0" 
+                            max="20"
+                            step="0.5"
+                            value={options.maxBlocks / 1000000}
+                            onChange={(e) => handleOptionChange('maxBlocks', Number(e.target.value) * 1000000)}
+                          />
+                          <span className="input-note">0 = unlimited</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <div className="bounds-actions">
                 <button 
                   className="import-button"
@@ -635,115 +725,6 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
         </div>
       )}
       
-      {/* Only show advanced options in the initial state */}
-      {(!showSizeSelector && !uploading && !worldData) && (
-        <div className="advanced-options">
-          <button 
-            className="advanced-button" 
-            onClick={() => setShowAdvanced(!showAdvanced)}
-          >
-            <FaCog /> {showAdvanced ? "Hide" : "Show"} Advanced Options
-          </button>
-          
-          {showAdvanced && (
-            <div className="options-panel">
-              <h4>Memory Optimization Settings</h4>
-              <p className="optimization-warning">
-                For larger worlds, adjust these settings to reduce memory usage
-              </p>
-              
-              <div className="option-row">
-                <label>
-                  <input 
-                    type="checkbox" 
-                    checked={options.excludeTransparentBlocks}
-                    onChange={(e) => handleOptionChange('excludeTransparentBlocks', e.target.checked)}
-                  />
-                  Skip transparent blocks (air, glass)
-                </label>
-              </div>
-              
-              <div className="option-row">
-                <label>
-                  <input 
-                    type="checkbox" 
-                    checked={options.excludeWaterBlocks}
-                    onChange={(e) => handleOptionChange('excludeWaterBlocks', e.target.checked)}
-                  />
-                  Skip water blocks
-                </label>
-              </div>
-              
-              <div className="option-row">
-                <label>
-                  <input 
-                    type="checkbox" 
-                    checked={options.limitRegions}
-                    onChange={(e) => handleOptionChange('limitRegions', e.target.checked)}
-                  />
-                  Limit regions (load only central area)
-                </label>
-              </div>
-              
-              <div className="option-grid">
-                <div className="option-col">
-                  <label>
-                    Max regions to load:
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="100"
-                      value={options.maxRegions}
-                      onChange={(e) => handleOptionChange('maxRegions', e.target.value)}
-                      disabled={!options.limitRegions}
-                    />
-                  </label>
-                  
-                  <label>
-                    Chunk sampling factor:
-                    <select
-                      value={options.chunkSamplingFactor}
-                      onChange={(e) => handleOptionChange('chunkSamplingFactor', e.target.value)}
-                    >
-                      <option value="1">Load all chunks (1:1)</option>
-                      <option value="2">Load every other chunk (1:2)</option>
-                      <option value="4">Load every 4th chunk (1:4)</option>
-                      <option value="8">Load every 8th chunk (1:8)</option>
-                    </select>
-                  </label>
-                </div>
-                
-                <div className="option-col">
-                  <label>
-                    Memory limit (MB):
-                    <input 
-                      type="number" 
-                      min="100" 
-                      max="4000"
-                      value={options.memoryLimit}
-                      onChange={(e) => handleOptionChange('memoryLimit', e.target.value)}
-                    />
-                  </label>
-                  
-                  <label>
-                    Max blocks (millions):
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="20"
-                      step="0.5"
-                      value={options.maxBlocks / 1000000}
-                      onChange={(e) => handleOptionChange('maxBlocks', Number(e.target.value) * 1000000)}
-                    />
-                    <span className="input-note">0 = unlimited</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      
       <style jsx>{`
         .upload-step {
           padding: 20px;
@@ -752,46 +733,60 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           color: #e0e0e0;
         }
         
+        .step-description {
+          margin-bottom: 20px;
+          color: #aaa;
+          font-size: 16px;
+          line-height: 1.5;
+        }
+        
         .upload-area {
           border: 2px dashed #4a90e2;
-          border-radius: 8px;
-          padding: 40px;
+          border-radius: 12px;
+          padding: 50px;
           text-align: center;
           cursor: pointer;
-          margin: 20px 0;
+          margin: 30px 0;
           background-color: rgba(74, 144, 226, 0.1);
-          transition: background-color 0.2s;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         
         .upload-area:hover {
           background-color: rgba(74, 144, 226, 0.2);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
         }
         
         .upload-icon {
-          font-size: 50px;
+          font-size: 60px;
           color: #4a90e2;
           margin-bottom: 20px;
+          filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
         }
         
         .upload-progress {
           margin: 20px 0;
-          padding: 15px;
-          border-radius: 8px;
+          padding: 20px;
+          border-radius: 12px;
           background-color: #2a2a2a;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         
         .progress-bar {
           height: 20px;
           background-color: #444;
           border-radius: 10px;
-          margin: 10px 0;
+          margin: 15px 0;
           overflow: hidden;
+          box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         
         .progress-bar-inner {
           height: 100%;
-          background-color: #4a90e2;
+          background: linear-gradient(90deg, #3a7bd5, #4a90e2);
           transition: width 0.3s ease;
+          box-shadow: 0 0 5px rgba(74, 144, 226, 0.5);
         }
         
         .memory-usage {
@@ -806,11 +801,12 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           border-radius: 8px;
           margin: 10px 0;
           overflow: hidden;
+          box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
         }
         
         .memory-bar-inner {
           height: 100%;
-          background-color: #4a90e2;
+          background: linear-gradient(90deg, #4a90e2, #3a7bd5);
           transition: width 0.3s ease, background-color 0.3s ease;
         }
         
@@ -842,67 +838,77 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
           padding: 30px;
           background-color: rgba(76, 175, 80, 0.15);
           border: 1px solid #4caf50;
-          border-radius: 8px;
+          border-radius: 12px;
           text-align: center;
           animation: fadeIn 0.5s ease-in-out;
+          box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
         }
         
         .success-icon {
           font-size: 60px;
           color: #4caf50;
           margin-bottom: 20px;
+          filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
         }
         
         @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         
         .error-message {
           background-color: rgba(255, 99, 71, 0.2);
           border: 1px solid tomato;
-          border-radius: 4px;
-          padding: 10px 15px;
+          border-radius: 8px;
+          padding: 15px 20px;
           margin: 15px 0;
           color: tomato;
+          box-shadow: 0 4px 8px rgba(255, 99, 71, 0.2);
         }
         
         .advanced-options {
-          margin-top: 20px;
+          margin-top: 25px;
+          border-top: 1px solid #444;
+          padding-top: 20px;
         }
         
         .advanced-button {
           background: #333;
           color: #e0e0e0;
           border: none;
-          padding: 8px 15px;
-          border-radius: 4px;
+          padding: 10px 18px;
+          border-radius: 6px;
           cursor: pointer;
           display: flex;
           align-items: center;
-          gap: 8px;
-          transition: background-color 0.2s;
+          gap: 10px;
+          transition: all 0.2s ease;
+          font-weight: 500;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
         
         .advanced-button:hover {
           background: #444;
+          transform: translateY(-1px);
+          box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
         }
         
         .options-panel {
           margin-top: 15px;
-          padding: 15px;
+          padding: 20px;
           background-color: #2a2a2a;
-          border-radius: 4px;
+          border-radius: 8px;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         
         .optimization-warning {
           color: #ffcc00;
           margin-bottom: 15px;
-          font-size: 14px;
+          font-weight: 500;
         }
         
         .option-row {
-          margin-bottom: 10px;
+          margin-bottom: 15px;
         }
         
         .option-grid {
@@ -919,129 +925,142 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
         
         .option-col label {
           display: block;
-          margin-bottom: 15px;
+          margin-bottom: 20px;
         }
         
         input[type="number"], select {
           background-color: #333;
           border: 1px solid #555;
           color: #e0e0e0;
-          padding: 5px 10px;
-          border-radius: 4px;
-          margin-top: 5px;
+          padding: 8px 12px;
+          border-radius: 6px;
+          margin-top: 8px;
           width: 100%;
+          transition: all 0.2s ease;
+          box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        input[type="number"]:focus, select:focus {
+          border-color: #4a90e2;
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.3);
         }
         
         .input-note {
           display: block;
           font-size: 12px;
           color: #aaa;
-          margin-top: 3px;
+          margin-top: 5px;
         }
         
         /* World size selector styles */
         .world-size-selector {
           margin: 20px 0;
-          padding: 20px;
+          padding: 25px;
           background-color: #2a2a2a;
-          border-radius: 8px;
+          border-radius: 12px;
+          box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
         }
         
         .world-info-panel {
           display: flex;
-          flex-wrap: wrap;
-          gap: 20px;
-          margin-top: 15px;
+          flex-direction: column;
+          gap: 15px;
         }
         
-        .world-stats {
-          flex: 1;
-          min-width: 200px;
-        }
-        
-        .warning-box {
-          margin-top: 15px;
-          padding: 10px;
-          background-color: rgba(255, 152, 0, 0.1);
-          border: 1px solid #ff9800;
-          border-radius: 4px;
-          color: #ff9800;
-        }
-        
-        .bounds-selector {
-          flex: 2;
-          min-width: 300px;
+        .world-map-container {
+          margin-top: 20px;
         }
         
         .bounds-inputs {
           display: flex;
-          flex-wrap: wrap;
+          flex-direction: column;
           gap: 15px;
-          margin-top: 15px;
+          margin-top: 20px;
+          padding: 20px;
+          background-color: #333;
+          border-radius: 8px;
         }
         
         .bounds-group {
-          flex: 1;
-          min-width: 200px;
+          margin-bottom: 10px;
         }
         
         .bounds-input-row {
           display: flex;
           align-items: center;
           gap: 10px;
-          margin-top: 5px;
+          margin-top: 8px;
+        }
+        
+        .bounds-input-row span {
+          color: #aaa;
         }
         
         .bounds-input-row input {
           flex: 1;
-          padding: 8px;
-          background-color: #333;
-          border: 1px solid #555;
-          color: #e0e0e0;
-          border-radius: 4px;
+          min-width: 0;
         }
         
         .selection-size-info {
           margin-top: 20px;
-          padding: 10px;
+          padding: 15px;
           background-color: #333;
-          border-radius: 4px;
+          border-radius: 8px;
+          border-left: 4px solid #4a90e2;
         }
         
         .bounds-actions {
-          margin-top: 20px;
           display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
+          gap: 15px;
+          margin-top: 25px;
+          justify-content: center;
         }
         
-        .bounds-actions button {
-          padding: 10px 15px;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
+        .import-button, .cancel-button {
+          padding: 12px 24px;
+          border-radius: 8px;
+          font-weight: 500;
           display: flex;
           align-items: center;
-          gap: 8px;
-          transition: background-color 0.2s;
+          gap: 10px;
+          transition: all 0.2s ease;
+          border: none;
+          cursor: pointer;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         
         .import-button {
-          background-color: #4caf50;
+          background-color: #4a90e2;
           color: white;
         }
         
         .import-button:hover {
-          background-color: #388e3c;
+          background-color: #3a7bd5;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
         }
         
         .cancel-button {
-          background-color: #f44336;
-          color: white;
+          background-color: #444;
+          color: #e0e0e0;
         }
         
         .cancel-button:hover {
-          background-color: #d32f2f;
+          background-color: #555;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+          .option-grid {
+            flex-direction: column;
+          }
+          
+          .bounds-actions {
+            flex-direction: column;
+          }
         }
       `}</style>
     </div>

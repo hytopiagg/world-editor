@@ -154,6 +154,7 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
               className="primary-button" 
               onClick={handleNextStep}
               disabled={!canProceed()}
+              style={{ display: currentStep === 0 ? 'none' : 'block' }}
             >
               Next
             </button>
