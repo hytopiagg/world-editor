@@ -18,6 +18,16 @@ const customTextureLibraryStyles = `
     color: #2196f3;
   }
   
+  .texture-instructions {
+    color: #ccc;
+    margin-bottom: 15px;
+    line-height: 1.5;
+  }
+  
+  .texture-instructions strong {
+    color: #4a90e2;
+  }
+  
   .texture-library-container {
     margin-top: 15px;
   }
@@ -74,23 +84,72 @@ const customTextureLibraryStyles = `
     justify-content: center;
     min-height: 120px;
     cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
   }
   
-  .texture-drop-area:hover, .texture-drop-area.drag-over {
-    background-color: #444;
-    border-color: #2196f3;
+  .texture-drop-area:hover {
+    background-color: #3a3a3a;
+    border-color: #4a90e2;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .texture-drop-area.drag-over {
+    background-color: #2c3e50;
+    border-color: #3498db;
+    box-shadow: 0 0 15px rgba(52, 152, 219, 0.5);
+    transform: scale(1.02);
+  }
+  
+  .texture-drop-area.drag-over::after {
+    content: 'Drop to Upload';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(52, 152, 219, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
   
   .drop-icon {
     font-size: 32px;
     color: #666;
     margin-bottom: 5px;
+    transition: color 0.3s ease;
+  }
+  
+  .texture-drop-area:hover .drop-icon {
+    color: #4a90e2;
   }
   
   .drop-text {
     color: #ccc;
     font-size: 14px;
+    transition: color 0.3s ease;
+  }
+  
+  .texture-drop-area:hover .drop-text {
+    color: #fff;
+  }
+  
+  .drop-subtext {
+    color: #999;
+    font-size: 12px;
+    margin-top: 5px;
+    text-align: center;
+  }
+  
+  .texture-drop-area:hover .drop-subtext {
+    color: #ccc;
   }
   
   .custom-texture-selector {
@@ -286,39 +345,13 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
   
   // Set up drag and drop handlers
   useEffect(() => {
-    const dropArea = dropAreaRef.current;
-    if (!dropArea) return;
+    // Note: We're now using inline event handlers on the drop area element
+    // This is a more reliable approach than adding event listeners here
+    // The inline handlers are added directly to the JSX element
     
-    const handleDragOver = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropArea.classList.add('drag-over');
-    };
-    
-    const handleDragLeave = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropArea.classList.remove('drag-over');
-    };
-    
-    const handleDrop = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropArea.classList.remove('drag-over');
-      
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        handleCustomTextureUpload(Array.from(e.dataTransfer.files));
-      }
-    };
-    
-    dropArea.addEventListener('dragover', handleDragOver);
-    dropArea.addEventListener('dragleave', handleDragLeave);
-    dropArea.addEventListener('drop', handleDrop);
-    
+    // We'll keep this useEffect for any additional setup or cleanup needed
     return () => {
-      dropArea.removeEventListener('dragover', handleDragOver);
-      dropArea.removeEventListener('dragleave', handleDragLeave);
-      dropArea.removeEventListener('drop', handleDrop);
+      // Any cleanup if needed
     };
   }, []);
   
@@ -446,9 +479,16 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
   const handleCustomTextureUpload = (files) => {
     console.log("Processing uploaded files:", files);
     
+    if (!files || files.length === 0) {
+      console.warn("No files provided to handleCustomTextureUpload");
+      return;
+    }
+    
     // Process each file
     files.forEach(file => {
       if (file.type.startsWith('image/')) {
+        console.log(`Processing image file: ${file.name} (${file.type}, ${file.size} bytes)`);
+        
         const reader = new FileReader();
         
         reader.onload = (e) => {
@@ -459,52 +499,85 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
           
           console.log(`Processing custom texture: ${blockName}`);
           
-          // Process the custom block
-          processCustomBlock({
-            name: blockName,
-            textureUri: textureUri
-          });
-          
-          // Wait for the custom block to be processed
-          setTimeout(() => {
-            // Get the latest custom blocks
-            const latestCustomBlocks = getCustomBlocks();
-            
-            console.log("Updated custom blocks:", latestCustomBlocks);
-            
-            // Update our custom textures state
-            setCustomTextures(latestCustomBlocks.map(block => ({
-              id: block.id,
-              name: block.name,
-              textureUri: block.textureUri
-            })));
-            
-            // Dispatch a custom event to notify that custom blocks have been updated
-            const event = new CustomEvent('custom-blocks-updated', { 
-              detail: { blocks: latestCustomBlocks } 
+          try {
+            // Process the custom block
+            processCustomBlock({
+              name: blockName,
+              textureUri: textureUri
             });
-            window.dispatchEvent(event);
-          }, 300);
+            
+            // Wait for the custom block to be processed
+            setTimeout(() => {
+              try {
+                // Get the latest custom blocks
+                const latestCustomBlocks = getCustomBlocks();
+                
+                console.log("Updated custom blocks:", latestCustomBlocks);
+                
+                // Update our custom textures state
+                setCustomTextures(latestCustomBlocks.map(block => ({
+                  id: block.id,
+                  name: block.name,
+                  textureUri: block.textureUri
+                })));
+                
+                // Dispatch a custom event to notify that custom blocks have been updated
+                const event = new CustomEvent('custom-blocks-updated', { 
+                  detail: { blocks: latestCustomBlocks } 
+                });
+                window.dispatchEvent(event);
+              } catch (error) {
+                console.error("Error updating custom textures:", error);
+              }
+            }, 300);
+          } catch (error) {
+            console.error("Error processing custom block:", error);
+          }
+        };
+        
+        reader.onerror = (error) => {
+          console.error(`Error reading file ${file.name}:`, error);
         };
         
         reader.readAsDataURL(file);
       } else {
-        console.warn(`File ${file.name} is not an image and will be skipped.`);
+        console.warn(`File ${file.name} is not an image (type: ${file.type}) and will be skipped.`);
       }
     });
   };
   
   const handleBrowseClick = () => {
     if (fileInputRef.current) {
+      console.log("Browse button clicked, opening file dialog");
       fileInputRef.current.click();
+    } else {
+      console.error("File input reference is not available");
     }
   };
 
   const handleFileInputChange = (e) => {
+    console.log("File input change event triggered");
+    
+    if (!e.target) {
+      console.error("Event target is null");
+      return;
+    }
+    
     if (e.target.files && e.target.files.length > 0) {
-      console.log("Files selected via browse:", e.target.files);
-      handleCustomTextureUpload(Array.from(e.target.files));
-      e.target.value = ''; // Reset input to allow selecting the same file again
+      console.log(`Files selected via browse: ${e.target.files.length} files`);
+      
+      try {
+        const filesArray = Array.from(e.target.files);
+        console.log("Files converted to array:", filesArray.map(f => f.name));
+        handleCustomTextureUpload(filesArray);
+      } catch (error) {
+        console.error("Error processing selected files:", error);
+      }
+      
+      // Reset input to allow selecting the same file again
+      e.target.value = '';
+    } else {
+      console.log("No files selected or file selection canceled");
     }
   };
   
@@ -614,7 +687,10 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
       {/* Custom Texture Library */}
       <div className="custom-texture-library">
         <h4>Custom Texture Library</h4>
-        <p>Drag and drop image files here to add custom textures, or click Browse to select files.</p>
+        <p className="texture-instructions">
+          Add your own textures to use for Minecraft blocks. 
+          <strong> Drag and drop image files</strong> here or click the "Add Texture" box to browse.
+        </p>
         
         <div className="texture-library-container">
           <div className="texture-grid">
@@ -633,9 +709,28 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
               ref={dropAreaRef}
               className="texture-drop-area"
               onClick={handleBrowseClick}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.add('drag-over');
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('drag-over');
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('drag-over');
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  handleCustomTextureUpload(Array.from(e.dataTransfer.files));
+                }
+              }}
             >
               <div className="drop-icon">+</div>
               <div className="drop-text">Add Texture</div>
+              <div className="drop-subtext">Drag & drop or click to browse</div>
               <input
                 ref={fileInputRef}
                 type="file"

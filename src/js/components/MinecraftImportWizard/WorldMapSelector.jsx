@@ -5,12 +5,12 @@ import { FaExpand, FaCompress, FaHome } from 'react-icons/fa';
  * A simplified map-like component for selecting a rectangular region of a Minecraft world
  * 
  * @param {Object} props 
- * @param {Object} props.worldBounds - The overall bounds of the world { minX, maxX, minZ, maxZ }
+ * @param {Object} props.bounds - The overall bounds of the world { minX, maxX, minZ, maxZ }
  * @param {Object} props.selectedBounds - The currently selected bounds { minX, maxX, minZ, maxZ }
  * @param {Function} props.onBoundsChange - Callback when bounds are changed
  * @param {Array} props.regionCoords - Array of region coordinates [{ x, z }, ...]
  */
-const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionCoords = [] }) => {
+const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords = [] }) => {
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const selectionRef = useRef(null);
@@ -22,21 +22,21 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
   
   // Calculate display bounds
   const getDisplayBounds = () => {
-    if (!worldBounds || !worldBounds.minX || !worldBounds.maxX || 
-        !worldBounds.minZ || !worldBounds.maxZ) {
+    if (!bounds || !bounds.minX || !bounds.maxX || 
+        !bounds.minZ || !bounds.maxZ) {
       return { minX: -256, maxX: 256, minZ: -256, maxZ: 256 };
     }
     
     // Add some padding around the world bounds
     const padding = 0.1; // 10% padding
-    const worldWidth = worldBounds.maxX - worldBounds.minX;
-    const worldDepth = worldBounds.maxZ - worldBounds.minZ;
+    const worldWidth = bounds.maxX - bounds.minX;
+    const worldDepth = bounds.maxZ - bounds.minZ;
     
     return {
-      minX: worldBounds.minX - worldWidth * padding,
-      maxX: worldBounds.maxX + worldWidth * padding,
-      minZ: worldBounds.minZ - worldDepth * padding,
-      maxZ: worldBounds.maxZ + worldDepth * padding
+      minX: bounds.minX - worldWidth * padding,
+      maxX: bounds.maxX + worldWidth * padding,
+      minZ: bounds.minZ - worldDepth * padding,
+      maxZ: bounds.maxZ + worldDepth * padding
     };
   };
   
@@ -373,10 +373,10 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
   
   // Render the world boundaries
   const renderWorldBoundaries = () => {
-    if (!worldBounds) return null;
+    if (!bounds) return null;
     
-    const topLeft = worldToSvg(worldBounds.minX, worldBounds.minZ);
-    const bottomRight = worldToSvg(worldBounds.maxX, worldBounds.maxZ);
+    const topLeft = worldToSvg(bounds.minX, bounds.minZ);
+    const bottomRight = worldToSvg(bounds.maxX, bounds.maxZ);
     
     const width = bottomRight.x - topLeft.x;
     const height = bottomRight.y - topLeft.y;
@@ -390,7 +390,7 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
           width: `${width}px`,
           height: `${height}px`
         }}
-        title={`World Boundary: ${worldBounds.maxX - worldBounds.minX + 1} x ${worldBounds.maxZ - worldBounds.minZ + 1} blocks`}
+        title={`World Boundary: ${bounds.maxX - bounds.minX + 1} x ${bounds.maxZ - bounds.minZ + 1} blocks`}
       />
     );
   };
@@ -499,7 +499,6 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
         
         .map-container {
           width: 100%;
-          height: 400px;
           position: relative;
           background-color: #1e1e1e;
           background-image: 
@@ -508,6 +507,19 @@ const WorldMapSelector = ({ worldBounds, selectedBounds, onBoundsChange, regionC
           background-size: 20px 20px;
           cursor: grab;
           overflow: hidden;
+          /* Create a square aspect ratio */
+          aspect-ratio: 1 / 1;
+          max-height: 500px;
+          max-width: 500px;
+          margin: 0 auto;
+        }
+        
+        /* Fallback for browsers that don't support aspect-ratio */
+        @supports not (aspect-ratio: 1 / 1) {
+          .map-container {
+            height: 0;
+            padding-bottom: 100%; /* Creates a 1:1 aspect ratio */
+          }
         }
         
         .map-container:active {

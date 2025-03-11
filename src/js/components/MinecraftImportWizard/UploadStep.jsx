@@ -421,6 +421,29 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
   
   // Update selected bounds
   const handleBoundsChange = (bounds) => {
+    // Ensure the X and Z dimensions are equal for a square selection
+    const xSize = bounds.maxX - bounds.minX;
+    const zSize = bounds.maxZ - bounds.minZ;
+    
+    // If the sizes are different, adjust to make them equal
+    if (xSize !== zSize) {
+      // Use the larger dimension as the target size
+      const targetSize = Math.max(xSize, zSize);
+      
+      // Adjust the smaller dimension to match
+      if (xSize < zSize) {
+        // Expand X dimension
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        bounds.minX = Math.floor(centerX - targetSize / 2);
+        bounds.maxX = Math.floor(centerX + targetSize / 2);
+      } else {
+        // Expand Z dimension
+        const centerZ = (bounds.minZ + bounds.maxZ) / 2;
+        bounds.minZ = Math.floor(centerZ - targetSize / 2);
+        bounds.maxZ = Math.floor(centerZ + targetSize / 2);
+      }
+    }
+    
     setSelectedBounds(bounds);
   };
   
@@ -970,6 +993,9 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep }) => {
         
         .world-map-container {
           margin-top: 20px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
         }
         
         .bounds-inputs {
