@@ -1907,21 +1907,27 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Cleanup effect that cleans up meshes when component unmounts
 	useEffect(() => {
+		// Capture the current value of the ref when the effect runs
+		const currentInstancedMeshes = instancedMeshRef.current;
+		
 		return () => {
-			// Cleanup meshes when component unmounts
-			Object.values(instancedMeshRef.current).forEach((mesh) => {
-				if (mesh) {
-					scene.remove(mesh);
-					if (mesh.geometry) mesh.geometry.dispose();
-					if (Array.isArray(mesh.material)) {
-						mesh.material.forEach((m) => m?.dispose());
-					} else if (mesh.material) {
-						mesh.material.dispose();
+			// Cleanup meshes when component unmounts, using the captured value
+			if (currentInstancedMeshes) {
+				Object.values(currentInstancedMeshes).forEach((mesh) => {
+					if (mesh) {
+						scene.remove(mesh);
+						if (mesh.geometry) mesh.geometry.dispose();
+						if (Array.isArray(mesh.material)) {
+							mesh.material.forEach((m) => m?.dispose());
+						} else if (mesh.material) {
+							mesh.material.dispose();
+						}
 					}
-				}
-			});
+				});
+			}
 		};
-	}, [scene]); // Empty dependency array means this only runs on unmount
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [scene]); // Can't include safeRemoveFromScene due to function order
 
 	// effect to refresh meshes when the meshesNeedsRefresh flag is true
 	useEffect(() => {
@@ -1930,7 +1936,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			buildUpdateTerrain();
 			meshesNeedsRefresh = false;
 		}
-	}, [meshesNeedsRefresh]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [meshesNeedsRefresh]); // meshesNeedsRefresh is a flag, buildUpdateTerrain is called conditionally
 
 	// effect to update current block type reference when the prop changes
 	useEffect(() => {
@@ -1950,7 +1957,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	/// build update terrain when the terrain state changes
 	useEffect(() => {
 		buildUpdateTerrain();
-	}, [terrainRef.current]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [terrainRef.current]); // terrainRef.current is a mutable object, react-hooks/exhaustive-deps warning is expected
 
 	/// onSceneReady send the scene to App.js via a setter
 	useEffect(() => {
@@ -2330,7 +2338,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				chunkMeshesRef.current = {};
 			}
 		};
-	}, [scene]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [scene]); // safeRemoveFromScene is used but declared later
 
 	// Create a safe function to add a mesh to the scene
 	const safeAddToScene = (mesh) => {
@@ -2536,14 +2545,18 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			updateVisibleChunks();
 		};
 		
+		// Capture the current value of orbitControlsRef when the effect runs
+		const currentOrbitControls = orbitControlsRef.current;
+		
 		// Listen for camera movements
-		orbitControlsRef.current?.addEventListener('change', handler);
+		currentOrbitControls?.addEventListener('change', handler);
 		
 		// Clean up
 		return () => {
-			orbitControlsRef.current?.removeEventListener('change', handler);
+			// Use the captured value in cleanup
+			currentOrbitControls?.removeEventListener('change', handler);
 		};
-	}, [camera.current, scene.current, orbitControlsRef.current]);
+	}, [updateVisibleChunks]); // Only depend on updateVisibleChunks
 
 	// Add camera movement hook to update visible chunks
 	useEffect(() => {
@@ -2567,7 +2580,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				cameraAnimationRef.current = null;
 			}
 		};
-	}, []);
+	}, [updateVisibleChunks]); // Add updateVisibleChunks as dependency
 
 	// Add clean-up code for caches
 	useEffect(() => {

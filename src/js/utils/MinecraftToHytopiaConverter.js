@@ -212,7 +212,7 @@ export class MinecraftToHytopiaConverter {
     let count = 0;
     for (const key in blockSource) {
       if (key.startsWith('section:')) {
-        const [prefix, x, y, z, width, height, depth] = key.split(':')[1].split(',');
+        const [width, height, depth] = key.split(':')[1].split(',');
         count += parseInt(width) * parseInt(height) * parseInt(depth);
       } else {
         count++;
