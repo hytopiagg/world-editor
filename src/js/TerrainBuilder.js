@@ -556,7 +556,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				updateDebugInfo();
 				
 				// Process chunks in batches for smoother loading
-				const BATCH_SIZE = 5; // Number of chunks to process in each batch
+				const BATCH_SIZE = 5;
 				
 				const processBatch = (startIndex) => {
 					// If we're done, finish up
@@ -2016,6 +2016,81 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				console.error("Error reloading terrain from DB:", err);
 			}
 		},
+		
+		/**
+		 * Load large terrain data incrementally to avoid UI freezes
+		 * Processes blocks in batches and updates the scene after each batch
+		 */
+		loadLargeTerrainIncrementally(blocks) {
+			// Start with empty terrain
+			terrainRef.current = {};
+			
+			const MAX_BLOCKS_PER_BATCH = 5000;
+			const allBlockEntries = Object.entries(blocks);
+			const totalBatches = Math.ceil(allBlockEntries.length / MAX_BLOCKS_PER_BATCH);
+			
+			console.log(`Loading large terrain with ${allBlockEntries.length} blocks in ${totalBatches} batches`);
+			
+			// Create a loading status element
+			let statusElement = document.getElementById('terrain-loading-status');
+			if (!statusElement) {
+				statusElement = document.createElement('div');
+				statusElement.id = 'terrain-loading-status';
+				statusElement.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.8); color:white; padding:20px; border-radius:10px; z-index:1000; text-align:center;';
+				document.body.appendChild(statusElement);
+			}
+			
+			// Function to process one batch
+			const processBatch = (startIndex) => {
+				const endIndex = Math.min(startIndex + MAX_BLOCKS_PER_BATCH, allBlockEntries.length);
+				const batchEntries = allBlockEntries.slice(startIndex, endIndex);
+				const currentBatch = Math.floor(startIndex / MAX_BLOCKS_PER_BATCH) + 1;
+				
+				// Update loading status
+				statusElement.innerHTML = `Loading terrain...<br>${startIndex} of ${allBlockEntries.length} blocks<br>Batch ${currentBatch} of ${totalBatches}`;
+				
+				// Add this batch of blocks to the terrain
+				batchEntries.forEach(([key, value]) => {
+					terrainRef.current[key] = value;
+				});
+				
+				// Update the terrain display for each batch
+				// But update the scene only on every 5th batch or on the final one
+				// to avoid too much re-rendering
+				const shouldUpdateScene = (currentBatch % 5 === 0) || (endIndex >= allBlockEntries.length);
+				
+				if (shouldUpdateScene) {
+					buildUpdateTerrain();
+				}
+				
+				// Move to next batch or finish
+				if (endIndex < allBlockEntries.length) {
+					// Continue with next batch after UI has time to update
+					setTimeout(() => {
+						processBatch(endIndex);
+					}, 50); // 50ms between batches
+				} else {
+					// Final update when all batches are processed
+					buildUpdateTerrain();
+					
+					// Save all data after fully loaded
+					DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current)
+						.then(() => {
+							console.log("Terrain data saved to database");
+							// Remove loading status element
+							statusElement.remove();
+						})
+						.catch(error => console.error("Error saving terrain:", error));
+				}
+			};
+			
+			// Start processing the first batch after a brief delay
+			// to let the UI update after the import dialog closes
+			setTimeout(() => {
+				processBatch(0);
+			}, 100);
+		},
+		
 		// Add method to activate a tool
 		activateTool: (toolName) => {
 			if (toolManagerRef.current) {

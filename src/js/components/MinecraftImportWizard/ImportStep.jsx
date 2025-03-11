@@ -35,7 +35,7 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
     setError(null);
     
     try {
-      // Process any custom textures first
+      // Process any custom textures first (in parallel for efficiency)
       const customMappings = Object.entries(blockMappings)
         .filter(([_, mapping]) => mapping.action === 'custom')
         .map(([blockType, mapping]) => ({
@@ -48,8 +48,8 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
       if (customMappings.length > 0) {
         console.log("Processing custom textures:", customMappings);
         
-        // Process each custom texture
-        for (const mapping of customMappings) {
+        // Process custom textures in parallel for better performance
+        await Promise.all(customMappings.map(async (mapping) => {
           // Only process if it has a texture URI
           if (mapping.textureUri) {
             // Check if this custom texture already exists
@@ -71,10 +71,10 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
               console.log(`Custom texture already exists for ${mapping.blockType}`);
             }
           }
-        }
+        }));
       }
       
-      // Create converter
+      // Create converter with optimized settings
       const converter = new MinecraftToHytopiaConverter(
         worldData,
         worldData.selectedRegion,
@@ -82,10 +82,20 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
       );
       
       // Set progress callback
-      converter.setProgressCallback(setProgress);
+      converter.setProgressCallback((percent) => {
+        // Only update UI when progress changes significantly
+        if (percent - progress >= 2 || percent === 100) {
+          setProgress(percent);
+        }
+      });
+      
+      // Display a console time log for performance monitoring
+      console.time('Minecraft map conversion');
       
       // Start conversion
       const conversionResult = await converter.convert();
+      
+      console.timeEnd('Minecraft map conversion');
       
       // Set result
       setResult(conversionResult);

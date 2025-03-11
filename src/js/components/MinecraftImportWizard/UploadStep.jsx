@@ -313,13 +313,13 @@ const UploadStep = ({ onWorldLoaded }) => {
       {showSizeSelector && worldSizeInfo && (
         <div className="world-size-selector">
           <h4>World Size Information</h4>
-          <div className="world-info-panel">
+		  <div className="world-info-panel">
             <div className="world-stats">
               <p><strong>World Name:</strong> {worldSizeInfo.worldFolder || 'Unknown'}</p>
               <p><strong>Size:</strong> {worldSizeInfo.size.width} x {worldSizeInfo.size.height} x {worldSizeInfo.size.depth} blocks</p>
               <p><strong>Regions:</strong> {worldSizeInfo.size.regionCount} ({worldSizeInfo.size.regionWidth}x{worldSizeInfo.size.regionDepth})</p>
               <p><strong>Estimated Size:</strong> {worldSizeInfo.size.approximateSizeMB} MB</p>
-              
+              <p><strong>Max Size = 500 x 500</strong></p>
               {worldSizeInfo.size.width * worldSizeInfo.size.depth > 5000 * 5000 && (
                 <div className="warning-box">
                   <p><strong>Warning:</strong> This is a very large world. Importing the entire map may cause performance issues.</p>
