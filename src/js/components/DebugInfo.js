@@ -5,6 +5,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
   const [instancingEnabled, setInstancingEnabled] = useState(true);
   const [greedyMeshingEnabled, setGreedyMeshingEnabled] = useState(true);
   const [selectionDistance, setSelectionDistance] = useState(64); // Default to 64
+  const [viewDistance, setViewDistance] = useState(64); // Default to 64
   const [fps, setFps] = useState(0);
   const [frameTime, setFrameTime] = useState(0);
   const [maxFrameTime, setMaxFrameTime] = useState(0);
@@ -25,6 +26,11 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
       // Initialize selection distance if available
       if (terrainBuilderRef.current.getSelectionDistance) {
         setSelectionDistance(terrainBuilderRef.current.getSelectionDistance());
+      }
+      
+      // Initialize view distance if available
+      if (terrainBuilderRef.current.getViewDistance) {
+        setViewDistance(terrainBuilderRef.current.getViewDistance());
       }
     }
   }, [terrainBuilderRef]);
@@ -102,6 +108,26 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
     }
   };
   
+  const handleViewDistanceChange = (e) => {
+    const newValue = parseInt(e.target.value);
+    setViewDistance(newValue);
+    
+    // Clear any previous update timeout
+    if (handleViewDistanceChange.timeoutId) {
+      clearTimeout(handleViewDistanceChange.timeoutId);
+    }
+    
+    // Update the UI immediately but debounce the actual terrain update
+    handleViewDistanceChange.timeoutId = setTimeout(() => {
+      if (terrainBuilderRef && terrainBuilderRef.current && terrainBuilderRef.current.setViewDistance) {
+        terrainBuilderRef.current.setViewDistance(newValue);
+      }
+    }, 50); // Short delay for smoother slider movement
+  };
+  
+  // Initialize the timeout property
+  handleViewDistanceChange.timeoutId = null;
+  
   const togglePerformanceDetails = () => {
     setShowPerformanceDetails(!showPerformanceDetails);
   };
@@ -165,6 +191,14 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
       </div>
       
       <div className="single-line"></div>
+      <div className="debug-row">
+        <span className="debug-label">View Distance:</span>
+        <span className="debug-value">
+          <b>{viewDistance}</b> blocks
+        </span>
+      </div>
+      
+      <div className="single-line"></div>
       <div className="debug-row performance-settings">
         <span className="debug-label" onClick={togglePerformanceDetails} style={{cursor: 'pointer'}}>
           Performance {showPerformanceDetails ? '▼' : '►'}
@@ -198,6 +232,19 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
                 step="8"
                 value={selectionDistance}
                 onChange={handleSelectionDistanceChange}
+                className="range-slider"
+              />
+            </div>
+            
+            <div className="slider-container">
+              <span className="slider-label">View Distance: {viewDistance}</span>
+              <input
+                type="range"
+                min="32"
+                max="256"
+                step="16"
+                value={viewDistance}
+                onChange={handleViewDistanceChange}
                 className="range-slider"
               />
             </div>
