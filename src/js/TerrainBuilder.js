@@ -2688,6 +2688,35 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 							spatialHashUpdateQueuedRef.current = false;
 						}, 2000);
 						
+						// Apply a temporary boost to chunk loading speed
+						const tempBoostChunkLoading = () => {
+							console.log("Applying temporary boost to chunk loading speed");
+							
+							// Store original values
+							const originalMaxConcurrent = TEXTURE_ATLAS_SETTINGS.maxConcurrentChunkRebuilds;
+							const originalTimePerFrame = 20; // From processChunkQueue
+							
+							// Apply boosted values (even higher than our optimized settings)
+							TEXTURE_ATLAS_SETTINGS.maxConcurrentChunkRebuilds = 12;
+							if (chunkLoadManager.current) {
+								chunkLoadManager.current.maxConcurrentLoads = 12;
+								chunkLoadManager.current.processingTimeLimit = 30;
+							}
+							
+							// Reset after 10 seconds
+							setTimeout(() => {
+								console.log("Reverting chunk loading speed to normal settings");
+								TEXTURE_ATLAS_SETTINGS.maxConcurrentChunkRebuilds = originalMaxConcurrent;
+								if (chunkLoadManager.current) {
+									chunkLoadManager.current.maxConcurrentLoads = originalMaxConcurrent;
+									chunkLoadManager.current.processingTimeLimit = 25;
+								}
+							}, 10000);
+						};
+						
+						// Apply the temporary boost
+						tempBoostChunkLoading();
+						
 						loadingManager.hideLoading();
 						resolve(true);
 					} else {
@@ -4409,11 +4438,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		const startTime = performance.now();
-		const maxTimePerFrame = 10; // Max ms to spend processing chunks per frame
+		const maxTimePerFrame = 20; // Increased from 10ms to allow more processing time
 		
 		// Process a limited number of chunks per frame
 		let chunksProcessed = 0;
-		const maxChunksPerFrame = 3; // Limit chunks per frame to prevent render stuttering
+		const maxChunksPerFrame = 8; // Increased from 3 to process more chunks per frame
 		
 		while (chunkUpdateQueueRef.current.length > 0 && 
 				(performance.now() - startTime < maxTimePerFrame) &&
@@ -4627,17 +4656,17 @@ const TEXTURE_ATLAS_SETTINGS = {
   // Whether to use batched chunk rebuilding (smooth but can cause stutters on large maps)
   batchedChunkRebuilding: true,
   
-  // Maximum number of concurrent chunk rebuilds (lower = smoother but slower)
-  maxConcurrentChunkRebuilds: 4,
+  // Maximum number of concurrent chunk rebuilds (higher = faster initial loading)
+  maxConcurrentChunkRebuilds: 8, // Increased from 4
   
   // Whether to prioritize chunks by distance (helps with camera movement fluidity)
   prioritizeChunksByDistance: true,
   
   // Whether to delay chunk rebuilding when atlas is initialized (reduces initial stutter)
-  delayInitialRebuild: true,
+  delayInitialRebuild: false, // Changed from true to load chunks immediately
   
   // Initial delay before starting chunk rebuilds (ms)
-  initialRebuildDelay: 100,
+  initialRebuildDelay: 0, // Reduced from 100ms
   
   // Whether to use texture atlas at all (disable for very low-end devices)
   useTextureAtlas: false

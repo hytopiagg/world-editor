@@ -10,7 +10,7 @@ const Mesh = THREE.Mesh;
 export class TextureAtlas {
   constructor() {
     this.atlas = null;           // The THREE.Texture for the atlas
-    this.atlasSize = 2048;       // Size of atlas texture (power of 2)
+    this.atlasSize = 1024;       // Size of atlas texture (power of 2)
     this.blockSize = 64;         // Size of individual block texture
     this.padding = 1;            // Padding between textures
     this.gridSize = Math.floor(this.atlasSize / (this.blockSize + this.padding * 2)); // Number of textures per row/column
@@ -1058,13 +1058,13 @@ export class ChunkLoadManager {
   constructor(onChunkLoaded) {
     this.loadQueue = [];
     this.processingChunks = new Set();
-    this.maxConcurrentLoads = 4;
+    this.maxConcurrentLoads = 8; // Increased from 4 for faster loading
     this.onChunkLoaded = onChunkLoaded;
     this.isProcessing = false;
     this.pauseProcessing = false;
     this.processStartTime = 0;
     this.chunkProcessTime = 0; // Average time to process a chunk (ms)
-    this.processingTimeLimit = 16; // Max time to spend processing chunks per frame (ms)
+    this.processingTimeLimit = 25; // Increased from 16ms to allow more processing time
   }
   
   // Add a chunk to the load queue
