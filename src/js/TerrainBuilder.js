@@ -354,221 +354,309 @@ const optimizeRenderer = (gl) => {
 // Add this class definition near the top of the file, outside the component
 class SpatialHashGrid {
 	constructor() {
-		// Use a sparse 3D grid for better performance
-		// First level: x coordinate (divided by chunk size)
-		// Second level: y coordinate (divided by chunk size)
-		// Third level: z coordinate (divided by chunk size)
-		// Fourth level: actual blocks within the chunk
+		// Use a Map for better performance with large datasets
 		this.grid = new Map();
 		this.size = 0;
-		this.chunkSize = 16; // Use smaller chunks for the spatial hash
+		
+		// Cache for chunk coordinates to avoid recalculating
+		this.chunkCoordCache = new Map();
+		
+		// Chunk size for spatial partitioning
+		this.chunkSize = 16;
+		
+		// Performance tracking
+		this.lastOperationTime = 0;
 	}
 	
-	// Get chunk coordinates for a block
+	/**
+	 * Get chunk coordinates from world coordinates
+	 * @param {number} x - World X coordinate
+	 * @param {number} y - World Y coordinate
+	 * @param {number} z - World Z coordinate
+	 * @returns {Object} - Chunk coordinates
+	 */
 	getChunkCoords(x, y, z) {
-		return [
-			Math.floor(x / this.chunkSize),
-			Math.floor(y / this.chunkSize),
-			Math.floor(z / this.chunkSize)
-		];
+		// Convert to numbers to ensure proper division
+		x = Number(x);
+		y = Number(y);
+		z = Number(z);
+		
+		return {
+			cx: Math.floor(x / this.chunkSize),
+			cy: Math.floor(y / this.chunkSize),
+			cz: Math.floor(z / this.chunkSize)
+		};
 	}
 	
-	// Get local coordinates within a chunk
+	/**
+	 * Get local coordinates within a chunk
+	 * @param {number} x - World X coordinate
+	 * @param {number} y - World Y coordinate
+	 * @param {number} z - World Z coordinate
+	 * @returns {Object} - Local coordinates
+	 */
 	getLocalCoords(x, y, z) {
-		return [
-			x % this.chunkSize,
-			y % this.chunkSize,
-			z % this.chunkSize
-		];
+		// Convert to numbers and get modulo for local coordinates
+		x = Number(x);
+		y = Number(y);
+		z = Number(z);
+		
+		return {
+			lx: ((x % this.chunkSize) + this.chunkSize) % this.chunkSize,
+			ly: ((y % this.chunkSize) + this.chunkSize) % this.chunkSize,
+			lz: ((z % this.chunkSize) + this.chunkSize) % this.chunkSize
+		};
 	}
 	
-	// Get a unique key for a block within a chunk
+	/**
+	 * Get local key from local coordinates
+	 * @param {number} lx - Local X coordinate
+	 * @param {number} ly - Local Y coordinate
+	 * @param {number} lz - Local Z coordinate
+	 * @returns {string} - Local key
+	 */
 	getLocalKey(lx, ly, lz) {
-		return (lx * this.chunkSize * this.chunkSize) + (ly * this.chunkSize) + lz;
+		return `${lx},${ly},${lz}`;
 	}
 	
-	// Set a block in the grid
+	/**
+	 * Set a block in the spatial hash grid
+	 * Optimized for bulk operations
+	 * @param {string} key - Position key in format "x,y,z"
+	 * @param {number} blockId - Block ID to set
+	 */
 	set(key, blockId) {
+		// Skip if key is invalid
+		if (!key || typeof key !== 'string') return;
+		
+		// Parse coordinates from key
 		const [x, y, z] = key.split(',').map(Number);
-		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
-		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
-		const localKey = this.getLocalKey(lx, ly, lz);
 		
-		// Get or create the x level
-		if (!this.grid.has(cx)) {
-			this.grid.set(cx, new Map());
+		// Skip if coordinates are invalid
+		if (isNaN(x) || isNaN(y) || isNaN(z)) return;
+		
+		// Get chunk coordinates - use cached value if available
+		let chunkKey = this.chunkCoordCache.get(key);
+		let chunkCoords;
+		
+		if (!chunkKey) {
+			chunkCoords = this.getChunkCoords(x, y, z);
+			chunkKey = `${chunkCoords.cx},${chunkCoords.cy},${chunkCoords.cz}`;
+			
+			// Cache the chunk key for this position to avoid recalculating
+			this.chunkCoordCache.set(key, chunkKey);
 		}
-		const xLevel = this.grid.get(cx);
 		
-		// Get or create the y level
-		if (!xLevel.has(cy)) {
-			xLevel.set(cy, new Map());
+		// Get or create chunk
+		let chunk = this.grid.get(chunkKey);
+		if (!chunk) {
+			chunk = new Map();
+			this.grid.set(chunkKey, chunk);
 		}
-		const yLevel = xLevel.get(cy);
 		
-		// Get or create the z level
-		if (!yLevel.has(cz)) {
-			yLevel.set(cz, new Map());
-		}
-		const zLevel = yLevel.get(cz);
+		// Get local coordinates
+		const localCoords = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(localCoords.lx, localCoords.ly, localCoords.lz);
 		
-		// Check if this is a new block
-		if (!zLevel.has(localKey)) {
+		// Set block in chunk
+		const hadBlock = chunk.has(localKey);
+		chunk.set(localKey, blockId);
+		
+		// Update size if this is a new block
+		if (!hadBlock) {
 			this.size++;
 		}
-		
-		// Set the block
-		zLevel.set(localKey, blockId);
 	}
 	
-	// Get a block from the grid
+	/**
+	 * Get a block from the spatial hash grid
+	 * @param {string} key - Position key in format "x,y,z"
+	 * @returns {number|null} - Block ID or null if not found
+	 */
 	get(key) {
+		// Skip if key is invalid
+		if (!key || typeof key !== 'string') return null;
+		
+		// Parse coordinates from key
 		const [x, y, z] = key.split(',').map(Number);
-		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
-		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
-		const localKey = this.getLocalKey(lx, ly, lz);
 		
-		// Check if the chunk exists
-		if (!this.grid.has(cx)) return undefined;
-		const xLevel = this.grid.get(cx);
+		// Skip if coordinates are invalid
+		if (isNaN(x) || isNaN(y) || isNaN(z)) return null;
 		
-		if (!xLevel.has(cy)) return undefined;
-		const yLevel = xLevel.get(cy);
+		// Get chunk coordinates - use cached value if available
+		let chunkKey = this.chunkCoordCache.get(key);
 		
-		if (!yLevel.has(cz)) return undefined;
-		const zLevel = yLevel.get(cz);
-		
-		// Return the block if it exists
-		return zLevel.get(localKey);
-	}
-	
-	// Check if a block exists in the grid
-	has(key) {
-		const [x, y, z] = key.split(',').map(Number);
-		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
-		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
-		const localKey = this.getLocalKey(lx, ly, lz);
-		
-		// Check if the chunk exists
-		if (!this.grid.has(cx)) return false;
-		const xLevel = this.grid.get(cx);
-		
-		if (!xLevel.has(cy)) return false;
-		const yLevel = xLevel.get(cy);
-		
-		if (!yLevel.has(cz)) return false;
-		const zLevel = yLevel.get(cz);
-		
-		// Check if the block exists
-		return zLevel.has(localKey);
-	}
-	
-	// Delete a block from the grid
-	delete(key) {
-		const [x, y, z] = key.split(',').map(Number);
-		const [cx, cy, cz] = this.getChunkCoords(x, y, z);
-		const [lx, ly, lz] = this.getLocalCoords(x, y, z);
-		const localKey = this.getLocalKey(lx, ly, lz);
-		
-		// Check if the chunk exists
-		if (!this.grid.has(cx)) return false;
-		const xLevel = this.grid.get(cx);
-		
-		if (!xLevel.has(cy)) return false;
-		const yLevel = xLevel.get(cy);
-		
-		if (!yLevel.has(cz)) return false;
-		const zLevel = yLevel.get(cz);
-		
-		// Delete the block if it exists
-		if (zLevel.has(localKey)) {
-			zLevel.delete(localKey);
-			this.size--;
-			
-			// Clean up empty chunks
-			if (zLevel.size === 0) {
-				yLevel.delete(cz);
-				
-				if (yLevel.size === 0) {
-					xLevel.delete(cy);
-					
-					if (xLevel.size === 0) {
-						this.grid.delete(cx);
-					}
-				}
-			}
-			
-			return true;
+		if (!chunkKey) {
+			const chunkCoords = this.getChunkCoords(x, y, z);
+			chunkKey = `${chunkCoords.cx},${chunkCoords.cy},${chunkCoords.cz}`;
 		}
 		
-		return false;
+		// Get chunk
+		const chunk = this.grid.get(chunkKey);
+		if (!chunk) return null;
+		
+		// Get local coordinates
+		const localCoords = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(localCoords.lx, localCoords.ly, localCoords.lz);
+		
+		// Get block from chunk
+		return chunk.get(localKey) || null;
 	}
 	
-	// Clear the grid
+	/**
+	 * Check if a block exists in the spatial hash grid
+	 * @param {string} key - Position key in format "x,y,z"
+	 * @returns {boolean} - True if block exists
+	 */
+	has(key) {
+		// Skip if key is invalid
+		if (!key || typeof key !== 'string') return false;
+		
+		// Parse coordinates from key
+		const [x, y, z] = key.split(',').map(Number);
+		
+		// Skip if coordinates are invalid
+		if (isNaN(x) || isNaN(y) || isNaN(z)) return false;
+		
+		// Get chunk coordinates - use cached value if available
+		let chunkKey = this.chunkCoordCache.get(key);
+		
+		if (!chunkKey) {
+			const chunkCoords = this.getChunkCoords(x, y, z);
+			chunkKey = `${chunkCoords.cx},${chunkCoords.cy},${chunkCoords.cz}`;
+		}
+		
+		// Get chunk
+		const chunk = this.grid.get(chunkKey);
+		if (!chunk) return false;
+		
+		// Get local coordinates
+		const localCoords = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(localCoords.lx, localCoords.ly, localCoords.lz);
+		
+		// Check if block exists in chunk
+		return chunk.has(localKey);
+	}
+	
+	/**
+	 * Delete a block from the spatial hash grid
+	 * @param {string} key - Position key in format "x,y,z"
+	 * @returns {boolean} - True if block was deleted
+	 */
+	delete(key) {
+		// Skip if key is invalid
+		if (!key || typeof key !== 'string') return false;
+		
+		// Parse coordinates from key
+		const [x, y, z] = key.split(',').map(Number);
+		
+		// Skip if coordinates are invalid
+		if (isNaN(x) || isNaN(y) || isNaN(z)) return false;
+		
+		// Get chunk coordinates - use cached value if available
+		let chunkKey = this.chunkCoordCache.get(key);
+		
+		if (!chunkKey) {
+			const chunkCoords = this.getChunkCoords(x, y, z);
+			chunkKey = `${chunkCoords.cx},${chunkCoords.cy},${chunkCoords.cz}`;
+		}
+		
+		// Get chunk
+		const chunk = this.grid.get(chunkKey);
+		if (!chunk) return false;
+		
+		// Get local coordinates
+		const localCoords = this.getLocalCoords(x, y, z);
+		const localKey = this.getLocalKey(localCoords.lx, localCoords.ly, localCoords.lz);
+		
+		// Delete block from chunk
+		const deleted = chunk.delete(localKey);
+		
+		// Update size if block was deleted
+		if (deleted) {
+			this.size--;
+			
+			// Remove chunk if empty
+			if (chunk.size === 0) {
+				this.grid.delete(chunkKey);
+			}
+			
+			// Remove from cache
+			this.chunkCoordCache.delete(key);
+		}
+		
+		return deleted;
+	}
+	
+	/**
+	 * Clear the spatial hash grid
+	 */
 	clear() {
 		this.grid.clear();
+		this.chunkCoordCache.clear();
 		this.size = 0;
 	}
 	
-	// Get all blocks in the grid
+	/**
+	 * Get all blocks in the spatial hash grid
+	 * @returns {Object} - Object with position keys and block IDs
+	 */
 	getBlocks() {
-		const blocks = [];
+		const blocks = {};
 		
-		this.grid.forEach((xLevel, cx) => {
-			xLevel.forEach((yLevel, cy) => {
-				yLevel.forEach((zLevel, cz) => {
-					zLevel.forEach((blockId, localKey) => {
-						// Convert local key back to local coordinates
-						const lx = Math.floor(localKey / (this.chunkSize * this.chunkSize));
-						const ly = Math.floor((localKey % (this.chunkSize * this.chunkSize)) / this.chunkSize);
-						const lz = localKey % this.chunkSize;
-						
-						// Convert to world coordinates
-						const x = cx * this.chunkSize + lx;
-						const y = cy * this.chunkSize + ly;
-						const z = cz * this.chunkSize + lz;
-						
-						blocks.push({
-							key: `${x},${y},${z}`,
-							blockId
-						});
-					});
-				});
-			});
-		});
+		// Iterate through all chunks
+		for (const [chunkKey, chunk] of this.grid.entries()) {
+			// Parse chunk coordinates
+			const [cx, cy, cz] = chunkKey.split(',').map(Number);
+			
+			// Iterate through all blocks in chunk
+			for (const [localKey, blockId] of chunk.entries()) {
+				// Parse local coordinates
+				const [lx, ly, lz] = localKey.split(',').map(Number);
+				
+				// Calculate world coordinates
+				const x = cx * this.chunkSize + lx;
+				const y = cy * this.chunkSize + ly;
+				const z = cz * this.chunkSize + lz;
+				
+				// Add block to result
+				const worldKey = `${x},${y},${z}`;
+				blocks[worldKey] = blockId;
+			}
+		}
 		
 		return blocks;
 	}
 	
-	// Get blocks in a specific chunk
+	/**
+	 * Get all blocks in a specific chunk
+	 * @param {number} cx - Chunk X coordinate
+	 * @param {number} cy - Chunk Y coordinate
+	 * @param {number} cz - Chunk Z coordinate
+	 * @returns {Object} - Object with position keys and block IDs
+	 */
 	getChunkBlocks(cx, cy, cz) {
-		if (!this.grid.has(cx)) return [];
-		const xLevel = this.grid.get(cx);
+		const blocks = {};
+		const chunkKey = `${cx},${cy},${cz}`;
 		
-		if (!xLevel.has(cy)) return [];
-		const yLevel = xLevel.get(cy);
+		// Get chunk
+		const chunk = this.grid.get(chunkKey);
+		if (!chunk) return blocks;
 		
-		if (!yLevel.has(cz)) return [];
-		const zLevel = yLevel.get(cz);
-		
-		const blocks = [];
-		
-		zLevel.forEach((blockId, localKey) => {
-			// Convert local key back to local coordinates
-			const lx = Math.floor(localKey / (this.chunkSize * this.chunkSize));
-			const ly = Math.floor((localKey % (this.chunkSize * this.chunkSize)) / this.chunkSize);
-			const lz = localKey % this.chunkSize;
+		// Iterate through all blocks in chunk
+		for (const [localKey, blockId] of chunk.entries()) {
+			// Parse local coordinates
+			const [lx, ly, lz] = localKey.split(',').map(Number);
 			
-			// Convert to world coordinates
+			// Calculate world coordinates
 			const x = cx * this.chunkSize + lx;
 			const y = cy * this.chunkSize + ly;
 			const z = cz * this.chunkSize + lz;
 			
-			blocks.push({
-				key: `${x},${y},${z}`,
-				blockId
-			});
-		});
+			// Add block to result
+			const worldKey = `${x},${y},${z}`;
+			blocks[worldKey] = blockId;
+		}
 		
 		return blocks;
 	}
@@ -833,7 +921,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					const totalBlocks = blockEntries.length;
 					
 					// Process blocks in larger batches for faster performance
-					const INITIAL_BATCH_SIZE = 50000; // Increased from 10000 to 50000
+					const INITIAL_BATCH_SIZE = 100000; // Increased from 10000 to 50000
 					let processedBlocks = 0;
 					
 					// Function to process a batch of blocks
@@ -2481,6 +2569,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			return new Promise(async resolve => {
 				try {
+					// Set a flag to prevent automatic spatial hash updates
+					// Store the previous value to restore it later
+					spatialHashUpdateQueuedRef.current = true; 
+					
 					// Get terrain data from database
 					const blocks = await DatabaseManager.getData(STORES.TERRAIN, "current");
 					
@@ -2501,18 +2593,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						
 						// Update loading screen with count
 						const totalBlocks = blocksArray.length;
-						loadingManager.updateLoading(`Loading ${totalBlocks} blocks...`, 10);
+						loadingManager.updateLoading(`Loading ${totalBlocks} blocks...`, 5);
 						console.log(`Loading ${totalBlocks} blocks from database`);
 						
 						// Process blocks directly without the complexity
 						const start = performance.now();
 						
-						// Add all blocks to terrain
+						// Add all blocks to terrain - this is fast, so just do it in one go
+						loadingManager.updateLoading(`Processing ${totalBlocks} blocks...`, 10);
 						blocksArray.forEach(block => {
 							terrainRef.current[block.posKey] = block.blockId;
 						});
 						
-						loadingManager.updateLoading(`Building terrain...`, 40);
+						// Update loading screen for terrain building
+						loadingManager.updateLoading(`Building terrain meshes...`, 20);
 						
 						// Disable spatial hash updates during terrain building
 						const prevThrottle = spatialHashUpdateThrottleRef.current;
@@ -2521,47 +2615,90 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						// Build terrain
 						await buildUpdateTerrain();
 						
-						loadingManager.updateLoading(`Updating spatial hash...`, 70);
+						// Now for the slow part - spatial hash update
+						// We'll use a more optimized approach with larger batches
+						loadingManager.updateLoading(`Preparing spatial hash update for ${totalBlocks} blocks...`, 40);
 						
-						// Clear and rebuild spatial hash
+						// Clear the spatial hash grid
 						spatialHashGridRef.current.clear();
 						
-						// Add all blocks to spatial hash in one go to avoid timeouts
+						// Prepare the data for faster processing
 						const blockEntries = Object.entries(terrainRef.current);
-						for (let i = 0; i < blockEntries.length; i++) {
-							const [posKey, blockId] = blockEntries[i];
-							spatialHashGridRef.current.set(posKey, blockId);
-							
-							// Update progress occasionally (every 50,000 blocks)
-							if (i % 50000 === 0) {
-								const progress = 70 + Math.floor((i / blockEntries.length) * 20);
-								loadingManager.updateLoading(`Processing terrain (${i}/${blockEntries.length})...`, progress);
+						const totalEntries = blockEntries.length;
+						
+						// Use larger batches for better performance
+						const SPATIAL_HASH_BATCH_SIZE = 100000; // Increased from 50000
+						const totalSpatialHashBatches = Math.ceil(totalEntries / SPATIAL_HASH_BATCH_SIZE);
+						
+						// Process spatial hash in batches
+						loadingManager.updateLoading(`Updating spatial hash (0/${totalSpatialHashBatches} batches)...`, 45);
+						
+						// Use a promise-based batch processor for better UI responsiveness
+						const processSpatialHashBatches = async () => {
+							for (let batchIndex = 0; batchIndex < totalSpatialHashBatches; batchIndex++) {
+								const startIdx = batchIndex * SPATIAL_HASH_BATCH_SIZE;
+								const endIdx = Math.min(startIdx + SPATIAL_HASH_BATCH_SIZE, totalEntries);
+								
+								// Update loading screen with detailed progress
+								const progress = 45 + Math.floor((batchIndex / totalSpatialHashBatches) * 45);
+								loadingManager.updateLoading(
+									`Updating spatial hash: batch ${batchIndex + 1}/${totalSpatialHashBatches} (${Math.floor((batchIndex / totalSpatialHashBatches) * 100)}%)`, 
+									progress
+								);
+								
+								// Process this batch
+								for (let i = startIdx; i < endIdx; i++) {
+									const [posKey, blockId] = blockEntries[i];
+									spatialHashGridRef.current.set(posKey, blockId);
+								}
+								
+								// Allow UI to update between batches
+								await new Promise(r => setTimeout(r, 0));
 							}
-						}
+							
+							return true;
+						};
 						
-						// Reset throttle
+						// Process all spatial hash batches
+						await processSpatialHashBatches();
+						
+						// Reset throttle but set last update time to prevent immediate re-update
 						spatialHashUpdateThrottleRef.current = prevThrottle;
+						spatialHashLastUpdateRef.current = performance.now(); // Mark as just updated
 						
-						loadingManager.updateLoading(`Finalizing terrain...`, 90);
+						// Log that spatial hash is fully updated
+						console.log(`Spatial hash fully updated with ${spatialHashGridRef.current.size} blocks`);
+						
+						// Final steps
+						loadingManager.updateLoading(`Finalizing terrain display...`, 90);
 						
 						// Update visibility
 						updateVisibleChunks();
 						
 						// Save to database
+						loadingManager.updateLoading(`Saving terrain data...`, 95);
 						await DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current);
 						
 						const end = performance.now();
-						console.log(`Terrain loaded in ${((end - start) / 1000).toFixed(2)} seconds`);
+						const seconds = ((end - start) / 1000).toFixed(2);
+						console.log(`Terrain loaded in ${seconds} seconds (${totalBlocks} blocks)`);
+						
+						// Allow spatial hash updates again after a delay
+						setTimeout(() => {
+							spatialHashUpdateQueuedRef.current = false;
+						}, 2000);
 						
 						loadingManager.hideLoading();
 						resolve(true);
 					} else {
 						console.log("No blocks found in database");
+						spatialHashUpdateQueuedRef.current = false;
 						loadingManager.hideLoading();
 						resolve(false);
 					}
 				} catch (error) {
 					console.error("Error refreshing terrain from database:", error);
+					spatialHashUpdateQueuedRef.current = false;
 					loadingManager.hideLoading();
 					resolve(false);
 				}
@@ -2595,22 +2732,23 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Flag to prevent duplicate update attempts
 			isUpdatingChunksRef.current = true;
 			
-			const MAX_BLOCKS_PER_BATCH = 5000;
+			// Use larger batch size for better performance
+			const MAX_BLOCKS_PER_BATCH = 100000;
 			const totalBlocks = blocks.length;
 			const totalBatches = Math.ceil(totalBlocks / MAX_BLOCKS_PER_BATCH);
 			
 			console.log(`Loading terrain with ${totalBlocks} blocks in ${totalBatches} batches`);
 			
 			// Function to process one batch
-			const processBatch = (startIndex, promiseResolve) => {
+			const processBatch = async (startIndex, promiseResolve) => {
 				try {
 					const endIndex = Math.min(startIndex + MAX_BLOCKS_PER_BATCH, totalBlocks);
 					const batchBlocks = blocks.slice(startIndex, endIndex);
 					const currentBatch = Math.floor(startIndex / MAX_BLOCKS_PER_BATCH) + 1;
 					
 					// Update loading progress
-					const progress = Math.floor((startIndex / totalBlocks) * 60);
-					loadingManager.updateLoading(`Loading blocks: ${startIndex} of ${totalBlocks} (${progress}%)`, progress);
+					const progress = Math.floor((startIndex / totalBlocks) * 40);
+					loadingManager.updateLoading(`Loading blocks: batch ${currentBatch}/${totalBatches} (${progress}%)`, progress);
 					
 					// Process blocks in this batch
 					batchBlocks.forEach(block => {
@@ -2633,67 +2771,71 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						}
 					});
 					
-					// Update scene on every 5th batch or final batch
-					const shouldUpdateScene = (currentBatch % 5 === 0) || (endIndex >= totalBlocks);
-					if (shouldUpdateScene) {
-						buildUpdateTerrain();
-					}
-					
-					// Continue processing or finish
-					if (endIndex < totalBlocks) {
-						setTimeout(() => {
-							processBatch(endIndex, promiseResolve);
-						}, 50);
+					// Update scene on every batch or final batch for larger batch sizes
+					if (currentBatch === totalBatches) {
+						loadingManager.updateLoading(`Building terrain meshes...`, 45);
+						await buildUpdateTerrain();
+						
+						// Now handle the spatial hash update - the slow part
+						loadingManager.updateLoading(`Preparing spatial hash update...`, 50);
+						
+						// Clear the spatial hash grid
+						spatialHashGridRef.current.clear();
+						
+						// Prepare the data for faster processing
+						const blockEntries = Object.entries(terrainRef.current);
+						const totalEntries = blockEntries.length;
+						
+						// Use larger batches for better performance
+						const SPATIAL_HASH_BATCH_SIZE = 100000;
+						const totalSpatialHashBatches = Math.ceil(totalEntries / SPATIAL_HASH_BATCH_SIZE);
+						
+						// Process spatial hash in batches
+						loadingManager.updateLoading(`Updating spatial hash (0/${totalSpatialHashBatches} batches)...`, 55);
+						
+						// Process all spatial hash batches
+						for (let batchIndex = 0; batchIndex < totalSpatialHashBatches; batchIndex++) {
+							const startIdx = batchIndex * SPATIAL_HASH_BATCH_SIZE;
+							const endIdx = Math.min(startIdx + SPATIAL_HASH_BATCH_SIZE, totalEntries);
+							
+							// Update loading screen with detailed progress
+							const progress = 55 + Math.floor((batchIndex / totalSpatialHashBatches) * 35);
+							loadingManager.updateLoading(
+								`Updating spatial hash: batch ${batchIndex + 1}/${totalSpatialHashBatches} (${Math.floor((batchIndex / totalSpatialHashBatches) * 100)}%)`, 
+								progress
+							);
+							
+							// Process this batch
+							for (let i = startIdx; i < endIdx; i++) {
+								const [posKey, blockId] = blockEntries[i];
+								spatialHashGridRef.current.set(posKey, blockId);
+							}
+							
+							// Allow UI to update between batches
+							await new Promise(r => setTimeout(r, 0));
+						}
+						
+						// Reset throttle
+						spatialHashUpdateThrottleRef.current = prevSpatialHashUpdateThrottle;
+						
+						// Final steps
+						loadingManager.updateLoading(`Finalizing terrain display...`, 90);
+						updateVisibleChunks();
+						
+						// Save to database
+						loadingManager.updateLoading(`Saving terrain data...`, 95);
+						await DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current);
+						
+						console.log("Terrain data saved to database");
+						loadingManager.hideLoading();
+						isUpdatingChunksRef.current = false;
+						
+						if (promiseResolve) promiseResolve();
 					} else {
-						// Final processing
-						buildUpdateTerrain()
-							.then(() => {
-								// Update loading message
-								loadingManager.updateLoading('Updating spatial hash...', 70);
-								
-								// Reset throttle
-								spatialHashUpdateThrottleRef.current = prevSpatialHashUpdateThrottle;
-								
-								// Clear and rebuild spatial hash
-								spatialHashGridRef.current.clear();
-								
-								// Process spatial hash
-								const blockEntries = Object.entries(terrainRef.current);
-								let processed = 0;
-								const totalEntries = blockEntries.length;
-								
-								for (let i = 0; i < totalEntries; i++) {
-									const [posKey, blockId] = blockEntries[i];
-									spatialHashGridRef.current.set(posKey, blockId);
-									
-									// Update progress every 10,000 blocks
-									if (i % 10000 === 0) {
-										const hashProgress = 70 + Math.floor((i / totalEntries) * 25);
-										loadingManager.updateLoading(`Updating spatial hash: ${i} of ${totalEntries}`, hashProgress);
-									}
-								}
-								
-								// Final visibility update
-								loadingManager.updateLoading('Finalizing terrain...', 95);
-								updateVisibleChunks();
-								
-								// Save to database
-								return DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current);
-							})
-							.then(() => {
-								console.log("Terrain data saved to database");
-								loadingManager.hideLoading();
-								isUpdatingChunksRef.current = false;
-								
-								if (promiseResolve) promiseResolve();
-							})
-							.catch(error => {
-								console.error("Error finalizing terrain:", error);
-								loadingManager.hideLoading();
-								isUpdatingChunksRef.current = false;
-								
-								if (promiseResolve) promiseResolve();
-							});
+						// Continue with next batch
+						setTimeout(async () => {
+							await processBatch(endIndex, promiseResolve);
+						}, 0);
 					}
 				} catch (batchError) {
 					console.error("Error processing batch:", batchError);
@@ -3557,17 +3699,19 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Replace the updateSpatialHash function with this throttled version
 	const updateSpatialHash = () => {
-		const now = performance.now();
-		
 		// If an update is already queued, don't queue another one
 		if (spatialHashUpdateQueuedRef.current) {
+			console.log("Skipping redundant spatial hash update (update already queued)");
 			return;
 		}
+		
+		const now = performance.now();
 		
 		// If it's been less than the throttle time since the last update, queue an update
 		// Note: During bulk operations like loading a map, spatialHashUpdateThrottleRef.current can be
 		// temporarily set to a high value to prevent excessive updates
 		if (now - spatialHashLastUpdateRef.current < spatialHashUpdateThrottleRef.current) {
+			console.log(`Throttling spatial hash update (last update was ${((now - spatialHashLastUpdateRef.current) / 1000).toFixed(2)}s ago, throttle is ${(spatialHashUpdateThrottleRef.current / 1000).toFixed(2)}s)`);
 			spatialHashUpdateQueuedRef.current = true;
 			
 			// Schedule an update after the throttle time has passed
@@ -3575,6 +3719,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				spatialHashUpdateQueuedRef.current = false;
 				// Only update if no other updates were scheduled while waiting
 				if (!spatialHashUpdateQueuedRef.current) {
+					console.log("Executing delayed spatial hash update after throttle period");
 					updateSpatialHashImpl();
 				}
 			}, spatialHashUpdateThrottleRef.current - (now - spatialHashLastUpdateRef.current));
@@ -3583,12 +3728,15 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		// Otherwise, update immediately
+		console.log("Executing immediate spatial hash update");
 		updateSpatialHashImpl();
 	};
 
 	// Implement the actual spatial hash update logic
 	const updateSpatialHashImpl = () => {
-		console.log("Updating spatial hash grid");
+		const blockCount = Object.keys(terrainRef.current).length;
+		console.log(`Starting spatial hash grid update for ${blockCount} blocks (throttle: ${spatialHashUpdateThrottleRef.current}ms, queued: ${spatialHashUpdateQueuedRef.current})`);
+		
 		const startTime = performance.now();
 		
 		// Update the last update time
@@ -3596,10 +3744,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Clear existing hash
 		spatialHashGridRef.current.clear();
-		
-		// Create a new Map with the desired capacity (optimize memory allocation)
-		const blockCount = Object.keys(terrainRef.current).length;
-		spatialHashGridRef.current = new Map(); // Recreate the map with proper size estimate
 		
 		// If there are too many blocks, use a chunked approach
 		if (blockCount > 100000) {
@@ -3626,13 +3770,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			return;
 		}
 		
-		// For smaller maps, add all blocks to the hash in bulk
+		// For smaller maps, add all blocks to the hash in one go
 		Object.entries(terrainRef.current).forEach(([posKey, blockId]) => {
 			spatialHashGridRef.current.set(posKey, blockId);
 		});
 		
 		const endTime = performance.now();
-		console.log(`Spatial hash updated with ${spatialHashGridRef.current.size} blocks in ${(endTime - startTime).toFixed(2)}ms`);
+		console.log(`Spatial hash fully updated with ${spatialHashGridRef.current.size} blocks in ${(endTime - startTime).toFixed(2)}ms`);
 	};
 
 	// Get visible chunks based on camera position and frustum
@@ -3689,10 +3833,38 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const totalBlocks = blockEntries.length;
 		let processedBlocks = 0;
 		const BATCH_SIZE = 50000;
+		const totalBatches = Math.ceil(totalBlocks / BATCH_SIZE);
+		let currentBatch = 0;
+		
+		// Check if we're already in a loading process
+		// If we have a high throttle set, we're likely in the middle of an import/load
+		const alreadyInLoadingProcess = spatialHashUpdateThrottleRef.current > 10000;
+		let showingLoadingScreen = false;
+		
+		// Show loading screen if this appears to be a standalone update
+		if (!alreadyInLoadingProcess) {
+			try {
+				loadingManager.showLoading('Updating spatial hash grid...');
+				showingLoadingScreen = true;
+			} catch (error) {
+				console.error("Error showing loading screen:", error);
+			}
+		}
 		
 		// Function to process a batch of blocks
 		const processBatch = (startIndex) => {
+			currentBatch++;
 			const endIndex = Math.min(startIndex + BATCH_SIZE, totalBlocks);
+			
+			// Update the loading status if we created a loading screen
+			if (showingLoadingScreen) {
+				try {
+					const progress = Math.floor((currentBatch / totalBatches) * 100);
+					loadingManager.updateLoading(`Updating spatial hash: batch ${currentBatch}/${totalBatches} (${progress}%)`, progress);
+				} catch (error) {
+					console.error("Error updating loading screen:", error);
+				}
+			}
 			
 			for (let i = startIndex; i < endIndex; i++) {
 				const [posKey, blockId] = blockEntries[i];
@@ -3717,6 +3889,15 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			} else {
 				// All blocks processed
 				console.log(`Spatial hash fully updated with ${spatialHashGridRef.current.size} blocks`);
+				
+				// Hide loading screen if we created one
+				if (showingLoadingScreen) {
+					try {
+						loadingManager.hideLoading();
+					} catch (error) {
+						console.error("Error hiding loading screen:", error);
+					}
+				}
 			}
 		};
 		
