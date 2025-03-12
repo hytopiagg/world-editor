@@ -435,37 +435,19 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
   
   // Update selected bounds
   const handleBoundsChange = (bounds) => {
+    console.log('handleBoundsChange called with:', bounds);
+    console.log('Current selectedBounds:', selectedBounds);
+    
     // Create a new bounds object that preserves all properties
     const newBounds = {
       ...selectedBounds,
       ...bounds
     };
     
-    // Ensure the X and Z dimensions are equal for a square selection if both X and Z are being updated
-    if (bounds.minX !== undefined && bounds.maxX !== undefined && 
-        bounds.minZ !== undefined && bounds.maxZ !== undefined) {
-      const xSize = bounds.maxX - bounds.minX;
-      const zSize = bounds.maxZ - bounds.minZ;
-      
-      // If the sizes are different, adjust to make them equal
-      if (xSize !== zSize) {
-        // Use the larger dimension as the target size
-        const targetSize = Math.max(xSize, zSize);
-        
-        // Adjust the smaller dimension to match
-        if (xSize < zSize) {
-          // Expand X dimension
-          const centerX = (bounds.minX + bounds.maxX) / 2;
-          newBounds.minX = Math.floor(centerX - targetSize / 2);
-          newBounds.maxX = Math.floor(centerX + targetSize / 2);
-        } else {
-          // Expand Z dimension
-          const centerZ = (bounds.minZ + bounds.maxZ) / 2;
-          newBounds.minZ = Math.floor(centerZ - targetSize / 2);
-          newBounds.maxZ = Math.floor(centerZ + targetSize / 2);
-        }
-      }
-    }
+    console.log('New bounds to be set:', newBounds);
+    
+    // Remove the square constraint - allow rectangular selections
+    // No need to enforce equal X and Z dimensions
     
     setSelectedBounds(newBounds);
   };

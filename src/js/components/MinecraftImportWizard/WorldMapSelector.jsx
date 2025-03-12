@@ -40,6 +40,11 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
     };
   };
   
+  // Debug function to log coordinate conversions
+  const debugCoordinates = (svgX, svgY, worldX, worldZ) => {
+    console.log(`SVG: (${svgX.toFixed(2)}, ${svgY.toFixed(2)}) => World: (${worldX.toFixed(2)}, ${worldZ.toFixed(2)})`);
+  };
+  
   // Convert world coordinates to SVG coordinates
   const worldToSvg = (x, z) => {
     if (!mapRef.current) return { x: 0, y: 0 };
@@ -55,8 +60,9 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
     const centerX = displayBounds.minX + worldWidth / 2;
     const centerZ = displayBounds.minZ + worldDepth / 2;
     
-    const scaledX = ((x - centerX) * zoom + viewCenter.x) * width / worldWidth + width / 2;
-    const scaledY = ((z - centerZ) * zoom + viewCenter.z) * height / worldDepth + height / 2;
+    // Calculate SVG coordinates with viewCenter offset
+    const scaledX = ((x - centerX) * zoom * width / worldWidth) + (viewCenter.x * width / worldWidth) + width / 2;
+    const scaledY = ((z - centerZ) * zoom * height / worldDepth) + (viewCenter.z * height / worldDepth) + height / 2;
     
     return { x: scaledX, y: scaledY };
   };
@@ -76,8 +82,9 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
     const centerX = displayBounds.minX + worldWidth / 2;
     const centerZ = displayBounds.minZ + worldDepth / 2;
     
-    const x = centerX + ((svgX - width / 2) * worldWidth / width - viewCenter.x) / zoom;
-    const z = centerZ + ((svgY - height / 2) * worldDepth / height - viewCenter.z) / zoom;
+    // Calculate world coordinates with viewCenter offset
+    const x = centerX + (((svgX - width / 2) - (viewCenter.x * width / worldWidth)) / zoom) * worldWidth / width;
+    const z = centerZ + (((svgY - height / 2) - (viewCenter.z * height / worldDepth)) / zoom) * worldDepth / height;
     
     return { x, z };
   };
@@ -85,6 +92,11 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
   // Update selection rectangle
   const updateSelectionRect = () => {
     if (!mapRef.current || !selectionRef.current || !selectedBounds) return;
+    
+    // Skip updating if we're currently dragging
+    if (selectionRef.current.hasAttribute('data-dragging')) {
+      return;
+    }
     
     // Get values with null safety
     const minX = selectedBounds.minX ?? 0;
@@ -103,15 +115,25 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
       const topLeft = worldToSvg(minX, minZ);
       const bottomRight = worldToSvg(maxX, maxZ);
       
-      selectionRef.current.style.left = `${topLeft.x}px`;
-      selectionRef.current.style.top = `${topLeft.y}px`;
-      selectionRef.current.style.width = `${bottomRight.x - topLeft.x}px`;
-      selectionRef.current.style.height = `${bottomRight.y - topLeft.y}px`;
+      // Calculate width and height
+      const width = Math.max(1, bottomRight.x - topLeft.x);
+      const height = Math.max(1, bottomRight.y - topLeft.y);
+      
+      // Use transform for positioning instead of left/top
+      selectionRef.current.style.transform = `translate(${topLeft.x}px, ${topLeft.y}px)`;
+      selectionRef.current.style.width = `${width}px`;
+      selectionRef.current.style.height = `${height}px`;
       
       // Add selection dimensions as a data attribute for tooltip
-      const width = maxX - minX + 1;
-      const depth = maxZ - minZ + 1;
-      selectionRef.current.setAttribute('data-dimensions', `${width} × ${depth}`);
+      const blockWidth = maxX - minX + 1;
+      const blockDepth = maxZ - minZ + 1;
+      selectionRef.current.setAttribute('data-dimensions', `${blockWidth} × ${blockDepth}`);
+      
+      // Update the map info display
+      const mapInfo = document.querySelector('.map-info span:last-child');
+      if (mapInfo) {
+        mapInfo.textContent = `Selection: ${blockWidth} × ${blockDepth} blocks`;
+      }
     } catch (error) {
       console.error("Error updating selection rectangle:", error);
     }
@@ -137,32 +159,89 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
     // Store initial selection position
     const initialBounds = { ...selectedBounds };
     
+    // Get the current transform of the selection
+    const currentTransform = selectionRef.current.style.transform;
+    const initialTransform = currentTransform || 'translate(0px, 0px)';
+    
+    // Extract current translation values
+    const match = initialTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+    const initialTranslateX = match ? parseFloat(match[1]) : 0;
+    const initialTranslateY = match ? parseFloat(match[2]) : 0;
+    
+    // Calculate the scale factor (how many world units per pixel)
+    const displayBounds = getDisplayBounds();
+    const worldWidth = displayBounds.maxX - displayBounds.minX;
+    const worldDepth = displayBounds.maxZ - displayBounds.minZ;
+    const mapWidth = mapRef.current.clientWidth;
+    const mapHeight = mapRef.current.clientHeight;
+    
+    const scaleX = worldWidth / mapWidth / zoom;
+    const scaleZ = worldDepth / mapHeight / zoom;
+    
+    console.log(`Scale factors: X=${scaleX}, Z=${scaleZ}`);
+    
+    // Flag to prevent updateSelectionRect from running during drag
+    selectionRef.current.setAttribute('data-dragging', 'true');
+    
     const handleMouseMove = (moveEvent) => {
-      // Calculate movement in SVG coordinates
+      // Calculate movement in screen pixels
       const deltaX = moveEvent.clientX - startX;
       const deltaY = moveEvent.clientY - startY;
       
-      // Convert delta to world coordinates
-      const scale = getDisplayBounds().maxX - getDisplayBounds().minX;
-      const svgWidth = mapRef.current.clientWidth;
-      const worldDeltaX = Math.round(deltaX * scale / svgWidth / zoom);
-      const worldDeltaZ = Math.round(deltaY * scale / svgWidth / zoom);
+      // Apply the movement directly to the selection element for smooth dragging
+      selectionRef.current.style.transform = `translate(${initialTranslateX + deltaX}px, ${initialTranslateY + deltaY}px)`;
       
-      // Update bounds
+      // Update the tooltip with the current dimensions
+      const blockWidth = initialBounds.maxX - initialBounds.minX + 1;
+      const blockDepth = initialBounds.maxZ - initialBounds.minZ + 1;
+      selectionRef.current.setAttribute('data-dimensions', `${blockWidth} × ${blockDepth}`);
+    };
+    
+    const handleMouseUp = (upEvent) => {
+      // Calculate movement in screen pixels
+      const deltaX = upEvent.clientX - startX;
+      const deltaY = upEvent.clientY - startY;
+      
+      // Convert pixel movement to world coordinates
+      const worldDeltaX = deltaX * scaleX;
+      const worldDeltaZ = deltaY * scaleZ;
+      
+      console.log(`Pixel delta: (${deltaX}, ${deltaY})`);
+      console.log(`World delta: (${worldDeltaX.toFixed(2)}, ${worldDeltaZ.toFixed(2)})`);
+      
+      // Create a new bounds object with the updated position
       const newBounds = {
-        minX: initialBounds.minX + worldDeltaX,
-        maxX: initialBounds.maxX + worldDeltaX,
-        minZ: initialBounds.minZ + worldDeltaZ,
-        maxZ: initialBounds.maxZ + worldDeltaZ,
+        minX: Math.round(initialBounds.minX + worldDeltaX),
+        maxX: Math.round(initialBounds.maxX + worldDeltaX),
+        minZ: Math.round(initialBounds.minZ + worldDeltaZ),
+        maxZ: Math.round(initialBounds.maxZ + worldDeltaZ),
         minY: initialBounds.minY,
         maxY: initialBounds.maxY
       };
       
+      // Ensure the width and height are preserved exactly
+      const width = initialBounds.maxX - initialBounds.minX;
+      const depth = initialBounds.maxZ - initialBounds.minZ;
+      newBounds.maxX = newBounds.minX + width;
+      newBounds.maxZ = newBounds.minZ + depth;
+      
+      console.log('New bounds:', newBounds);
+      
+      // Keep the current visual position until the state update is complete
+      const finalTranslateX = initialTranslateX + deltaX;
+      const finalTranslateY = initialTranslateY + deltaY;
+      
+      // Update the bounds - IMPORTANT: This is what updates the parent component
       onBoundsChange(newBounds);
-    };
-    
-    const handleMouseUp = () => {
-      setIsDragging(false);
+      
+      // Remove the dragging flag after a short delay to allow the state update to complete
+      setTimeout(() => {
+        if (selectionRef.current) {
+          selectionRef.current.removeAttribute('data-dragging');
+          setIsDragging(false);
+        }
+      }, 50);
+      
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -184,34 +263,106 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
     const startX = e.clientX;
     const startY = e.clientY;
     
-    // Store initial selection position
+    // Store initial selection position and dimensions
     const initialBounds = { ...selectedBounds };
     
+    // Get current selection element dimensions
+    const selRect = selectionRef.current.getBoundingClientRect();
+    const initialWidth = selRect.width;
+    const initialHeight = selRect.height;
+    
+    // Get the current transform of the selection
+    const currentTransform = selectionRef.current.style.transform;
+    const initialTransform = currentTransform || 'translate(0px, 0px)';
+    
+    // Extract current translation values
+    const match = initialTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+    const initialTranslateX = match ? parseFloat(match[1]) : 0;
+    const initialTranslateY = match ? parseFloat(match[2]) : 0;
+    
+    // Calculate the scale factor (how many world units per pixel)
+    const displayBounds = getDisplayBounds();
+    const worldWidth = displayBounds.maxX - displayBounds.minX;
+    const worldDepth = displayBounds.maxZ - displayBounds.minZ;
+    const mapWidth = mapRef.current.clientWidth;
+    const mapHeight = mapRef.current.clientHeight;
+    
+    const scaleX = worldWidth / mapWidth / zoom;
+    const scaleZ = worldDepth / mapHeight / zoom;
+    
+    // Flag to prevent updateSelectionRect from running during resize
+    selectionRef.current.setAttribute('data-dragging', 'true');
+    
     const handleMouseMove = (moveEvent) => {
-      // Calculate movement in SVG coordinates
+      // Calculate movement in screen pixels
       const deltaX = moveEvent.clientX - startX;
       const deltaY = moveEvent.clientY - startY;
       
-      // Convert delta to world coordinates
-      const scale = getDisplayBounds().maxX - getDisplayBounds().minX;
-      const svgWidth = mapRef.current.clientWidth;
-      const worldDeltaX = Math.round(deltaX * scale / svgWidth / zoom);
-      const worldDeltaZ = Math.round(deltaY * scale / svgWidth / zoom);
+      // Apply direct visual changes for smooth resizing
+      let newWidth = initialWidth;
+      let newHeight = initialHeight;
+      let newTranslateX = initialTranslateX;
+      let newTranslateY = initialTranslateY;
       
-      // Update bounds based on resize direction
-      const newBounds = { ...initialBounds };
-      
-      if (direction.includes('n')) {
-        newBounds.minZ = initialBounds.minZ + worldDeltaZ;
-      }
-      if (direction.includes('s')) {
-        newBounds.maxZ = initialBounds.maxZ + worldDeltaZ;
+      // Update dimensions and position based on resize direction
+      if (direction.includes('e')) {
+        newWidth = Math.max(10, initialWidth + deltaX);
       }
       if (direction.includes('w')) {
-        newBounds.minX = initialBounds.minX + worldDeltaX;
+        newWidth = Math.max(10, initialWidth - deltaX);
+        newTranslateX = initialTranslateX + initialWidth - newWidth;
+      }
+      if (direction.includes('s')) {
+        newHeight = Math.max(10, initialHeight + deltaY);
+      }
+      if (direction.includes('n')) {
+        newHeight = Math.max(10, initialHeight - deltaY);
+        newTranslateY = initialTranslateY + initialHeight - newHeight;
+      }
+      
+      // Apply the visual changes directly
+      selectionRef.current.style.width = `${newWidth}px`;
+      selectionRef.current.style.height = `${newHeight}px`;
+      selectionRef.current.style.transform = `translate(${newTranslateX}px, ${newTranslateY}px)`;
+    };
+    
+    const handleMouseUp = (upEvent) => {
+      // Get the final dimensions and position
+      const finalWidth = parseFloat(selectionRef.current.style.width) || initialWidth;
+      const finalHeight = parseFloat(selectionRef.current.style.height) || initialHeight;
+      
+      const finalTransform = selectionRef.current.style.transform;
+      const finalMatch = finalTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+      const finalTranslateX = finalMatch ? parseFloat(finalMatch[1]) : initialTranslateX;
+      const finalTranslateY = finalMatch ? parseFloat(finalMatch[2]) : initialTranslateY;
+      
+      // Calculate the deltas in pixels
+      const deltaLeft = finalTranslateX - initialTranslateX;
+      const deltaTop = finalTranslateY - initialTranslateY;
+      const deltaRight = (finalTranslateX + finalWidth) - (initialTranslateX + initialWidth);
+      const deltaBottom = (finalTranslateY + finalHeight) - (initialTranslateY + initialHeight);
+      
+      // Convert pixel deltas to world coordinates
+      const worldDeltaLeft = deltaLeft * scaleX;
+      const worldDeltaTop = deltaTop * scaleZ;
+      const worldDeltaRight = deltaRight * scaleX;
+      const worldDeltaBottom = deltaBottom * scaleZ;
+      
+      // Create a new bounds object based on the resize direction
+      const newBounds = { ...initialBounds };
+      
+      // Update bounds based on the resize direction
+      if (direction.includes('w')) {
+        newBounds.minX = Math.round(initialBounds.minX + worldDeltaLeft);
       }
       if (direction.includes('e')) {
-        newBounds.maxX = initialBounds.maxX + worldDeltaX;
+        newBounds.maxX = Math.round(initialBounds.maxX + worldDeltaRight);
+      }
+      if (direction.includes('n')) {
+        newBounds.minZ = Math.round(initialBounds.minZ + worldDeltaTop);
+      }
+      if (direction.includes('s')) {
+        newBounds.maxZ = Math.round(initialBounds.maxZ + worldDeltaBottom);
       }
       
       // Ensure min is less than max
@@ -231,12 +382,20 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
         }
       }
       
+      console.log('New bounds after resize:', newBounds);
+      
+      // Update the bounds
       onBoundsChange(newBounds);
-    };
-    
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      setResizeDirection(null);
+      
+      // Remove the dragging flag after a short delay to allow the state update to complete
+      setTimeout(() => {
+        if (selectionRef.current) {
+          selectionRef.current.removeAttribute('data-dragging');
+          setIsResizing(false);
+          setResizeDirection(null);
+        }
+      }, 50);
+      
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -264,6 +423,12 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
     updateSelectionRect();
   }, [selectedBounds, zoom, viewCenter]);
   
+  // Log when selectedBounds changes
+  useEffect(() => {
+    console.log('selectedBounds changed in WorldMapSelector:', selectedBounds);
+  }, [selectedBounds]);
+  
+  // Update the useEffect hook for initializing the selection rectangle
   // Force an update when the component mounts to ensure proper display
   useEffect(() => {
     if (mapRef.current && selectedBounds) {
@@ -271,6 +436,15 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
       const forceUpdate = () => {
         const element = mapRef.current;
         if (element) {
+          // Get the current dimensions of the map container
+          const width = element.clientWidth;
+          const height = element.clientHeight;
+          
+          // Store these dimensions as data attributes to detect changes
+          element.setAttribute('data-width', width);
+          element.setAttribute('data-height', height);
+          
+          // Force a reflow
           element.style.display = 'none';
           void element.offsetHeight;
           element.style.display = 'block';
@@ -282,7 +456,24 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
       
       // Run immediately and then again after a delay to ensure DOM is ready
       forceUpdate();
-      setTimeout(forceUpdate, 100);
+      
+      // Run multiple times with increasing delays to ensure it works in all scenarios
+      const timeouts = [50, 100, 250, 500].map(delay => 
+        setTimeout(forceUpdate, delay)
+      );
+      
+      // Add a resize observer to update the selection when the container size changes
+      const resizeObserver = new ResizeObserver(() => {
+        updateSelectionRect();
+      });
+      
+      resizeObserver.observe(mapRef.current);
+      
+      // Clean up the observer and timeouts when the component unmounts
+      return () => {
+        resizeObserver.disconnect();
+        timeouts.forEach(timeout => clearTimeout(timeout));
+      };
     }
   }, [mapRef.current, selectedBounds]);
   
@@ -520,10 +711,22 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
           color: #ccc;
           display: flex;
           gap: 15px;
+          min-height: 20px; /* Ensure consistent height */
+        }
+        
+        .map-info span {
+          white-space: nowrap; /* Prevent text wrapping */
+          min-width: 80px; /* Minimum width for the zoom text */
+        }
+        
+        .map-info span:last-child {
+          min-width: 180px; /* Minimum width for the selection text */
+          text-align: right; /* Right-align the text */
         }
         
         .map-container {
-          width: 100%;
+          width: 300px; /* Fixed width */
+          height: 300px; /* Fixed height */
           position: relative;
           background-color: #1a1a1a;
           background-image: 
@@ -532,19 +735,7 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
           background-size: 20px 20px;
           cursor: grab;
           overflow: hidden;
-          /* Create a square aspect ratio */
-          aspect-ratio: 1 / 1;
-          max-height: 300px; /* Match the front-view height */
-          max-width: 500px;
           margin: 0 auto;
-        }
-        
-        /* Fallback for browsers that don't support aspect-ratio */
-        @supports not (aspect-ratio: 1 / 1) {
-          .map-container {
-            height: 0;
-            padding-bottom: 100%; /* Creates a 1:1 aspect ratio */
-          }
         }
         
         .map-container:active {
@@ -621,12 +812,14 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
           border: 2px solid rgba(74, 144, 226, 0.8);
           cursor: move;
           z-index: 20;
+          transform-origin: top left; /* Set transform origin to top left */
+          will-change: transform, width, height; /* Optimize for animations */
         }
         
         .selection-rect::after {
           content: attr(data-dimensions);
           position: absolute;
-          bottom: -20px;
+          top: 100%; /* Position below the selection */
           left: 50%;
           transform: translateX(-50%);
           background-color: rgba(0, 0, 0, 0.7);
@@ -635,6 +828,9 @@ const WorldMapSelector = ({ bounds, selectedBounds, onBoundsChange, regionCoords
           border-radius: 4px;
           font-size: 10px;
           white-space: nowrap;
+          margin-top: 5px; /* Add some space between selection and tooltip */
+          pointer-events: none; /* Prevent tooltip from interfering with mouse events */
+          z-index: 30; /* Ensure tooltip is above other elements */
         }
         
         .resize-handle {
