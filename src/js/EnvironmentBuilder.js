@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils';
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { DatabaseManager, STORES } from './DatabaseManager';
-import { ENVIRONMENT_INSTANCED_MESH_CAPACITY } from './Constants';
+import { ENVIRONMENT_INSTANCED_MESH_CAPACITY } from './constants/performance';
 
 export const environmentModels = (() => {
   try {

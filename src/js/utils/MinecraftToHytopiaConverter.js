@@ -3,7 +3,7 @@ import {
   MAX_IMPORT_SIZE_X, 
   MAX_IMPORT_SIZE_Y, 
   MAX_IMPORT_SIZE_Z
-} from '../Constants';
+} from '../constants/terrain';
 
 export class MinecraftToHytopiaConverter {
   constructor(worldData, selectedRegion, blockMappings) {

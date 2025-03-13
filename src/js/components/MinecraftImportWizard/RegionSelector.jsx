@@ -4,8 +4,9 @@ import {
   MAX_IMPORT_SIZE_Y, 
   MAX_IMPORT_SIZE_Z,
   DEFAULT_IMPORT_SIZE,
-  version 
-} from '../../Constants';
+  CENTER_IMPORTS_AT_ORIGIN
+} from '../../constants/terrain';
+import { version } from '../../Constants';
 
 // Minecraft 1.21 constants - bottom of the world is at Y=-69
 const MINECRAFT_BOTTOM_Y = -69;
