@@ -16,7 +16,7 @@ const GlobalLoadingScreen = () => {
     const unsubscribe = loadingManager.addListener((state) => {
       // Log progress value when it changes
       if (state.progress !== loadingState.progress) {
-        console.log('Progress updated:', state.progress);
+       // console.log('Progress updated:', state.progress);
       }
       setLoadingState(state);
     });
