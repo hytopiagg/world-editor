@@ -20,6 +20,7 @@ import UnderConstruction from "./js/components/UnderConstruction";
 import UndoRedoManager from "./js/UndoRedo";
 import QuickTips from './js/components/QuickTips';
 import {getCustomBlocks} from "./js/TerrainBuilder";
+import GlobalLoadingScreen from './js/components/GlobalLoadingScreen';
 
 function App() {
   const undoRedoManagerRef = useRef(null);
@@ -99,6 +100,9 @@ function App() {
       {/* Loading Screen */}
       {!pageIsLoaded && <LoadingScreen />}
 
+      {/* Global Loading Screen for heavy operations */}
+      <GlobalLoadingScreen />
+
       {/* Hytopia Logo */}
       <div className="hytopia-logo-wrapper">
         <img src={hytopiaLogo}/>
@@ -157,6 +161,7 @@ function App() {
         debugInfo={debugInfo}
         totalBlocks={totalBlocks}
         totalEnvironmentObjects={totalEnvironmentObjects} 
+        terrainBuilderRef={terrainBuilderRef}
       />
 
       <ToolBar
@@ -180,19 +185,21 @@ function App() {
       />
 
       <div className="camera-controls-wrapper">
-        <Tooltip text="Reset camera position">
-          <button onClick={() => setCameraReset((prev) => !prev)} className="camera-control-button">
-            <FaCamera />
-          </button>
-        </Tooltip>
-        <Tooltip text={isMuted ? "Unmute" : "Mute"}>
-          <button
-            onClick={toggleMute}
-            className={`camera-control-button ${!isMuted ? "active" : ""}`}
-          >
-            <FaVolumeMute />
-          </button>
-        </Tooltip>
+        <div className="camera-buttons">
+          <Tooltip text="Reset camera position">
+            <button onClick={() => setCameraReset((prev) => !prev)} className="camera-control-button">
+              <FaCamera />
+            </button>
+          </Tooltip>
+          <Tooltip text={isMuted ? "Unmute" : "Mute"}>
+            <button
+              onClick={toggleMute}
+              className={`camera-control-button ${!isMuted ? "active" : ""}`}
+            >
+              <FaVolumeMute />
+            </button>
+          </Tooltip>
+        </div>
 
         <div className="camera-angle-slider">
           <input

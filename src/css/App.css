@@ -172,8 +172,15 @@ button.selected {
   bottom: 20px;
   right: 20px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-end;
   z-index: 1000;
+}
+
+.camera-buttons {
+  display: flex;
+  flex-direction: column;
+  margin-right: 10px;
 }
 
 .camera-control-button {
