@@ -25,254 +25,9 @@ import { ToolManager, WallTool } from "./tools";
 // Import chunk utility functions
 import { getChunkKey, getChunkCoords, getLocalCoords, getLocalKey, isChunkVisible as isChunkVisibleUtil } from "./utils/terrain/chunkUtils";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
-
-// Modify the blockTypes definition to be a function that can be updated
-let blockTypesArray = (() => {
-	const textureContext = require.context("../../public/assets/blocks", true, /\.(png|jpe?g)$/);
-	const texturePaths = textureContext.keys();
-	const blockMap = new Map();
-	let idCounter = 1;
-
-	texturePaths.forEach((path) => {
-		// Skip environment and error textures
-		if (path.includes("environment") || path.includes("error")) {
-			return;
-		}
-
-		const match = path.match(/^\.\/(.+?)(\/[+-][xyz])?\.png$/);
-		if (match) {
-			const [, fullName, side] = match;
-			const parts = fullName.split("/");
-			const blockName = parts.length > 1 ? parts[0] : fullName.replace(/\.[^/.]+$/, "");
-
-			if (!blockMap.has(blockName)) {
-				blockMap.set(blockName, {
-					id: idCounter++,
-					name: blockName,
-					textureUri: `./assets/blocks/${blockName}.png`,
-					sideTextures: {},
-				});
-			}
-
-			if (side) {
-				const sideKey = side.slice(1);
-				blockMap.get(blockName).sideTextures[sideKey] = `./assets/blocks/${blockName}${side}.png`;
-			}
-		}
-	});
-
-	return Array.from(blockMap.values()).map((block) => ({
-		...block,
-		isMultiTexture: Object.keys(block.sideTextures).length > 0,
-		isEnvironment: false,
-		hasMissingTexture: block.textureUri === "./assets/blocks/error.png",
-	}));
-})();
-
-//// function to handle the adding/updating of a custom block
-export const processCustomBlock = (block) => {
-	// Validate block data
-	if (!block || !block.name || !block.textureUri) {
-		console.error("Invalid block data:", block);
-		return;
-	}
-
-	// Find existing block with same name or ID
-	let existingBlock = null;
-	
-	// If block has an ID, try to find by ID first
-	if (block.id) {
-		existingBlock = blockTypesArray.find(b => b.id === block.id);
-		if (existingBlock) {
-			console.log(`Found existing block with ID ${block.id}`);
-		}
-	}
-	
-	// If not found by ID, try to find by name
-	if (!existingBlock) {
-		existingBlock = blockTypesArray.find(b => b.name === block.name);
-		if (existingBlock) {
-			console.log(`Found existing block with name ${block.name}`);
-		}
-	}
-
-	if (existingBlock) {
-		// If block exists, update it
-		existingBlock.textureUri = block.textureUri;
-		existingBlock.hasMissingTexture = false;
-		existingBlock.isMultiTexture = block.isMultiTexture || false;
-		existingBlock.sideTextures = block.sideTextures || {};
-		existingBlock.isCustom = true;
-
-		/// if the texture uri is not a data uri, then we need to set it to the error texture
-		if(!existingBlock.textureUri.startsWith('data:image/'))
-		{
-			console.error(`Texture failed to load for block ${existingBlock.name}, using error texture`);
-			existingBlock.textureUri = "./assets/blocks/error.png";
-			existingBlock.hasMissingTexture = true;
-		}
-	
-		// Save only custom blocks to database
-		const customBlocksOnly = blockTypesArray.filter(b => b.isCustom);
-		DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', customBlocksOnly)
-			.catch(error => console.error("Error saving updated blocks:", error));
-		
-		meshesNeedsRefresh.value = true;
-		console.log("Updated block:", existingBlock.name);
-		return existingBlock;
-	}
-
-	// Add new block with ID in custom block range (100-199)
-	const newBlock = {
-		id: block.id || Math.max(...blockTypesArray.filter(b => b.id >= 100).map(b => b.id), 99) + 1, // Use provided ID or generate new one
-		name: block.name,
-		textureUri: block.textureUri,
-		isCustom: true,
-		isMultiTexture: block.isMultiTexture || false,
-		
-		sideTextures: block.sideTextures || {},
-		hasMissingTexture: false
-	};
-
-	/// if the texture uri is not a data uri, then we need to set it to the error texture
-	if(!newBlock.textureUri.startsWith('data:image/'))
-	{
-		console.error(`Texture failed to load for block ${newBlock.name}, using error texture`);
-		newBlock.textureUri = "./assets/blocks/error.png";
-		newBlock.hasMissingTexture = true;
-	}
-
-	// Validate ID is in custom block range
-	if (newBlock.id < 100 || newBlock.id >= 200) {
-		console.error("Invalid custom block ID:", newBlock.id);
-		return;
-	}
-
-	// Add the new block to the blockTypesArray
-	blockTypesArray.push(newBlock);
-
-	// Save only custom blocks to database
-	const customBlocksOnly = blockTypesArray.filter(b => b.isCustom);
-	DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', customBlocksOnly)
-		.catch(error => console.error("Error saving custom blocks:", error));
-
-	meshesNeedsRefresh.value = true;
-	refreshBlockTools();
-	
-	console.log("Added new custom block:", newBlock);
-	return newBlock;
-};
-
-// Add function to remove custom blocks
-export const removeCustomBlock = (blockIdToRemove) => {
-	// Convert input to array if it's not already
-	const idsToRemove = Array.isArray(blockIdToRemove) ? blockIdToRemove : [blockIdToRemove];
-	
-	// Validate that all IDs are in the custom block range (100-199)
-	const invalidIds = idsToRemove.filter(id => id < 100 || id >= 200);
-	if (invalidIds.length > 0) {
-		console.error('Cannot remove non-custom blocks with IDs:', invalidIds);
-		return;
-	}
-
-	// Remove the specified blocks
-	blockTypesArray = blockTypesArray.filter(block => !idsToRemove.includes(block.id));
-
-	// Save the updated blockTypesArray to the database
-	DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', blockTypesArray)
-		.catch(error => console.error("Error saving updated blocks:", error));
-
-	console.log("Removed custom blocks with IDs:", idsToRemove);
-	refreshBlockTools();
-	meshesNeedsRefresh.value = true;
-};
-
-// Export the blockTypes getter
-export const getBlockTypes = () => blockTypesArray;
-
-export const getCustomBlocks = () => {
-	const customBlocks = blockTypesArray.filter(block => block.id >= 100);
-	return customBlocks;
-};
-
-// Export the initial blockTypes for backward compatibility
-export const blockTypes = blockTypesArray;
-
-// Use texture atlas for rendering
-let textureAtlas = null;
-let chunkMeshBuilder = null;
-let chunkLoadManager = null;
-
-// Track if the atlas is initialized
-let atlasInitialized = false;
-
-// Initialize the texture atlas
-const initTextureAtlas = async (blockTypes) => {
-  if (!blockTypes || blockTypes.length === 0) {
-    console.warn("Cannot initialize texture atlas: No block types provided");
-    return null;
-  }
-  
-  if (atlasInitialized && textureAtlas) {
-    console.log("Texture atlas already initialized, returning existing instance");
-    return textureAtlas.getAtlasTexture();
-  }
-  
-  console.log(`Initializing texture atlas with ${blockTypes.length} block types...`);
-  
-  try {
-    // Reset initialization flag until complete
-    atlasInitialized = false;
-    
-    // Create new instances if they don't exist
-    if (!textureAtlas) {
-      textureAtlas = new TextureAtlas();
-    }
-    
-    // Wait for the atlas to be initialized
-    const atlas = await textureAtlas.initialize(blockTypes);
-    
-    if (!atlas) {
-      throw new Error("Texture atlas initialization failed: No atlas returned");
-    }
-    
-    // Only create chunk mesh builder if the atlas was successfully initialized
-    if (!chunkMeshBuilder) {
-      chunkMeshBuilder = new ChunkMeshBuilder(textureAtlas);
-    } else {
-      // Update existing mesh builder with new atlas
-      chunkMeshBuilder.textureAtlas = textureAtlas;
-    }
-    
-    // Only set initialized flag when everything is complete
-    atlasInitialized = true;
-    console.log("Texture atlas successfully initialized with:", 
-      textureAtlas ? `${textureAtlas.blockUVs.size} block textures` : "no textures");
-    
-    return atlas;
-  } catch (error) {
-    console.error("Texture atlas initialization failed with error:", error);
-    atlasInitialized = false;
-    return null;
-  }
-};
-
-// Replace the createGreedyMesh function with our optimized version
-const generateGreedyMesh = (chunksBlocks, blockTypes) => {
-    // Skip if texture atlas is disabled
-    if (!TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
-        return null; // Fall back to basic rendering
-    }
-    
-    if (!atlasInitialized) {
-        console.warn("Texture atlas not initialized, falling back to original mesh generation");
-        // Call original implementation or initialize texture atlas first
-        return null;
-    }
-    
-    return chunkMeshBuilder.buildChunkMesh(chunksBlocks, blockTypes);
-};
-
+import { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks } from "./managers/BlockTypesManager";
+import { initTextureAtlas, generateGreedyMesh, isAtlasInitialized, 
+         getChunkMeshBuilder, getTextureAtlas, createChunkLoadManager, getChunkLoadManager } from "./managers/TextureAtlasManager";
 
 // Function to optimize rendering performance
 const optimizeRenderer = (gl) => {
@@ -342,6 +97,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const terrainRef = useRef({});
 	const gridRef = useRef();
 
+	// Forward declaration of initAtlas to avoid "not defined" errors
+	let initAtlas;
+	
 	// Animation tracking
 	const mouseMoveAnimationRef = useRef(null);
 	const cameraAnimationRef = useRef(null);
@@ -433,32 +191,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Create a safe function to remove a mesh from the scene (batched)
 	const safeRemoveFromScene = (mesh) => {
-		if (!mesh) return;
-		
-		// Add to pending removes
-		pendingRemoveFromSceneRef.current.push(mesh);
-		
-		// Dispose resources when removing
-		// This needs to happen immediately to free memory
-		try {
-			// Dispose resources
+		if (mesh && scene) {
+			scene.remove(mesh);
+			
 			if (mesh.geometry) {
 				mesh.geometry.dispose();
 			}
 			
-			if (Array.isArray(mesh.material)) {
-				mesh.material.forEach(m => m?.dispose());
-			} else if (mesh.material) {
-				mesh.material.dispose();
+			if (mesh.material) {
+				if (Array.isArray(mesh.material)) {
+					mesh.material.forEach(m => m.dispose());
+				} else {
+					mesh.material.dispose();
+				}
 			}
-		} catch (error) {
-			console.error("Error disposing mesh resources:", error);
-		}
-		
-		// Schedule update if not already scheduled
-		if (!sceneUpdateScheduledRef.current) {
-			sceneUpdateScheduledRef.current = true;
-			requestAnimationFrame(processPendingSceneChanges);
 		}
 	};
 
@@ -662,7 +408,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 							let processedChunks = 0;
 							
 							// Process chunks in larger batches for faster processing
-							const BATCH_SIZE = 25; // Increased from 10 to 25
+							const BATCH_SIZE = 30; // Increased from 10 to 25
 							
 							const processBatch = (startIndex) => {
 								// If we're done, finish up
@@ -746,10 +492,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// A version of rebuildChunk that doesn't update visibility (for batch processing)
 	const rebuildChunkNoVisibilityUpdate = (chunkKey) => {
-		// Skip if scene not ready
-		if (!scene || !meshesInitializedRef.current) return;
-		
 		try {
+			// Skip if scene not ready or meshes not initialized
+			if (!scene || !meshesInitializedRef.current) return;
+			
+			const chunksBlocks = {};
+			const meshes = {};
+			
 			// Clean up existing chunk meshes for this specific chunk
 			if (chunkMeshesRef.current[chunkKey]) {
 				Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
@@ -763,37 +512,57 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				return;
 			}
 			
-			// Get blocks for this chunk
-			const chunkBlocks = chunksRef.current.get(chunkKey) || {};
+			// Try to get blocks from spatial grid manager if available
+			let useOriginalImplementation = true;
 			
-			// If no blocks in this chunk, we're done
-			if (Object.keys(chunkBlocks).length === 0) {
+			if (spatialGridManagerRef.current && typeof spatialGridManagerRef.current.forEachBlockInChunk === 'function') {
+				const blocksInChunk = [];
+				
+				// Get all blocks within this chunk using the spatial grid manager
+				spatialGridManagerRef.current.forEachBlockInChunk(chunkKey, (blockKey, blockData) => {
+					chunksBlocks[blockKey] = blockData.type;
+					blocksInChunk.push(blockKey);
+				});
+				
+				// If blocks were found, don't fallback to original implementation
+				if (blocksInChunk.length > 0) {
+					useOriginalImplementation = false;
+				}
+			}
+			
+			// Fallback to original implementation if needed
+			if (useOriginalImplementation) {
+				// Get blocks for this chunk from chunksRef
+				const chunkBlocks = chunksRef.current.get(chunkKey) || {};
+				
+				// Format chunk data for mesh generation
+				Object.entries(chunkBlocks).forEach(([posKey, blockId]) => {
+					chunksBlocks[posKey] = blockId;
+				});
+			}
+			
+			// If no blocks in this chunk, return
+			if (Object.keys(chunksBlocks).length === 0) {
 				return;
 			}
 			
-			// Format chunk data for mesh generation
-			const chunksBlocks = {};
-			Object.entries(chunkBlocks).forEach(([posKey, blockId]) => {
-				chunksBlocks[posKey] = blockId;
-			});
-			
 			// Try to use greedy meshing first if enabled (most efficient)
-			if (GREEDY_MESHING_ENABLED) {
+			if (getGreedyMeshingEnabled()) {
 				try {
-				const meshes = createGreedyMeshForChunk(chunksBlocks);
+					const meshes = createGreedyMeshForChunk(chunksBlocks);
 					if (meshes) {
 						if (!chunkMeshesRef.current[chunkKey]) {
 							chunkMeshesRef.current[chunkKey] = {};
 						}
-
+						
 						// Add all generated meshes
 						Object.entries(meshes).forEach(([key, mesh]) => {
 							mesh.userData = { chunkKey };
 							mesh.frustumCulled = true;
 							chunkMeshesRef.current[chunkKey][key] = mesh;
-					safeAddToScene(mesh);
-				});
-				
+							safeAddToScene(mesh);
+						});
+						
 						return;
 					}
 				} catch (error) {
@@ -802,19 +571,21 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			}
 			
 			// Fall back to instanced rendering (second most efficient)
-			if (PERFORMANCE_SETTINGS.instancingEnabled) {
-				// Group blocks by type
-				const blockTypes = {};
+			if (getInstancingEnabled()) {
+				// Group blocks by type (id)
+				const blockTypesByPosition = {};
+				
+				// For each block, add it to the right type group
 				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
-					if (!blockTypes[blockId]) {
-						blockTypes[blockId] = [];
+					if (!blockTypesByPosition[blockId]) {
+						blockTypesByPosition[blockId] = [];
 					}
-					blockTypes[blockId].push(posKey);
+					blockTypesByPosition[blockId].push(posKey);
 				});
 				
 				// Create instance mesh for each block type
-				Object.entries(blockTypes).forEach(([blockId, positions]) => {
-					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
+				Object.entries(blockTypesByPosition).forEach(([blockId, positions]) => {
+					const blockType = getBlockTypes().find(b => b.id === parseInt(blockId));
 					if (!blockType) return;
 					
 					// Use cached geometry and material
@@ -823,68 +594,73 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					
 					// Create instanced mesh with exact capacity
 					const capacity = Math.min(positions.length, CHUNK_BLOCK_CAPACITY);
-					const instancedMesh = new THREE.InstancedMesh(
-						geometry,
-						material,
-						capacity
-					);
-					instancedMesh.userData = { blockTypeId: blockType.id, chunkKey };
-					instancedMesh.frustumCulled = true;
-					instancedMesh.castShadow = true;
-					instancedMesh.receiveShadow = true;
+					const instancedMesh = new THREE.InstancedMesh(geometry, material, capacity);
+					instancedMesh.count = positions.length;
 					
-					// Use pooled matrix if available
-					const tempMatrix = new THREE.Matrix4();
-					
-					// Set matrix for each block
+					// Set instance matrix for each position
+					const dummy = new THREE.Object3D();
 					positions.forEach((posKey, index) => {
+						if (index >= capacity) return; // Skip if exceeding capacity
+						
 						const [x, y, z] = posKey.split(',').map(Number);
-						tempMatrix.makeTranslation(x, y, z);
-						instancedMesh.setMatrixAt(index, tempMatrix);
+						dummy.position.set(x, y, z);
+						dummy.updateMatrix();
+						instancedMesh.setMatrixAt(index, dummy.matrix);
 					});
 					
-					// Update mesh
-					instancedMesh.count = positions.length;
 					instancedMesh.instanceMatrix.needsUpdate = true;
 					
-					// Store and add to scene directly
+					// Set userdata for tracking
+					instancedMesh.userData = {
+						chunkKey,
+						blockId,
+						type: 'instanced'
+					};
+					
+					// Add to mesh tracking
 					if (!chunkMeshesRef.current[chunkKey]) {
 						chunkMeshesRef.current[chunkKey] = {};
 					}
-					chunkMeshesRef.current[chunkKey][blockId] = instancedMesh;
+					
+					// Add instance mesh to scene
+					const key = `instanced-${blockId}`;
+					chunkMeshesRef.current[chunkKey][key] = instancedMesh;
 					safeAddToScene(instancedMesh);
 				});
-			} else {
-				// Individual meshes as last resort
-				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
-					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
-					if (!blockType) return;
-					
-					const geometry = getCachedGeometry(blockType);
-					const material = getCachedMaterial(blockType);
-					
-					const mesh = new THREE.Mesh(geometry, material);
-					const [x, y, z] = posKey.split(',').map(Number);
-					mesh.position.set(x, y, z);
-					
-					mesh.userData = { blockId: blockType.id, chunkKey, blockPos: posKey };
-					mesh.frustumCulled = true;
-					
-					// Add to scene
-					if (!chunkMeshesRef.current[chunkKey]) {
-						chunkMeshesRef.current[chunkKey] = {};
-					}
-					if (!chunkMeshesRef.current[chunkKey][blockId]) {
-						chunkMeshesRef.current[chunkKey][blockId] = [];
-					}
-					if (Array.isArray(chunkMeshesRef.current[chunkKey][blockId])) {
-						chunkMeshesRef.current[chunkKey][blockId].push(mesh);
-					} else {
-						chunkMeshesRef.current[chunkKey][blockId] = [mesh];
-					}
-					safeAddToScene(mesh);
-				});
+				
+				return;
 			}
+			
+			// Individual meshes as last resort
+			Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
+				const blockType = getBlockTypes().find(b => b.id === parseInt(blockId));
+				if (!blockType) return;
+				
+				// Create mesh for each block (least efficient, but most compatible)
+				const [x, y, z] = posKey.split(',').map(Number);
+				
+				const geometry = getCachedGeometry(blockType);
+				const material = getCachedMaterial(blockType);
+				
+				const mesh = new THREE.Mesh(geometry, material);
+				mesh.position.set(x, y, z);
+				
+				mesh.userData = {
+					blockId,
+					chunkKey,
+					type: 'individual'
+				};
+				
+				// Add to tracking
+				if (!chunkMeshesRef.current[chunkKey]) {
+					chunkMeshesRef.current[chunkKey] = {};
+				}
+				
+				const blockKey = `block-${posKey}`;
+				chunkMeshesRef.current[chunkKey][blockKey] = mesh;
+				safeAddToScene(mesh);
+			});
+			
 		} catch (error) {
 			console.error("Error rebuilding chunk:", error);
 		}
@@ -896,9 +672,15 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	/// Geometry and Material Helper Functions ///
 
 	const createBlockGeometry = (blockType) => {
-		if (!blockType) {
-			console.error("Invalid blockType:", blockType);
-			return new THREE.BoxGeometry(1, 1, 1); // Default fallback
+		// If blockType is a number (ID), find the actual block type object
+		if (typeof blockType === 'number') {
+			const blockId = blockType;
+			blockType = blockTypes.find(b => b.id === parseInt(blockId));
+			
+			if (!blockType) {
+				console.error(`Block type with ID ${blockId} not found`);
+				return null;
+			}
 		}
 
 		if (blockType.isEnvironment) {
@@ -2037,6 +1819,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Instead, we'll create them on-demand per chunk
 			
 			meshesInitializedRef.current = true;
+			
+			// Initialize texture atlas early
+			if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
+				// We need to wait until blockTypes are loaded, so we'll do it in the 
+				// custom blocks callback below
+				console.log("Will initialize texture atlas after loading block types");
+			}
 
 			// Load custom blocks from IndexedDB
 			DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
@@ -2051,6 +1840,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						window.dispatchEvent(new CustomEvent('custom-blocks-loaded', {
 							detail: { blocks: customBlocksData }
 						}));
+						
+						// Initialize texture atlas now that block types are loaded
+						if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
+							console.log("Custom blocks loaded, initializing texture atlas");
+							initAtlas();
+						}
 					}
 					
 					// Load terrain from IndexedDB
@@ -2682,7 +2477,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				
 				// Create instance mesh for each block type
 				Object.entries(blockTypes).forEach(([blockId, positions]) => {
-					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
+					const blockType = blockTypes.find(b => b.id === parseInt(blockId));
 					if (!blockType) return;
 					
 					// Use cached geometry and material
@@ -2725,7 +2520,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			} else {
 				// Individual meshes as last resort
 				Object.entries(chunksBlocks).forEach(([posKey, blockId]) => {
-					const blockType = blockTypesArray.find(b => b.id === parseInt(blockId));
+					const blockType = blockTypes.find(b => b.id === parseInt(blockId));
 					if (!blockType) return;
 					
 					const geometry = getCachedGeometry(blockType);
@@ -3244,24 +3039,49 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		materialCache.current.clear();
 	};
 
+	// Add a ref to track chunks waiting for atlas initialization
+	const chunksWaitingForAtlasRef = useRef([]);
+	
 	// Implement createGreedyMeshForChunk to use our optimized version
 	const createGreedyMeshForChunk = (chunksBlocks) => {
 		// Skip texture atlas if disabled
-		if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas && atlasInitialized) {
+		if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas && isAtlasInitialized()) {
 			try {
-				const optimizedMesh = chunkMeshBuilder.buildChunkMesh(chunksBlocks, blockTypesArray);
+				const optimizedMesh = getChunkMeshBuilder().buildChunkMesh(chunksBlocks, getBlockTypes());
 				if (optimizedMesh) {
 					// Return a single mesh as an object for compatibility with existing code
 					return { 'optimized': optimizedMesh };
 				}
 			} catch (error) {
-				console.error("Error creating greedy mesh:", error);
+				console.error("Error building greedy mesh:", error);
 				// Fall back to original implementation
+			}
+		} else if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
+			// Texture atlas is enabled but not initialized yet
+			// Force initialization
+			if (!isAtlasInitialized()) {
+				// Extract chunk key from the first block key
+				const blockKey = Object.keys(chunksBlocks)[0];
+				if (blockKey) {
+					// Extract just the chunk coordinates (first 3 components of the position)
+					const [x, y, z] = blockKey.split(',').map(Number);
+					if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+						const chunkCoords = getChunkCoords(x, y, z);
+						const chunkKey = `${chunkCoords.cx},${chunkCoords.cy},${chunkCoords.cz}`;
+						
+						// Add to the waiting list if not already there
+						if (chunksWaitingForAtlasRef && chunksWaitingForAtlasRef.current && 
+							!chunksWaitingForAtlasRef.current.includes(chunkKey)) {
+							console.log(`Adding chunk ${chunkKey} to atlas waiting list`);
+							chunksWaitingForAtlasRef.current.push(chunkKey);
+						}
+					}
+				}
 			}
 		}
 		
 		// Use our generateGreedyMesh function as fallback
-		const meshData = generateGreedyMesh(chunksBlocks, blockTypesArray);
+		const meshData = generateGreedyMesh(chunksBlocks, getBlockTypes());
 		
 		// If using original implementation that returns meshData, convert it to meshes
 		if (meshData) {
@@ -3272,7 +3092,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			geometry.setIndex(meshData.indices);
 			
 			const material = new THREE.MeshStandardMaterial({
-				map: textureAtlas ? textureAtlas.getAtlasTexture() : null,
+				map: getTextureAtlas() ? getTextureAtlas().getAtlasTexture() : null,
 				side: THREE.FrontSide,
 				transparent: false,
 				alphaTest: 0.5
@@ -3292,8 +3112,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	  const changed = setGreedyMeshingEnabled(enabled);
 	  
 	  // Also update the ChunkMeshBuilder if it exists
-	  if (chunkMeshBuilder) {
-	    chunkMeshBuilder.setGreedyMeshing(enabled);
+	  const meshBuilder = getChunkMeshBuilder();
+	  if (meshBuilder) {
+	    meshBuilder.setGreedyMeshing(enabled);
 	  }
 	  
 	  // If changed, rebuild all chunks
@@ -3484,106 +3305,97 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		// Initialize texture atlas
-		const initAtlas = async () => {
-			if (!blockTypesArray || blockTypesArray.length === 0) {
-				console.warn("Cannot initialize texture atlas: no block types available");
+		initAtlas = async () => {
+			// Check if we have block types
+			if (!blockTypes || blockTypes.length === 0) {
+				console.error("No block types available for texture atlas initialization");
 				return;
 			}
 			
-			console.log("Initializing texture atlas in TerrainBuilder with", blockTypesArray.length, "block types");
-			try {
-				// Clear any previous initialization state
-				atlasInitialized = false;
+			console.log("Initializing texture atlas in TerrainBuilder with", blockTypes.length, "block types");
+			
+			// Initialize the texture atlas
+			const atlas = await initTextureAtlas(blockTypes);
+			
+			if (!atlas) {
+				console.error("Texture atlas initialization failed");
+				return;
+			}
+			
+			// Initialize chunk load manager if needed
+			if (!chunkLoadManager.current) {
+				// Define the processor function that will handle rebuilding chunks
+				const chunkProcessor = async (chunkKey) => {
+					await rebuildChunk(chunkKey);
+				};
 				
-				// Initialize the texture atlas and wait for it to complete
-				const atlas = await initTextureAtlas(blockTypesArray);
+				// Calculate appropriate max concurrent loads based on device
+				const maxConcurrent = navigator.hardwareConcurrency ? 
+					Math.max(2, Math.min(4, navigator.hardwareConcurrency - 1)) : 2;
 				
-				if (!atlas) {
-					throw new Error("Texture atlas initialization returned null");
-				}
+				// Create the chunk load manager
+				chunkLoadManager.current = createChunkLoadManager({
+					processor: chunkProcessor,
+					maxConcurrentLoads: maxConcurrent,
+					processingTimeLimit: 25 // ms per frame for chunk rebuilding
+				});
 				
-				console.log("Texture atlas initialization complete!");
+				console.log(`Chunk load manager initialized with max ${maxConcurrent} concurrent chunks`);
+			}
+			
+			// Process any chunks that were waiting for atlas initialization
+			if (chunksWaitingForAtlasRef && chunksWaitingForAtlasRef.current && chunksWaitingForAtlasRef.current.length > 0) {
+				console.log(`Processing ${chunksWaitingForAtlasRef.current.length} chunks that were waiting for atlas`);
 				
-				// Setup chunk load manager if it doesn't exist
-				if (!chunkLoadManager.current) {
-					// Apply concurrent rebuild setting
-					const maxConcurrent = TEXTURE_ATLAS_SETTINGS.maxConcurrentChunkRebuilds;
-					chunkLoadManager.current = new ChunkLoadManager(async (chunkKey) => {
-						await rebuildChunk(chunkKey);
-					});
-					chunkLoadManager.current.maxConcurrentLoads = maxConcurrent;
-				}
-				
-				// Only rebuild chunks if we have any
-				const chunkMeshesData = chunkMeshesRef ? chunkMeshesRef.current : {};
-				const chunkKeys = Object.keys(chunkMeshesData);
-				
-				if (chunkKeys.length > 0) {
-					console.log(`Texture atlas ready, rebuilding ${chunkKeys.length} chunks...`);
+				// Process chunks in batches to avoid blocking the main thread
+				const processBatch = (index) => {
+					const batchSize = 5;
+					const end = Math.min(index + batchSize, chunksWaitingForAtlasRef.current.length);
 					
-					// If batch rebuilding is disabled, rebuild all chunks at once
-					if (!TEXTURE_ATLAS_SETTINGS.batchedChunkRebuilding) {
-						console.log("Batch rebuilding disabled, rebuilding all chunks at once");
-						// Use a slight delay to allow UI to update
-						setTimeout(() => {
-							chunkKeys.forEach(chunkKey => {
-								rebuildChunk(chunkKey);
-							});
-						}, TEXTURE_ATLAS_SETTINGS.initialRebuildDelay);
-					} else {
-						// Queue chunks for rebuilding with priorities
-						const rebuildChunks = () => {
-							chunkKeys.forEach((chunkKey, index) => {
-								let priority = 100 - (index % 10);
-								
-								// Prioritize by distance if enabled
-								if (TEXTURE_ATLAS_SETTINGS.prioritizeChunksByDistance && threeCamera) {
-									const [chunkX, chunkY, chunkZ] = chunkKey.split(',').map(Number);
-									const cameraPos = threeCamera.position;
-									const distance = Math.sqrt(
-										Math.pow(chunkX*16 - cameraPos.x, 2) + 
-										Math.pow(chunkY*16 - cameraPos.y, 2) + 
-										Math.pow(chunkZ*16 - cameraPos.z, 2)
-									);
-									// Higher priority for closer chunks (0-100 range)
-									priority = Math.max(0, 100 - Math.min(100, Math.floor(distance / 10)));
-								}
-								
-								chunkLoadManager.current.addChunkToQueue(chunkKey, priority);
-							});
-						};
-						
-						// Delay initial rebuild if enabled
-						if (TEXTURE_ATLAS_SETTINGS.delayInitialRebuild) {
-							setTimeout(rebuildChunks, TEXTURE_ATLAS_SETTINGS.initialRebuildDelay);
-						} else {
-							rebuildChunks();
-						}
+					for (let i = index; i < end; i++) {
+						const chunkKey = chunksWaitingForAtlasRef.current[i];
+						rebuildChunk(chunkKey);
 					}
-				} else {
-					console.log("Texture atlas ready, no chunks to rebuild");
-				}
-			} catch (error) {
-				console.error("Failed to initialize texture atlas:", error);
-				// Reset the flag so we can try again
-				atlasInitialized = false;
+					
+					if (end < chunksWaitingForAtlasRef.current.length) {
+						setTimeout(() => processBatch(end), 0);
+					} else {
+						chunksWaitingForAtlasRef.current = [];
+					}
+				};
+				
+				// Start processing
+				setTimeout(() => processBatch(0), 100);
+			}
+				
+			// If there are chunks in the queue, process them now
+			if (chunkUpdateQueueRef.current.length > 0) {
+				console.log(`Rebuilding ${chunkUpdateQueueRef.current.length} chunks after texture atlas initialized`);
+				
+				// Process all the chunks in the queue
+				chunkUpdateQueueRef.current.forEach(entry => {
+					const { chunkKey, priority } = entry;
+					chunkLoadManager.current.addChunkToQueue(chunkKey, priority);
+				});
+				
+				// Clear the queue
+				chunkUpdateQueueRef.current = [];
+			} else {
+				console.log("Texture atlas ready, no chunks to rebuild");
 			}
 		};
 		
-		// Call the async function
-		initAtlas().catch(error => {
-			console.error("Texture atlas initialization failed:", error);
-			atlasInitialized = false;
-		});
+		// Call initialization
+		initAtlas();
 		
 		// Cleanup function
 		return () => {
-			// Cancel any pending operations if component unmounts
+			// Clear any pending operations if component unmounts
 			if (chunkLoadManager.current) {
 				chunkLoadManager.current.clearQueue();
 			}
 		};
-	}, [blockTypesArray]); // Re-run if block types change
+	}, [blockTypes]); // Re-run if block types change
 
 
 	
@@ -3978,15 +3790,15 @@ export const resetChunkRenderer = (settings = {}) => {
 	});
 	
 	// Clear chunk load manager if it exists
-	if (chunkLoadManager && chunkLoadManager.current) {
-		chunkLoadManager.current.clearQueue();
+	const loadManager = getChunkLoadManager();
+	if (loadManager) {
+		loadManager.clearQueue();
 	}
 	
 	// If disabling texture atlas, clear the atlas
 	if (settings.hasOwnProperty('useTextureAtlas') && !settings.useTextureAtlas) {
-		atlasInitialized = false;
-		textureAtlas = null;
-		chunkMeshBuilder = null;
+		// Reset texture atlas
+		initTextureAtlas(null); // This will reset the atlas internally
 	}
 	
 	// Set flag to rebuild all meshes
@@ -3994,4 +3806,10 @@ export const resetChunkRenderer = (settings = {}) => {
 	
 	console.log("Chunk renderer reset with new settings:", settings);
 };
+
+// Re-export functions from the BlockTypesManager for backward compatibility
+export { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks };
+
+// Re-export functions from the TextureAtlasManager for backward compatibility
+export { initTextureAtlas, generateGreedyMesh, isAtlasInitialized, getChunkMeshBuilder, getTextureAtlas, createChunkLoadManager, getChunkLoadManager };
 

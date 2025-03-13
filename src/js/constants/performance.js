@@ -14,7 +14,7 @@ export const ENVIRONMENT_INSTANCED_MESH_CAPACITY = 50000;
 // Texture Atlas settings
 export const TEXTURE_ATLAS_SETTINGS = {
   batchedChunkRebuilding: true,
-  maxConcurrentChunkRebuilds: 8,
+  maxConcurrentChunkRebuilds: 64,
   prioritizeChunksByDistance: true,
   delayInitialRebuild: false,
   initialRebuildDelay: 0,
