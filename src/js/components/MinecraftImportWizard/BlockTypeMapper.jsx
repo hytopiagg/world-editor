@@ -120,7 +120,7 @@ const customTextureLibraryStyles = `
 `;
 
 const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
-  console.log('[TIMING] BlockTypeMapper: Component function called');
+  //console.log('[TIMING] BlockTypeMapper: Component function called');
   
   const [isInitializing, setIsInitializing] = useState(true);
   const [mappings, setMappings] = useState({});
@@ -148,7 +148,7 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
     if (initRunRef.current) return;
     initRunRef.current = true;
     
-    console.log('[TIMING] BlockTypeMapper: Second useEffect (mappings) started');
+    //console.log('[TIMING] BlockTypeMapper: Second useEffect (mappings) started');
     
     const initializeMappings = async () => {
       try {

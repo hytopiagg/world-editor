@@ -77,6 +77,44 @@ async function scanWorldSize(zipData) {
       } 
     });
     
+    // Find level.dat for world version check
+    let worldVersion = null;
+    
+    // Try to find level.dat in common locations
+    const levelDatPatterns = [
+      /^level\.dat$/,
+      /^.*\/level\.dat$/
+    ];
+    
+    for (const pattern of levelDatPatterns) {
+      const levelDatFile = Object.keys(zip.files).find(path => path.match(pattern));
+      if (levelDatFile) {
+        try {
+          const levelDatBuffer = await zip.files[levelDatFile].async('arraybuffer');
+          
+          // Create a temporary parser to check the world version
+          const tempParser = new AnvilParser();
+          tempParser.checkWorldVersion(levelDatBuffer);
+          worldVersion = tempParser.worldVersion;
+          
+          self.postMessage({ 
+            type: 'progress',
+            data: { 
+              message: `Found level.dat at ${levelDatFile}, World Version: ${worldVersion || 'Unknown'}`,
+              progress: 15
+            }
+          });
+          break;
+        } catch (e) {
+          console.warn(`Failed to read level.dat at ${levelDatFile}:`, e);
+        }
+      }
+    }
+    
+    if (!worldVersion) {
+      console.warn('Could not determine world version from level.dat');
+    }
+    
     // Find region files
     const possibleRegionPaths = [
       /^region\/r\.-?\d+\.-?\d+\.mca$/,           // Direct region folder
@@ -211,7 +249,8 @@ async function scanWorldSize(zipData) {
         approximateSizeMB: approximateSizeMB
       },
       regionCoords: regionCoords,
-      worldFolder: detectWorldFolder(regionFiles[0])
+      worldFolder: detectWorldFolder(regionFiles[0]),
+      worldVersion: worldVersion
     };
     
     self.postMessage({ 

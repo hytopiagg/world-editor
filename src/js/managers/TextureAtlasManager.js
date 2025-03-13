@@ -122,7 +122,7 @@ export const isAtlasInitialized = () => {
  */
 export const generateGreedyMesh = (chunksBlocks, blockTypes) => {
   if (!atlasInitialized || !chunkMeshBuilder) {
-    console.warn("Texture atlas not initialized, cannot generate greedy mesh");
+    //console.warn("Texture atlas not initialized, cannot generate greedy mesh");
     return null;
   }
   

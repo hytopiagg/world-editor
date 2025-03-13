@@ -463,6 +463,16 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
               ? "Please wait while we process your Minecraft world. This may take a few minutes depending on the size."
               : "Processing complete! Preparing to advance to the next step..."}
           </p>
+          
+          {/* Add version compatibility warning */}
+          {worldData && worldData.worldVersion && worldData.worldVersion < 3953 && progress === 100 && (
+            <div className="version-warning-message">
+              <p><strong>Warning:</strong> This world is from an older version of Minecraft (Data Version {worldData.worldVersion}).</p>
+              <p>For best results, please update your world to Minecraft 1.21 (Data Version 3953) before importing.</p>
+              <p>Importing older worlds may result in missing blocks or other compatibility issues.</p>
+              <p>You cannot proceed with the import until you update your world to Minecraft 1.21.</p>
+            </div>
+          )}
         </div>
         
         <div className="progress-bar">
@@ -615,10 +625,34 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
             <p><strong>Estimated Size:</strong> {worldSizeInfo.size.approximateSizeMB} MB</p>
             <p><strong>Maximum Import Size:</strong> 500 x 500 blocks (X/Z dimensions)</p>
             
+            {/* Add world version information */}
+            {worldSizeInfo.worldVersion && (
+              <p>
+                <strong>Minecraft Data Version:</strong> {worldSizeInfo.worldVersion}
+                {worldSizeInfo.worldVersion === 3953 && (
+                  <span className="version-compatible"> (Minecraft 1.21)</span>
+                )}
+                {worldSizeInfo.worldVersion > 3953 && (
+                  <span className="version-compatible"> (Newer than Minecraft 1.21)</span>
+                )}
+                {worldSizeInfo.worldVersion < 3953 && (
+                  <span className="version-older"> (Older than Minecraft 1.21 - Needs updating)</span>
+                )}
+              </p>
+            )}
+            
             {worldSizeInfo.size.width * worldSizeInfo.size.depth > 5000 * 5000 && (
               <div className="warning-box">
                 <p><strong>Warning:</strong> This is a very large world. Importing the entire map may cause performance issues.</p>
                 <p>It's recommended to select a smaller region to import.</p>
+              </div>
+            )}
+            
+            {/* Add version compatibility warning */}
+            {worldSizeInfo.worldVersion && worldSizeInfo.worldVersion < 3953 && (
+              <div className="version-warning-box">
+                <p><strong>Warning:</strong> This world is from an older version of Minecraft (Data Version {worldSizeInfo.worldVersion}).</p>
+                <p>Please update your world to Minecraft 1.21 (Data Version 3953) before importing.</p>
               </div>
             )}
           </div>
@@ -814,6 +848,7 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
               <button 
                 className="import-button"
                 onClick={handleStartParsing}
+                disabled={worldSizeInfo?.worldVersion && worldSizeInfo.worldVersion < 3953}
               >
                 <FaCheck /> Import Selected Region
               </button>
@@ -955,6 +990,35 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
         
         .warning-box p {
           margin: 5px 0;
+        }
+        
+        .version-compatible {
+          color: #4caf50;
+          font-weight: bold;
+          margin-left: 5px;
+        }
+        
+        .version-older {
+          color: #f44336;
+          font-weight: bold;
+          margin-left: 5px;
+        }
+        
+        .version-warning-box {
+          margin-top: 15px;
+          padding: 15px;
+          background-color: rgba(244, 67, 54, 0.1);
+          border: 2px solid #f44336;
+          border-radius: 8px;
+          color: #fff;
+        }
+        
+        .version-warning-box p {
+          margin: 5px 0;
+        }
+        
+        .version-warning-box strong {
+          color: #f44336;
         }
         
         .upload-area {
@@ -1300,6 +1364,19 @@ const UploadStep = ({ onWorldLoaded, onAdvanceStep, onStateChange }) => {
           background-color: #3a7bd5;
           transform: translateY(-2px);
           box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        .import-button:disabled {
+          background-color: #666;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+        }
+        
+        .import-button:disabled:hover {
+          background-color: #666;
+          transform: none;
+          box-shadow: none;
         }
         
         .cancel-button {

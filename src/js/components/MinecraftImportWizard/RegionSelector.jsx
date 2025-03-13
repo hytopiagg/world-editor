@@ -388,6 +388,58 @@ const verticalBoxStyles = `
   }
 `;
 
+// Add CSS for the world version information and warning
+const versionInfoStyles = `
+  .region-selector .world-version-info {
+    background-color: #222;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 20px 0;
+    color: white;
+  }
+  
+  .region-selector .world-version-info h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #2196f3;
+  }
+  
+  .region-selector .world-version-info p {
+    margin: 5px 0;
+  }
+  
+  .region-selector .version-compatible {
+    color: #4caf50;
+    font-weight: bold;
+  }
+  
+  .region-selector .version-newer {
+    color: #ff9800;
+    font-weight: bold;
+  }
+  
+  .region-selector .version-older {
+    color: #f44336;
+    font-weight: bold;
+  }
+  
+  .region-selector .world-version-info.version-warning {
+    border: 2px solid #f44336;
+    background-color: rgba(244, 67, 54, 0.1);
+  }
+  
+  .region-selector .version-warning-message {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: rgba(244, 67, 54, 0.2);
+    border-left: 4px solid #f44336;
+  }
+  
+  .region-selector .version-warning-message p {
+    margin: 5px 0;
+  }
+`;
+
 const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
   // State for region bounds
   const [bounds, setBounds] = useState({
@@ -437,6 +489,17 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     depth: worldData?.bounds ? worldData.bounds.maxZ - worldData.bounds.minZ + 1 : 100,
     height: worldData?.bounds ? worldData.bounds.maxY - worldData.bounds.minY + 1 : 100
   };
+
+  // Add state for version compatibility
+  const [isVersionCompatible, setIsVersionCompatible] = useState(true);
+  
+  // Check world version compatibility
+  useEffect(() => {
+    if (worldData && worldData.worldVersion) {
+      // Minecraft 1.21 is Data Version 3953
+      setIsVersionCompatible(worldData.worldVersion >= 3953);
+    }
+  }, [worldData]);
 
   // Add padding around the world bounds
   const padding = Math.max(worldSize.width, worldSize.depth) * 0.1;
@@ -1123,6 +1186,9 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
       {/* Add style tag for vertical box */}
       <style>{verticalBoxStyles}</style>
       
+      {/* Add style tag for version information */}
+      <style>{versionInfoStyles}</style>
+      
       <div className="region-header">
         <h3>Select Region to Import</h3>
         <div className="region-info-compact">
@@ -1574,6 +1640,33 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
           <strong>Hytopia Bounds:</strong> From ({finalWorldBounds.minX}, {finalWorldBounds.minY}, {finalWorldBounds.minZ}) to ({finalWorldBounds.maxX}, {finalWorldBounds.maxY}, {finalWorldBounds.maxZ})
         </p>
       </div>
+
+      {/* World Version Information */}
+      {worldData?.worldVersion && (
+        <div className={`world-version-info ${!isVersionCompatible ? 'version-warning' : ''}`}>
+          <h4>World Version Information</h4>
+          <p>
+            <strong>Minecraft Data Version:</strong> {worldData.worldVersion}
+            {worldData.worldVersion === 3953 && (
+              <span className="version-compatible"> (Minecraft 1.21 - Fully Compatible)</span>
+            )}
+            {worldData.worldVersion > 3953 && (
+              <span className="version-newer"> (Newer than Minecraft 1.21 - May not be fully compatible)</span>
+            )}
+            {worldData.worldVersion < 3953 && (
+              <span className="version-older"> (Older than Minecraft 1.21 - Needs updating)</span>
+            )}
+          </p>
+          
+          {!isVersionCompatible && (
+            <div className="version-warning-message">
+              <p><strong>Warning:</strong> This world is from an older version of Minecraft (Data Version {worldData.worldVersion}).</p>
+              <p>For best results, please update your world to Minecraft 1.21 (Data Version 3953) before importing.</p>
+              <p>Importing older worlds may result in missing blocks or other compatibility issues.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

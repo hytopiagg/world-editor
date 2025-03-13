@@ -2921,12 +2921,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			}
 		}
 		
+		/*
 		// Track performance
 		const endTime = performance.now();
 		const duration = endTime - startTime;
 		if (duration > 16) {
 			console.log(`Chunk visibility update took ${duration.toFixed(2)}ms`);
 		}
+		*/
 	};
 
 	// Call update visible chunks when camera moves

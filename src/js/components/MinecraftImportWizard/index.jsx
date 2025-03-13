@@ -100,9 +100,9 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   }, []);
   
   const handleNextStep = useCallback(() => {
-    console.log('[TIMING] Index: handleNextStep called, moving from step', currentStep);
+    //console.log('[TIMING] Index: handleNextStep called, moving from step', currentStep);
     setCurrentStep(prev => Math.min(prev + 1, STEPS.length - 1));
-    console.log('[TIMING] Index: After setCurrentStep call');
+    //console.log('[TIMING] Index: After setCurrentStep call');
   }, [currentStep]);
   
   const handlePrevStep = useCallback(() => {
@@ -152,7 +152,8 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
     switch (STEPS[currentStep].id) {
       case 'upload':
         // Only allow proceeding from upload step when world data is fully loaded
-        return !!worldData && !worldData.loading;
+        // Also check if the world version is compatible with Minecraft 1.21 (Data Version 3953)
+        return !!worldData && !worldData.loading && (worldData.worldVersion >= 3953 || !worldData.worldVersion);
       case 'blocks':
         // Always allow proceeding from block mapping step since we auto-map
         return true;
@@ -165,16 +166,16 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   
   // Render the current step
   const renderStep = () => {
-    console.log('[TIMING] Index: renderStep called for step', currentStep, STEPS[currentStep].id);
+    //console.log('[TIMING] Index: renderStep called for step', currentStep, STEPS[currentStep].id);
     switch (STEPS[currentStep].id) {
       case 'upload':
         console.log('[TIMING] Index: Rendering UploadStep');
         return <UploadStep 
                  onWorldLoaded={(data) => {
                    console.log('[TIMING] Index: onWorldLoaded callback received data');
-                   console.log('[TIMING] Index: Setting worldData, size:', JSON.stringify(data).length, 'bytes');
+                   ////console.log('[TIMING] Index: Setting worldData, size:', JSON.stringify(data).length, 'bytes');
                    setWorldData(data);
-                   console.log('[TIMING] Index: After setWorldData call');
+                   //console.log('[TIMING] Index: After setWorldData call');
                  }}
                  onAdvanceStep={handleNextStep} // Pass the step advancement function
                  onStateChange={handleUploadStepStateChange} // Pass the state change handler
