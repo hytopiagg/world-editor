@@ -11,8 +11,7 @@ import { TextureAtlas, ChunkMeshBuilder, ChunkLoadManager } from "./TextureAtlas
 import { loadingManager } from './LoadingManager';
 import { PERFORMANCE_SETTINGS, TEXTURE_ATLAS_SETTINGS, getTextureAtlasSettings, 
 	    meshesNeedsRefresh, toggleInstancing, getInstancingEnabled,
-		setTextureAtlasSetting
-		 } from "./constants/performance";
+		setTextureAtlasSetting, toggleOcclusionCulling, getOcclusionCullingEnabled, getOcclusionThreshold, setOcclusionThreshold } from "./constants/performance";
 
 import {CHUNK_SIZE, GREEDY_MESHING_ENABLED, 
 		 getViewDistance, setViewDistance, MAX_SELECTION_DISTANCE, 
@@ -28,6 +27,90 @@ import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks } from "./managers/BlockTypesManager";
 import { initTextureAtlas, generateGreedyMesh, isAtlasInitialized, 
          getChunkMeshBuilder, getTextureAtlas, createChunkLoadManager, getChunkLoadManager } from "./managers/TextureAtlasManager";
+
+// Add a cache for chunk adjacency information
+const chunkAdjacencyCache = new Map();
+
+// Helper function to check if a chunk is adjacent to any verified visible chunk
+const isAdjacentToVisibleChunk = (chunkKey, verifiedVisibleChunks) => {
+	// Check if we have cached result
+	if (chunkAdjacencyCache.has(chunkKey)) {
+		const cachedAdjacentChunks = chunkAdjacencyCache.get(chunkKey);
+		// Check if any of the cached adjacent chunks are in the verified visible set
+		for (const adjacentChunk of cachedAdjacentChunks) {
+			if (verifiedVisibleChunks.has(adjacentChunk)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	// Parse chunk coordinates
+	const [cx, cy, cz] = chunkKey.split(',').map(Number);
+	
+	// Store adjacent chunks for caching
+	const adjacentChunks = [];
+	
+	// First check the 6 face-adjacent neighbors (more likely to be visible)
+	const faceAdjacentOffsets = [
+		[1, 0, 0], [-1, 0, 0],  // X axis
+		[0, 1, 0], [0, -1, 0],  // Y axis
+		[0, 0, 1], [0, 0, -1]   // Z axis
+	];
+	
+	for (const [dx, dy, dz] of faceAdjacentOffsets) {
+		const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
+		adjacentChunks.push(adjacentChunkKey);
+		
+		if (verifiedVisibleChunks.has(adjacentChunkKey)) {
+			// Cache the result before returning
+			chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+			return true;
+		}
+	}
+	
+	// If no face-adjacent chunks are visible, check the 20 diagonal neighbors
+	// 8 corner diagonals
+	for (let dx = -1; dx <= 1; dx += 2) {
+		for (let dy = -1; dy <= 1; dy += 2) {
+			for (let dz = -1; dz <= 1; dz += 2) {
+				const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
+				adjacentChunks.push(adjacentChunkKey);
+				
+				if (verifiedVisibleChunks.has(adjacentChunkKey)) {
+					// Cache the result before returning
+					chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+					return true;
+				}
+			}
+		}
+	}
+	
+	// 12 edge diagonals
+	const edgeDiagonalOffsets = [
+		// X-Y plane edges
+		[1, 1, 0], [1, -1, 0], [-1, 1, 0], [-1, -1, 0],
+		// X-Z plane edges
+		[1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1],
+		// Y-Z plane edges
+		[0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1]
+	];
+	
+	for (const [dx, dy, dz] of edgeDiagonalOffsets) {
+		const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
+		adjacentChunks.push(adjacentChunkKey);
+		
+		if (verifiedVisibleChunks.has(adjacentChunkKey)) {
+			// Cache the result before returning
+			chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+			return true;
+		}
+	}
+	
+	// Cache the result before returning
+	chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+	return false;
+};
 
 // Function to optimize rendering performance
 const optimizeRenderer = (gl) => {
@@ -1966,6 +2049,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		updateTerrainFromToolBar,
 		getCurrentTerrainData,
 		clearMap,
+		toggleOcclusionCulling: toggleOcclusionCullingLocal,
+		setOcclusionThreshold: setOcclusionThresholdLocal,
 
 		/**
 		 * Force a DB reload of terrain and then rebuild it
@@ -2588,6 +2673,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Performance tracking
 		const startTime = performance.now();
 		
+		// Clear adjacency cache if it gets too large
+		if (chunkAdjacencyCache.size > 10000) {
+			chunkAdjacencyCache.clear();
+		}
+		
 		// Update frustum for culling
 		frustumRef.current.setFromProjectionMatrix(
 		frustumMatrixRef.current.multiplyMatrices(
@@ -2598,6 +2688,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Track visible chunks for this update
 		const visibleChunks = new Set();
+		
+		// Track chunks that are verified visible (not occluded)
+		const verifiedVisibleChunks = new Set();
 		
 		// Track chunks that need to be loaded, with distance to camera for prioritization
 		const chunksToLoad = [];
@@ -2626,6 +2719,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Cache this calculation to avoid recomputing for each chunk
 		const viewRadiusSquared = (viewRadiusInChunks * CHUNK_SIZE) * (viewRadiusInChunks * CHUNK_SIZE);
 		
+		// Track chunks that are within view distance (for occlusion culling)
+		const chunksWithinViewDistance = new Set();
+		
 		// Pre-filter chunks more efficiently using square distance
 		const chunksToCheck = [...chunksRef.current.keys()].filter(chunkKey => {
 			const [x, y, z] = chunkKey.split(',').map(Number);
@@ -2651,56 +2747,74 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			const sqDz = worldZ - cameraPos.z;
 			const sqDistance = sqDx*sqDx + sqDy*sqDy + sqDz*sqDz;
 			
+			// Check if chunk is within view distance
+			const isWithinViewDistance = sqDistance <= viewRadiusSquared;
+			
+			// If it's within view distance, add to our set for occlusion culling
+			if (isWithinViewDistance) {
+				chunksWithinViewDistance.add(chunkKey);
+			}
+			
 			// Include chunks within the view radius plus some margin
-			return sqDistance <= viewRadiusSquared;
+			return isWithinViewDistance;
 		});
 		
-		// Check filtered chunks to see which are visible
+		// FIRST PASS: Identify all chunks that are definitely visible (not occluded)
 		chunksToCheck.forEach(chunkKey => {
 			// Check if chunk is visible using our improved function
 			if (isChunkVisible(chunkKey, threeCamera, frustumRef.current)) {
-				visibleChunks.add(chunkKey);
-				
-				// Reset the visibility change timer since chunk is now visible
-				delete chunkVisibilityChangeTimeRef.current[chunkKey];
-				
-				// Track this chunk as visible for this frame
-				chunkVisibilityHistoryRef.current.frames[nextHistoryFrame].add(chunkKey);
-				
-				// Get chunk center for distance calculation
-				const [x, y, z] = chunkKey.split(',').map(Number);
-				const chunkSize = CHUNK_SIZE;
-				const chunkCenter = new THREE.Vector3(
-					x * chunkSize + chunkSize/2,
-					y * chunkSize + chunkSize/2,
-					z * chunkSize + chunkSize/2
-				);
-				
-				// Calculate distance to camera
-				const distanceToCamera = chunkCenter.distanceTo(cameraPos);
-				
-				// Ensure chunk mesh exists and is visible
-				if (!chunkMeshesRef.current[chunkKey]) {
-					// Add to load queue with distance priority
-					chunksToLoad.push({
-						chunkKey,
-						distance: distanceToCamera
-					});
+				// Apply occlusion culling if enabled and chunk is within view distance
+				if (occlusionCullingEnabledRef.current && 
+					spatialGridManagerRef.current && 
+					chunksWithinViewDistance.has(chunkKey) &&
+					spatialGridManagerRef.current.isChunkOccluded(chunkKey, cameraPos, getOcclusionThreshold())) {
+					// Chunk is occluded - we'll handle it in the second pass
 				} else {
-					// Make sure all meshes in the chunk are visible
-					const meshes = chunkMeshesRef.current[chunkKey];
-					Object.values(meshes).forEach(mesh => {
-						if (Array.isArray(mesh)) {
-							// Handle array of meshes
-							mesh.forEach(m => {
-								if (!scene.children.includes(m)) {
-									safeAddToScene(m);
-								}
-							});
-						} else if (!scene.children.includes(mesh)) {
-							safeAddToScene(mesh);
-						}
-					});
+					// Chunk is visible and not occluded - mark it as verified visible
+					verifiedVisibleChunks.add(chunkKey);
+					visibleChunks.add(chunkKey);
+					
+					// Reset the visibility change timer since chunk is now visible
+					delete chunkVisibilityChangeTimeRef.current[chunkKey];
+					
+					// Track this chunk as visible for this frame
+					chunkVisibilityHistoryRef.current.frames[nextHistoryFrame].add(chunkKey);
+					
+					// Get chunk center for distance calculation
+					const [x, y, z] = chunkKey.split(',').map(Number);
+					const chunkSize = CHUNK_SIZE;
+					const chunkCenter = new THREE.Vector3(
+						x * chunkSize + chunkSize/2,
+						y * chunkSize + chunkSize/2,
+						z * chunkSize + chunkSize/2
+					);
+					
+					// Calculate distance to camera
+					const distanceToCamera = chunkCenter.distanceTo(cameraPos);
+					
+					// Ensure chunk mesh exists and is visible
+					if (!chunkMeshesRef.current[chunkKey]) {
+						// Add to load queue with distance priority
+						chunksToLoad.push({
+							chunkKey,
+							distance: distanceToCamera
+						});
+					} else {
+						// Make sure all meshes in the chunk are visible
+						const meshes = chunkMeshesRef.current[chunkKey];
+						Object.values(meshes).forEach(mesh => {
+							if (Array.isArray(mesh)) {
+								// Handle array of meshes
+								mesh.forEach(m => {
+									if (!scene.children.includes(m)) {
+										safeAddToScene(m);
+									}
+								});
+							} else if (!scene.children.includes(mesh)) {
+								safeAddToScene(mesh);
+							}
+						});
+					}
 				}
 			} else {
 				// Check if chunk has been visible in recent frames
@@ -2748,70 +2862,92 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 							safeAddToScene(mesh);
 						}
 					});
+				}
+			}
+		});
+		
+		// SECOND PASS: Make all chunks adjacent to verified visible chunks also visible
+		// But only if they're within view distance
+		chunksToCheck.forEach(chunkKey => {
+			// Skip chunks that are already marked as visible
+			if (visibleChunks.has(chunkKey)) {
+				return;
+			}
+			
+			// Use the optimized adjacency check
+			if (isAdjacentToVisibleChunk(chunkKey, verifiedVisibleChunks)) {
+				visibleChunks.add(chunkKey);
+				
+				// Reset the visibility change timer
+				delete chunkVisibilityChangeTimeRef.current[chunkKey];
+				
+				// Get chunk center for distance calculation
+				const [x, y, z] = chunkKey.split(',').map(Number);
+				const chunkSize = CHUNK_SIZE;
+				const chunkCenter = new THREE.Vector3(
+					x * chunkSize + chunkSize/2,
+					y * chunkSize + chunkSize/2,
+					z * chunkSize + chunkSize/2
+				);
+				
+				// Calculate distance to camera
+				const distanceToCamera = chunkCenter.distanceTo(cameraPos);
+				
+				// Ensure chunk mesh exists and is visible
+				if (!chunkMeshesRef.current[chunkKey]) {
+					// Add to load queue with slightly lower priority than verified visible chunks
+					chunksToLoad.push({
+						chunkKey,
+						distance: distanceToCamera + 5 // Small penalty compared to verified visible chunks
+					});
 				} else {
-					// Check if chunk might soon be visible due to camera rotation
-					// This adds predictive loading for chunks that will soon come into view
-					// to reduce pop-in during camera rotation
-					const [x, y, z] = chunkKey.split(',').map(Number);
-					const chunkSize = CHUNK_SIZE;
-					const chunkCenter = new THREE.Vector3(
-						x * chunkSize + chunkSize/2,
-						y * chunkSize + chunkSize/2,
-						z * chunkSize + chunkSize/2
-					);
-					
-					// Vector from camera to chunk center
-					const camToChunk = chunkCenter.clone().sub(cameraPos);
-					const distanceToCamera = camToChunk.length();
-					
-					// Only consider chunks within view distance
-					if (distanceToCamera <= getViewDistance()) {
-						// Check if chunk is in the general direction of where camera is looking
-						// Dot product > 0 means the chunk is in front of the camera
-						// Higher dot product means more aligned with camera view direction
-						camToChunk.normalize();
-						const dotProduct = camToChunk.dot(cameraForward);
-						
-						// If chunk is in front of camera (within a 120-degree cone)
-						// and close enough to potentially become visible during rotation
-						if (dotProduct > 0.3 && cameraMoving.current) { // Reduced from 0.5 to 0.3 to widen the prediction cone
-							// Preload this chunk with a slightly lower priority
-							chunksToLoad.push({
-								chunkKey,
-								distance: distanceToCamera + 5 // Add slight penalty to prioritize actually visible chunks
-							});
-							
-							// Don't add to visibleChunks so it doesn't get rendered yet
-							// but it will be ready when camera rotates to see it
-						} else {
-							// Chunk is not visible and not likely to become visible soon, hide its meshes
-							if (chunkMeshesRef.current[chunkKey]) {
-								const currentTime = performance.now();
-								
-								// Only hide if it's been invisible for a while (debounce)
-								if (!chunkVisibilityChangeTimeRef.current[chunkKey]) {
-									// First time chunk is invisible, just record the time
-									chunkVisibilityChangeTimeRef.current[chunkKey] = currentTime;
-								} else if (currentTime - chunkVisibilityChangeTimeRef.current[chunkKey] > visibilityChangeDelayRef.current) {
-									// Chunk has been invisible for long enough, hide it
-									Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
-										if (Array.isArray(mesh)) {
-											// Handle array of meshes
-											mesh.forEach(m => {
-												if (scene.children.includes(m)) {
-													safeRemoveFromScene(m);
-												}
-											});
-										} else if (scene.children.includes(mesh)) {
-											safeRemoveFromScene(mesh);
-										}
-									});
+					// Make sure all meshes in the chunk are visible
+					const meshes = chunkMeshesRef.current[chunkKey];
+					Object.values(meshes).forEach(mesh => {
+						if (Array.isArray(mesh)) {
+							// Handle array of meshes
+							mesh.forEach(m => {
+								if (!scene.children.includes(m)) {
+									safeAddToScene(m);
 								}
-								// Otherwise keep showing the chunk to avoid flickering
-							}
+							});
+						} else if (!scene.children.includes(mesh)) {
+							safeAddToScene(mesh);
 						}
+					});
+				}
+			} else {
+				// Chunk is not visible and not adjacent to any visible chunk
+				// Check if it might soon be visible due to camera rotation
+				const [x, y, z] = chunkKey.split(',').map(Number);
+				const chunkSize = CHUNK_SIZE;
+				const chunkCenter = new THREE.Vector3(
+					x * chunkSize + chunkSize/2,
+					y * chunkSize + chunkSize/2,
+					z * chunkSize + chunkSize/2
+				);
+				
+				// Vector from camera to chunk center
+				const camToChunk = chunkCenter.clone().sub(cameraPos);
+				const distanceToCamera = camToChunk.length();
+				
+				// Only consider chunks within view distance
+				if (distanceToCamera <= getViewDistance()) {
+					// Check if chunk is in the general direction of where camera is looking
+					camToChunk.normalize();
+					const dotProduct = camToChunk.dot(cameraForward);
+					
+					// If chunk is in front of camera (within a 120-degree cone)
+					// and close enough to potentially become visible during rotation
+					if (dotProduct > 0.3 && cameraMoving.current) {
+						// Preload this chunk with a lower priority
+						chunksToLoad.push({
+							chunkKey,
+							distance: distanceToCamera + 10 // Higher penalty for predictive loading
+						});
 					} else {
-						// Chunk is not visible, hide its meshes to save on rendering
+						// Chunk is not visible, not adjacent to visible chunks, and not likely to become visible soon
+						// Hide its meshes
 						if (chunkMeshesRef.current[chunkKey]) {
 							const currentTime = performance.now();
 							
@@ -2834,15 +2970,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 									}
 								});
 							}
-							// Otherwise keep showing the chunk to avoid flickering
 						}
 					}
 				}
 			}
 		});
-		
-		// Update the history frame index
-		chunkVisibilityHistoryRef.current.currentFrameIndex = nextHistoryFrame;
 		
 		// Process chunks that weren't checked in the pre-filtering to ensure they are hidden
 		// This fixes the issue where distant chunks remain visible
@@ -2866,69 +2998,28 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Sort chunks to load by distance (closest first)
 		chunksToLoad.sort((a, b) => a.distance - b.distance);
 		
-		// Only process a limited number of chunks per frame to avoid stuttering
-		// Take the closest chunks first, up to the limit
-		const maxChunksToProcess = PERFORMANCE_SETTINGS.maxChunksPerFrame * (cameraMoving.current ? 1.5 : 1); // Process more chunks during camera movement
-		const prioritizedChunks = chunksToLoad.slice(0, Math.ceil(maxChunksToProcess));
+		// Limit the number of chunks to load per frame
+		const maxChunksToLoad = 5;
+		chunksToLoad.slice(0, maxChunksToLoad).forEach(({ chunkKey }) => {
+			// Add to update queue with high priority
+			addChunkToUpdateQueue(chunkKey, 10);
+		});
 		
-		// Queue the high-priority chunks for immediate loading
-		if (prioritizedChunks.length > 0 && !isUpdatingChunksRef.current) {
-			// Process chunks in sync with the render cycle
-			isUpdatingChunksRef.current = true;
-			
-			const processNextChunk = (index) => {
-				if (index >= prioritizedChunks.length) {
-					isUpdatingChunksRef.current = false;
-					updateVisibleChunks(); // Final visibility update
-					return;
-				}
-				
-				const { chunkKey } = prioritizedChunks[index];
-				rebuildChunkNoVisibilityUpdate(chunkKey);
-				
-				// Process next chunk on the next animation frame to stay in sync with rendering
-				requestAnimationFrame(() => processNextChunk(index + 1));
-			};
-			
-			requestAnimationFrame(() => processNextChunk(0));
-		}
+		// Update the current frame index for the next update
+		chunkVisibilityHistoryRef.current.currentFrameIndex = nextHistoryFrame;
 		
-		// Queue remaining chunks with lower priority (for later frames)
-		if (chunksToLoad.length > maxChunksToProcess) {
-			const lowerPriorityChunks = chunksToLoad.slice(maxChunksToProcess);
-			
-			// Only process if we're not already updating high-priority chunks
-			if (!isUpdatingChunksRef.current) {
-				isUpdatingChunksRef.current = true;
-				
-				const processLowerPriority = (index) => {
-					if (index >= lowerPriorityChunks.length) {
-						isUpdatingChunksRef.current = false;
-						return;
-					}
-					
-					const { chunkKey } = lowerPriorityChunks[index];
-					// Only rebuild if the chunk is still needed (camera might have moved)
-					if (isChunkVisible(chunkKey, threeCamera, frustumRef.current)) {
-						rebuildChunkNoVisibilityUpdate(chunkKey);
-					}
-					
-					// Process next chunk after next animation frame
-					requestAnimationFrame(() => processLowerPriority(index + 1));
-				};
-				
-				requestAnimationFrame(() => processLowerPriority(0));
-			}
-		}
-		
-		/*
-		// Track performance
+		// Performance tracking
 		const endTime = performance.now();
-		const duration = endTime - startTime;
-		if (duration > 16) {
-			console.log(`Chunk visibility update took ${duration.toFixed(2)}ms`);
+		const updateTime = endTime - startTime;
+		
+		// Adjust update interval based on performance
+		// If updates are taking too long, reduce frequency
+		if (updateTime > 16) { // 16ms = ~60fps
+			visibilityUpdateIntervalRef.current = Math.min(visibilityUpdateIntervalRef.current * 1.1, 500);
+		} else {
+			// If updates are fast, gradually increase frequency
+			visibilityUpdateIntervalRef.current = Math.max(visibilityUpdateIntervalRef.current * 0.95, 100);
 		}
-		*/
 	};
 
 	// Call update visible chunks when camera moves
@@ -3681,6 +3772,127 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			chunkVisibilityChangeTimeRef.current = {};
 		};
 	}, []);
+
+	// Add a ref for the chunk solidity cache
+	const chunkSolidityCacheRef = useRef(new Map());
+	
+	// Use the performance settings for occlusion culling
+	const occlusionCullingEnabledRef = useRef(getOcclusionCullingEnabled());
+	
+	// Update the toggleOcclusionCulling function to use the performance settings
+	const toggleOcclusionCullingLocal = (enabled) => {
+		// Update the global setting
+		toggleOcclusionCulling(enabled);
+		
+		// Update the local ref
+		occlusionCullingEnabledRef.current = enabled;
+		
+		// Clear the solidity cache when toggling
+		chunkSolidityCacheRef.current.clear();
+		
+		// Force an update of visible chunks
+		updateVisibleChunks();
+	};
+
+	// Add a method to set the occlusion threshold
+	const setOcclusionThresholdLocal = (threshold) => {
+		// Update the global setting
+		setOcclusionThreshold(threshold);
+		
+		// Clear the solidity cache when changing threshold
+		chunkSolidityCacheRef.current.clear();
+		
+		// Force an update of visible chunks
+		updateVisibleChunks();
+	};
+
+	// Add a cache for chunk adjacency information
+	const chunkAdjacencyCache = new Map();
+	
+	// Helper function to check if a chunk is adjacent to any verified visible chunk
+	const isAdjacentToVisibleChunk = (chunkKey, verifiedVisibleChunks) => {
+		// Check if we have cached result
+		if (chunkAdjacencyCache.has(chunkKey)) {
+			const cachedAdjacentChunks = chunkAdjacencyCache.get(chunkKey);
+			// Check if any of the cached adjacent chunks are in the verified visible set
+			for (const adjacentChunk of cachedAdjacentChunks) {
+				if (verifiedVisibleChunks.has(adjacentChunk)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		
+		// Parse chunk coordinates
+		const [cx, cy, cz] = chunkKey.split(',').map(Number);
+		
+		// Store adjacent chunks for caching
+		const adjacentChunks = [];
+		
+		// First check the 6 face-adjacent neighbors (more likely to be visible)
+		const faceAdjacentOffsets = [
+			[1, 0, 0], [-1, 0, 0],  // X axis
+			[0, 1, 0], [0, -1, 0],  // Y axis
+			[0, 0, 1], [0, 0, -1]   // Z axis
+		];
+		
+		for (const [dx, dy, dz] of faceAdjacentOffsets) {
+			const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
+			adjacentChunks.push(adjacentChunkKey);
+			
+			if (verifiedVisibleChunks.has(adjacentChunkKey)) {
+				// Cache the result before returning
+				chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+				return true;
+			}
+		}
+		
+		// If no face-adjacent chunks are visible, check the 20 diagonal neighbors
+		// 8 corner diagonals
+		for (let dx = -1; dx <= 1; dx += 2) {
+			for (let dy = -1; dy <= 1; dy += 2) {
+				for (let dz = -1; dz <= 1; dz += 2) {
+					const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
+					adjacentChunks.push(adjacentChunkKey);
+					
+					if (verifiedVisibleChunks.has(adjacentChunkKey)) {
+						// Cache the result before returning
+						chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+						return true;
+					}
+				}
+			}
+		}
+		
+		// 12 edge diagonals
+		const edgeDiagonalOffsets = [
+			// X-Y plane edges
+			[1, 1, 0], [1, -1, 0], [-1, 1, 0], [-1, -1, 0],
+			// X-Z plane edges
+			[1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1],
+			// Y-Z plane edges
+			[0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1]
+		];
+		
+		for (const [dx, dy, dz] of edgeDiagonalOffsets) {
+			const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
+			adjacentChunks.push(adjacentChunkKey);
+			
+			if (verifiedVisibleChunks.has(adjacentChunkKey)) {
+				// Cache the result before returning
+				chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+				return true;
+			}
+		}
+		
+		// Cache the result before returning
+		chunkAdjacencyCache.set(chunkKey, adjacentChunks);
+		return false;
+	};
+	
+	// Function to update which chunks are visible based on camera position and frustum
+	// Delete the old updateVisibleChunks function and keep only this optimized version
+	// ... existing code ...
 
 	// Main return statement
 	return (

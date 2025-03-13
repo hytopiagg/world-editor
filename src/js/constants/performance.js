@@ -4,6 +4,7 @@ export const PERFORMANCE_SETTINGS = {
   objectPooling: true,
   batchedGeometry: true,
   occlusionCulling: true,
+  occlusionThreshold: 0.5, // Threshold for considering a chunk as occluding (0-1)
   instancingEnabled: true,
   shadowDistance: 96,
 };
@@ -46,6 +47,26 @@ export const toggleInstancing = (enabled) => {
 };
 
 export const getInstancingEnabled = () => PERFORMANCE_SETTINGS.instancingEnabled;
+
+// Toggle occlusion culling
+export const toggleOcclusionCulling = (enabled) => {
+  PERFORMANCE_SETTINGS.occlusionCulling = enabled;
+  console.log(`Occlusion culling set to ${enabled}`);
+  return true;
+};
+
+export const getOcclusionCullingEnabled = () => PERFORMANCE_SETTINGS.occlusionCulling;
+
+// Set occlusion threshold
+export const setOcclusionThreshold = (threshold) => {
+  // Ensure threshold is between 0 and 1
+  const validThreshold = Math.max(0, Math.min(1, threshold));
+  PERFORMANCE_SETTINGS.occlusionThreshold = validThreshold;
+  console.log(`Occlusion threshold set to ${validThreshold}`);
+  return true;
+};
+
+export const getOcclusionThreshold = () => PERFORMANCE_SETTINGS.occlusionThreshold;
 
 // Texture atlas settings getters/setters
 export const getTextureAtlasSettings = () => TEXTURE_ATLAS_SETTINGS;

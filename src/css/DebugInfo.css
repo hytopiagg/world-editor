@@ -152,3 +152,10 @@
   background: #4f9;
   cursor: pointer;
 }
+
+.slider-hint {
+  font-size: 9px;
+  color: #888;
+  margin-top: 2px;
+  font-style: italic;
+}
