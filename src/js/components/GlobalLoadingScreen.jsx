@@ -13,11 +13,17 @@ const GlobalLoadingScreen = () => {
 
   useEffect(() => {
     // Subscribe to loading manager updates
-    const unsubscribe = loadingManager.addListener(setLoadingState);
+    const unsubscribe = loadingManager.addListener((state) => {
+      // Log progress value when it changes
+      if (state.progress !== loadingState.progress) {
+        console.log('Progress updated:', state.progress);
+      }
+      setLoadingState(state);
+    });
     
     // Cleanup subscription when component unmounts
     return () => unsubscribe();
-  }, []);
+  }, [loadingState.progress]);
 
   if (!loadingState.isLoading) {
     return null;
@@ -39,10 +45,13 @@ const GlobalLoadingScreen = () => {
             <div className="progress-bar">
               <div
                 className="progress-fill"
-                style={{ width: `${loadingState.progress}%` }}
+                style={{ 
+                  width: `${Math.round(loadingState.progress)}%`,
+                  transition: 'width 0.2s ease-out'
+                }}
               ></div>
             </div>
-            <div className="progress-text">{loadingState.progress}%</div>
+            <div className="progress-text">{Math.round(loadingState.progress)}%</div>
           </div>
         )}
         

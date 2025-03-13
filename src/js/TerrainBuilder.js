@@ -3782,31 +3782,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 // Convert to forwardRef
 export default forwardRef(TerrainBuilder);
 
-// Reset chunk renderer with new settings
-export const resetChunkRenderer = (settings = {}) => {
-	// Update settings
-	Object.entries(settings).forEach(([key, value]) => {
-		setTextureAtlasSetting(key, value);
-	});
-	
-	// Clear chunk load manager if it exists
-	const loadManager = getChunkLoadManager();
-	if (loadManager) {
-		loadManager.clearQueue();
-	}
-	
-	// If disabling texture atlas, clear the atlas
-	if (settings.hasOwnProperty('useTextureAtlas') && !settings.useTextureAtlas) {
-		// Reset texture atlas
-		initTextureAtlas(null); // This will reset the atlas internally
-	}
-	
-	// Set flag to rebuild all meshes
-	meshesNeedsRefresh.value = true;
-	
-	console.log("Chunk renderer reset with new settings:", settings);
-};
-
 // Re-export functions from the BlockTypesManager for backward compatibility
 export { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks };
 

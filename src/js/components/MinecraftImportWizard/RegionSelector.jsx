@@ -487,6 +487,25 @@ const RegionSelector = ({ worldData, onRegionSelected, initialRegion }) => {
     }
   }, [worldData, initialRegion]);
 
+  // Force a recalculation of the height bars when the component is mounted
+  useEffect(() => {
+    if (worldData?.bounds && bounds) {
+      // Force a layout recalculation by creating a small, temporary state update
+      const currentHeight = size.y;
+      const tempHeight = currentHeight + 1;
+      
+      // Apply a quick change and revert back to force the bars to update visually
+      setTimeout(() => {
+        setSize(prevSize => ({...prevSize, y: tempHeight}));
+        
+        // Revert back to the original height after a short delay
+        setTimeout(() => {
+          setSize(prevSize => ({...prevSize, y: currentHeight}));
+        }, 50);
+      }, 100);
+    }
+  }, [worldData?.bounds, bounds]);
+
   // Update bounds whenever size or center changes
   useEffect(() => {
     if (!center) return;

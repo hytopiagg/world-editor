@@ -55,15 +55,67 @@ const FrontViewSelector = ({ bounds, selectedBounds, onBoundsChange }) => {
       
       // Run immediately and then again after a delay to ensure DOM is ready
       forceUpdate();
+      
+      // Add multiple delayed updates to ensure the bars render correctly
+      // This is necessary because sometimes the initial calculation happens 
+      // before styles are fully applied
       setTimeout(forceUpdate, 100);
+      setTimeout(forceUpdate, 300);
+      setTimeout(forceUpdate, 500);
     }
   }, [selectedBounds, svgRef.current]);
   
-  // Convert Y coordinate to SVG Y position
+  // Add a separate effect to force reflow after the component is fully mounted
+  useEffect(() => {
+    if (svgRef.current && selectedBounds) {
+      // This will run once after initial mount
+      const handleResize = () => {
+        // Force recomputation of the selection area position
+        const selectionArea = svgRef.current.querySelector('.y-selection-area');
+        if (selectionArea) {
+          selectionArea.style.top = `${yToSvgY(selectedBounds.maxY)}px`;
+          selectionArea.style.height = `${yToSvgY(selectedBounds.minY) - yToSvgY(selectedBounds.maxY)}px`;
+        }
+        
+        // Also update all reference lines
+        const referenceLines = svgRef.current.querySelectorAll('.reference-line');
+        referenceLines.forEach((line, index) => {
+          if (index < REFERENCE_POINTS.length) {
+            const y = REFERENCE_POINTS[index].y;
+            line.style.top = `${yToSvgY(y)}px`;
+          }
+        });
+      };
+
+      // Force the calculation immediately and after a delay
+      handleResize();
+      window.addEventListener('resize', handleResize);
+      
+      // Run it a few more times with delays to ensure it's properly positioned
+      // Using more frequent updates in the first second to ensure proper rendering
+      setTimeout(handleResize, 50);
+      setTimeout(handleResize, 100);
+      setTimeout(handleResize, 200);
+      setTimeout(handleResize, 500);
+      setTimeout(handleResize, 1000);
+      
+      return () => {
+        window.removeEventListener('resize', handleResize);
+      };
+    }
+  }, []);
+  
+  // Convert Y coordinate to SVG Y position with additional checks for container size
   const yToSvgY = (y) => {
     if (!svgRef.current) return 0;
     
-    const height = svgRef.current.clientHeight - 30; // Subtract padding (15px top + 15px bottom)
+    // Get the actual height after the container has rendered
+    const containerHeight = svgRef.current.clientHeight || 300; // Use 300px as fallback
+    const height = containerHeight - 30; // Subtract padding (15px top + 15px bottom)
+    
+    // Make sure we have valid height before calculation
+    if (height <= 0) return 15; // Return top padding if height is invalid
+    
     // Map from Minecraft Y range (-64 to 320) to SVG height, with padding
     return 15 + height - ((y + 64) / (320 + 64)) * height;
   };
@@ -209,7 +261,8 @@ const FrontViewSelector = ({ bounds, selectedBounds, onBoundsChange }) => {
               className="y-selection-area"
               style={{
                 top: `${yToSvgY(selectedBounds.maxY)}px`,
-                height: `${yToSvgY(selectedBounds.minY) - yToSvgY(selectedBounds.maxY)}px`
+                height: `${yToSvgY(selectedBounds.minY) - yToSvgY(selectedBounds.maxY)}px`,
+                transition: 'none' // Disable transitions initially to prevent animation artifacts
               }}
             >
               {/* Max Y handle */}

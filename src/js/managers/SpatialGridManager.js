@@ -342,7 +342,10 @@ class SpatialGridManager {
 				// Update the loading status if showing loading screen
 				if (showLoadingScreen && this.loadingManager) {
 					try {
-						const progress = Math.floor((currentBatch / totalBatches) * 100);
+						// For the last batch, always set progress to 100%
+						const progress = (currentBatch === totalBatches) 
+							? 100
+							: Math.floor((currentBatch / totalBatches) * 100);
 						this.loadingManager.updateLoading(`Updating spatial hash: batch ${currentBatch}/${totalBatches} (${progress}%)`, progress);
 					} catch (error) {
 						console.error("Error updating loading screen:", error);
@@ -377,7 +380,12 @@ class SpatialGridManager {
 					// Hide loading screen if shown
 					if (showLoadingScreen && this.loadingManager) {
 						try {
-							this.loadingManager.hideLoading();
+							// Set progress to 100% before hiding the loading screen
+							this.loadingManager.updateLoading(`Spatial hash update complete (100%)`, 100);
+							// Wait a brief moment to ensure the update is visible
+							setTimeout(() => {
+								this.loadingManager.hideLoading();
+							}, 500); // Increased timeout to ensure the 100% is visible
 						} catch (error) {
 							console.error("Error hiding loading screen:", error);
 						}
