@@ -1078,38 +1078,52 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const handleMouseDown = (event) => {
 		const startTime = performance.now();
 		
+		// Check if a tool is active
+		const isToolActive = toolManagerRef.current && toolManagerRef.current.getActiveTool();
+		
 		// If a tool is active, delegate the event to it
-		if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
+		if (isToolActive) {
 			const intersection = getRaycastIntersection();
 			if (intersection) {
 				toolManagerRef.current.handleMouseDown(event, intersection.point, event.button);
-				return; // Let the tool handle it
+				// Important: Return immediately to prevent default block placement
+				return;
+			} else {
+				// If we didn't get an intersection but a tool is active, still return
+				// to prevent default block placement behavior
+				console.log('TerrainBuilder: No intersection found for tool, but tool is active');
+				return;
 			}
 		}
 		
-		// Otherwise use default behavior
+		// Otherwise use default behavior for block placement
 		if (event.button === 0) {
-			isPlacingRef.current = true;
-			isFirstBlockRef.current = true;
-			currentPlacingYRef.current = previewPositionRef.current.y;
-			
-			// Clear recently placed blocks on mouse down
-			recentlyPlacedBlocksRef.current.clear();
+			// Only set isPlacingRef.current to true if no tool is active
+			// (This check is redundant now, but kept for clarity)
+			if (!isToolActive) {
+				isPlacingRef.current = true;
+				
+				isFirstBlockRef.current = true;
+				currentPlacingYRef.current = previewPositionRef.current.y;
+				
+				// Clear recently placed blocks on mouse down
+				recentlyPlacedBlocksRef.current.clear();
 
-			// Store initial position for axis lock
-			if (axisLockEnabledRef.current) {
-				placementStartPosition.current = previewPositionRef.current.clone();
+				// Store initial position for axis lock
+				if (axisLockEnabledRef.current) {
+					placementStartPosition.current = previewPositionRef.current.clone();
+				}
+
+				// Reset the placement changes tracker
+				placementChangesRef.current = { 
+					terrain: { added: {}, removed: {} }, 
+					environment: { added: [], removed: [] } 
+				};
+
+				// Handle initial placement
+				updatePreviewPosition();
+				playPlaceSound();
 			}
-
-			// Reset the placement changes tracker
-			placementChangesRef.current = { 
-				terrain: { added: {}, removed: {} }, 
-				environment: { added: [], removed: [] } 
-			};
-
-			// Handle initial placement
-			updatePreviewPosition();
-			playPlaceSound();
 			
 			const endTime = performance.now();
 			console.log(`Performance: handleMouseDown took ${endTime - startTime}ms`);
@@ -1118,6 +1132,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	const handleBlockPlacement = () => {
 		const startTime = performance.now();
+		
+		// Safety check: Don't do anything if a tool is active - this avoids interfering with tool functionality
+		if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
+			return;
+		}
 		
 		if (!modeRef.current || !isPlacingRef.current) return;
 
@@ -1421,176 +1440,39 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 
 		const rect = canvasRectRef.current;
-
-		// Reuse vectors for normalized mouse position
-		normalizedMouseRef.current.x = ((((pointer.x + 1) / 2) * rect.width - rect.width / 2) / rect.width) * 2;
-		normalizedMouseRef.current.y = ((((pointer.y + 1) / 2) * rect.height - rect.height / 2) / rect.height) * 2;
-
-		// Setup raycaster with the normalized coordinates
-		threeRaycaster.setFromCamera(normalizedMouseRef.current, threeCamera);
 		
-		// FIRST PASS: Check for block intersections directly
-		let blockIntersection = null;
+		// Get intersection for preview
+		const blockIntersection = getRaycastIntersection();
 		
-		// Use spatial hash for efficient block checking
-		// Safety check - ensure spatialGridManagerRef.current is initialized
-		if (useSpatialHashRef.current && spatialGridManagerRef.current && spatialGridManagerRef.current.size > 0) {
-			// Create ray from camera
-			const ray = threeRaycaster.ray.clone();
+		// If we have a valid intersection and mouse position:
+		if (blockIntersection && blockIntersection.point) {
+			// Check if a tool is active - this is important to prevent default block placement when tools are active
+			const isToolActive = toolManagerRef.current && toolManagerRef.current.getActiveTool();
 			
-			// Parameters for ray marching
-			const maxDistance = selectionDistanceRef.current;
-			const precision = 0.1;
-			
-			// Start at camera position
-			let pos = ray.origin.clone();
-			let step = ray.direction.clone().normalize().multiplyScalar(precision);
-			let distance = 0;
-			
-			// For performance tracking
-			let iterations = 0;
-			const maxIterations = 1000; // Limit iterations to prevent infinite loops
-			
-			// Ray marching loop - ALWAYS check for blocks first
-			while (distance < maxDistance && iterations < maxIterations) {
-				iterations++;
-				
-				// Get block coordinates
-				const blockX = Math.floor(pos.x);
-				const blockY = Math.floor(pos.y);
-				const blockZ = Math.floor(pos.z);
-				
-				// Skip if below ground
-				if (blockY < 0) {
-					pos.add(step);
-					distance += precision;
-					continue;
-				}
-				
-				// Create block key
-				const blockKey = `${blockX},${blockY},${blockZ}`;
-				
-				// Skip recently placed blocks during placement
-				if (isPlacingRef.current && recentlyPlacedBlocksRef.current.has(blockKey)) {
-					pos.add(step);
-					distance += precision;
-					continue;
-				}
-				
-				// Check if there's a block at this position (using spatial hash)
-				if (spatialGridManagerRef.current.hasBlock(blockKey)) {
-					// We hit a block!
-					const blockId = spatialGridManagerRef.current.getBlock(blockKey);
-					
-					// Calculate exact hit position
-					const point = pos.clone();
-					
-					// Calculate normal (which face was hit)
-					const normal = new THREE.Vector3();
-					
-					// Use epsilon tests to determine face
-					const epsilon = 0.01;
-					const px = pos.x - blockX;
-					const py = pos.y - blockY;
-					const pz = pos.z - blockZ;
-					
-					if (px < epsilon) normal.set(-1, 0, 0);
-					else if (px > 1-epsilon) normal.set(1, 0, 0);
-					else if (py < epsilon) normal.set(0, -1, 0);
-					else if (py > 1-epsilon) normal.set(0, 1, 0);
-					else if (pz < epsilon) normal.set(0, 0, -1);
-					else normal.set(0, 0, 1);
-					
-					// Set block intersection
-					blockIntersection = {
-						point,
-						normal,
-						block: { x: blockX, y: blockY, z: blockZ },
-						blockId,
-						distance,
-						isGroundPlane: false
+			// Delegate mouse move to tool if active
+			if (isToolActive) {
+				const activeTool = toolManagerRef.current.getActiveTool();
+				// Only call the tool's handleMouseMove if it has this method
+				if (typeof activeTool.handleMouseMove === 'function') {
+					// Create a synthetic mouse event using the current pointer coordinates and canvas position
+					const canvasRect = gl.domElement.getBoundingClientRect();
+					const mouseEvent = {
+						// Calculate client coordinates based on normalized pointer and canvas rect
+						clientX: ((pointer.x + 1) / 2) * canvasRect.width + canvasRect.left,
+						clientY: ((1 - pointer.y) / 2) * canvasRect.height + canvasRect.top
 					};
 					
-					// Exit the loop since we found a block
-					break;
-				}
-				
-				// Move along the ray
-				pos.add(step);
-				distance += precision;
-			}
-		}
-		
-		// SECOND PASS: If no block intersections, check for ground plane intersection
-		if (!blockIntersection) {
-			// Create a ground plane for raycasting
-			//const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-			const rayOrigin = threeRaycaster.ray.origin;
-			const rayDirection = threeRaycaster.ray.direction;
-			
-			// Calculate intersection with the ground plane
-			const target = new THREE.Vector3();
-			const intersectionDistance = rayOrigin.y / -rayDirection.y;
-			
-			// Only consider intersections in front of the camera and within selection distance
-			if (intersectionDistance > 0 && intersectionDistance < selectionDistanceRef.current) {
-				// Calculate the intersection point
-				target.copy(rayOrigin).addScaledVector(rayDirection, intersectionDistance);
-				
-				// Check if this point is within our valid grid area
-				const gridSizeHalf = gridSize / 2;
-				if (Math.abs(target.x) <= gridSizeHalf && Math.abs(target.z) <= gridSizeHalf) {
-					// This is a hit against the ground plane within the valid build area
-					blockIntersection = {
-						point: target.clone(),
-						normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
-						block: { x: Math.floor(target.x), y: 0, z: Math.floor(target.z) },
-						blockId: null, // No block here - it's the ground
-						distance: intersectionDistance,
-						isGroundPlane: true
-					};
+					// Call the tool's handleMouseMove
+					activeTool.handleMouseMove(mouseEvent, blockIntersection.point);
 				}
 			}
-		}
-		
-		// If no intersection at all, hide preview and return
-		if (!blockIntersection) {
-			if (previewMeshRef.current && previewMeshRef.current.visible) {
-				previewMeshRef.current.visible = false;
-			}
-			return;
-		}
-		
-		// Track if we're hitting the ground plane
-		previewIsGroundPlaneRef.current = blockIntersection.isGroundPlane === true;
-
-		// If a tool is active, delegate the mouse move event to it
-		if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
-			toolManagerRef.current.handleMouseMove(null, blockIntersection.point);
 			
-			// Also call tool update method to allow for continuous updates
-			toolManagerRef.current.update();
-		}
-
-		// Update preview mesh color based on whether we're hitting a block or the ground plane
-		if (previewMeshRef.current && previewMeshRef.current.material) {
-			if (previewIsGroundPlaneRef.current) {
-				// Ground plane - use a blue tint
-				previewMeshRef.current.material.color.setRGB(0.7, 0.7, 1.0);
-				previewMeshRef.current.material.opacity = 0.6;
-			} else {
-				// Block - use normal color
-				previewMeshRef.current.material.color.setRGB(1.0, 1.0, 1.0);
-				previewMeshRef.current.material.opacity = 0.8;
-			}
-		}
-
-		if (!currentBlockTypeRef?.current?.isEnvironment) {
-			// Reuse vector for grid position calculation
+			// Always update previewPositionRef for tools and default behavior
 			tempVectorRef.current.copy(blockIntersection.point);
-			
-			// Apply mode-specific adjustments
-			if (modeRef.current === "remove") {
+
+			// If deleting, move back a bit
+			if (modeRef.current === "delete") {
+				// For delete mode, move half a block in the normal direction
 				tempVectorRef.current.x = Math.round(tempVectorRef.current.x - blockIntersection.normal.x * 0.5);
 				tempVectorRef.current.y = Math.round(tempVectorRef.current.y - blockIntersection.normal.y * 0.5);
 				tempVectorRef.current.z = Math.round(tempVectorRef.current.z - blockIntersection.normal.z * 0.5);
@@ -1607,97 +1489,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					tempVectorRef.current.y = 0; // Position at y=0 when placing on ground plane
 				}
 			}
-
-			// Maintain Y position during placement
-			if (isPlacingRef.current) {
-				tempVectorRef.current.y = currentPlacingYRef.current;
-			}
-
-			// Apply axis lock if needed
-			if (axisLockEnabledRef.current && isPlacingRef.current) {
-				if (!lockedAxisRef.current && !isFirstBlockRef.current) {
-					// Determine which axis to lock based on movement
-					const newAxis = determineLockedAxis(tempVectorRef.current);
-					if (newAxis) {
-						lockedAxisRef.current = newAxis;
-						console.log("Axis locked to:", newAxis); // Debug log
-					}
-				}
-
-				if (lockedAxisRef.current) {
-					// Lock movement to the determined axis
-					if (lockedAxisRef.current === 'x') {
-						tempVectorRef.current.z = placementStartPosition.current.z;
-					} else {
-						tempVectorRef.current.x = placementStartPosition.current.x;
-					}
-				}
-			}
-
-			// Check if we've moved enough to update the preview position
-			// This adds hysteresis to prevent small jitters
-			if (!isFirstBlockRef.current && isPlacingRef.current) {
-				tempVec2Ref.current.set(lastPreviewPositionRef.current.x, lastPreviewPositionRef.current.z);
-				tempVec2_2Ref.current.set(tempVectorRef.current.x, tempVectorRef.current.z);
-				if (tempVec2Ref.current.distanceTo(tempVec2_2Ref.current) < THRESHOLD_FOR_PLACING) {
-					return;
-				}
-			}
-
-			// Update preview position
-			previewPositionRef.current.copy(tempVectorRef.current);
 			
-			// Only update the state if the position has changed significantly
-			if (!lastPreviewPositionRef.current.equals(previewPositionRef.current)) {
-				lastPreviewPositionRef.current.copy(previewPositionRef.current);
-				setPreviewPosition(previewPositionRef.current.clone());
+			// CRITICAL: Update the previewPositionRef with the calculated position from tempVectorRef
+			// This ensures the preview block moves with the mouse
+			if (previewPositionRef && previewPositionRef.current) {
+				previewPositionRef.current.copy(tempVectorRef.current);
 				
-				// Send preview position to App.js
-				if (previewPositionToAppJS) {
-					previewPositionToAppJS(previewPositionRef.current);
-				}
-				
-				updateDebugInfo();
+				// CRITICAL: Also update the React state variable that's used for rendering the preview box
+				// This ensures the green box indicator follows the mouse
+				setPreviewPosition(tempVectorRef.current.clone());
 			}
 			
-			// Update preview mesh position
-			if (previewMeshRef.current) {
-				previewMeshRef.current.position.copy(previewPositionRef.current);
-				previewMeshRef.current.visible = true;
+			// Important check: Only call handleBlockPlacement if a tool is NOT active.
+			// This prevents the default block placement behavior from interfering with tools like WallTool
+			if (isPlacingRef.current && !isToolActive) {
+				handleBlockPlacement();
 			}
-		} else {
-			// For environment objects, position at the intersection point
-			const envPosition = blockIntersection.point.clone();
-			
-			// For environment objects, we want to snap the Y position to the nearest integer
-			// and add 0.5 to place them on top of blocks rather than halfway through
-			envPosition.y = Math.ceil(envPosition.y);
-			
-			previewPositionRef.current.copy(envPosition);
-			
-			// Only update the state if the position has changed significantly
-			if (!lastPreviewPositionRef.current.equals(previewPositionRef.current)) {
-				lastPreviewPositionRef.current.copy(previewPositionRef.current);
-				setPreviewPosition(previewPositionRef.current.clone());
-				
-				// Send preview position to App.js
-				if (previewPositionToAppJS) {
-					previewPositionToAppJS(previewPositionRef.current);
-				}
-				
-				updateDebugInfo();
-			}
-			
-			// Update preview mesh position
-			if (previewMeshRef.current) {
-				previewMeshRef.current.position.copy(previewPositionRef.current);
-				previewMeshRef.current.visible = true;
-				previewMeshRef.current.updateMatrix();
-			}
-		}
-
-		if (isPlacingRef.current) {
-			handleBlockPlacement();
 		}
 	};
 
@@ -2085,6 +1892,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			currentBlockTypeRef: currentBlockTypeRef,
 			previewPositionRef: previewPositionRef,
 			terrainBuilderRef: ref, // Add a reference to this component
+			undoRedoManager: undoRedoManager, // Pass the undoRedoManager to the tools
+			placementChangesRef: placementChangesRef, // Add placement changes ref for tracking undo/redo
+			isPlacingRef: isPlacingRef, // Add placing state ref
 			// Add any other properties tools might need
 		};
 		
@@ -2094,12 +1904,28 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const wallTool = new WallTool(terrainBuilderProps);
 		toolManagerRef.current.registerTool("wall", wallTool);
 		
+		// Remove the incorrect useEffect from here
+		
 		initialize();
 
 		return () => {
 			mounted = false; // Prevent state updates after unmount
 		};
 	}, [threeCamera, scene]);
+	
+	// Add effect to update tools with undoRedoManager when it becomes available - at the top level of the component
+	useEffect(() => {
+		if (undoRedoManager && toolManagerRef.current) {
+			console.log('TerrainBuilder: UndoRedoManager is now available, updating tools');
+
+			// Update WallTool with the undoRedoManager
+			const wallTool = toolManagerRef.current.tools["wall"];
+			if (wallTool) {
+				console.log('TerrainBuilder: Updating WallTool with undoRedoManager');
+				wallTool.undoRedoManager = undoRedoManager;
+			}
+		}
+	}, [undoRedoManager]);
 
 	// Cleanup effect that cleans up meshes when component unmounts
 	useEffect(() => {

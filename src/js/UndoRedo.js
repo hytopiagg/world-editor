@@ -101,36 +101,31 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
       console.log("Undo state:", currentUndo);
       const redoStates = await DatabaseManager.getData(STORES.REDO, 'states') || [];
 
-      // Get current terrain and environment
-      const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, 'current') || {};
-      const currentEnv = await DatabaseManager.getData(STORES.ENVIRONMENT, 'current') || [];
-      console.log(`Current terrain has ${Object.keys(currentTerrain).length} blocks`);
-
-      // Apply undo changes
-      let newTerrain = { ...currentTerrain };
-      let newEnvironment = [...currentEnv];
-
-      if (currentUndo.terrain) {
-        // Remove added blocks
-        if (currentUndo.terrain.added) {
-          const addedKeys = Object.keys(currentUndo.terrain.added);
-          console.log(`Removing ${addedKeys.length} added blocks`);
-          addedKeys.forEach(key => {
-            delete newTerrain[key];
-          });
-        }
-        
-        // Restore removed blocks
-        if (currentUndo.terrain.removed) {
-          const removedEntries = Object.entries(currentUndo.terrain.removed);
-          console.log(`Restoring ${removedEntries.length} removed blocks`);
-          removedEntries.forEach(([key, value]) => {
-            newTerrain[key] = value;
-          });
-        }
-      }
-
+      // Prepare redo state
+      const redoChanges = {
+        terrain: currentUndo.terrain
+          ? {
+              added: currentUndo.terrain.added,
+              removed: currentUndo.terrain.removed
+            }
+          : null,
+        environment: currentUndo.environment
+          ? {
+              added: currentUndo.environment.added,
+              removed: currentUndo.environment.removed
+            }
+          : null
+      };
+      
+      // For terrain, we'll update the selective changes in handleUndo to improve performance
+      
+      // For environment, we still need to load and update it fully
+      let newEnvironment = [];
+      
       if (currentUndo.environment) {
+        const currentEnv = await DatabaseManager.getData(STORES.ENVIRONMENT, 'current') || [];
+        newEnvironment = [...currentEnv];
+        
         // Remove any objects that were originally "added" — with ±0.001
         const originalEnvCount = newEnvironment.length;
         if (currentUndo.environment.added && currentUndo.environment.added.length > 0) {
@@ -153,29 +148,13 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
         }
       }
 
-      // Prepare redo state
-      const redoChanges = {
-        terrain: currentUndo.terrain
-          ? {
-              added: currentUndo.terrain.added,
-              removed: currentUndo.terrain.removed
-            }
-          : null,
-        environment: currentUndo.environment
-          ? {
-              added: currentUndo.environment.added,
-              removed: currentUndo.environment.removed
-            }
-          : null
-      };
-      
-      console.log(`Updated terrain has ${Object.keys(newTerrain).length} blocks`);
       console.log("Saving updated state to database...");
 
       // Save updated state, update undo/redo
       try {
         await Promise.all([
-          DatabaseManager.saveData(STORES.TERRAIN, 'current', newTerrain),
+          // For terrain, we'll handle individual block updates directly in handleUndo
+          // to avoid loading the entire terrain data
           DatabaseManager.saveData(STORES.ENVIRONMENT, 'current', newEnvironment),
           DatabaseManager.saveData(STORES.UNDO, 'states', remainingUndo),
           DatabaseManager.saveData(STORES.REDO, 'states', [redoChanges, ...redoStates])
@@ -204,26 +183,12 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
       const [currentRedo, ...remainingRedo] = redoStates;
       const undoStates = await DatabaseManager.getData(STORES.UNDO, 'states') || [];
 
-      // Get current terrain and environment
-      const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, 'current') || {};
-      const currentEnv = await DatabaseManager.getData(STORES.ENVIRONMENT, 'current') || [];
-
-      // Apply redo changes
-      let newTerrain = { ...currentTerrain };
-      let newEnvironment = [...currentEnv];
-
-      if (currentRedo.terrain) {
-        // Re-add blocks that were originally added
-        Object.entries(currentRedo.terrain.added || {}).forEach(([key, value]) => {
-          newTerrain[key] = value;
-        });
-        // Remove blocks that were originally removed
-        Object.keys(currentRedo.terrain.removed || {}).forEach(key => {
-          delete newTerrain[key];
-        });
-      }
-
+      // For environment, we still need to load and update it fully
+      let newEnvironment = [];
+      
       if (currentRedo.environment) {
+        const currentEnv = await DatabaseManager.getData(STORES.ENVIRONMENT, 'current') || [];
+        newEnvironment = [...currentEnv];
 
         // Remove any objects that were originally removed — with ±0.001
         if (currentRedo.environment.removed?.length > 0) {
@@ -260,7 +225,7 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
       };
 
       await Promise.all([
-        DatabaseManager.saveData(STORES.TERRAIN, 'current', newTerrain),
+        // We'll handle terrain updates in handleRedo
         DatabaseManager.saveData(STORES.ENVIRONMENT, 'current', newEnvironment),
         DatabaseManager.saveData(STORES.REDO, 'states', remainingRedo),
         DatabaseManager.saveData(STORES.UNDO, 'states', [undoChanges, ...undoStates])
@@ -282,10 +247,6 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
       if (undoneChanges) {
         console.log("Undo operation successful, selectively updating terrain...");
         
-        // Get current terrain from database
-        const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, 'current') || {};
-        console.log(`Current terrain has ${Object.keys(currentTerrain).length} blocks`);
-        
         // Process terrain changes
         if (undoneChanges.terrain && terrainBuilderRef?.current) {
           const addedBlocks = {};
@@ -296,6 +257,37 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
             Object.keys(undoneChanges.terrain.added).forEach(posKey => {
               removedBlocks[posKey] = undoneChanges.terrain.added[posKey];
             });
+            
+            console.log(`Will remove ${Object.keys(removedBlocks).length} blocks from the terrain`);
+            
+            // Update database directly for removed blocks (batch delete)
+            if (Object.keys(removedBlocks).length > 0) {
+              try {
+                // Get a transaction and update the database directly
+                const db = await DatabaseManager.getDBConnection();
+                const tx = db.transaction(STORES.TERRAIN, 'readwrite');
+                const store = tx.objectStore(STORES.TERRAIN);
+                
+                // Delete keys from storage
+                await Promise.all(Object.keys(removedBlocks).map(key => {
+                  const deleteRequest = store.delete(`${key}`);
+                  return new Promise((resolve, reject) => {
+                    deleteRequest.onsuccess = resolve;
+                    deleteRequest.onerror = reject;
+                  });
+                }));
+                
+                // Complete the transaction
+                await new Promise((resolve, reject) => {
+                  tx.oncomplete = resolve;
+                  tx.onerror = reject;
+                });
+                
+                console.log(`Successfully deleted ${Object.keys(removedBlocks).length} blocks directly from DB`);
+              } catch (dbError) {
+                console.error("Error updating database during block removal:", dbError);
+              }
+            }
           }
           
           // Added blocks (were removed in the original operation)
@@ -303,6 +295,37 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
             Object.entries(undoneChanges.terrain.removed).forEach(([posKey, blockId]) => {
               addedBlocks[posKey] = blockId;
             });
+            
+            console.log(`Will add back ${Object.keys(addedBlocks).length} blocks to the terrain`);
+            
+            // Update database directly for added blocks (batch put)
+            if (Object.keys(addedBlocks).length > 0) {
+              try {
+                // Get a transaction and update the database directly
+                const db = await DatabaseManager.getDBConnection();
+                const tx = db.transaction(STORES.TERRAIN, 'readwrite');
+                const store = tx.objectStore(STORES.TERRAIN);
+                
+                // Add blocks to storage
+                await Promise.all(Object.entries(addedBlocks).map(([key, value]) => {
+                  const putRequest = store.put(value, key);
+                  return new Promise((resolve, reject) => {
+                    putRequest.onsuccess = resolve;
+                    putRequest.onerror = reject;
+                  });
+                }));
+                
+                // Complete the transaction
+                await new Promise((resolve, reject) => {
+                  tx.oncomplete = resolve;
+                  tx.onerror = reject;
+                });
+                
+                console.log(`Successfully added ${Object.keys(addedBlocks).length} blocks directly to DB`);
+              } catch (dbError) {
+                console.error("Error updating database during block addition:", dbError);
+              }
+            }
           }
           
           console.log(`Selectively updating terrain: ${Object.keys(addedBlocks).length} additions, ${Object.keys(removedBlocks).length} removals`);
@@ -354,10 +377,6 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
       if (redoneChanges) {
         console.log("Redo operation successful, selectively updating terrain...");
         
-        // Get current terrain from database
-        const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, 'current') || {};
-        console.log(`Current terrain has ${Object.keys(currentTerrain).length} blocks`);
-        
         // Process terrain changes
         if (redoneChanges.terrain && terrainBuilderRef?.current) {
           const addedBlocks = {};
@@ -368,6 +387,37 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
             Object.entries(redoneChanges.terrain.added).forEach(([posKey, blockId]) => {
               addedBlocks[posKey] = blockId;
             });
+            
+            console.log(`Will add ${Object.keys(addedBlocks).length} blocks to the terrain`);
+            
+            // Update database directly for added blocks
+            if (Object.keys(addedBlocks).length > 0) {
+              try {
+                // Get a transaction and update the database directly
+                const db = await DatabaseManager.getDBConnection();
+                const tx = db.transaction(STORES.TERRAIN, 'readwrite');
+                const store = tx.objectStore(STORES.TERRAIN);
+                
+                // Add blocks to storage
+                await Promise.all(Object.entries(addedBlocks).map(([key, value]) => {
+                  const putRequest = store.put(value, key);
+                  return new Promise((resolve, reject) => {
+                    putRequest.onsuccess = resolve;
+                    putRequest.onerror = reject;
+                  });
+                }));
+                
+                // Complete the transaction
+                await new Promise((resolve, reject) => {
+                  tx.oncomplete = resolve;
+                  tx.onerror = reject;
+                });
+                
+                console.log(`Successfully added ${Object.keys(addedBlocks).length} blocks directly to DB`);
+              } catch (dbError) {
+                console.error("Error updating database during block addition:", dbError);
+              }
+            }
           }
           
           // Remove blocks that were originally removed
@@ -375,6 +425,37 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
             Object.entries(redoneChanges.terrain.removed).forEach(([posKey, blockId]) => {
               removedBlocks[posKey] = blockId;
             });
+            
+            console.log(`Will remove ${Object.keys(removedBlocks).length} blocks from the terrain`);
+            
+            // Update database directly for removed blocks
+            if (Object.keys(removedBlocks).length > 0) {
+              try {
+                // Get a transaction and update the database directly
+                const db = await DatabaseManager.getDBConnection();
+                const tx = db.transaction(STORES.TERRAIN, 'readwrite');
+                const store = tx.objectStore(STORES.TERRAIN);
+                
+                // Delete keys from storage
+                await Promise.all(Object.keys(removedBlocks).map(key => {
+                  const deleteRequest = store.delete(`${key}`);
+                  return new Promise((resolve, reject) => {
+                    deleteRequest.onsuccess = resolve;
+                    deleteRequest.onerror = reject;
+                  });
+                }));
+                
+                // Complete the transaction
+                await new Promise((resolve, reject) => {
+                  tx.oncomplete = resolve;
+                  tx.onerror = reject;
+                });
+                
+                console.log(`Successfully deleted ${Object.keys(removedBlocks).length} blocks directly from DB`);
+              } catch (dbError) {
+                console.error("Error updating database during block removal:", dbError);
+              }
+            }
           }
           
           console.log(`Selectively updating terrain: ${Object.keys(addedBlocks).length} additions, ${Object.keys(removedBlocks).length} removals`);

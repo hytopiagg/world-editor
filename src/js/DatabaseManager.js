@@ -52,6 +52,12 @@ export class DatabaseManager {
     return this.dbConnection;
   }
 
+  /// Get direct access to the database connection
+  /// Used for more efficient direct operations
+  static async getDBConnection() {
+    return this.getConnection();
+  }
+
   static async saveData(storeName, key, data) {
     const db = await this.getConnection();
     return new Promise((resolve, reject) => {
