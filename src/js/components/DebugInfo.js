@@ -12,6 +12,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
   const [occlusionThreshold, setOcclusionThreshold] = useState(getOcclusionThreshold());
   const [selectionDistance, setSelectionDistance] = useState(64); // Default to 64
   const [viewDistance, setViewDistance] = useState(64); // Default to 64
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true); // Default to true
   const [fps, setFps] = useState(0);
   const [frameTime, setFrameTime] = useState(0);
   const [maxFrameTime, setMaxFrameTime] = useState(0);
@@ -37,6 +38,11 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
       // Initialize view distance if available
       if (terrainBuilderRef.current.getViewDistance) {
         setViewDistance(terrainBuilderRef.current.getViewDistance());
+      }
+      
+      // Initialize auto-save status if available
+      if (terrainBuilderRef.current.isAutoSaveEnabled) {
+        setAutoSaveEnabled(terrainBuilderRef.current.isAutoSaveEnabled());
       }
     }
   }, [terrainBuilderRef]);
@@ -155,6 +161,15 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
   // Initialize the timeout property
   handleViewDistanceChange.timeoutId = null;
   
+  const handleAutoSaveToggle = (e) => {
+    const newValue = e.target.checked;
+    setAutoSaveEnabled(newValue);
+    
+    if (terrainBuilderRef && terrainBuilderRef.current && terrainBuilderRef.current.toggleAutoSave) {
+      terrainBuilderRef.current.toggleAutoSave(newValue);
+    }
+  };
+  
   const togglePerformanceDetails = () => {
     setShowPerformanceDetails(!showPerformanceDetails);
   };
@@ -256,6 +271,15 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
                 onChange={handleOcclusionCullingToggle}
               />
               Occlusion Culling
+            </label>
+            
+            <label className="toggle-label">
+              <input 
+                type="checkbox" 
+                checked={autoSaveEnabled} 
+                onChange={handleAutoSaveToggle}
+              />
+              Auto-Save (5 min)
             </label>
             
             {occlusionCullingEnabled && (

@@ -6,6 +6,7 @@ import {
   FaCamera,
   FaVolumeMute,
   FaDatabase,
+  FaSave,
 } from "react-icons/fa";
 import Tooltip from "./js/components/Tooltip";
 import hytopiaLogo from "./images/hytopia_logo_white.png";
@@ -197,6 +198,14 @@ function App() {
               className={`camera-control-button ${!isMuted ? "active" : ""}`}
             >
               <FaVolumeMute />
+            </button>
+          </Tooltip>
+          <Tooltip text="Save terrain">
+            <button
+              onClick={() => terrainBuilderRef.current && terrainBuilderRef.current.saveTerrainManually()}
+              className="camera-control-button"
+            >
+              <FaSave />
             </button>
           </Tooltip>
         </div>

@@ -350,6 +350,18 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 			const success = terrainBuilderRef.current?.activateTool(toolName);
 			if (success) {
 				setActiveTool(toolName);
+				
+				// Special handling for wall tool to ensure it has undoRedoManager
+				if (toolName === "wall" && undoRedoManager) {
+					console.log("ToolBar: Ensuring WallTool has undoRedoManager reference");
+					
+					// Get the tool and update its undoRedoManager reference
+					const wallTool = terrainBuilderRef.current?.toolManagerRef?.current?.tools?.["wall"];
+					if (wallTool) {
+						wallTool.undoRedoManager = undoRedoManager;
+						console.log("ToolBar: Updated WallTool undoRedoManager reference");
+					}
+				}
 			}
 		}
 	};

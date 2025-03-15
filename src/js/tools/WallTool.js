@@ -31,6 +31,16 @@ class WallTool extends BaseTool {
 			this.scene = terrainBuilderProps.scene;
 			this.toolManagerRef = terrainBuilderProps.toolManagerRef;
 			this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
+			
+			// Add undoRedoManager reference
+			this.undoRedoManager = terrainBuilderProps.undoRedoManager;
+			console.log('WallTool: Got undoRedoManager reference:', !!this.undoRedoManager);
+
+			// Add direct references to placement tracking
+			this.placementChangesRef = terrainBuilderProps.placementChangesRef;
+			this.isPlacingRef = terrainBuilderProps.isPlacingRef;
+			console.log('WallTool: Got placementChangesRef:', !!this.placementChangesRef);
+			console.log('WallTool: Got isPlacingRef:', !!this.isPlacingRef);
 
 			// Add missing preview position ref
 			this.previewPositionRef = terrainBuilderProps.previewPositionRef;
@@ -53,6 +63,9 @@ class WallTool extends BaseTool {
 		console.log('terrainRef.current exists:', this.terrainRef && !!this.terrainRef.current);
 		console.log('currentBlockTypeRef exists:', !!this.currentBlockTypeRef);
 		console.log('currentBlockTypeRef.current exists:', this.currentBlockTypeRef && !!this.currentBlockTypeRef.current);
+		console.log('undoRedoManager exists:', !!this.undoRedoManager);
+		console.log('placementChangesRef exists:', !!this.placementChangesRef);
+		console.log('isPlacingRef exists:', !!this.isPlacingRef);
 
 		// Initialize empty objects if needed
 		if (this.terrainRef && !this.terrainRef.current) {
@@ -60,7 +73,22 @@ class WallTool extends BaseTool {
 			this.terrainRef.current = {};
 		}
 
-
+		// Reset wall state on activation
+		this.wallStartPosition = null;
+		this.removeWallPreview();
+		
+		// Reset tracking state to ensure clean activation
+		if (this.isPlacingRef) {
+			this.isPlacingRef.current = false;
+		}
+		
+		// Reset placement changes to ensure we don't have leftover changes
+		if (this.placementChangesRef) {
+			this.placementChangesRef.current = { 
+				terrain: { added: {}, removed: {} }, 
+				environment: { added: [], removed: [] } 
+			};
+		}
 	}
 
 	onDeactivate() {
@@ -79,6 +107,14 @@ class WallTool extends BaseTool {
 			return;
 		}
 
+		console.log('WallTool: handleMouseDown', {
+			button,
+			position,
+			hasStartPosition: !!this.wallStartPosition,
+			isCtrlPressed: this.isCtrlPressed,
+			undoRedoManager: !!this.undoRedoManager
+		});
+
 		// Left-click to place wall or set starting point
 		if (button === 0) {
 			if (this.wallStartPosition) {
@@ -95,21 +131,103 @@ class WallTool extends BaseTool {
 					this.terrainRef.current = {};
 				}
 
-				// Perform the appropriate action based on Ctrl key state
-				if (this.isCtrlPressed) {
-					this.eraseWall(this.wallStartPosition, position, this.wallHeight);
+				// Enable placement tracking for undo/redo
+				if (this.isPlacingRef) {
+					console.log('WallTool: Setting isPlacingRef to true (directly)');
+					this.isPlacingRef.current = true;
+				}
+				
+				// Make sure placement changes are initialized
+				if (this.placementChangesRef) {
+					console.log('WallTool: Ensuring placementChangesRef is initialized (directly)');
+					this.placementChangesRef.current = { 
+						terrain: { added: {}, removed: {} }, 
+						environment: { added: [], removed: [] } 
+					};
 				} else {
-					this.placeWall(this.wallStartPosition, position, this.wallHeight);
+					console.warn('WallTool: placementChangesRef is not available, changes won\'t be tracked for undo/redo');
+				}
+
+				// Perform the appropriate action based on Ctrl key state
+				let actionPerformed = false;
+				if (this.isCtrlPressed) {
+					actionPerformed = this.eraseWall(this.wallStartPosition, position, this.wallHeight);
+				} else {
+					actionPerformed = this.placeWall(this.wallStartPosition, position, this.wallHeight);
+				}
+
+				if (!actionPerformed) {
+					console.warn('WallTool: Wall action failed');
+					return;
+				}
+
+				// Save undo state directly
+				console.log('WallTool: Saving undo state directly');
+				if (this.placementChangesRef) {
+					const changes = this.placementChangesRef.current;
+					
+					// Check if we have undoRedoManager and changes to save
+					const hasChanges = 
+						Object.keys(changes.terrain.added).length > 0 || 
+						Object.keys(changes.terrain.removed).length > 0;
+						
+					if (hasChanges) {
+						// Try using direct undoRedoManager reference first
+						if (this.undoRedoManager) {
+							console.log('WallTool: Calling saveUndo with direct undoRedoManager reference');
+							this.undoRedoManager.saveUndo(changes);
+						}
+						// Fall back to terrainBuilder reference if available
+						else if (this.terrainBuilderRef.current.undoRedoManager) {
+							console.log('WallTool: Calling saveUndo via terrainBuilderRef');
+							this.terrainBuilderRef.current.undoRedoManager.saveUndo(changes);
+						}
+						else {
+							console.warn('WallTool: No undoRedoManager available, changes won\'t be tracked for undo/redo');
+						}
+						
+						// Reset placement changes after saving
+						this.placementChangesRef.current = { 
+							terrain: { added: {}, removed: {} }, 
+							environment: { added: [], removed: [] } 
+						};
+					} else {
+						console.warn('WallTool: No changes to save');
+					}
+				} else {
+					console.warn('WallTool: placementChangesRef not available, changes won\'t be tracked for undo/redo');
 				}
 
 				// Reset the start position for a new wall
 				this.wallStartPosition = null;
 				this.removeWallPreview();
-				// playPlaceSound();
+				
+				// Disable placing
+				if (this.isPlacingRef) {
+					console.log('WallTool: Setting isPlacingRef to false (directly)');
+					this.isPlacingRef.current = false;
+				}
 			} else {
 				// Set start position for a new wall
 				console.log('Setting wall start position:', position);
 				this.wallStartPosition = position.clone();
+				
+				// Start tracking changes for undo/redo
+				if (this.placementChangesRef) {
+					console.log('WallTool: Initializing placementChangesRef for new wall (directly)');
+					this.placementChangesRef.current = { 
+						terrain: { added: {}, removed: {} }, 
+						environment: { added: [], removed: [] } 
+					};
+					
+					// Start placement
+					if (this.isPlacingRef) {
+						console.log('WallTool: Setting isPlacingRef to true for new wall (directly)');
+						this.isPlacingRef.current = true;
+					}
+				} else {
+					console.warn('WallTool: placementChangesRef not available at wall start');
+				}
 			}
 		}
 	}
@@ -181,8 +299,24 @@ class WallTool extends BaseTool {
 	 * @returns {boolean} True if the wall was placed, false otherwise
 	 */
 	placeWall(startPos, endPos, height) {
+		console.log('WallTool: Placing wall from', startPos, 'to', endPos, 'with height', height);
 
-		if (!startPos || !endPos) return;
+		if (!startPos || !endPos) {
+			console.error('WallTool: Invalid start or end position for placing');
+			return false;
+		}
+
+		// Ensure the terrainRef is available
+		if (!this.terrainRef || !this.terrainRef.current) {
+			console.error('WallTool: terrainRef not available for placing');
+			return false;
+		}
+
+		// Ensure we have a block type to place
+		if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+			console.error('WallTool: No block type to place');
+			return false;
+		}
 
 		// Convert positions to integers
 		const startX = Math.round(startPos.x), startY = Math.round(startPos.y), startZ = Math.round(startPos.z);
@@ -214,11 +348,42 @@ class WallTool extends BaseTool {
 		// Ensure the final column is placed
 		placeColumn(endX, endZ);
 
-		this.terrainBuilderRef.current.updateTerrainBlocks(
-			addedBlocks,
-			{},
-			this.currentBlockTypeRef.current.id
-		);
+		console.log(`WallTool: Added ${Object.keys(addedBlocks).length} blocks to terrain`);
+		
+		// If no blocks were added, return false
+		if (Object.keys(addedBlocks).length === 0) {
+			console.warn('WallTool: No blocks were added during wall placement');
+			return false;
+		}
+
+		// Update the terrain with added blocks
+		if (this.terrainBuilderRef && this.terrainBuilderRef.current && this.terrainBuilderRef.current.updateTerrainBlocks) {
+			this.terrainBuilderRef.current.updateTerrainBlocks(
+				addedBlocks,
+				{},
+				this.currentBlockTypeRef.current.id
+			);
+		} else {
+			console.error('WallTool: Cannot update terrain - terrainBuilderRef not available');
+			return false;
+		}
+
+		// Add to placement changes for undo/redo
+		if (this.placementChangesRef) {
+			console.log('WallTool: Adding placed blocks to placementChangesRef (directly)');
+			Object.entries(addedBlocks).forEach(([key, value]) => {
+				this.placementChangesRef.current.terrain.added[key] = value;
+			});
+			
+			// Log the current state of placement changes
+			const added = Object.keys(this.placementChangesRef.current.terrain.added).length;
+			const removed = Object.keys(this.placementChangesRef.current.terrain.removed).length;
+			console.log(`WallTool: placementChangesRef now has ${added} added and ${removed} removed blocks`);
+		} else {
+			console.warn('WallTool: placementChangesRef not available, changes won\'t be tracked for undo/redo');
+		}
+
+		return true;
 	}
 
 	/**
@@ -229,9 +394,16 @@ class WallTool extends BaseTool {
 	 * @returns {boolean} True if the wall was erased, false otherwise
 	 */
 	eraseWall(startPos, endPos, height) {
+		console.log('WallTool: Erasing wall from', startPos, 'to', endPos, 'with height', height);
 
 		if (!startPos || !endPos) {
 			console.error('Invalid start or end position for erasing');
+			return false;
+		}
+
+		// Ensure the terrainRef is available
+		if (!this.terrainRef || !this.terrainRef.current) {
+			console.error('WallTool: terrainRef not available for erasing');
 			return false;
 		}
 
@@ -267,11 +439,41 @@ class WallTool extends BaseTool {
 		// Erase the final column at the endpoint
 		eraseColumn(endX, endZ);
 
+		console.log(`WallTool: Removed ${Object.keys(removedBlocks).length} blocks from terrain`);
+		
+		// If no blocks were removed, return false
+		if (Object.keys(removedBlocks).length === 0) {
+			console.warn('WallTool: No blocks were removed during wall erasure');
+			return false;
+		}
 
-		this.terrainBuilderRef.current.updateTerrainBlocks(
-			{},
-			removedBlocks
-		);
+		// Update the terrain with removed blocks
+		if (this.terrainBuilderRef && this.terrainBuilderRef.current && this.terrainBuilderRef.current.updateTerrainBlocks) {
+			this.terrainBuilderRef.current.updateTerrainBlocks(
+				{},
+				removedBlocks
+			);
+		} else {
+			console.error('WallTool: Cannot update terrain - terrainBuilderRef not available');
+			return false;
+		}
+
+		// Add to placement changes for undo/redo
+		if (this.placementChangesRef) {
+			console.log('WallTool: Adding removed blocks to placementChangesRef (directly)');
+			Object.entries(removedBlocks).forEach(([key, value]) => {
+				this.placementChangesRef.current.terrain.removed[key] = value;
+			});
+			
+			// Log the current state of placement changes
+			const added = Object.keys(this.placementChangesRef.current.terrain.added).length;
+			const removed = Object.keys(this.placementChangesRef.current.terrain.removed).length;
+			console.log(`WallTool: placementChangesRef now has ${added} added and ${removed} removed blocks`);
+		} else {
+			console.warn('WallTool: placementChangesRef not available, changes won\'t be tracked for undo/redo');
+		}
+
+		return true;
 	}
 
 	/**
