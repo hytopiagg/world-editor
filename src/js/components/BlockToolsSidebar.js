@@ -230,6 +230,19 @@ const BlockToolsSidebar = ({
         // Wait for all files to be processed
         await Promise.all(filePromises);
         
+        // CRITICAL: Save the custom blocks to the database
+        try {
+          // Get the latest custom blocks after processing
+          const updatedCustomBlocks = getCustomBlocks();
+          
+          // Save them to the database
+          console.log("Saving custom blocks to database:", updatedCustomBlocks.length);
+          await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedCustomBlocks);
+          console.log("Custom blocks saved to database successfully");
+        } catch (error) {
+          console.error("Error saving custom blocks to database:", error);
+        }
+        
         // Refresh the block tools to show the new blocks
         console.log("Refreshing block tools after processing custom blocks");
         refreshBlockTools();
