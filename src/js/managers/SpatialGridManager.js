@@ -407,9 +407,17 @@ class SpatialGridManager {
 	 * @param {Array} removedBlocks - Array of keys to remove
 	 */
 	updateBlocks(addedBlocks = [], removedBlocks = []) {
+		console.log("SpatialGridManager.updateBlocks:", {
+			addedBlocks: addedBlocks.length,
+			removedBlocks: removedBlocks.length,
+			removedBlocksData: removedBlocks
+		});
+		
 		// Process removed blocks
 		for (const key of removedBlocks) {
-			this.spatialHashGrid.delete(key);
+			const hadBlock = this.spatialHashGrid.has(key);
+			const deleted = this.spatialHashGrid.delete(key);
+			console.log(`Removing block ${key}: existed=${hadBlock}, deleted=${deleted}`);
 		}
 		
 		// Process added blocks
@@ -419,15 +427,16 @@ class SpatialGridManager {
 	}
 	
 	/**
-	 * Perform raycasting using the spatial hash grid
-	 * @param {THREE.Raycaster} raycaster - Three.js raycaster
-	 * @param {THREE.Camera} camera - Three.js camera
-	 * @param {Object} options - Options for raycasting
-	 * @param {number} options.maxDistance - Maximum raycast distance
-	 * @param {boolean} options.prioritizeBlocks - Whether to prioritize block hits over ground plane
-	 * @param {number} options.gridSize - Size of the buildable grid for ground plane detection
+	 * Perform a raycast against the spatial hash grid
+	 * @param {THREE.Raycaster} raycaster - The raycaster to use
+	 * @param {THREE.Camera} camera - The camera to use
+	 * @param {Object} options - Options for the raycast
+	 * @param {number} options.maxDistance - Maximum distance to check
+	 * @param {boolean} options.prioritizeBlocks - Whether to prioritize blocks over ground plane
+	 * @param {number} options.gridSize - Size of the grid
 	 * @param {Set} options.recentlyPlacedBlocks - Set of recently placed blocks to ignore
 	 * @param {boolean} options.isPlacing - Whether we're currently in placement mode
+	 * @param {string} options.mode - Current mode (add, delete, remove)
 	 * @returns {Object|null} - Raycast result with point, normal, block position, and blockId
 	 */
 	raycast(raycaster, camera, options = {}) {
@@ -438,7 +447,8 @@ class SpatialGridManager {
 			prioritizeBlocks = true, // Default to prioritizing blocks
 			gridSize = 256,
 			recentlyPlacedBlocks = new Set(),
-			isPlacing = false
+			isPlacing = false,
+			mode = 'add' // Default to add mode
 		} = options;
 		
 		// Create ray from camera
@@ -477,6 +487,7 @@ class SpatialGridManager {
 		
 		// If spatial hash is empty, return ground intersection
 		if (this.spatialHashGrid.size === 0) {
+			console.log("Spatial hash is empty, returning ground intersection");
 			return groundIntersection;
 		}
 		
@@ -553,6 +564,12 @@ class SpatialGridManager {
 		
 		// Return the closest block intersection if any
 		if (blockIntersections.length > 0) {
+			// For erase mode, modify the intersection point to be the center of the block
+			if (mode === 'delete' || mode === 'remove') {
+				const intersection = blockIntersections[0];
+				const { x, y, z } = intersection.block;
+				intersection.point.set(x, y, z);
+			}
 			return blockIntersections[0];
 		}
 		
@@ -734,6 +751,7 @@ class SpatialGridManager {
 	 * @returns {boolean} - True if the block was deleted
 	 */
 	deleteBlock(key) {
+		console.log(`SpatialGridManager.deleteBlock: Deleting block at ${key}`);
 		return this.spatialHashGrid.delete(key);
 	}
 	

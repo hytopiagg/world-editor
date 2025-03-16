@@ -1246,12 +1246,19 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Always update previewPositionRef for tools and default behavior
 			tempVectorRef.current.copy(blockIntersection.point);
 
-			// If deleting, move back a bit
-			if (modeRef.current === "delete") {
-				// For delete mode, move half a block in the normal direction
-				tempVectorRef.current.x = Math.round(tempVectorRef.current.x - blockIntersection.normal.x * 0.5);
-				tempVectorRef.current.y = Math.round(tempVectorRef.current.y - blockIntersection.normal.y * 0.5);
-				tempVectorRef.current.z = Math.round(tempVectorRef.current.z - blockIntersection.normal.z * 0.5);
+			// If in delete/remove mode, select the actual block, not the face
+			if (modeRef.current === "delete" || modeRef.current === "remove") {
+				// For delete/remove mode, use the block coordinates directly
+				if (blockIntersection.block) {
+					tempVectorRef.current.x = blockIntersection.block.x;
+					tempVectorRef.current.y = blockIntersection.block.y;
+					tempVectorRef.current.z = blockIntersection.block.z;
+				} else {
+					// If no block property, use the old method as fallback
+					tempVectorRef.current.x = Math.round(tempVectorRef.current.x - blockIntersection.normal.x * 0.5);
+					tempVectorRef.current.y = Math.round(tempVectorRef.current.y - blockIntersection.normal.y * 0.5);
+					tempVectorRef.current.z = Math.round(tempVectorRef.current.z - blockIntersection.normal.z * 0.5);
+				}
 			} else {
 				// For add mode, add a small offset in the normal direction before rounding
 				tempVectorRef.current.add(blockIntersection.normal.clone().multiplyScalar(0.01));
@@ -2346,11 +2353,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Update chunks with appropriate spatial hash
 			const spatialHashStart = performance.now();
 			if (Object.keys(addedBlocks).length > 0 || Object.keys(removedBlocks).length > 0) {
+				// Prepare the added blocks for spatial hash update
+				const addedBlocksForSpatialHash = Object.entries(addedBlocks).map(([key, blockId]) => ({ key, blockId }));
+				
+				// Prepare the removed blocks for spatial hash update - just need the keys
+				const removedBlocksForSpatialHash = Object.keys(removedBlocks);
+				
+				console.log("Updating spatial hash with:", {
+					addedCount: addedBlocksForSpatialHash.length,
+					removedCount: removedBlocksForSpatialHash.length,
+					removedKeys: removedBlocksForSpatialHash
+				});
+				
 				// Update the spatial hash with modified blocks
-				updateSpatialHashForBlocks(
-					Object.entries(addedBlocks).map(([key, blockId]) => ({ key, blockId })), 
-					Object.keys(removedBlocks)
-				);
+				updateSpatialHashForBlocks(addedBlocksForSpatialHash, removedBlocksForSpatialHash);
 			}
 			const spatialHashEnd = performance.now();
 			console.log(`Performance: Spatial hash update took ${spatialHashEnd - spatialHashStart}ms`);
@@ -3528,14 +3544,34 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Safety check - ensure spatialGridManagerRef.current is initialized
 		if (!threeRaycaster || !threeCamera || !spatialGridManagerRef.current) return null;
 		
+		// In erase mode, we need to make sure we're not hitting blocks that have been removed
+		// but might still be in the spatial hash due to caching or other issues
+		const currentMode = modeRef.current;
+		
 		// Use the SpatialGridManager's raycast method instead of implementing it here
-		return spatialGridManagerRef.current.raycast(threeRaycaster, threeCamera, {
+		const result = spatialGridManagerRef.current.raycast(threeRaycaster, threeCamera, {
 			maxDistance: selectionDistanceRef.current,
 			prioritizeBlocks,
 			gridSize,
 			recentlyPlacedBlocks: recentlyPlacedBlocksRef.current,
-			isPlacing: isPlacingRef.current
+			isPlacing: isPlacingRef.current,
+			mode: currentMode // Pass the current mode to help with block selection
 		});
+		
+		// If we're in erase mode and got a block intersection, double-check that the block still exists
+		if (result && !result.isGroundPlane && (currentMode === "delete" || currentMode === "remove")) {
+			const blockKey = `${result.block.x},${result.block.y},${result.block.z}`;
+			if (!terrainRef.current[blockKey]) {
+				console.log(`Block at ${blockKey} no longer exists in terrain, but was found in spatial hash`);
+				// The block doesn't exist in the terrain anymore, so we should ignore this intersection
+				// and try again with the block removed from the spatial hash
+				spatialGridManagerRef.current.deleteBlock(blockKey);
+				// Recursively call this function again to get a new intersection
+				return getOptimizedRaycastIntersection(prioritizeBlocks);
+			}
+		}
+		
+		return result;
 	};
 
 	
@@ -3890,10 +3926,15 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			return;
 		}
 		
+		console.log("Updating spatial hash:", {
+			addedBlocks: addedBlocks.length,
+			removedBlocks: removedBlocks.length
+		});
+		
 		// Use the SpatialGridManager's updateBlocks method
 		spatialGridManagerRef.current.updateBlocks(
 			addedBlocks.map(({ key, blockId }) => [key, blockId]),
-			removedBlocks.map(({ key }) => key)
+			removedBlocks
 		);
 	};
 
