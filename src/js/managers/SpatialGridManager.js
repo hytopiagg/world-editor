@@ -435,7 +435,7 @@ class SpatialGridManager {
 		
 		const {
 			maxDistance = 32,
-			prioritizeBlocks = false,
+			prioritizeBlocks = true, // Default to prioritizing blocks
 			gridSize = 256,
 			recentlyPlacedBlocks = new Set(),
 			isPlacing = false
@@ -444,7 +444,7 @@ class SpatialGridManager {
 		// Create ray from camera
 		const ray = raycaster.ray.clone();
 		
-		// First, check for ground plane intersection to have it as a fallback
+		// Calculate ground plane intersection as a fallback
 		const rayOrigin = ray.origin;
 		const rayDirection = ray.direction;
 		
@@ -455,7 +455,7 @@ class SpatialGridManager {
 		// Store ground plane intersection if valid
 		let groundIntersection = null;
 		
-		// Only consider intersections in front of the camera and within selection distance
+		// Only consider ground intersections in front of the camera and within selection distance
 		if (intersectionDistance > 0 && intersectionDistance < maxDistance) {
 			// Calculate the intersection point
 			target.copy(rayOrigin).addScaledVector(rayDirection, intersectionDistance);
@@ -475,109 +475,203 @@ class SpatialGridManager {
 			}
 		}
 		
-		// If prioritizeBlocks is false and we have a ground intersection, return it immediately
-		if (!prioritizeBlocks && groundIntersection) {
-			return groundIntersection;
-		}
-		
-		// If spatial hash is empty or still being built, return ground intersection
+		// If spatial hash is empty, return ground intersection
 		if (this.spatialHashGrid.size === 0) {
 			return groundIntersection;
 		}
 		
-		// Parameters for ray marching
-		const precision = 0.5; // Use a larger step size for better performance
+		// Use a more accurate ray-box intersection approach
+		// First, determine which chunks the ray passes through
+		const chunksToCheck = this.getChunksAlongRay(ray, maxDistance);
 		
-		// Start at camera position
-		let pos = ray.origin.clone();
-		let step = ray.direction.clone().normalize().multiplyScalar(precision);
-		let distance = 0;
+		// Store all block intersections
+		const blockIntersections = [];
 		
-		// For performance tracking
-		let iterations = 0;
-		const maxIterations = 1000; // Limit iterations to prevent infinite loops
-		
-		// Track which blocks we've checked
-		const checkedBlocks = new Set();
-		
-		// Ray marching loop
-		while (distance < maxDistance && iterations < maxIterations) {
-			iterations++;
+		// Check each chunk for block intersections
+		for (const chunkKey of chunksToCheck) {
+			const chunk = this.spatialHashGrid.grid.get(chunkKey);
+			if (!chunk) continue;
 			
-			// Get block coordinates
-			const blockX = Math.floor(pos.x);
-			const blockY = Math.floor(pos.y);
-			const blockZ = Math.floor(pos.z);
+			// Parse chunk coordinates
+			const [cx, cy, cz] = chunkKey.split(',').map(Number);
 			
-			// Skip if below ground
-			if (blockY < 0) {
-				pos.add(step);
-				distance += precision;
-				continue;
+			// Check each block in the chunk
+			for (const [localKey, blockId] of chunk.entries()) {
+				// Parse local coordinates
+				const [lx, ly, lz] = localKey.split(',').map(Number);
+				
+				// Calculate world coordinates
+				const x = cx * CHUNK_SIZE + lx;
+				const y = cy * CHUNK_SIZE + ly;
+				const z = cz * CHUNK_SIZE + lz;
+				
+				// Create block key
+				const blockKey = `${x},${y},${z}`;
+				
+				// Skip recently placed blocks during placement
+				if (isPlacing && recentlyPlacedBlocks.has(blockKey)) {
+					continue;
+				}
+				
+				// Create a box for this block
+				const blockBox = new THREE.Box3(
+					new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5),
+					new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5)
+				);
+				
+				// Check if ray intersects this box
+				const intersectionPoint = new THREE.Vector3();
+				const doesIntersect = ray.intersectBox(blockBox, intersectionPoint);
+				
+				if (doesIntersect) {
+					// Calculate distance from camera to intersection
+					const distance = rayOrigin.distanceTo(intersectionPoint);
+					
+					// Skip if too far
+					if (distance > maxDistance) {
+						continue;
+					}
+					
+					// Calculate which face was hit with high precision
+					const normal = this.calculateExactFaceNormal(intersectionPoint, x, y, z);
+					
+					// Add to intersections
+					blockIntersections.push({
+						point: intersectionPoint.clone(),
+						normal,
+						block: { x, y, z },
+						blockId,
+						distance,
+						isGroundPlane: false
+					});
+				}
 			}
-			
-			// Create block key
-			const blockKey = `${blockX},${blockY},${blockZ}`;
-			
-			// Skip if we've already checked this block
-			if (checkedBlocks.has(blockKey)) {
-				pos.add(step);
-				distance += precision;
-				continue;
-			}
-			
-			// Add to checked blocks
-			checkedBlocks.add(blockKey);
-			
-			// Skip recently placed blocks during placement
-			if (isPlacing && recentlyPlacedBlocks.has(blockKey)) {
-				pos.add(step);
-				distance += precision;
-				continue;
-			}
-			
-			// Check if there's a block at this position (using spatial hash)
-			if (this.spatialHashGrid.has(blockKey)) {
-				// We hit a block!
-				const blockId = this.spatialHashGrid.get(blockKey);
-				
-				// Calculate exact hit position
-				const point = pos.clone();
-				
-				// Calculate normal (which face was hit)
-				const normal = new THREE.Vector3();
-				
-				// Use epsilon tests to determine face
-				const epsilon = 0.01;
-				const px = pos.x - blockX;
-				const py = pos.y - blockY;
-				const pz = pos.z - blockZ;
-				
-				if (px < epsilon) normal.set(-1, 0, 0);
-				else if (px > 1-epsilon) normal.set(1, 0, 0);
-				else if (py < epsilon) normal.set(0, -1, 0);
-				else if (py > 1-epsilon) normal.set(0, 1, 0);
-				else if (pz < epsilon) normal.set(0, 0, -1);
-				else normal.set(0, 0, 1);
-				
-				// Return block intersection
-				return {
-					point,
-					normal,
-					block: { x: blockX, y: blockY, z: blockZ },
-					blockId,
-					distance,
-					isGroundPlane: false
-				};
-			}
-			
-			// Move along the ray
-			pos.add(step);
-			distance += precision;
 		}
 		
-		// If we didn't hit any blocks, return the ground intersection as a fallback
+		// Sort intersections by distance (closest first)
+		blockIntersections.sort((a, b) => a.distance - b.distance);
+		
+		// Return the closest block intersection if any
+		if (blockIntersections.length > 0) {
+			return blockIntersections[0];
+		}
+		
+		// If no block intersections, return the ground intersection as a fallback
 		return groundIntersection;
+	}
+	
+	/**
+	 * Calculate the exact face normal for a block intersection
+	 * @param {THREE.Vector3} point - Intersection point
+	 * @param {number} blockX - Block X coordinate
+	 * @param {number} blockY - Block Y coordinate
+	 * @param {number} blockZ - Block Z coordinate
+	 * @returns {THREE.Vector3} - Face normal
+	 */
+	calculateExactFaceNormal(point, blockX, blockY, blockZ) {
+		// Calculate distances to each face
+		const distToXMinus = Math.abs(point.x - (blockX - 0.5));
+		const distToXPlus = Math.abs(point.x - (blockX + 0.5));
+		const distToYMinus = Math.abs(point.y - (blockY - 0.5));
+		const distToYPlus = Math.abs(point.y - (blockY + 0.5));
+		const distToZMinus = Math.abs(point.z - (blockZ - 0.5));
+		const distToZPlus = Math.abs(point.z - (blockZ + 0.5));
+		
+		// Find the minimum distance
+		const minDist = Math.min(
+			distToXMinus, distToXPlus,
+			distToYMinus, distToYPlus,
+			distToZMinus, distToZPlus
+		);
+		
+		// Return the normal for the closest face
+		if (minDist === distToXMinus) return new THREE.Vector3(-1, 0, 0);
+		if (minDist === distToXPlus) return new THREE.Vector3(1, 0, 0);
+		if (minDist === distToYMinus) return new THREE.Vector3(0, -1, 0);
+		if (minDist === distToYPlus) return new THREE.Vector3(0, 1, 0);
+		if (minDist === distToZMinus) return new THREE.Vector3(0, 0, -1);
+		return new THREE.Vector3(0, 0, 1);
+	}
+	
+	/**
+	 * Get all chunks that a ray passes through
+	 * @param {THREE.Ray} ray - The ray to check
+	 * @param {number} maxDistance - Maximum distance to check
+	 * @returns {Set<string>} - Set of chunk keys
+	 */
+	getChunksAlongRay(ray, maxDistance) {
+		const chunksToCheck = new Set();
+		
+		// Use 3D DDA (Digital Differential Analyzer) algorithm for ray traversal
+		// This is more accurate than ray marching for finding all chunks
+		
+		// Start at ray origin
+		const startPos = ray.origin.clone();
+		const dir = ray.direction.clone().normalize();
+		
+		// Calculate which chunk the ray starts in
+		let currentX = Math.floor(startPos.x / CHUNK_SIZE);
+		let currentY = Math.floor(startPos.y / CHUNK_SIZE);
+		let currentZ = Math.floor(startPos.z / CHUNK_SIZE);
+		
+		// Add starting chunk
+		chunksToCheck.add(`${currentX},${currentY},${currentZ}`);
+		
+		// Calculate step direction (which way to step in each dimension)
+		const stepX = dir.x > 0 ? 1 : (dir.x < 0 ? -1 : 0);
+		const stepY = dir.y > 0 ? 1 : (dir.y < 0 ? -1 : 0);
+		const stepZ = dir.z > 0 ? 1 : (dir.z < 0 ? -1 : 0);
+		
+		// Calculate distance to next chunk boundary in each dimension
+		// First, calculate the boundaries of the current chunk
+		const nextBoundaryX = (currentX + (stepX > 0 ? 1 : 0)) * CHUNK_SIZE;
+		const nextBoundaryY = (currentY + (stepY > 0 ? 1 : 0)) * CHUNK_SIZE;
+		const nextBoundaryZ = (currentZ + (stepZ > 0 ? 1 : 0)) * CHUNK_SIZE;
+		
+		// Calculate distance to next boundary in each dimension
+		let tMaxX = stepX === 0 ? Infinity : Math.abs((nextBoundaryX - startPos.x) / dir.x);
+		let tMaxY = stepY === 0 ? Infinity : Math.abs((nextBoundaryY - startPos.y) / dir.y);
+		let tMaxZ = stepZ === 0 ? Infinity : Math.abs((nextBoundaryZ - startPos.z) / dir.z);
+		
+		// Calculate how far along the ray we need to move to cross a chunk in each dimension
+		const tDeltaX = stepX === 0 ? Infinity : Math.abs(CHUNK_SIZE / dir.x);
+		const tDeltaY = stepY === 0 ? Infinity : Math.abs(CHUNK_SIZE / dir.y);
+		const tDeltaZ = stepZ === 0 ? Infinity : Math.abs(CHUNK_SIZE / dir.z);
+		
+		// Track total distance traveled
+		let totalDistance = 0;
+		
+		// Limit iterations to prevent infinite loops
+		const maxIterations = 100;
+		let iterations = 0;
+		
+		// Traverse chunks until we reach the maximum distance
+		while (totalDistance < maxDistance && iterations < maxIterations) {
+			iterations++;
+			
+			// Find the closest boundary
+			if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+				// X boundary is closest
+				currentX += stepX;
+				totalDistance = tMaxX;
+				tMaxX += tDeltaX;
+			} else if (tMaxY < tMaxZ) {
+				// Y boundary is closest
+				currentY += stepY;
+				totalDistance = tMaxY;
+				tMaxY += tDeltaY;
+			} else {
+				// Z boundary is closest
+				currentZ += stepZ;
+				totalDistance = tMaxZ;
+				tMaxZ += tDeltaZ;
+			}
+			
+			// Add this chunk to the set
+			chunksToCheck.add(`${currentX},${currentY},${currentZ}`);
+		}
+		
+		return chunksToCheck;
 	}
 	
 	/**

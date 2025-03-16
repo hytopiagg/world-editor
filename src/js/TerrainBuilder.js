@@ -1233,196 +1233,43 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
 		
 		// First, check for block collisions using optimized ray casting
-		let blockIntersection = null;
+		let intersection = null;
+		
 		// Safety check - ensure spatialGridManagerRef.current is initialized
 		if (useSpatialHashRef.current && spatialGridManagerRef.current && spatialGridManagerRef.current.size > 0) {
-			blockIntersection = getOptimizedRaycastIntersection();
-		}
-		
-		// If we found a block intersection, return it immediately
-		if (blockIntersection && !blockIntersection.isGroundPlane) {
-			return blockIntersection;
-		}
-		
-		// If no block intersection, check for ground plane intersection
-		//const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-		const rayOrigin = threeRaycaster.ray.origin;
-		const rayDirection = threeRaycaster.ray.direction;
-		
-		// Calculate intersection with the ground plane
-		const target = new THREE.Vector3();
-		const intersectionDistance = rayOrigin.y / -rayDirection.y;
-		
-		// Store ground plane intersection if valid
-		let groundIntersection = null;
-		
-		// Only consider intersections in front of the camera and within selection distance
-		if (intersectionDistance > 0 && intersectionDistance < selectionDistanceRef.current) {
-			// Calculate the intersection point
-			target.copy(rayOrigin).addScaledVector(rayDirection, intersectionDistance);
+			// Use the optimized raycast method which now handles both block and ground plane detection
+			intersection = getOptimizedRaycastIntersection(true); // Always prioritize blocks
+		} else {
+			// Fallback to simple ground plane detection if spatial hash is not available
+			const rayOrigin = threeRaycaster.ray.origin;
+			const rayDirection = threeRaycaster.ray.direction;
 			
-			// Check if this point is within our valid grid area
-			const gridSizeHalf = gridSize / 2;
-			if (Math.abs(target.x) <= gridSizeHalf && Math.abs(target.z) <= gridSizeHalf) {
-				// This is a hit against the ground plane within the valid build area
-				groundIntersection = {
-					point: target.clone(),
-					normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
-					block: { x: Math.floor(target.x), y: 0, z: Math.floor(target.z) },
-					blockId: null, // No block here - it's the ground
-					distance: intersectionDistance,
-					isGroundPlane: true
-				};
-			}
-		}
-		
-		// If we already have a block intersection from the optimized raycast, return it
-		if (blockIntersection) {
-			return blockIntersection;
-		}
-		
-		// Fall back to original method for block detection
-		
-		// Quick check: see if we're even pointing at any chunks with blocks
-		const dir = threeRaycaster.ray.direction.clone().normalize();
-		const pos = threeRaycaster.ray.origin.clone();
-		
-		// Check if there are any chunks in this direction
-		let hasChunksInDirection = false;
-		const checkedChunks = new Set();
-		
-		// Get camera chunk
-		
-		// Check a few chunks in the ray direction
-		for (let dist = 1; dist <= 5; dist++) {
-			const checkPos = pos.clone().add(dir.clone().multiplyScalar(dist * CHUNK_SIZE));
-			const chunkX = Math.floor(checkPos.x / CHUNK_SIZE);
-			const chunkY = Math.floor(checkPos.y / CHUNK_SIZE);
-			const chunkZ = Math.floor(checkPos.z / CHUNK_SIZE);
+			// Calculate intersection with the ground plane
+			const target = new THREE.Vector3();
+			const intersectionDistance = rayOrigin.y / -rayDirection.y;
 			
-			// Skip if we've already checked this chunk
-			const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
-			if (checkedChunks.has(chunkKey)) continue;
-			checkedChunks.add(chunkKey);
-			
-			// If this chunk exists in our data, we need to do the raycast
-			if (chunksRef.current.has(chunkKey)) {
-				hasChunksInDirection = true;
-				break;
-			}
-		}
-		
-		// If no chunks in this direction, return the ground intersection if we have one
-		if (!hasChunksInDirection) {
-			return groundIntersection;
-		}
-		
-		// Create a temporary array to store all intersections
-		let allIntersections = [];
-		
-		// Get blocks that are in chunks along the ray direction
-		const blocksToCheck = [];
-		
-		// Collect blocks from chunks that are in the ray direction
-		chunksRef.current.forEach((chunkBlocks, chunkKey) => {
-			const [cx, cy, cz] = chunkKey.split(',').map(Number);
-	  
-			// Calculate chunk center
-			const chunkCenterX = (cx * CHUNK_SIZE) + (CHUNK_SIZE / 2);
-			const chunkCenterY = (cy * CHUNK_SIZE) + (CHUNK_SIZE / 2);
-			const chunkCenterZ = (cz * CHUNK_SIZE) + (CHUNK_SIZE / 2);
-			
-			// Create a vector from camera to chunk center
-			const toCenterX = chunkCenterX - threeCamera.position.x;
-			const toCenterY = chunkCenterY - threeCamera.position.y;
-			const toCenterZ = chunkCenterZ - threeCamera.position.z;
-			
-			// Calculate dot product with ray direction to see if chunk is in front of camera
-			const dotProduct = toCenterX * dir.x + toCenterY * dir.y + toCenterZ * dir.z;
-			
-			// Only check chunks that are in front of the camera and within a reasonable angle
-			if (dotProduct > 0) {
-				// Calculate squared distance to chunk center
-				const distanceSquared = toCenterX * toCenterX + toCenterY * toCenterY + toCenterZ * toCenterZ;
+			// Only consider intersections in front of the camera and within selection distance
+			if (intersectionDistance > 0 && intersectionDistance < selectionDistanceRef.current) {
+				// Calculate the intersection point
+				target.copy(rayOrigin).addScaledVector(rayDirection, intersectionDistance);
 				
-				// Skip chunks that are too far away
-				if (distanceSquared <= selectionDistanceRef.current * selectionDistanceRef.current) {
-					// Add blocks from this chunk to the check list
-					Object.entries(chunkBlocks).forEach(([posKey, blockId]) => {
-						blocksToCheck.push({ posKey, blockId });
-					});
+				// Check if this point is within our valid grid area
+				const gridSizeHalf = gridSize / 2;
+				if (Math.abs(target.x) <= gridSizeHalf && Math.abs(target.z) <= gridSizeHalf) {
+					// This is a hit against the ground plane within the valid build area
+					intersection = {
+						point: target.clone(),
+						normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
+						block: { x: Math.floor(target.x), y: 0, z: Math.floor(target.z) },
+						blockId: null, // No block here - it's the ground
+						distance: intersectionDistance,
+						isGroundPlane: true
+					};
 				}
 			}
-		});
-		
-		// Manually check each block in the filtered list
-		blocksToCheck.forEach(({ posKey, blockId }) => {
-			// Skip recently placed blocks during placement
-			if (isPlacingRef.current && recentlyPlacedBlocksRef.current.has(posKey)) {
-				return;
-			}
-			
-			const [x, y, z] = posKey.split(',').map(Number);
-			
-			// Check distance to camera first (quick reject for distant blocks)
-			const distanceToCamera = threeCamera.position.distanceToSquared(new THREE.Vector3(x, y, z));
-			if (distanceToCamera > selectionDistanceRef.current * selectionDistanceRef.current) {
-				return; // Skip blocks beyond selection distance
-			}
-			
-			// Create a temporary box for raycasting
-			const tempBox = new THREE.Box3(
-				new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5),
-				new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5)
-			);
-			
-			// Check if ray intersects this box
-			if (threeRaycaster.ray.intersectsBox(tempBox)) {
-				// Calculate true distance from camera
-				const distanceFromCamera = threeCamera.position.distanceTo(new THREE.Vector3(x, y, z));
-				
-				// Skip blocks that are too far away
-				if (distanceFromCamera > selectionDistanceRef.current) {
-					return;
-				}
-				
-				// Determine which face was hit (approximation)
-				const intersection = threeRaycaster.ray.intersectBox(tempBox, new THREE.Vector3());
-				if (!intersection) return; // Should never happen
-				
-				const faceNormal = new THREE.Vector3();
-				
-				// Determine face normal by checking which box side was hit
-				const epsilon = 0.001;
-				if (Math.abs(intersection.x - (x - 0.5)) < epsilon) faceNormal.set(-1, 0, 0);
-				else if (Math.abs(intersection.x - (x + 0.5)) < epsilon) faceNormal.set(1, 0, 0);
-				else if (Math.abs(intersection.y - (y - 0.5)) < epsilon) faceNormal.set(0, -1, 0);
-				else if (Math.abs(intersection.y - (y + 0.5)) < epsilon) faceNormal.set(0, 1, 0);
-				else if (Math.abs(intersection.z - (z - 0.5)) < epsilon) faceNormal.set(0, 0, -1);
-				else faceNormal.set(0, 0, 1);
-				
-				// Add to intersection list
-				allIntersections.push({
-					point: intersection,
-					normal: faceNormal,
-					block: { x, y, z },
-					blockId,
-					distance: distanceFromCamera,
-					isGroundPlane: false
-				});
-			}
-		});
-		
-		// Sort by distance (closest first)
-		allIntersections.sort((a, b) => a.distance - b.distance);
-		
-		// Return the closest intersection, if any
-		if (allIntersections.length > 0) {
-			return allIntersections[0];
 		}
 		
-		// If no block intersections, return the ground intersection as a fallback
-		return groundIntersection;
+		return intersection;
 	};
 
 	// Throttle mouse move updates
@@ -3747,7 +3594,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Call this in buildUpdateTerrain after updating terrainRef
 	
 	// Optimized ray intersection using spatial hash
-	const getOptimizedRaycastIntersection = (prioritizeBlocks = false) => {
+	const getOptimizedRaycastIntersection = (prioritizeBlocks = true) => {
 		// Safety check - ensure spatialGridManagerRef.current is initialized
 		if (!threeRaycaster || !threeCamera || !spatialGridManagerRef.current) return null;
 		
