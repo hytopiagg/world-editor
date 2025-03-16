@@ -177,28 +177,25 @@ button.selected {
   z-index: 1000;
 }
 
-.camera-buttons {
-  display: flex;
-  flex-direction: column;
-  margin-right: 10px;
-}
-
 .camera-control-button {
-  margin-bottom: 10px;
+  margin: 0 5px;
   padding: 10px;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   background: linear-gradient(to bottom, rgba(230, 243, 255, 0.7), rgba(179, 217, 255, 0.7));
   transition: all 0.3s ease;
+  outline: 2px solid rgba(0, 0, 0, 0.2);
 }
 
 .camera-control-button:hover {
   background: linear-gradient(to bottom, rgba(209, 232, 255, 0.8), rgba(153, 204, 255, 0.8));
+  outline: 2px solid rgba(0, 0, 0, 0.3);
 }
 
 .camera-control-button.active {
   background: linear-gradient(to bottom, rgba(52, 152, 219, 0.8), rgba(41, 128, 185, 0.8));
+  outline: 2px solid rgba(0, 0, 0, 0.4);
 }
 
 .camera-control-button svg {
@@ -207,6 +204,23 @@ button.selected {
 
 .camera-control-button.active svg {
   color: white;
+}
+
+.camera-control-button.save-button {
+  font-size: 1.3em;
+  padding: 12px;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.camera-buttons {
+  display: flex;
+  flex-direction: column;
+  margin-right: 10px;
+}
+
+.camera-buttons .camera-control-button {
+  margin-bottom: 10px;
 }
 
 .checkbox-input-wrapper {
@@ -330,5 +344,11 @@ button.selected {
 .under-construction-content p {
   margin: 0.5rem 0;
   color: #cccccc;
+}
+
+/* Saving indicator animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 

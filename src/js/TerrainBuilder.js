@@ -28,89 +28,7 @@ import { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCu
 import { initTextureAtlas, generateGreedyMesh, isAtlasInitialized, 
          getChunkMeshBuilder, getTextureAtlas, createChunkLoadManager, getChunkLoadManager } from "./managers/TextureAtlasManager";
 
-// Add a cache for chunk adjacency information
-const chunkAdjacencyCache = new Map();
 
-// Helper function to check if a chunk is adjacent to any verified visible chunk
-const isAdjacentToVisibleChunk = (chunkKey, verifiedVisibleChunks) => {
-	// Check if we have cached result
-	if (chunkAdjacencyCache.has(chunkKey)) {
-		const cachedAdjacentChunks = chunkAdjacencyCache.get(chunkKey);
-		// Check if any of the cached adjacent chunks are in the verified visible set
-		for (const adjacentChunk of cachedAdjacentChunks) {
-			if (verifiedVisibleChunks.has(adjacentChunk)) {
-				return true;
-			}
-		}
-		return false;
-	}
-	
-	// Parse chunk coordinates
-	const [cx, cy, cz] = chunkKey.split(',').map(Number);
-	
-	// Store adjacent chunks for caching
-	const adjacentChunks = [];
-	
-	// First check the 6 face-adjacent neighbors (more likely to be visible)
-	const faceAdjacentOffsets = [
-		[1, 0, 0], [-1, 0, 0],  // X axis
-		[0, 1, 0], [0, -1, 0],  // Y axis
-		[0, 0, 1], [0, 0, -1]   // Z axis
-	];
-	
-	for (const [dx, dy, dz] of faceAdjacentOffsets) {
-		const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
-		adjacentChunks.push(adjacentChunkKey);
-		
-		if (verifiedVisibleChunks.has(adjacentChunkKey)) {
-			// Cache the result before returning
-			chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-			return true;
-		}
-	}
-	
-	// If no face-adjacent chunks are visible, check the 20 diagonal neighbors
-	// 8 corner diagonals
-	for (let dx = -1; dx <= 1; dx += 2) {
-		for (let dy = -1; dy <= 1; dy += 2) {
-			for (let dz = -1; dz <= 1; dz += 2) {
-				const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
-				adjacentChunks.push(adjacentChunkKey);
-				
-				if (verifiedVisibleChunks.has(adjacentChunkKey)) {
-					// Cache the result before returning
-					chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-					return true;
-				}
-			}
-		}
-	}
-	
-	// 12 edge diagonals
-	const edgeDiagonalOffsets = [
-		// X-Y plane edges
-		[1, 1, 0], [1, -1, 0], [-1, 1, 0], [-1, -1, 0],
-		// X-Z plane edges
-		[1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1],
-		// Y-Z plane edges
-		[0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1]
-	];
-	
-	for (const [dx, dy, dz] of edgeDiagonalOffsets) {
-		const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
-		adjacentChunks.push(adjacentChunkKey);
-		
-		if (verifiedVisibleChunks.has(adjacentChunkKey)) {
-			// Cache the result before returning
-			chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-			return true;
-		}
-	}
-	
-	// Cache the result before returning
-	chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-	return false;
-};
 
 // Function to optimize rendering performance
 const optimizeRenderer = (gl) => {
@@ -138,6 +56,7 @@ const optimizeRenderer = (gl) => {
 
 function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, sendTotalBlocks, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
 	// Initialize refs, state, and other variables
+	const [isSaving, setIsSaving] = useState(false);
 	
 	// Helper function to ensure render cycle completion
 	const waitForRenderCycle = (callback) => {
@@ -198,8 +117,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Also save when user navigates away
 	useEffect(() => {
-		const handleBeforeUnload = () => {
-			// If we have pending changes, save immediately
+		const handleBeforeUnload = (event) => {
+			// If we have pending changes, save immediately and show warning
 			if (Object.keys(pendingChangesRef.current.added).length > 0 || 
 				Object.keys(pendingChangesRef.current.removed).length > 0) {
 				console.log("Saving terrain before page unload...");
@@ -216,6 +135,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				} catch (err) {
 					console.error("Failed to save before unload:", err);
 				}
+				
+				// Standard way to show a confirmation dialog when closing the page
+				// This works across modern browsers
+				event.preventDefault();
+				event.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+				return event.returnValue;
 			}
 		};
 		
@@ -261,6 +186,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Schedule the save with appropriate delay
 		setTimeout(async () => {
+			// Show saving indicator
+			setIsSaving(true);
 			const saveStartTime = performance.now();
 			
 			try {
@@ -314,6 +241,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			} finally {
 				// Clear the pending flag
 				pendingSaveRef.current = false;
+				// Hide saving indicator
+				setIsSaving(false);
 			}
 		}, delay);
 		
@@ -2319,6 +2248,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Add view distance functions
 		getViewDistance,  // Use the imported function
 		setViewDistance,  // Use the imported function
+		get isSaving() { return isSaving; }
 	}));  // This is the correct syntax with just one closing parenthesis
 
 	// Add resize listener to update canvasRect

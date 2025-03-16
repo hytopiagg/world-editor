@@ -53,6 +53,7 @@ function App() {
     scale: 1.0,
     rotation: 0
   });
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const loadSavedToolSelection = () => {
@@ -82,6 +83,48 @@ function App() {
       loadSavedToolSelection();
     }
   }, [pageIsLoaded]);
+
+  // Check if terrain is saving
+  useEffect(() => {
+    const checkSavingStatus = () => {
+      if (terrainBuilderRef.current) {
+        const savingState = terrainBuilderRef.current.isSaving;
+        if (savingState !== isSaving) {
+          console.log("Saving state changed:", savingState);
+          setIsSaving(savingState);
+        }
+      }
+    };
+    
+    // Check every 100ms
+    const interval = setInterval(checkSavingStatus, 100);
+    return () => clearInterval(interval);
+  }, [isSaving]);
+
+  // Add Ctrl+S hotkey for saving
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Check for Ctrl+S (or Cmd+S on Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault(); // Prevent browser's save dialog
+        
+        // Set saving state directly for immediate feedback
+        setIsSaving(true);
+        
+        // Call the save function
+        if (terrainBuilderRef.current) {
+          console.log("Saving via Ctrl+S hotkey");
+          terrainBuilderRef.current.saveTerrainManually();
+        }
+        
+        // Set a fallback timer to clear the saving state if something goes wrong
+        setTimeout(() => setIsSaving(false), 5000);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const LoadingScreen = () => (
     <div className="loading-screen">
@@ -122,6 +165,43 @@ function App() {
       />
 
       <div className="vignette-gradient"></div>
+
+      {/* Saving indicator */}
+      {isSaving && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '80px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            pointerEvents: 'none' // Ensure it doesn't interfere with clicks
+          }}
+        >
+          <div
+            style={{
+              width: '16px',
+              height: '16px',
+              borderRadius: '50%',
+              border: '3px solid rgba(255, 255, 255, 0.3)',
+              borderTopColor: 'white',
+              animation: 'spin 1s linear infinite'
+            }}
+          />
+          Saving...
+        </div>
+      )}
 
       <Canvas shadows className="canvas-container">
         <TerrainBuilder
@@ -186,6 +266,24 @@ function App() {
       />
 
       <div className="camera-controls-wrapper">
+        <Tooltip text="Save terrain (Ctrl+S)">
+          <button
+            onClick={() => {
+              // Set saving state directly for immediate feedback
+              setIsSaving(true);
+              // Then call the actual save function
+              if (terrainBuilderRef.current) {
+                terrainBuilderRef.current.saveTerrainManually();
+              }
+              // Set a fallback timer to clear the saving state if something goes wrong
+              setTimeout(() => setIsSaving(false), 5000);
+            }}
+            className="camera-control-button save-button"
+          >
+            <FaSave />
+          </button>
+        </Tooltip>
+        
         <div className="camera-buttons">
           <Tooltip text="Reset camera position">
             <button onClick={() => setCameraReset((prev) => !prev)} className="camera-control-button">
@@ -198,14 +296,6 @@ function App() {
               className={`camera-control-button ${!isMuted ? "active" : ""}`}
             >
               <FaVolumeMute />
-            </button>
-          </Tooltip>
-          <Tooltip text="Save terrain">
-            <button
-              onClick={() => terrainBuilderRef.current && terrainBuilderRef.current.saveTerrainManually()}
-              className="camera-control-button"
-            >
-              <FaSave />
             </button>
           </Tooltip>
         </div>
