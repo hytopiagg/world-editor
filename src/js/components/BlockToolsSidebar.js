@@ -3,7 +3,7 @@ import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
 import { DatabaseManager, STORES } from '../DatabaseManager';
 import { environmentModels } from '../EnvironmentBuilder';
-import { blockTypes, processCustomBlock, getCustomBlocks, removeCustomBlock, getBlockTypes } from '../TerrainBuilder';
+import { blockTypes, processCustomBlock, getCustomBlocks, removeCustomBlock, getBlockTypes } from '../managers/BlockTypesManager';
 import "../../css/BlockToolsSidebar.css";
 
 const SCALE_MIN = 0.1;
@@ -14,6 +14,7 @@ const ROTATION_MAX = 360;
 let selectedBlockID = 0;
 
 export const refreshBlockTools = () => {
+  console.log("Refreshing block tools sidebar");
   const event = new CustomEvent('refreshBlockTools');
   window.dispatchEvent(event);
 };
@@ -41,7 +42,14 @@ const BlockToolsSidebar = ({
 
   useEffect(() => {
     const handleRefresh = () => {
-      setCustomBlocks(getCustomBlocks());
+      console.log("Handling refresh event in BlockToolsSidebar");
+      try {
+        const customBlocksData = getCustomBlocks();
+        console.log("Custom blocks loaded:", customBlocksData);
+        setCustomBlocks(customBlocksData);
+      } catch (error) {
+        console.error("Error refreshing custom blocks:", error);
+      }
     };
     
     // Initial load
@@ -49,7 +57,14 @@ const BlockToolsSidebar = ({
     
     // Listen for refresh events
     window.addEventListener('refreshBlockTools', handleRefresh);
-    return () => window.removeEventListener('refreshBlockTools', handleRefresh);
+    
+    // Also listen for custom-blocks-loaded events from Minecraft imports
+    window.addEventListener('custom-blocks-loaded', handleRefresh);
+    
+    return () => {
+      window.removeEventListener('refreshBlockTools', handleRefresh);
+      window.removeEventListener('custom-blocks-loaded', handleRefresh);
+    };
   }, []);
 
   const updateSettings = (updates) => {
@@ -214,6 +229,23 @@ const BlockToolsSidebar = ({
 
         // Wait for all files to be processed
         await Promise.all(filePromises);
+        
+        // CRITICAL: Save the custom blocks to the database
+        try {
+          // Get the latest custom blocks after processing
+          const updatedCustomBlocks = getCustomBlocks();
+          
+          // Save them to the database
+          console.log("Saving custom blocks to database:", updatedCustomBlocks.length);
+          await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedCustomBlocks);
+          console.log("Custom blocks saved to database successfully");
+        } catch (error) {
+          console.error("Error saving custom blocks to database:", error);
+        }
+        
+        // Refresh the block tools to show the new blocks
+        console.log("Refreshing block tools after processing custom blocks");
+        refreshBlockTools();
       }
     }
     /// process environment objects next
