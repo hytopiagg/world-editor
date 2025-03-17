@@ -187,6 +187,7 @@ export const exportMapFile = async (terrainBuilderRef) => {
             textureUri: block.isMultiTexture ? `blocks/${block.name}` : `blocks/${block.name}.png`,
             isCustom: false,
             isMultiTexture: block.isMultiTexture || false,
+            isLiquid: block.name.toLowerCase().includes('water') || block.name.toLowerCase().includes('lava') ? true : false,
             sideTextures: block.sideTextures || {}
           };
         }
