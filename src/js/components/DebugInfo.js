@@ -10,7 +10,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
   const [greedyMeshingEnabled, setGreedyMeshingEnabled] = useState(true);
   const [occlusionCullingEnabled, setOcclusionCullingEnabled] = useState(getOcclusionCullingEnabled());
   const [occlusionThreshold, setOcclusionThreshold] = useState(getOcclusionThreshold());
-  const [selectionDistance, setSelectionDistance] = useState(64); // Default to 64
+  const [selectionDistance, setSelectionDistance] = useState(128); // Default to 64
   const [viewDistance, setViewDistance] = useState(64); // Default to 64
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true); // Default to true
   const [fps, setFps] = useState(0);
@@ -303,7 +303,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
               <input
                 type="range"
                 min="16"
-                max="128"
+                max="256"
                 step="8"
                 value={selectionDistance}
                 onChange={handleSelectionDistanceChange}
