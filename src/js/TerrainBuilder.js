@@ -71,13 +71,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Efficient database save mechanism
 	const pendingSaveRef = useRef(false);
-	const lastSaveTimeRef = useRef(0);
+	const lastSaveTimeRef = useRef(Date.now()); // Initialize with current time to prevent immediate save on load
 	const saveThrottleTime = 2000; // Min 2 seconds between saves
 	const pendingChangesRef = useRef({ added: {}, removed: {} });
 	const initialSaveCompleteRef = useRef(false);
 	const autoSaveIntervalRef = useRef(null);
 	const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
 	const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
+	const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
 	
 	// Setup auto-save only if enabled
 	useEffect(() => {
@@ -117,35 +118,79 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Also save when user navigates away
 	useEffect(() => {
+		// Variable to track if a reload was just prevented (Cancel was clicked)
+		let reloadJustPrevented = false;
+		// Store the URL to detect actual navigation vs reload attempts
+		const currentUrl = window.location.href;
+		
 		const handleBeforeUnload = (event) => {
 			// If we have pending changes, save immediately and show warning
 			if (Object.keys(pendingChangesRef.current.added).length > 0 || 
 				Object.keys(pendingChangesRef.current.removed).length > 0) {
-				console.log("Saving terrain before page unload...");
-				
-				// We can't use the async version for beforeunload, so use synchronous version
-				// This might cause a brief pause, but it's better than losing data
-				try {
-					// Use a synchronous save approach for before-unload
-					// Note: Modern browsers may not block for this operation anymore
-					// but we're still doing our best to save before exit
-					
-					// Most browsers now ignore this attempt at sync saving or handle it differently
-					// But we'll still attempt it as a best effort
-				} catch (err) {
-					console.error("Failed to save before unload:", err);
-				}
+
+				localStorage.setItem('reload_attempted', 'true');
 				
 				// Standard way to show a confirmation dialog when closing the page
 				// This works across modern browsers
+				reloadJustPrevented = true;
 				event.preventDefault();
 				event.returnValue = "You have unsaved changes. Are you sure you want to leave?";
 				return event.returnValue;
 			}
 		};
 		
+		// This handler runs when the user navigates back/forward or after the beforeunload dialog
+		const handlePopState = (event) => {
+			// Check if this is after a cancel action from beforeunload
+			if (reloadJustPrevented) {
+				console.log("Detected popstate after reload prevention");
+				event.preventDefault();
+				
+				// Reset the flag
+				reloadJustPrevented = false;
+				
+				// Restore the history state to prevent the reload
+				window.history.pushState(null, document.title, currentUrl);
+				return false;
+			}
+		};
+		
+		// Function to handle when the page is shown after being hidden
+		// This can happen when user clicks Cancel on the reload prompt
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === 'visible') {
+				// Check if we were in the middle of a reload attempt
+				const reloadAttempted = localStorage.getItem('reload_attempted') === 'true';
+				if (reloadAttempted) {
+					console.log("Page became visible again after reload attempt");
+					// Clear the flag
+					localStorage.removeItem('reload_attempted');
+					// If we have a reload prevention flag, this means the user canceled
+					if (reloadJustPrevented) {
+						reloadJustPrevented = false;
+						console.log("User canceled reload, restoring history state");
+						// Restore history state
+						window.history.pushState(null, document.title, currentUrl);
+					}
+				}
+			}
+		};
+		
 		window.addEventListener('beforeunload', handleBeforeUnload);
-		return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+		window.addEventListener('popstate', handlePopState);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		
+		// Set initial history state
+		window.history.pushState(null, document.title, currentUrl);
+		
+		// Clear any stale reload flags
+		localStorage.removeItem('reload_attempted');
+		
+		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+			window.removeEventListener('popstate', handlePopState);
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+		};
 	}, []);
 	
 	// Track changes for incremental saves
@@ -256,6 +301,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		initialSaveCompleteRef.current = false;
 		// Clear pending changes 
 		pendingChangesRef.current = { added: {}, removed: {} };
+		// Set the last save time to now to prevent immediate saving on startup
+		lastSaveTimeRef.current = Date.now();
+		console.log("Last save time initialized to:", new Date(lastSaveTimeRef.current).toLocaleTimeString());
 		
 		// Attempt to load and validate terrain data
 		const validateTerrain = async () => {
@@ -337,7 +385,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const lockedAxisRef = useRef(null);
 	const blockCountsRef = useRef({});
 	const previewMeshRef = useRef(null);
-	const selectionDistanceRef = useRef(MAX_SELECTION_DISTANCE);
+	const selectionDistanceRef = useRef(MAX_SELECTION_DISTANCE/2);
 	const axisLockEnabledRef = useRef(axisLockEnabled);
 	const currentBlockTypeRef = useRef(currentBlockType);
 	const isFirstBlockRef = useRef(true);
@@ -645,10 +693,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 									// Update visibility now that all chunks are built
 									updateVisibleChunks();
 									
-									// Save terrain asynchronously after all chunks are loaded
-									setTimeout(() => {
-										efficientTerrainSave();
-									}, 100);
+									// We're no longer auto-saving after terrain updates
+									// This ensures unsaved changes persist until user explicitly saves or closes
+									// We still have the unsaved changes tracked in pendingChangesRef for the warning dialog
 									
 									// Don't resolve yet - will resolve in final update step
 									return;
@@ -1020,7 +1067,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			} else {
 				// If we didn't get an intersection but a tool is active, still return
 				// to prevent default block placement behavior
-				console.log('TerrainBuilder: No intersection found for tool, but tool is active');
+				//console.log('TerrainBuilder: No intersection found for tool, but tool is active');
 				return;
 			}
 		}
@@ -1071,7 +1118,28 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 		if (currentBlockTypeRef.current?.isEnvironment) {
 			if (isFirstBlockRef.current) {
-				// Environment object placement logic...
+				// Call the environment builder to place the object
+				if (environmentBuilderRef.current && typeof environmentBuilderRef.current.placeEnvironmentModel === 'function') {
+					try {
+						const addedEnvironmentObjects = environmentBuilderRef.current.placeEnvironmentModel();
+						if (addedEnvironmentObjects && addedEnvironmentObjects.length > 0) {
+							console.log('Environment objects placed:', addedEnvironmentObjects.length);
+							// Track added environment objects in the placementChangesRef for undo/redo support
+							if (placementChangesRef.current) {
+								placementChangesRef.current.environment.added = [
+									...placementChangesRef.current.environment.added,
+									...addedEnvironmentObjects
+								];
+							}
+						} else {
+							console.warn('No environment objects were placed or returned');
+						}
+					} catch (error) {
+						console.error('Error placing environment object:', error);
+					}
+				} else {
+					console.error('Environment builder reference or placeEnvironmentModel function not available');
+				}
 			}
 		} else {
 			// Standard block placement
@@ -1183,7 +1251,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				target.copy(rayOrigin).addScaledVector(rayDirection, intersectionDistance);
 				
 				// Check if this point is within our valid grid area
-				const gridSizeHalf = gridSize / 2;
+				const gridSizeHalf = gridSizeRef.current / 2;
 				if (Math.abs(target.x) <= gridSizeHalf && Math.abs(target.z) <= gridSizeHalf) {
 					// This is a hit against the ground plane within the valid build area
 					intersection = {
@@ -1281,6 +1349,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// CRITICAL: Also update the React state variable that's used for rendering the preview box
 				// This ensures the green box indicator follows the mouse
 				setPreviewPosition(tempVectorRef.current.clone());
+				
+				// Send the preview position to the App component, which forwards it to EnvironmentBuilder
+				if (previewPositionToAppJS && typeof previewPositionToAppJS === 'function') {
+					previewPositionToAppJS(tempVectorRef.current.clone());
+				}
 			}
 			
 			// Important check: Only call handleBlockPlacement if a tool is NOT active.
@@ -1450,6 +1523,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Set terrain data immediately
 		terrainRef.current = terrainData;
 		
+		// For Minecraft imports, we'll save to database immediately and not mark as unsaved
+		if (terrainData) {
+			console.log("Importing Minecraft map and saving to database");
+			
+			// First save to database
+			DatabaseManager.saveData(STORES.TERRAIN, "current", terrainData)
+				.then(() => {
+					console.log("Minecraft imported terrain saved to database successfully");
+					// Clear any pending changes to prevent unsaved changes warning
+					pendingChangesRef.current = { added: {}, removed: {} };
+				})
+				.catch(error => {
+					console.error("Error saving Minecraft imported terrain:", error);
+				});
+		}
+		
 		// Start terrain update immediately for faster response
 		buildUpdateTerrain()
 			.then(() => {
@@ -1470,6 +1559,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		if (gridRef.current) {
 			// Get grid size from localStorage or use default value
 			const savedGridSize = parseInt(localStorage.getItem("gridSize"), 10) || newGridSize;
+			
+			// Update the gridSizeRef to maintain current grid size value
+			gridSizeRef.current = savedGridSize;
 
 			if (gridRef.current.geometry) {
 				gridRef.current.geometry.dispose();
@@ -1651,6 +1743,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						terrainRef.current = savedTerrain;
 						console.log("Terrain loaded from IndexedDB");
 						totalBlocksRef.current = Object.keys(terrainRef.current).length;
+						
+						// Don't mark loaded terrain as having unsaved changes
+						// This was causing the unnecessary beforeunload warnings
+						// pendingChangesRef.current.added = {};
+						// Instead, just make sure we have an empty pending changes object
+						pendingChangesRef.current = { added: {}, removed: {} };
+						console.log("Loaded terrain marked as saved - no unsaved changes");
+						
 						buildUpdateTerrain(); // Build using chunked approach
 					} else {
 						console.log("No terrain found in IndexedDB");
@@ -1699,12 +1799,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Add effect to update tools with undoRedoManager when it becomes available - at the top level of the component
 	useEffect(() => {
 		if (undoRedoManager && toolManagerRef.current) {
-			console.log('TerrainBuilder: UndoRedoManager is now available, updating tools');
+			//console.log('TerrainBuilder: UndoRedoManager is now available, updating tools');
 
 			// Update WallTool with the undoRedoManager
 			const wallTool = toolManagerRef.current.tools["wall"];
 			if (wallTool) {
-				console.log('TerrainBuilder: Updating WallTool with undoRedoManager');
+			//	console.log('TerrainBuilder: Updating WallTool with undoRedoManager');
 				wallTool.undoRedoManager = undoRedoManager;
 			}
 		}
@@ -1916,7 +2016,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						loadingManager.updateLoading(`Processing ${totalBlocks} blocks...`, 10);
 						blocksArray.forEach(block => {
 							terrainRef.current[block.posKey] = block.blockId;
+							
+							// Also add to pendingChanges to trigger unsaved changes warning
+							pendingChangesRef.current.added[block.posKey] = block.blockId;
 						});
+						
+						console.log("Marking refreshed terrain data as having unsaved changes");
 						
 						// Update loading screen for terrain building
 						loadingManager.updateLoading(`Building terrain meshes...`, 20);
@@ -3552,7 +3657,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const result = spatialGridManagerRef.current.raycast(threeRaycaster, threeCamera, {
 			maxDistance: selectionDistanceRef.current,
 			prioritizeBlocks,
-			gridSize,
+			gridSize: gridSizeRef.current, // Use the current grid size from ref instead of prop
 			recentlyPlacedBlocks: recentlyPlacedBlocksRef.current,
 			isPlacing: isPlacingRef.current,
 			mode: currentMode // Pass the current mode to help with block selection
