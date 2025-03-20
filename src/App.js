@@ -298,6 +298,56 @@ function App() {
               <FaVolumeMute />
             </button>
           </Tooltip>
+          
+          {/* Test button for chunk culling refresh */}
+          <Tooltip text="Refresh chunk culling">
+            <button
+              onClick={() => {
+                if (terrainBuilderRef.current && terrainBuilderRef.current.refreshChunkCulling) {
+                  console.log("Manual chunk culling refresh requested");
+                  const result = terrainBuilderRef.current.refreshChunkCulling();
+                  console.log("Chunk culling refresh result:", result);
+                  
+                  // Provide visual feedback that the button was clicked
+                  const btn = document.activeElement;
+                  if (btn) {
+                    btn.classList.add("active");
+                    setTimeout(() => btn.classList.remove("active"), 300);
+                  }
+                }
+              }}
+              className="camera-control-button"
+              style={{ backgroundColor: "#ff5500", color: "white" }}
+            >
+              <span style={{ fontWeight: "bold" }}>🔄 Refresh</span>
+            </button>
+          </Tooltip>
+          
+          {/* Toggle for view distance culling */}
+          <Tooltip text="Toggle view distance culling">
+            <button
+              onClick={() => {
+                if (terrainBuilderRef.current) {
+                  // First query the chunk system to see if it's currently enabled
+                  const chunkSystem = window.getChunkSystem ? window.getChunkSystem() : null;
+                  if (chunkSystem) {
+                    const currentlyEnabled = chunkSystem._options.viewDistanceEnabled;
+                    console.log(`View distance culling is currently ${currentlyEnabled ? 'enabled' : 'disabled'}`);
+                    // Toggle to the opposite
+                    terrainBuilderRef.current.toggleViewDistanceCulling(!currentlyEnabled);
+                    
+                    // Force refresh after toggling
+                    setTimeout(() => {
+                      terrainBuilderRef.current.refreshChunkCulling();
+                    }, 100);
+                  }
+                }
+              }}
+              className="camera-control-button"
+            >
+              <span>👁️</span> {/* Eye emoji for visibility */}
+            </button>
+          </Tooltip>
         </div>
 
         <div className="camera-angle-slider">

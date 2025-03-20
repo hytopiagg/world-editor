@@ -302,51 +302,59 @@ class WallTool extends BaseTool {
 		console.log('WallTool: Placing wall from', startPos, 'to', endPos, 'with height', height);
 
 		if (!startPos || !endPos) {
-			console.error('WallTool: Invalid start or end position for placing');
+			console.error('Invalid start or end position for wall placement');
 			return false;
 		}
 
-		// Ensure the terrainRef is available
-		if (!this.terrainRef || !this.terrainRef.current) {
-			console.error('WallTool: terrainRef not available for placing');
+		// Early validation of references
+		if (!this.terrainBuilderRef || !this.terrainBuilderRef.current) {
+			console.error('WallTool: Cannot place wall - terrainBuilderRef not available');
 			return false;
 		}
 
-		// Ensure we have a block type to place
-		if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
-			console.error('WallTool: No block type to place');
-			return false;
-		}
+		// Check if the optimized fastUpdateBlock function is available
+		const canUseFastUpdate = this.terrainBuilderRef.current.fastUpdateBlock !== undefined;
+		console.log(`WallTool: Using ${canUseFastUpdate ? 'optimized' : 'standard'} block update method`);
 
-		// Convert positions to integers
-		const startX = Math.round(startPos.x), startY = Math.round(startPos.y), startZ = Math.round(startPos.z);
-		const endX = Math.round(endPos.x), endZ = Math.round(endPos.z);
-
-		// Calculate direction vector
-		const dx = Math.sign(endX - startX);
-		const dz = Math.sign(endZ - startZ);
-
+		// Track any blocks added for state tracking and undo/redo
 		const addedBlocks = {};
-		const blockType = this.currentBlockTypeRef.current.id;
 
-		// Helper function to place a column of blocks
-		const placeColumn = (x, z) => {
-			for (let y = 0; y < height; y++) {
-				const pos = `${x},${startY + y},${z}`;
-				if (!this.terrainRef.current[pos]) {
-					this.terrainRef.current[pos] = blockType;
-					addedBlocks[pos] = blockType;
+		// Get current block type ID from the reference
+		const blockTypeId = this.currentBlockTypeRef.current.id;
+
+		// Use Bresenham's line algorithm to draw line on the ground
+		const points = this.getLinePoints(
+			Math.round(startPos.x),
+			Math.round(startPos.z),
+			Math.round(endPos.x),
+			Math.round(endPos.z)
+		);
+
+		// Use optimized method for placing blocks if available
+		if (canUseFastUpdate) {
+			for (const point of points) {
+				// For each point on the line, create a column
+				const [x, z] = point;
+				
+				// Create a column of blocks from y=0 up to the specified height
+				const baseY = Math.round(startPos.y);
+				
+				for (let y = 0; y < height; y++) {
+					const position = [x, baseY + y, z];
+					this.terrainBuilderRef.current.fastUpdateBlock(position, blockTypeId);
+					
+					// Also track in addedBlocks for undo/redo
+					const key = position.join(',');
+					addedBlocks[key] = blockTypeId;
 				}
 			}
-		};
-
-		// Iterate along the path (including endpoint)
-		for (let x = startX, z = startZ; x !== endX || z !== endZ; x += (x !== endX ? dx : 0), z += (z !== endZ ? dz : 0)) {
-			placeColumn(x, z);
+		} else {
+			// Fall back to original implementation
+			for (const point of points) {
+				// For each point on the line, create a column
+				this.placeColumn(point[0], point[1], startPos.y, height, addedBlocks);
+			}
 		}
-
-		// Ensure the final column is placed
-		placeColumn(endX, endZ);
 
 		console.log(`WallTool: Added ${Object.keys(addedBlocks).length} blocks to terrain`);
 		
@@ -356,16 +364,14 @@ class WallTool extends BaseTool {
 			return false;
 		}
 
-		// Update the terrain with added blocks
-		if (this.terrainBuilderRef && this.terrainBuilderRef.current && this.terrainBuilderRef.current.updateTerrainBlocks) {
-			this.terrainBuilderRef.current.updateTerrainBlocks(
-				addedBlocks,
-				{},
-				this.currentBlockTypeRef.current.id
-			);
-		} else {
-			console.error('WallTool: Cannot update terrain - terrainBuilderRef not available');
-			return false;
+		// Update debug info and total blocks count
+		if (this.terrainBuilderRef.current.updateDebugInfo) {
+			this.terrainBuilderRef.current.updateDebugInfo();
+		}
+		
+		if (this.terrainBuilderRef.current.sendTotalBlocks) {
+			const totalBlocks = Object.keys(this.terrainBuilderRef.current.terrainRef.current).length;
+			this.terrainBuilderRef.current.sendTotalBlocks(totalBlocks);
 		}
 
 		// Add to placement changes for undo/redo
@@ -601,6 +607,57 @@ class WallTool extends BaseTool {
 
 		// Call parent dispose method
 		super.dispose();
+	}
+
+	// Helper function to place a column of blocks
+	placeColumn(x, z, baseY, height, addedBlocksTracker) {
+		// Get current block type ID from the reference
+		const blockTypeId = this.currentBlockTypeRef.current.id;
+
+		// Create a column of blocks from baseY up to the specified height
+		baseY = Math.round(baseY);
+		
+		for (let y = 0; y < height; y++) {
+			const posKey = `${x},${baseY + y},${z}`;
+			// Skip if block already exists
+			if (this.terrainRef.current[posKey]) continue;
+			
+			// Add to our terrain data structure
+			this.terrainRef.current[posKey] = blockTypeId;
+			
+			// Track for undo/redo
+			if (addedBlocksTracker) {
+				addedBlocksTracker[posKey] = blockTypeId;
+			}
+		}
+	}
+
+	// Implement Bresenham's line algorithm to get all points on a line
+	getLinePoints(x0, z0, x1, z1) {
+		const points = [];
+		const dx = Math.abs(x1 - x0);
+		const dz = Math.abs(z1 - z0);
+		const sx = x0 < x1 ? 1 : -1;
+		const sz = z0 < z1 ? 1 : -1;
+		let err = dx - dz;
+		
+		while (true) {
+			points.push([x0, z0]);
+			
+			if (x0 === x1 && z0 === z1) break;
+			
+			const e2 = 2 * err;
+			if (e2 > -dz) {
+				err -= dz;
+				x0 += sx;
+			}
+			if (e2 < dx) {
+				err += dx;
+				z0 += sz;
+			}
+		}
+		
+		return points;
 	}
 }
 

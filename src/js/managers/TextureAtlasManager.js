@@ -1,75 +1,37 @@
 /**
  * TextureAtlasManager
- * Manages texture atlas initialization and operations
+ * Compatibility layer for migrating from TextureAtlas to BlockTextureAtlas and ChunkSystem
  */
 
-import { TextureAtlas, ChunkMeshBuilder, ChunkLoadManager } from "../TextureAtlas";
+// Import the new system components
+import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
+import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
+import { getChunkSystem } from "../chunks/TerrainBuilderIntegration";
 import { getBlockTypes } from "./BlockTypesManager";
 
-// Use texture atlas for rendering
-let textureAtlas = null;
-let chunkMeshBuilder = null;
-let chunkLoadManager = null;
-
-// Track if the atlas is initialized
-let atlasInitialized = false;
+// Track if the system is initialized
+let systemInitialized = false;
 
 /**
  * Initialize the texture atlas with the provided block types
+ * This is a compatibility function that now uses BlockTextureAtlas and ChunkSystem
  * @param {Array} blockTypes - Array of block types to initialize the atlas with
  * @returns {Object|null} - The atlas texture or null if initialization failed
  */
 export const initTextureAtlas = async (blockTypes = null) => {
-  // Use provided block types or get them from BlockTypesManager
-  const blocksToUse = blockTypes || getBlockTypes();
+  console.log("Using new BlockTextureAtlas and ChunkSystem");
   
-  if (!blocksToUse || blocksToUse.length === 0) {
-    console.warn("Cannot initialize texture atlas: No block types provided");
-    return null;
+  // The ChunkSystem initializes the BlockTextureAtlas automatically
+  // This function remains for compatibility
+  
+  // Return the texture from BlockTextureAtlas if available
+  const blockTextureAtlas = BlockTextureAtlas.instance;
+  if (blockTextureAtlas) {
+    systemInitialized = true;
+    return blockTextureAtlas.textureAtlas;
   }
   
-  if (atlasInitialized && textureAtlas) {
-    console.log("Texture atlas already initialized, returning existing instance");
-    return textureAtlas.getAtlasTexture();
-  }
-  
-  console.log(`Initializing texture atlas with ${blocksToUse.length} block types...`);
-  
-  try {
-    // Reset initialization flag until complete
-    atlasInitialized = false;
-    
-    // Create new instances if they don't exist
-    if (!textureAtlas) {
-      textureAtlas = new TextureAtlas();
-    }
-    
-    // Wait for the atlas to be initialized
-    const atlas = await textureAtlas.initialize(blocksToUse);
-    
-    if (!atlas) {
-      throw new Error("Texture atlas initialization failed: No atlas returned");
-    }
-    
-    // Only create chunk mesh builder if the atlas was successfully initialized
-    if (!chunkMeshBuilder) {
-      chunkMeshBuilder = new ChunkMeshBuilder(textureAtlas);
-    } else {
-      // Update existing mesh builder with new atlas
-      chunkMeshBuilder.textureAtlas = textureAtlas;
-    }
-    
-    // Only set initialized flag when everything is complete
-    atlasInitialized = true;
-    console.log("Texture atlas successfully initialized with:", 
-      textureAtlas ? `${textureAtlas.blockUVs.size} block textures` : "no textures");
-    
-    return atlas;
-  } catch (error) {
-    console.error("Texture atlas initialization failed with error:", error);
-    atlasInitialized = false;
-    return null;
-  }
+  return null;
 };
 
 /**
@@ -77,41 +39,79 @@ export const initTextureAtlas = async (blockTypes = null) => {
  * @returns {Object|null} - The texture atlas or null if not initialized
  */
 export const getTextureAtlas = () => {
-  return textureAtlas;
+  const blockTextureAtlas = BlockTextureAtlas.instance;
+  return blockTextureAtlas ? { 
+    getAtlasTexture: () => blockTextureAtlas.textureAtlas,
+    blockUVs: { size: 0 } // Compatibility property
+  } : null;
 };
 
 /**
  * Get the chunk mesh builder instance
- * @returns {Object|null} - The chunk mesh builder or null if not initialized
+ * @returns {Object|null} - A compatibility wrapper for the ChunkSystem
  */
 export const getChunkMeshBuilder = () => {
-  return chunkMeshBuilder;
+  const chunkSystem = getChunkSystem();
+  
+  // Return a compatibility wrapper
+  return chunkSystem ? {
+    buildChunkMesh: (chunksBlocks, blockTypes) => {
+      console.warn("Using compatibility layer for buildChunkMesh - consider upgrading to ChunkSystem directly");
+      // This is a simplified compatibility stub - real implementation would need to convert formats
+      return { geometry: null, material: null };
+    },
+    setGreedyMeshing: (enabled) => {
+      console.warn("setGreedyMeshing called via compatibility layer - consider using constants/terrain directly");
+    },
+    textureAtlas: getTextureAtlas()
+  } : null;
 };
 
 /**
  * Create a chunk load manager
  * @param {Object} options - Options for the chunk load manager
- * @returns {Object} - The chunk load manager
+ * @returns {Object} - Compatibility wrapper for ChunkSystem
  */
 export const createChunkLoadManager = (options = {}) => {
-  chunkLoadManager = new ChunkLoadManager(options);
-  return chunkLoadManager;
+  console.warn("createChunkLoadManager called via compatibility layer - consider using ChunkSystem directly");
+  
+  // Return a compatibility wrapper
+  return {
+    addChunkToQueue: (chunkKey, priority) => {
+      // No-op, handled by ChunkSystem internally
+    },
+    clearQueue: () => {
+      // No-op, handled by ChunkSystem internally
+    },
+    pause: () => {
+      // No-op, handled by ChunkSystem internally
+    },
+    resume: () => {
+      // No-op, handled by ChunkSystem internally
+    },
+    maxConcurrentLoads: options.maxConcurrentLoads || 4,
+    processingTimeLimit: options.processingTimeLimit || 20
+  };
 };
 
 /**
  * Get the chunk load manager instance
- * @returns {Object|null} - The chunk load manager or null if not initialized
+ * @returns {Object|null} - Compatibility wrapper for ChunkSystem
  */
 export const getChunkLoadManager = () => {
-  return chunkLoadManager;
+  return createChunkLoadManager(); // Return a dummy wrapper
 };
 
 /**
  * Check if the texture atlas is initialized
- * @returns {boolean} - True if the atlas is initialized
+ * @returns {boolean} - True if the system is initialized
  */
 export const isAtlasInitialized = () => {
-  return atlasInitialized;
+  // Check if both BlockTextureAtlas and ChunkSystem are initialized
+  const blockTextureAtlas = BlockTextureAtlas.instance;
+  const chunkSystem = getChunkSystem();
+  
+  return blockTextureAtlas && chunkSystem && chunkSystem._initialized;
 };
 
 /**
@@ -121,10 +121,7 @@ export const isAtlasInitialized = () => {
  * @returns {Object|null} - The generated mesh or null if texture atlas is not initialized
  */
 export const generateGreedyMesh = (chunksBlocks, blockTypes) => {
-  if (!atlasInitialized || !chunkMeshBuilder) {
-    //console.warn("Texture atlas not initialized, cannot generate greedy mesh");
-    return null;
-  }
-  
-  return chunkMeshBuilder.buildChunkMesh(chunksBlocks, blockTypes);
+  console.warn("generateGreedyMesh called via compatibility layer - use ChunkSystem directly");
+  // This is now handled internally by the ChunkSystem
+  return null;
 }; 

@@ -301,6 +301,273 @@ class SpatialGridManager {
 	constructor(loadingManager) {
 		this.spatialHashGrid = new SpatialHashGrid();
 		this.loadingManager = loadingManager;
+		this.isProcessing = false; // Flag to track if processing is happening
+		this.lastFrustumUpdate = 0;
+		this.chunksInFrustum = new Set(); // Set of chunk keys in frustum
+	}
+	
+	/**
+	 * Get chunks that are visible within the camera frustum
+	 * @param {THREE.Camera} camera - The camera to use
+	 * @param {number} maxDistance - Maximum distance to check (defaults to view distance)
+	 * @returns {Set<string>} - Set of chunk keys in the frustum
+	 */
+	getChunksInFrustum(camera, maxDistance = 64) {
+		if (!camera) {
+			console.warn("No camera provided for getChunksInFrustum");
+			return new Set();
+		}
+		
+		const start = performance.now();
+		
+		// Create frustum from camera
+		const frustum = new THREE.Frustum();
+		const projScreenMatrix = new THREE.Matrix4();
+		
+		// Update the projection matrix
+		projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+		frustum.setFromProjectionMatrix(projScreenMatrix);
+		
+		// Get camera position
+		const cameraPosition = camera.position.clone();
+		
+		// Store chunks in frustum
+		const chunksInFrustum = new Set();
+		
+		// Get camera chunk coordinates
+		const cameraChunkX = Math.floor(cameraPosition.x / CHUNK_SIZE);
+		const cameraChunkY = Math.floor(cameraPosition.y / CHUNK_SIZE);
+		const cameraChunkZ = Math.floor(cameraPosition.z / CHUNK_SIZE);
+		
+		// Add the chunk containing the camera
+		chunksInFrustum.add(`${cameraChunkX},${cameraChunkY},${cameraChunkZ}`);
+		
+		// Use a more efficient approach - only check chunks that actually have content
+		// Get all chunks that have blocks in them, as they're the only ones we need to consider
+		const allChunksWithBlocks = Array.from(this.spatialHashGrid.grid.keys());
+		
+		// If the grid is empty or very small, use the standard approach
+		if (allChunksWithBlocks.length < 10) {
+			// Calculate maximum chunks to check based on maxDistance
+			const maxChunks = Math.ceil(maxDistance / CHUNK_SIZE);
+			
+			// Check chunks around the camera in progressively larger shells
+			for (let shell = 0; shell <= 2; shell++) {
+				// Start with the camera chunk, then nearby chunks, then more distant chunks
+				const shellSize = shell * Math.ceil(maxChunks/3);
+				
+				// Check a subset of chunks in this shell (more aggressively cull distant chunks)
+				for (let dx = -shellSize; dx <= shellSize; dx += shell === 0 ? 1 : 2) {
+					for (let dy = -shellSize; dy <= shellSize; dy += shell === 0 ? 1 : 2) {
+						for (let dz = -shellSize; dz <= shellSize; dz += shell === 0 ? 1 : 2) {
+							// Skip the inner shells which we've already checked
+							if (shell > 0 && 
+								Math.abs(dx) < shellSize && 
+								Math.abs(dy) < shellSize && 
+								Math.abs(dz) < shellSize) {
+								continue;
+							}
+							
+							// Calculate chunk coordinates
+							const cx = cameraChunkX + dx;
+							const cy = cameraChunkY + dy;
+							const cz = cameraChunkZ + dz;
+							
+							// Calculate chunk center for distance check
+							const chunkCenter = new THREE.Vector3(
+								cx * CHUNK_SIZE + CHUNK_SIZE / 2,
+								cy * CHUNK_SIZE + CHUNK_SIZE / 2,
+								cz * CHUNK_SIZE + CHUNK_SIZE / 2
+							);
+							
+							// First, check distance to camera (faster than frustum test)
+							const distance = chunkCenter.distanceTo(cameraPosition);
+							
+							// Skip if too far
+							if (distance > maxDistance) {
+								continue;
+							}
+							
+							// For nearby chunks, always include them
+							if (distance < CHUNK_SIZE * 2) {
+								chunksInFrustum.add(`${cx},${cy},${cz}`);
+								continue;
+							}
+							
+							// For more distant chunks, check frustum containment
+							if (frustum.containsPoint(chunkCenter)) {
+								chunksInFrustum.add(`${cx},${cy},${cz}`);
+							}
+						}
+					}
+				}
+			}
+		} else {
+			// For larger worlds, only consider chunks that actually have content
+			for (const chunkKey of allChunksWithBlocks) {
+				// Parse chunk coordinates
+				const [cx, cy, cz] = chunkKey.split(',').map(Number);
+				
+				// Calculate chunk center
+				const chunkCenter = new THREE.Vector3(
+					cx * CHUNK_SIZE + CHUNK_SIZE / 2,
+					cy * CHUNK_SIZE + CHUNK_SIZE / 2,
+					cz * CHUNK_SIZE + CHUNK_SIZE / 2
+				);
+				
+				// First, check distance to camera (faster than frustum test)
+				const distance = chunkCenter.distanceTo(cameraPosition);
+				
+				// Skip if too far
+				if (distance > maxDistance) {
+					continue;
+				}
+				
+				// For nearby chunks, always include them
+				if (distance < CHUNK_SIZE * 2) {
+					chunksInFrustum.add(chunkKey);
+					continue;
+				}
+				
+				// For more distant chunks, check frustum containment
+				if (frustum.containsPoint(chunkCenter)) {
+					chunksInFrustum.add(chunkKey);
+				}
+			}
+		}
+		
+		// Performance logging
+		const end = performance.now();
+		const duration = end - start;
+		if (duration > 5) {
+			console.log(`Frustum check took ${duration.toFixed(2)}ms for ${chunksInFrustum.size} chunks`);
+		}
+		
+		return chunksInFrustum;
+	}
+	
+	/**
+	 * Update the frustum cache - should be called regularly when camera moves
+	 * @param {THREE.Camera} camera - The camera to use
+	 * @param {number} maxDistance - Maximum distance to check
+	 */
+	updateFrustumCache(camera, maxDistance = 64) {
+		const now = performance.now();
+		
+		// Only update after 100ms to avoid excessive updates
+		if (now - this.lastFrustumUpdate < 100) {
+			return;
+		}
+		
+		this.lastFrustumUpdate = now;
+		this.chunksInFrustum = this.getChunksInFrustum(camera, maxDistance);
+	}
+	
+	/**
+	 * Update blocks within the camera frustum only
+	 * @param {Object} terrainBlocks - Object containing all blocks in the terrain
+	 * @param {THREE.Camera} camera - The camera to use
+	 * @param {Object} options - Options for updating
+	 */
+	updateInFrustum(terrainBlocks, camera, options = {}) {
+		if (!camera) {
+			console.warn("No camera provided for updateInFrustum");
+			return Promise.resolve();
+		}
+		
+		if (!terrainBlocks || typeof terrainBlocks !== 'object') {
+			console.warn("Invalid terrain blocks provided for updateInFrustum");
+			return Promise.resolve();
+		}
+		
+		const start = performance.now();
+		
+		// Set processing flag to prevent overlapping calls
+		this.isProcessing = true;
+		
+		try {
+			// Update the frustum cache
+			this.updateFrustumCache(camera, options.maxDistance || 64);
+			
+			// If no chunks in frustum, skip update
+			if (this.chunksInFrustum.size === 0) {
+				this.isProcessing = false;
+				return Promise.resolve();
+			}
+			
+			// Filter blocks to only those in frustum
+			const frustumBlocks = {};
+			let blockCount = 0;
+			let skipCount = 0;
+			
+			// Use chunksInFrustum for fast lookups
+			const chunksInFrustumSet = this.chunksInFrustum;
+			
+			// For small worlds, process everything
+			if (Object.keys(terrainBlocks).length < 5000) {
+				// Process all blocks as we don't have too many
+				for (const [posKey, blockId] of Object.entries(terrainBlocks)) {
+					// Add all blocks to the frustum blocks object
+					frustumBlocks[posKey] = blockId;
+					blockCount++;
+				}
+			} else {
+				// For larger worlds, filter by frustum
+				for (const [posKey, blockId] of Object.entries(terrainBlocks)) {
+					const [x, y, z] = posKey.split(',').map(Number);
+					
+					// Calculate which chunk this block is in
+					const chunkX = Math.floor(x / CHUNK_SIZE);
+					const chunkY = Math.floor(y / CHUNK_SIZE);
+					const chunkZ = Math.floor(z / CHUNK_SIZE);
+					const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+					
+					// If this chunk is in frustum, include the block
+					if (chunksInFrustumSet.has(chunkKey)) {
+						frustumBlocks[posKey] = blockId;
+						blockCount++;
+					} else {
+						skipCount++;
+					}
+				}
+			}
+			
+			const filterTime = performance.now() - start;
+			
+			// Log information about the filtering
+			if (blockCount > 0 && !options.silent) {
+				console.log(`Filtered ${blockCount} blocks in frustum (${skipCount} skipped) in ${filterTime.toFixed(2)}ms`);
+			}
+			
+			// Only proceed with update if we have blocks to update
+			if (blockCount === 0) {
+				this.isProcessing = false;
+				return Promise.resolve();
+			}
+			
+			// Store current context for promise callback
+			const self = this;
+			
+			// Update only blocks in frustum
+			return this.updateFromTerrain(frustumBlocks, options)
+				.then(() => {
+					const totalTime = performance.now() - start;
+					if (totalTime > 50 && !options.silent) {
+						console.log(`Total frustum update took ${totalTime.toFixed(2)}ms for ${blockCount} blocks`);
+					}
+				})
+				.catch(error => {
+					console.error("Error in updateInFrustum:", error);
+				})
+				.finally(() => {
+					// Clear processing flag after completion
+					self.isProcessing = false;
+				});
+		} catch (error) {
+			console.error("Exception in updateInFrustum:", error);
+			this.isProcessing = false;
+			return Promise.resolve();
+		}
 	}
 	
 	/**
@@ -311,8 +578,25 @@ class SpatialGridManager {
 	 * @param {number} options.batchSize - Number of blocks to process in each batch
 	 */
 	updateFromTerrain(terrainBlocks, options = {}) {
+		// Set processing flag
+		this.isProcessing = true;
+		
+		// Validate input
+		if (!terrainBlocks || typeof terrainBlocks !== 'object') {
+			console.warn("Invalid terrain blocks provided to updateFromTerrain");
+			this.isProcessing = false;
+			return Promise.resolve();
+		}
+		
 		const blockEntries = Object.entries(terrainBlocks);
 		const totalBlocks = blockEntries.length;
+		
+		// If no blocks, just resolve immediately
+		if (totalBlocks === 0) {
+			this.isProcessing = false;
+			return Promise.resolve();
+		}
+		
 		let processedBlocks = 0;
 		const BATCH_SIZE = options.batchSize || 50000;
 		const totalBatches = Math.ceil(totalBlocks / BATCH_SIZE);
@@ -320,6 +604,16 @@ class SpatialGridManager {
 		
 		// Check if we need to show a loading screen
 		const showLoadingScreen = options.showLoadingScreen === true;
+		const silent = options.silent === true;
+		
+		// Skip this update if skipIfBusy is set and we're already processing
+		if (options.skipIfBusy && this.spatialHashGrid.isProcessing) {
+			if (!silent) {
+				console.log("Skipping spatial hash update because grid is busy");
+			}
+			this.isProcessing = false;
+			return Promise.resolve();
+		}
 		
 		// Clear the grid before updating
 		this.spatialHashGrid.clear();
@@ -327,11 +621,14 @@ class SpatialGridManager {
 		// Show loading screen if requested
 		if (showLoadingScreen && this.loadingManager) {
 			try {
-				this.loadingManager.showLoading('Updating spatial hash grid...');
+				this.loadingManager.showLoading(options.message || 'Updating spatial hash grid...');
 			} catch (error) {
 				console.error("Error showing loading screen:", error);
 			}
 		}
+		
+		// Store a reference to self for promise chain
+		const self = this;
 		
 		return new Promise((resolve) => {
 			// Function to process a batch of blocks
@@ -375,7 +672,9 @@ class SpatialGridManager {
 					}
 				} else {
 					// All blocks processed
-					console.log(`Spatial hash fully updated with ${this.spatialHashGrid.size} blocks`);
+					if (!silent) {
+						console.log(`Spatial hash fully updated with ${this.spatialHashGrid.size} blocks`);
+					}
 					
 					// Hide loading screen if shown
 					if (showLoadingScreen && this.loadingManager) {
@@ -385,19 +684,32 @@ class SpatialGridManager {
 							// Wait a brief moment to ensure the update is visible
 							setTimeout(() => {
 								this.loadingManager.hideLoading();
+								// Clear processing flag
+								self.isProcessing = false;
+								// Resolve the promise
+								resolve();
 							}, 500); // Increased timeout to ensure the 100% is visible
 						} catch (error) {
 							console.error("Error hiding loading screen:", error);
+							// Clear processing flag even on error
+							self.isProcessing = false;
+							resolve();
 						}
+					} else {
+						// Clear processing flag
+						self.isProcessing = false;
+						// Resolve the promise
+						resolve();
 					}
-					
-					// Resolve the promise
-					resolve();
 				}
 			};
 			
 			// Start processing
 			processBatch(0);
+		}).catch(error => {
+			console.error("Error in updateFromTerrain:", error);
+			// Clear processing flag on error
+			this.isProcessing = false;
 		});
 	}
 	
@@ -405,24 +717,95 @@ class SpatialGridManager {
 	 * Update specific blocks in the spatial hash grid
 	 * @param {Array} addedBlocks - Array of [key, blockId] pairs to add
 	 * @param {Array} removedBlocks - Array of keys to remove
+	 * @param {Object} options - Options for updating
 	 */
-	updateBlocks(addedBlocks = [], removedBlocks = []) {
-		console.log("SpatialGridManager.updateBlocks:", {
-			addedBlocks: addedBlocks.length,
-			removedBlocks: removedBlocks.length,
-			removedBlocksData: removedBlocks
-		});
+	updateBlocks(addedBlocks = [], removedBlocks = [], options = {}) {
+		// Set processing flag
+		this.isProcessing = true;
 		
-		// Process removed blocks
-		for (const key of removedBlocks) {
-			const hadBlock = this.spatialHashGrid.has(key);
-			const deleted = this.spatialHashGrid.delete(key);
-			console.log(`Removing block ${key}: existed=${hadBlock}, deleted=${deleted}`);
-		}
-		
-		// Process added blocks
-		for (const [key, blockId] of addedBlocks) {
-			this.spatialHashGrid.set(key, blockId);
+		try {
+			if (!options.silent) {
+				console.log("SpatialGridManager.updateBlocks:", {
+					addedBlocks: addedBlocks.length,
+					removedBlocks: removedBlocks.length
+				});
+			}
+			
+			// Process removed blocks
+			let removedCount = 0;
+			for (const block of removedBlocks) {
+				try {
+					// Handle different formats of removed blocks
+					let key;
+					
+					if (typeof block === 'string') {
+						// Format: "x,y,z"
+						key = block;
+					} else if (Array.isArray(block)) {
+						// Format: [x, y, z]
+						key = block.join(',');
+					} else if (typeof block === 'object' && block !== null) {
+						// Format: {position: [x, y, z]} or {x, y, z}
+						if (Array.isArray(block.position)) {
+							key = block.position.join(',');
+						} else if (block.x !== undefined && block.y !== undefined && block.z !== undefined) {
+							key = `${block.x},${block.y},${block.z}`;
+						} else if (block.posKey) {
+							key = block.posKey;
+						}
+					}
+					
+					if (key && this.spatialHashGrid.has(key)) {
+						this.spatialHashGrid.delete(key);
+						removedCount++;
+					}
+				} catch (e) {
+					console.error(`Error removing block:`, e);
+				}
+			}
+			
+			// Process added blocks
+			let addedCount = 0;
+			for (const item of addedBlocks) {
+				try {
+					// Handle different formats of added blocks
+					let key, blockId;
+					
+					if (Array.isArray(item) && item.length >= 2) {
+						// Format: [key, blockId]
+						[key, blockId] = item;
+					} else if (typeof item === 'object' && item !== null) {
+						// Format: {position: [x, y, z], id} or {x, y, z, id}
+						if (Array.isArray(item.position)) {
+							key = item.position.join(',');
+							blockId = item.id || item.blockId;
+						} else if (item.x !== undefined && item.y !== undefined && item.z !== undefined) {
+							key = `${item.x},${item.y},${item.z}`;
+							blockId = item.id || item.blockId;
+						} else if (item.posKey) {
+							key = item.posKey;
+							blockId = item.id || item.blockId;
+						}
+					}
+					
+					// Only proceed if we have valid data
+					if (key && blockId !== undefined) {
+						this.spatialHashGrid.set(key, blockId);
+						addedCount++;
+					}
+				} catch (e) {
+					console.error("Error adding block:", e, item);
+				}
+			}
+			
+			if (!options.silent && (addedCount > 0 || removedCount > 0)) {
+				console.log(`Successfully updated spatial hash: added ${addedCount}, removed ${removedCount}`);
+			}
+		} catch (e) {
+			console.error("Error in updateBlocks:", e);
+		} finally {
+			// Clear processing flag
+			this.isProcessing = false;
 		}
 	}
 	

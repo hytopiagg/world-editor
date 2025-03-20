@@ -7,7 +7,13 @@ import { cameraManager } from "./Camera";
 import { DatabaseManager, STORES } from "./DatabaseManager";
 import { refreshBlockTools } from "./components/BlockToolsSidebar";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils";
-import { TextureAtlas, ChunkMeshBuilder, ChunkLoadManager } from "./TextureAtlas";
+// Replace old texture atlas and chunk imports with new ones
+import BlockTextureAtlas from "./blocks/BlockTextureAtlas";
+import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
+import { initChunkSystem, updateTerrainChunks, updateTerrainBlocks as importedUpdateTerrainBlocks, 
+         processChunkRenderQueue, getChunkSystem, setChunkViewDistance, 
+         setChunkViewDistanceEnabled, getBlockId, hasBlock, clearChunks, isChunkVisible,
+         updateChunkSystemCamera } from "./chunks/TerrainBuilderIntegration";
 import { loadingManager } from './LoadingManager';
 import { PERFORMANCE_SETTINGS, TEXTURE_ATLAS_SETTINGS, getTextureAtlasSettings, 
 	    meshesNeedsRefresh, toggleInstancing, getInstancingEnabled,
@@ -22,9 +28,10 @@ import {CHUNK_SIZE, GREEDY_MESHING_ENABLED,
 import { ToolManager, WallTool } from "./tools";
 
 // Import chunk utility functions
-import { getChunkKey, getChunkCoords, getLocalCoords, getLocalKey, isChunkVisible as isChunkVisibleUtil } from "./utils/terrain/chunkUtils";
+import { getChunkKey as getChunkKeyUtil, getChunkCoords, getLocalCoords, getLocalKey, isChunkVisible as isChunkVisibleUtil } from "./utils/terrain/chunkUtils";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks } from "./managers/BlockTypesManager";
+// Keep the old export functions for backward compatibility but they will be redirected
 import { initTextureAtlas, generateGreedyMesh, isAtlasInitialized, 
          getChunkMeshBuilder, getTextureAtlas, createChunkLoadManager, getChunkLoadManager } from "./managers/TextureAtlasManager";
 
@@ -57,6 +64,30 @@ const optimizeRenderer = (gl) => {
 function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, sendTotalBlocks, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
 	// Initialize refs, state, and other variables
 	const [isSaving, setIsSaving] = useState(false);
+	
+	// Add loading state tracking
+	const isLoadingRef = useRef(false);
+	const isForceRef = useRef(false);
+	
+	// Spatial hash tracking
+	const spatialHashUpdateQueuedRef = useRef(false);
+	const spatialHashUpdateThrottleRef = useRef(0);
+	const spatialHashLastUpdateRef = useRef(0);
+	const disableSpatialHashUpdatesRef = useRef(false); // Flag to completely disable spatial hash updates
+	const deferSpatialHashUpdatesRef = useRef(false); // Flag to defer spatial hash updates during loading
+	const pendingSpatialHashUpdatesRef = useRef({ added: [], removed: [] }); // Store deferred updates
+	const scheduleSpatialHashUpdateRef = useRef(false); // Flag to schedule a spatial hash update
+	const firstLoadCompletedRef = useRef(false); // Flag to track if the first load is complete
+	
+	// Camera ref for frustum culling
+	const cameraRef = useRef(null);
+	
+	// Define chunk size constant for spatial calculations
+	const CHUNK_SIZE = 16; // Size of each chunk in blocks
+	
+	// Define geometry and material caches with proper naming
+	const geometryCacheRef = useRef(new Map());
+	const materialCacheRef = useRef(new Map());
 	
 	// Helper function to ensure render cycle completion
 	const waitForRenderCycle = (callback) => {
@@ -216,82 +247,103 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Function to efficiently save terrain data
 	const efficientTerrainSave = () => {
-		// If a save is already pending, don't schedule another one
-		if (pendingSaveRef.current) return;
+		// Skip if saving is already in progress
+		if (isSaving) {
+			console.log("Save already in progress, skipping new save request");
+			return Promise.resolve();
+		}
 		
-		// Calculate time since last save
+		// Skip if we just loaded the terrain or if auto-save is disabled
+		if (isLoadingRef.current) {
+			console.log("Skipping save during loading");
+			return Promise.resolve();
+		}
+		
+		// Skip if we're in the middle of a bulk operation
+		if (isBulkLoadingRef.current) {
+			console.log("Skipping save during bulk operation");
+			return Promise.resolve();
+		}
+		
+		// Skip if no changes or throttled
 		const now = Date.now();
 		const timeSinceLastSave = now - lastSaveTimeRef.current;
+		const hasChanges = Object.keys(pendingChangesRef.current.added).length > 0 || 
+						   Object.keys(pendingChangesRef.current.removed).length > 0;
 		
-		// Determine delay - if we recently saved, wait longer
-		const delay = Math.max(0, saveThrottleTime - timeSinceLastSave);
+		if (!hasChanges) {
+			console.log("No changes to save");
+			return Promise.resolve();
+		}
 		
-		// Mark that we have a save pending
-		pendingSaveRef.current = true;
-		
-		// Schedule the save with appropriate delay
-		setTimeout(async () => {
-			// Show saving indicator
-			setIsSaving(true);
-			const saveStartTime = performance.now();
+		// Throttle saves to avoid frequent database operations
+		if (timeSinceLastSave < saveThrottleTime && !isForceRef.current) {
+			console.log(`Save throttled (${timeSinceLastSave}ms < ${saveThrottleTime}ms)`);
 			
-			try {
-				// First time, save the entire terrain
-				if (!initialSaveCompleteRef.current) {
-					console.log("Performing initial full terrain save...");
-					await DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current);
-					initialSaveCompleteRef.current = true;
-				} 
-				// For subsequent saves, only save the changes
-				else {
-					const hasChanges = 
-						Object.keys(pendingChangesRef.current.added).length > 0 || 
-						Object.keys(pendingChangesRef.current.removed).length > 0;
-						
-					if (!hasChanges) {
-						console.log("No changes to save");
-						return;
-					}
-					
-					console.log(
-						`Saving terrain changes: ${Object.keys(pendingChangesRef.current.added).length} additions, ` +
-						`${Object.keys(pendingChangesRef.current.removed).length} removals`
-					);
-					
-					// Get current terrain data
-					const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, "current") || {};
-					
-					// Apply changes
-					Object.entries(pendingChangesRef.current.added).forEach(([key, value]) => {
-						currentTerrain[key] = value;
-					});
-					
-					Object.keys(pendingChangesRef.current.removed).forEach(key => {
-						delete currentTerrain[key];
-					});
-					
-					// Save updated terrain
-					await DatabaseManager.saveData(STORES.TERRAIN, "current", currentTerrain);
-					
-					// Clear pending changes
-					pendingChangesRef.current = { added: {}, removed: {} };
+			// If we haven't queued a save yet, queue one
+			if (!pendingSaveRef.current) {
+				const delayTime = saveThrottleTime - timeSinceLastSave + 100; // Add 100ms buffer
+				console.log(`Queueing save in ${delayTime}ms`);
+				
+				pendingSaveRef.current = true;
+				setTimeout(() => {
+					pendingSaveRef.current = false;
+					efficientTerrainSave();
+				}, delayTime);
+			}
+			
+			return Promise.resolve();
+		}
+		
+		// Set saving flag
+		setIsSaving(true);
+		console.log("Saving terrain data...");
+		
+		// Merge changes
+		const addedBlocksCount = Object.keys(pendingChangesRef.current.added).length;
+		const removedBlocksCount = Object.keys(pendingChangesRef.current.removed).length;
+		
+		// Update lastSaveTime immediately to prevent rapid subsequent calls
+		lastSaveTimeRef.current = now;
+		
+		// Clear the force flag
+		isForceRef.current = false;
+		
+		// Create a copy of the pending changes before clearing them
+		const changesSnapshot = {
+			added: { ...pendingChangesRef.current.added },
+			removed: { ...pendingChangesRef.current.removed }
+		};
+		
+		// Clear pending changes so new ones can be tracked while we save
+		pendingChangesRef.current = { added: {}, removed: {} };
+		
+		// Execute the save operation
+		return DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current)
+			.then(() => {
+				console.log(`Terrain saved successfully (added: ${addedBlocksCount}, removed: ${removedBlocksCount})`);
+				setIsSaving(false);
+				
+				// Mark initial save as complete
+				initialSaveCompleteRef.current = true;
+				
+				return { success: true, added: addedBlocksCount, removed: removedBlocksCount };
+			})
+			.catch((error) => {
+				console.error("Error saving terrain:", error);
+				
+				// Restore the changes that failed to save
+				for (const [key, value] of Object.entries(changesSnapshot.added)) {
+					pendingChangesRef.current.added[key] = value;
 				}
 				
-				// Update the last save time
-				lastSaveTimeRef.current = Date.now();
-				const saveEndTime = performance.now();
-				console.log(`Performance: Incremental terrain save took ${saveEndTime - saveStartTime}ms`);
-			} catch (err) {
-				console.error("Error saving terrain data:", err);
-			} finally {
-				// Clear the pending flag
-				pendingSaveRef.current = false;
-				// Hide saving indicator
+				for (const [key, value] of Object.entries(changesSnapshot.removed)) {
+					pendingChangesRef.current.removed[key] = value;
+				}
+				
 				setIsSaving(false);
-			}
-		}, delay);
-		
-		console.log(`Performance: Scheduled terrain save in ${delay}ms`);
+				return { success: false, error: error.message };
+			});
 	};
 	
 	// Initialize the incremental terrain save system
@@ -361,7 +413,164 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Scene setup
 	const { scene, camera: threeCamera, raycaster: threeRaycaster, pointer, gl } = useThree();
+	
+	// Keep a reference to the current camera that can be accessed from outside the component
+	const currentCameraRef = useRef(null);
+	
+	// Update the camera reference whenever it changes
+	useEffect(() => {
+		if (threeCamera) {
+			currentCameraRef.current = threeCamera;
+			cameraRef.current = threeCamera; // Also update our camera ref for frustum culling
+		}
+	}, [threeCamera]);
+	
+	// Function to update chunk system with current camera and process render queue
+	const updateChunkSystemWithCamera = () => {
+		// Only log occasionally to avoid console spam
+		const shouldLog = false;//Date.now() % 2000 < 50; // Log roughly every 2 seconds for ~50ms window
+		
+		if (!currentCameraRef.current) {
+			console.error("[updateChunkSystemWithCamera] Camera reference not available");
+			return false;
+		}
+
+		const camera = currentCameraRef.current;
+		const chunkSystem = getChunkSystem();
+		if (!chunkSystem) {
+			console.error("[updateChunkSystemWithCamera] Chunk system not available");
+			return false;
+		}
+
+		// Ensure camera matrices are up to date
+		camera.updateMatrixWorld(true);
+		camera.updateProjectionMatrix();
+
+		// Check if the camera is actually set in the chunk system
+		const cameraWasSet = !!chunkSystem._scene.camera;
+		
+		// Update the camera in the chunk system
+		updateChunkSystemCamera(camera);
+  
+		if (shouldLog) {
+			console.log("[updateChunkSystemWithCamera] Camera updated:",
+				"Was set:", cameraWasSet,
+				"New camera:", camera.position.toArray().map(v => v.toFixed(2)),
+				"Chunk system camera:", chunkSystem._scene.camera?.position?.toArray().map(v => v.toFixed(2)) || "null");
+		}
+		
+		// Make sure view distance settings are correct
+		const { getViewDistance } = require('./constants/terrain');
+		const currentViewDistance = getViewDistance();
+  
+		// Ensure view distance is set and view distance culling is enabled
+		chunkSystem.setViewDistance(currentViewDistance);
+		chunkSystem.setViewDistanceEnabled(true);
+		
+		if (shouldLog) {
+			console.log("[updateChunkSystemWithCamera] Updated view distance:", 
+				currentViewDistance, 
+				"Camera position:", camera.position.toArray().map(v => v.toFixed(2)));
+		}
+		
+		// Process chunks with updated camera reference
+		processChunkRenderQueue();
+  
+		// Update the frustum for visibility calculations
+		const projScreenMatrix = new THREE.Matrix4();
+		projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+		const frustum = new THREE.Frustum();
+		frustum.setFromProjectionMatrix(projScreenMatrix);
+		frustumRef.current = frustum;
+		
+		if (shouldLog) {
+			console.log("[updateChunkSystemWithCamera] Render queue processed and frustum updated");
+		}
+		
+		return true;
+	};
+	
+	// Add a debug function to force refresh all chunks
+	const forceRefreshAllChunks = () => {
+		console.log("[Debug] Forcing refresh of all chunks based on camera position");
+		
+		const camera = currentCameraRef.current;
+		if (!camera) {
+			console.error("[Debug] No camera reference available");
+			return;
+		}
+		
+		const chunkSystem = getChunkSystem();
+		if (!chunkSystem) {
+			console.error("[Debug] No chunk system available");
+			return;
+		}
+		
+		// Log current camera state only when needed
+		if (Date.now() % 5000 < 50) { // Only log every ~5 seconds
+			console.log("[Debug] Camera position:", camera.position.toArray().map(v => v.toFixed(2)));
+			console.log("[Debug] Camera rotation:", camera.rotation.toArray().map(v => v.toFixed(2)));
+		}
+		
+		// Ensure view distance settings are correct
+		const { getViewDistance } = require('./constants/terrain');
+		const currentViewDistance = getViewDistance();
+		
+		// Ensure camera matrices are up to date
+		camera.updateMatrixWorld(true);
+		camera.updateProjectionMatrix();
+		
+		// Update the frustum for visibility calculations
+		const projScreenMatrix = new THREE.Matrix4();
+		projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+		const frustum = new THREE.Frustum();
+		frustum.setFromProjectionMatrix(projScreenMatrix);
+		frustumRef.current = frustum;
+		
+		// Explicitly update view distance and enable culling
+		chunkSystem.setViewDistance(currentViewDistance);
+		chunkSystem.setViewDistanceEnabled(true);
+		
+		// Set camera in chunk system
+		updateChunkSystemCamera(camera);
+		
+		// Process render queue multiple times to ensure updates are applied
+		processChunkRenderQueue();
+		setTimeout(() => processChunkRenderQueue(), 50);
+		setTimeout(() => processChunkRenderQueue(), 100);
+		
+		return true;
+	};
+
+
+
+	// Special version for block placement - add this before updateTerrainBlocks
+	const updateChunkSystemForBlockPlacement = () => {
+		console.log("[Block Placement] Updating chunk system with camera:", 
+			threeCamera?.position.toArray().map(v => v.toFixed(2)) || "null");
+  
+		const chunkSystem = getChunkSystem();
+		if (!chunkSystem) {
+			console.error("[Block Placement] Chunk system not available");
+			return false;
+		}
+  
+		// Log the camera state in chunk system before update
+		console.log("[Block Placement] Camera in chunk system before:", 
+			chunkSystem._scene.camera?.position?.toArray().map(v => v.toFixed(2)) || "null");
+		
+		// Update the camera directly
+		chunkSystem._scene.camera = threeCamera;
+		
+		// Log the camera state in chunk system after update
+		console.log("[Block Placement] Camera in chunk system after:", 
+			chunkSystem._scene.camera?.position?.toArray().map(v => v.toFixed(2)) || "null");
+  
+		return true;
+	};
+	
 	const placementStartState = useRef(null);
+	
 	// Add a new ref to track changes during placement
 	const placementChangesRef = useRef({ terrain: { added: {}, removed: {} }, environment: { added: [], removed: [] } });
 	const instancedMeshRef = useRef({});
@@ -393,6 +602,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const lastPreviewPositionRef = useRef(new THREE.Vector3());
 	const placementSizeRef = useRef(placementSize);
 	const previewIsGroundPlaneRef = useRef(false);
+	const isBulkLoadingRef = useRef(false);
 
 	// state for preview position to force re-render of preview cube when it changes
 	const [previewPosition, setPreviewPosition] = useState(new THREE.Vector3());
@@ -507,261 +717,228 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	//* TERRAIN UPDATE FUNCTIONS *//
 	//* TERRAIN UPDATE FUNCTIONS *//
 
-	/// define buildUpdateTerrain to update the terrain
+	// Build and update the terrain, using the new ChunkSystem
 	const buildUpdateTerrain = () => {
-		// Return a promise that resolves when the terrain update is complete
-		return new Promise((resolve, reject) => {
-			// Skip if meshes not initialized yet
-			if (!meshesInitializedRef.current || !scene) {
-				console.warn("Meshes not initialized or scene not ready");
-				resolve(); // Resolve instead of reject to avoid error messages
-				return;
+		// Skip if terrain is empty
+		if (!terrainRef.current || Object.keys(terrainRef.current).length === 0) {
+			console.log("Terrain is empty, nothing to build");
+			return;
+		}
+		
+		console.time('buildUpdateTerrain');
+
+		// Update the chunk system with terrain data
+		const chunkSystem = getChunkSystem();
+		if (chunkSystem) {
+			console.log("Updating chunk system with terrain data...");
+			// Tell the chunk system to update with terrain data
+			updateTerrainChunks(terrainRef.current);
+		} else {
+			console.warn("Chunk system not initialized, cannot build terrain");
+		}
+		
+		// Skip spatial hash updates if already completed, unless explicitly requested
+		if (firstLoadCompletedRef.current && !scheduleSpatialHashUpdateRef.current) {
+			console.log("Spatial hash already built, skipping update");
+		}
+		// Update the spatial hash for raycasting ONLY if this is the first load
+		// or if explicitly requested via scheduleSpatialHashUpdateRef
+		else if (spatialGridManagerRef.current) {
+			// Only log on first load or when explicitly scheduled
+			if (!firstLoadCompletedRef.current) {
+				console.log("First load: Building spatial hash for raycasting...");
+			} else if (scheduleSpatialHashUpdateRef.current) {
+				console.log("Scheduled update: Building spatial hash for raycasting...");
+				scheduleSpatialHashUpdateRef.current = false; // Reset the flag
 			}
 			
-			// Don't queue multiple updates
-			if (isUpdatingChunksRef.current) {
-				console.log("Skipping redundant terrain update, one is already in progress");
-				resolve(); // Resolve instead of reject to avoid error messages
-				return;
-			}
-
-			// Set updating flag
-			isUpdatingChunksRef.current = true;
-			
-			// Show loading screen for the initial processing
-			loadingManager.showLoading('Processing terrain data...');
-
-			// Process in the next frame to avoid React rendering issues
-			setTimeout(() => {
-				try {
-					// Reset block counts
-					let blockCountsByType = {};
-					
-					// Clear existing chunk data
-					chunksRef.current.clear();
-					
-					// Organize chunks by distance from camera
-					const cameraChunkX = Math.floor(threeCamera.position.x / CHUNK_SIZE);
-					const cameraChunkY = Math.floor(threeCamera.position.y / CHUNK_SIZE);
-					const cameraChunkZ = Math.floor(threeCamera.position.z / CHUNK_SIZE);
-					
-					// Processing queue
-					const chunkQueue = [];
-					
-					// Get all block entries for processing
-					const blockEntries = Object.entries(terrainRef.current);
-					const totalBlocks = blockEntries.length;
-					
-					// Process blocks in larger batches for faster performance
-					const INITIAL_BATCH_SIZE = 100000; // Increased from 10000 to 50000
-					let processedBlocks = 0;
-					
-					// Function to process a batch of blocks
-					const processBlockBatch = (startIndex) => {
-						// Update loading progress
-						const progress = Math.floor((processedBlocks / totalBlocks) * 100);
-						loadingManager.updateLoading(`Processing blocks (${processedBlocks}/${totalBlocks})`, progress);
-						
-						// Process a batch of blocks
-						const endIndex = Math.min(startIndex + INITIAL_BATCH_SIZE, totalBlocks);
-						
-						for (let i = startIndex; i < endIndex; i++) {
-							const [posKey, blockId] = blockEntries[i];
-							const [x, y, z] = posKey.split(',').map(Number);
-							const chunkKey = getChunkKey(x, y, z);
-							
-							// Initialize chunk if it doesn't exist
-							if (!chunksRef.current.has(chunkKey)) {
-								chunksRef.current.set(chunkKey, {});
-								
-								// Calculate chunk center
-								const chunkX = Math.floor(x / CHUNK_SIZE);
-								const chunkY = Math.floor(y / CHUNK_SIZE);
-								const chunkZ = Math.floor(z / CHUNK_SIZE);
-								
-								// Calculate squared distance to camera (faster than sqrt)
-								const distSq = 
-									Math.pow(chunkX - cameraChunkX, 2) +
-									Math.pow(chunkY - cameraChunkY, 2) +
-									Math.pow(chunkZ - cameraChunkZ, 2);
-									
-								// Add to processing queue with priority
-								chunkQueue.push({
-									chunkKey,
-									distance: distSq
-								});
-							}
-							
-							// Store block in chunk
-							chunksRef.current.get(chunkKey)[posKey] = blockId;
-							
-							// Count blocks by type
-							blockCountsByType[blockId] = (blockCountsByType[blockId] || 0) + 1;
-						}
-						
-						// Update processed count
-						processedBlocks = endIndex;
-						
-						// If there are more blocks to process, schedule the next batch
-						if (processedBlocks < totalBlocks) {
-							setTimeout(() => {
-								processBlockBatch(processedBlocks);
-							}, 0); // Use 0ms timeout to yield to the browser
-						} else {
-							// All blocks processed, continue with the rest of the setup
-							finishSetup();
-						}
-					};
-					
-					// Function to finish setup after all blocks are processed
-					const finishSetup = () => {
-						loadingManager.updateLoading('Finalizing terrain setup...', 95);
-						
-						// Update spatial hash grid for ray casting
-						updateSpatialHash();
-						
-						// Sort chunks by distance (closest first)
-						chunkQueue.sort((a, b) => a.distance - b.distance);
-						
-						// Clean up existing chunk meshes in larger batches
-						const cleanupMeshes = () => {
-							// Get all mesh entries
-							const meshEntries = Object.entries(chunkMeshesRef.current);
-							
-							// Process in larger batches
-							const CLEANUP_BATCH_SIZE = 200; // Increased from 50 to 200
-							let processedMeshes = 0;
-							
-							const cleanupBatch = (startIndex) => {
-								const endIndex = Math.min(startIndex + CLEANUP_BATCH_SIZE, meshEntries.length);
-								
-								for (let i = startIndex; i < endIndex; i++) {
-									const [chunkKey, blockMeshes] = meshEntries[i];
-									Object.values(blockMeshes).forEach(mesh => {
-										safeRemoveFromScene(mesh);
-									});
-								}
-								
-								processedMeshes = endIndex;
-								
-								if (processedMeshes < meshEntries.length) {
-									setTimeout(() => {
-										cleanupBatch(processedMeshes);
-									}, 0);
-								} else {
-									// All meshes cleaned up, continue
-									continueAfterCleanup();
-								}
-							};
-							
-							// Start cleanup if there are meshes
-							if (meshEntries.length > 0) {
-								cleanupBatch(0);
-							} else {
-								continueAfterCleanup();
-							}
-						};
-						
-						// Function to continue after mesh cleanup
-						const continueAfterCleanup = () => {
-							// Reset chunk meshes
-							chunkMeshesRef.current = {};
-							
-							// For backward compatibility, update the block counts
-							blockCountsRef.current = blockCountsByType;
-							totalBlocksRef.current = Object.keys(terrainRef.current).length;
-							
-							// Update debug info early
-							updateDebugInfo();
-							
-							// Hide loading screen before starting chunk processing
-							loadingManager.hideLoading();
-							
-							// Track progress for internal use only (no loading UI updates)
-							const totalChunks = chunkQueue.length;
-							let processedChunks = 0;
-							
-							// Process chunks in larger batches for faster processing
-							const BATCH_SIZE = 30; // Increased from 10 to 25
-							
-							const processBatch = (startIndex) => {
-								// If we're done, finish up
-								if (startIndex >= chunkQueue.length) {
-									// Flag that we're done
-									isUpdatingChunksRef.current = false;
-									
-									// Update visibility now that all chunks are built
-									updateVisibleChunks();
-									
-									// We're no longer auto-saving after terrain updates
-									// This ensures unsaved changes persist until user explicitly saves or closes
-									// We still have the unsaved changes tracked in pendingChangesRef for the warning dialog
-									
-									// Don't resolve yet - will resolve in final update step
-									return;
-								}
-								
-								// Process a batch of chunks
-								const endIndex = Math.min(startIndex + BATCH_SIZE, chunkQueue.length);
-								
-								// Process this batch
-								for (let i = startIndex; i < endIndex; i++) {
-									const { chunkKey } = chunkQueue[i];
-									try {
-										rebuildChunkNoVisibilityUpdate(chunkKey);
-										
-										// Update processed count (no UI updates)
-										processedChunks++;
-									} catch (error) {
-										console.error(`Error processing chunk ${chunkKey}:`, error);
-									}
-								}
-								
-								// Update visibility once for the whole batch
-								updateVisibleChunks();
-								
-								// Schedule the next batch with zero delay for maximum speed
-								setTimeout(() => {
-									processBatch(endIndex);
-								}, 0); // Reduced from 1ms for maximum speed
-							};
-							
-							// Start processing the first batch
-							processBatch(0);
-							
-							// Add a final step to ensure all visibility is correct at the end
-							setTimeout(() => {
-								// Clear the chunk bounding box cache to ensure proper recalculation
-								chunkBoxCache.current.clear();
-								
-								// Do a final visibility update to ensure all chunks are properly shown/hidden
-								updateVisibleChunks();
-								
-								// Finally resolve the promise as everything is complete
-								resolve();
-							}, 100);
-						};
-						
-						// Start the mesh cleanup process
-						cleanupMeshes();
-					};
-					
-					// Start processing the first batch of blocks
-					processBlockBatch(0);
-					
-				} catch (error) {
-					console.error("Error in buildUpdateTerrain:", error);
-					isUpdatingChunksRef.current = false;
-					
-					// If there's an error, hide the loading screen
-					loadingManager.hideLoading();
-					
-					resolve(); // Resolve instead of reject to avoid error messages
-				}
-			}, 0);
-		});
+			// Always use the regular update for incremental changes
+			spatialGridManagerRef.current.updateFromTerrain(terrainRef.current);
+		}
+		
+		// Mark first load as completed
+		firstLoadCompletedRef.current = true;
+		
+		console.timeEnd('buildUpdateTerrain');
+	};
+	// Helper function to get chunk key from coordinates
+	const getChunkKey = (x, y, z) => {
+		return getChunkKeyUtil(x, y, z);
 	};
 
+	// Helper function to get view distance in case import isn't working
+	const getViewDistanceLocal = () => {
+		// Try to use the imported function first
+		if (typeof getViewDistance === 'function') {
+			return getViewDistance();
+		}
+		
+		// Fallback to a default value
+		return 64; // Default view distance
+	};
+
+	// Ultra-optimized direct block update path for drag operations
+	const fastUpdateBlock = (position, blockId) => {
+		if (!position) return;
+
+		// Generate the position key
+		const posKey = `${position[0]},${position[1]},${position[2]}`;
+
+		// Skip if block type is unchanged
+		if (terrainRef.current[posKey] === blockId) return;
+
+		// For removal (blockId = 0), use a different approach
+		if (blockId === 0) {
+			// Skip if block doesn't exist
+			if (!terrainRef.current[posKey]) return;
+
+			// Add to undo stack
+			const removedBlocks = { [posKey]: terrainRef.current[posKey] };
+			trackTerrainChanges({}, removedBlocks);
+
+			// Remove from terrain
+			delete terrainRef.current[posKey];
+		} else {
+			// Add to terrain and undo stack
+			const addedBlocks = { [posKey]: blockId };
+			trackTerrainChanges(addedBlocks, {});
+
+			// Add to terrain
+			terrainRef.current[posKey] = blockId;
+		}
+
+		// Update block count
+		totalBlocksRef.current = Object.keys(terrainRef.current).length;
+
+		// Direct call to chunk system for fastest performance
+		if (getChunkSystem()) {
+			getChunkSystem().updateBlocks([{
+				position: position,
+				id: blockId
+			}], []);
+		}
+
+		// We'll update debug info and total blocks count later in bulk
+	};
+
+
+	// Update the updateSpatialHash function to use getViewDistanceLocal
+	const updateSpatialHash = () => {
+		// Skip if disabled globally
+		if (disableSpatialHashUpdatesRef.current) {
+			return;
+		}
+
+		if (!spatialGridManagerRef.current) {
+			return;
+		}
+		
+		// Throttle updates to avoid performance impact
+		if (spatialHashUpdateQueuedRef.current) {
+			return; // Already queued for update
+		}
+		
+		// Skip update if camera is moving to prioritize smooth movement
+		if (cameraMoving.current) {
+			return;
+		}
+		
+		// Check if we're already in the middle of processing a batch
+		if (spatialGridManagerRef.current.isProcessing) {
+			return;
+		}
+		
+		// Set update as queued
+		spatialHashUpdateQueuedRef.current = true;
+		
+		// Much longer delay for updates
+		setTimeout(() => {
+			// Only proceed if still initialized and not currently processing
+			if (spatialGridManagerRef.current && !spatialGridManagerRef.current.isProcessing) {
+				// Get camera for frustum culling
+				const camera = cameraRef.current;
+				
+				if (camera) {
+					// Use frustum-based update only for blocks in view
+					spatialGridManagerRef.current.updateInFrustum(terrainRef.current, camera, {
+						showLoadingScreen: false,  // Never show loading screen
+						batchSize: 100000,         // Use much larger batches
+						silent: true,              // Suppress all logs
+						skipIfBusy: true,          // Skip if already busy
+						maxDistance: getViewDistanceLocal() // Use current view distance with local function
+					});
+				} else {
+					// Fallback to regular update if no camera
+					spatialGridManagerRef.current.updateFromTerrain(terrainRef.current, {
+						showLoadingScreen: false,
+						batchSize: 100000,
+						silent: true,
+						skipIfBusy: true
+					});
+				}
+			}
+			
+			// Reset queue flag after a longer delay
+			setTimeout(() => {
+				spatialHashUpdateQueuedRef.current = false;
+			}, 3000); // Allow at most one update every 3 seconds
+		}, 1000); // Delay the update by 1 second
+	};
+
+	// Create an optimized greedy mesh for a chunk
+	const createGreedyMeshForChunk = (chunksBlocks) => {
+		// If we have an initialized chunk system, use it for greedy meshing
+		const chunkSystem = getChunkSystem();
+		if (chunkSystem) {
+			// Note: ChunkSystem handles meshing internally
+			// This is just a stub for backward compatibility
+			return null;
+		}
+
+		// Fallback for backward compatibility
+		return null;
+	};
+
+	// Get cached geometry for a block type
+	const getCachedGeometry = (blockType) => {
+		// Check if we have a cached geometry for this block type
+		if (!geometryCacheRef.current.has(blockType.id)) {
+			// Create and cache the geometry
+			const geometry = createBlockGeometry(blockType);
+			geometryCacheRef.current.set(blockType.id, geometry);
+		}
+
+		return geometryCacheRef.current.get(blockType.id);
+	};
+
+	// Get cached material for a block type
+	const getCachedMaterial = (blockType) => {
+		// Check if we have a cached material for this block type
+		if (!materialCacheRef.current.has(blockType.id)) {
+			// Create and cache the material
+			const material = createBlockMaterial(blockType);
+			materialCacheRef.current.set(blockType.id, material);
+		}
+
+		return materialCacheRef.current.get(blockType.id);
+	};
+
+	// Update greedy meshing setting
+	const toggleGreedyMeshing = (enabled) => {
+		// Update the terrain constant
+		setGreedyMeshingEnabled(enabled);
+		console.log(`Greedy meshing ${enabled ? 'enabled' : 'disabled'}`);
+
+		// If we have an initialized chunk system, it will handle the meshing style
+		// No need to manually rebuild the entire terrain
+
+		// Trigger rebuild of visible chunks to apply the new meshing style
+		if (getChunkSystem()) {
+			// Clear current chunks and reload from terrain data
+			clearChunks();
+			updateTerrainChunks(terrainRef.current);
+		}
+	};
 	// A version of rebuildChunk that doesn't update visibility (for batch processing)
 	const rebuildChunkNoVisibilityUpdate = (chunkKey) => {
 		try {
@@ -1171,7 +1348,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				const preUpdateTime = performance.now();
 				console.log(`Performance: Block placement preparation took ${preUpdateTime - placeStartTime}ms`);
 				
-				updateTerrainBlocks(addedBlocks, {});
+				importedUpdateTerrainBlocks(addedBlocks, {});
 				
 				const postUpdateTime = performance.now();
 				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
@@ -1200,7 +1377,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				const preUpdateTime = performance.now();
 				console.log(`Performance: Block removal preparation took ${preUpdateTime - removeStartTime}ms`);
 				
-				updateTerrainBlocks({}, removedBlocks);
+				importedUpdateTerrainBlocks({}, removedBlocks);
 				
 				const postUpdateTime = performance.now();
 				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
@@ -1591,36 +1768,62 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 	}
 
+	// Clear the terrain
 	const clearMap = () => {
-		// Clear environment data first
-		DatabaseManager.clearStore(STORES.ENVIRONMENT)
-			.then(() => {
-				// Clear environment objects
-				environmentBuilderRef.current.clearEnvironments();
-				
-				// Clear terrain data
-				return DatabaseManager.clearStore(STORES.TERRAIN);
-			})
-			.then(() => {
-				// Clear undo/redo history
-				return Promise.all([
-					DatabaseManager.saveData(STORES.UNDO, "states", []),
-					DatabaseManager.saveData(STORES.REDO, "states", [])
-				]);
-			})
-			.then(() => {
-				// Update local terrain state
+		// Clear terrain object
 				terrainRef.current = {};
-				buildUpdateTerrain().then(() => {
-					// Force a visibility update after clearing the map
-					updateVisibleChunks();
-				});
 				totalBlocksRef.current = 0;
-			})
-			.catch(error => {
-				console.error("Error clearing map data:", error);
-			});
-	}
+		
+		// Send total blocks count to parent component
+		if (sendTotalBlocks) {
+			sendTotalBlocks(0);
+		}
+		
+		// Clear all chunks from the system
+		clearChunks();
+		
+		// Clear spatial grid for raycasting
+		if (spatialGridManagerRef.current) {
+			spatialGridManagerRef.current.clear();
+		}
+		
+		// Reset pending changes
+		pendingChangesRef.current = { added: {}, removed: {} };
+		
+		// Update debug info
+		updateDebugInfo();
+		
+		// Save empty terrain to database
+		efficientTerrainSave();
+	};
+
+	// Function to initialize spatial hash once after map is loaded
+	const initializeSpatialHash = () => {
+		// If already initialized, don't do it again
+		if (firstLoadCompletedRef.current && !scheduleSpatialHashUpdateRef.current) {
+			console.log("Spatial hash already initialized, skipping...");
+			return Promise.resolve();
+		}
+		
+		// Only call this once after initial map loading, not during regular updates
+		console.log("Initializing spatial hash (one-time operation)...");
+		
+		if (!spatialGridManagerRef.current) {
+			console.warn("Spatial grid manager not initialized, cannot initialize spatial hash");
+			return Promise.resolve();
+		}
+		
+		// Mark as completed to prevent duplicate calls
+		firstLoadCompletedRef.current = true;
+		
+		// Show loading screen only for this initial full build - this is an expensive operation
+		return spatialGridManagerRef.current.updateFromTerrain(terrainRef.current, {
+			showLoadingScreen: true,  // Show loading screen for initial build only
+			batchSize: 100000,        // Use large batches for efficiency
+			silent: false,            // Log progress
+			message: "Building Spatial Index..."
+		});
+	};
 
 	// Update mousemove effect to use requestAnimationFrame
 	useEffect(() => {
@@ -1690,6 +1893,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Initialize camera manager with camera and controls
 			if (threeCamera && orbitControlsRef.current) {
 				cameraManager.initialize(threeCamera, orbitControlsRef.current);
+				
+				// Add direct change event listener for camera movement
+				// This ensures view distance culling updates when using orbit controls
+				orbitControlsRef.current.addEventListener('change', () => {
+					// Trigger camera movement handling
+					handleCameraMove();
+				});
 			}
 
 			// Load skybox
@@ -1700,17 +1910,21 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				scene.background = textureCube;
 			}
 
-			// Note: We don't pre-initialize meshes for all block types anymore
-			// Instead, we'll create them on-demand per chunk
+			// Initialize the new chunk system instead of the texture atlas
+			if (scene) {
+				console.log("Initializing chunk system with view distance:", getViewDistance());
+				// Initialize the chunk system with the scene and view distance
+				initChunkSystem(scene, { 
+					viewDistance: getViewDistance(),
+					viewDistanceEnabled: true
+				}).then(() => {
+					console.log("Chunk system initialized successfully");
+				}).catch(error => {
+					console.error("Error initializing chunk system:", error);
+				});
+			}
 			
 			meshesInitializedRef.current = true;
-			
-			// Initialize texture atlas early
-			if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
-				// We need to wait until blockTypes are loaded, so we'll do it in the 
-				// custom blocks callback below
-				console.log("Will initialize texture atlas after loading block types");
-			}
 
 			// Load custom blocks from IndexedDB
 			DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
@@ -1726,11 +1940,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 							detail: { blocks: customBlocksData }
 						}));
 						
-						// Initialize texture atlas now that block types are loaded
-						if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
-							console.log("Custom blocks loaded, initializing texture atlas");
-							initAtlas();
-						}
+						// No need to initialize texture atlas here, it's done in the chunk system
 					}
 					
 					// Load terrain from IndexedDB
@@ -1751,7 +1961,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						pendingChangesRef.current = { added: {}, removed: {} };
 						console.log("Loaded terrain marked as saved - no unsaved changes");
 						
-						buildUpdateTerrain(); // Build using chunked approach
+						// Update the chunk system with the loaded terrain
+						updateTerrainChunks(terrainRef.current);
 					} else {
 						console.log("No terrain found in IndexedDB");
 						// Initialize with empty terrain
@@ -1917,17 +2128,95 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		return enabled;
 	};
 
+
+	// Helper function to clear all terrain data
+	const clearTerrain = () => {
+		if (terrainRef.current && Object.keys(terrainRef.current).length > 0) {
+			terrainRef.current = {};
+			console.log("Terrain cleared");
+		}
+	};
+
+	// Helper function to get block key from coordinates
+	const getBlockKey = (coord) => {
+		if (!coord) return null;
+		return `${coord.x},${coord.y},${coord.z}`;
+	};
+
+
 	// Expose buildUpdateTerrain and clearMap via ref
 	useImperativeHandle(ref, () => ({
 		buildUpdateTerrain,
 		updateTerrainFromToolBar,
 		getCurrentTerrainData,
 		clearMap,
+		// Keeping these for compatibility, but they now just pass through to ChunkSystem
 		toggleOcclusionCulling: toggleOcclusionCullingLocal,
 		setOcclusionThreshold: setOcclusionThresholdLocal,
 		saveTerrainManually, // Add manual save function
 		updateTerrainBlocks, // Expose for selective updates in undo/redo
 		updateTerrainForUndoRedo, // Optimized version specifically for undo/redo operations
+		fastUpdateBlock, // Ultra-optimized function for drag operations
+		updateDebugInfo, // Expose debug info updates for tools
+		
+		// Performance optimization APIs
+		setDeferredChunkMeshing,
+		
+		// API for managing deferred spatial hash updates
+		deferSpatialHashUpdates: (defer) => {
+			deferSpatialHashUpdatesRef.current = defer;
+			console.log(`Spatial hash updates are now ${defer ? 'deferred' : 'immediate'}`);
+			// If we're turning off deferred updates, apply any pending updates
+			if (!defer && 
+				pendingSpatialHashUpdatesRef.current && 
+				(pendingSpatialHashUpdatesRef.current.added.length + 
+				pendingSpatialHashUpdatesRef.current.removed.length > 0)) {
+				return applyDeferredSpatialHashUpdates();
+			}
+			return Promise.resolve();
+		},
+		applyDeferredSpatialHashUpdates,
+		isPendingSpatialHashUpdates: () => 
+			pendingSpatialHashUpdatesRef.current && 
+			(pendingSpatialHashUpdatesRef.current.added.length + 
+			pendingSpatialHashUpdatesRef.current.removed.length > 0),
+		
+		// Test function to manually refresh chunk culling
+		refreshChunkCulling: () => {
+			console.log(`[refreshChunkCulling] Current view distance: ${getViewDistance()}`);
+			
+			// Always do a full refresh for the manual refresh button
+			console.log("[refreshChunkCulling] Forcing complete chunk refresh");
+			forceRefreshAllChunks();
+			
+			return true;
+		},
+		
+		// Methods for view distance handling
+		setViewDistance: (distance) => {
+			console.log(`Setting view distance to ${distance} from component ref`);
+			
+			// Call the module-level function to update the distance value
+			updateViewDistance(distance);
+			
+			// Always force a complete refresh when view distance changes
+			console.log("[setViewDistance] Forcing complete chunk refresh");
+			forceRefreshAllChunks();
+			
+			return true;
+		},
+		
+		getViewDistance: () => {
+			// Import getViewDistance from terrain constants
+			const { getViewDistance } = require('./constants/terrain');
+			return getViewDistance();
+		},
+		
+		toggleViewDistanceCulling: (enabled) => {
+			console.log(`${enabled ? 'Enabling' : 'Disabling'} view distance culling from component ref`);
+			toggleViewDistanceCulling(enabled);
+			return true;
+		},
 		
 		// Configure the auto-save interval (in milliseconds)
 		setAutoSaveInterval: (intervalMs) => {
@@ -1971,6 +2260,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			return isPlacingRef.current;
 		},
 		
+		
+
 		/**
 		 * Force a DB reload of terrain and then rebuild it
 		 */
@@ -2030,62 +2321,34 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						const prevThrottle = spatialHashUpdateThrottleRef.current;
 						spatialHashUpdateThrottleRef.current = 100000;
 						
-						// Build terrain
+						// Build terrain - this will not rebuild spatial hash if firstLoadCompletedRef is true
 						await buildUpdateTerrain();
 						
-						// Now for the slow part - spatial hash update
-						// We'll use a more optimized approach with larger batches
-						loadingManager.updateLoading(`Preparing spatial hash update for ${totalBlocks} blocks...`, 40);
-						
-						// Clear the spatial hash grid
-						spatialGridManagerRef.current.clear();
-						
-						// Prepare the data for faster processing
-						const blockEntries = Object.entries(terrainRef.current);
-						const totalEntries = blockEntries.length;
-						
-						// Use larger batches for better performance
-						const SPATIAL_HASH_BATCH_SIZE = 100000; // Increased from 50000
-						const totalSpatialHashBatches = Math.ceil(totalEntries / SPATIAL_HASH_BATCH_SIZE);
-						
-						// Process spatial hash in batches
-						loadingManager.updateLoading(`Updating spatial hash (0/${totalSpatialHashBatches} batches)...`, 45);
-						
-						// Use a promise-based batch processor for better UI responsiveness
-						const processSpatialHashBatches = async () => {
-							for (let batchIndex = 0; batchIndex < totalSpatialHashBatches; batchIndex++) {
-								const startIdx = batchIndex * SPATIAL_HASH_BATCH_SIZE;
-								const endIdx = Math.min(startIdx + SPATIAL_HASH_BATCH_SIZE, totalEntries);
-								
-								// Update loading screen with detailed progress
-								const progress = 45 + Math.floor((batchIndex / totalSpatialHashBatches) * 45);
-								loadingManager.updateLoading(
-									`Updating spatial hash: batch ${batchIndex + 1}/${totalSpatialHashBatches} (${Math.floor((batchIndex / totalSpatialHashBatches) * 100)}%)`, 
-									progress
-								);
-								
-								// Process this batch
-								for (let i = startIdx; i < endIdx; i++) {
-									const [posKey, blockId] = blockEntries[i];
-									spatialGridManagerRef.current.setBlock(posKey, blockId);
-								}
-								
-								// Allow UI to update between batches
-								await new Promise(r => setTimeout(r, 0));
-							}
+						// Check if we need to update the spatial hash
+						if (!firstLoadCompletedRef.current && spatialGridManagerRef.current) {
+							// Now for the slow part - spatial hash update
+							// We'll use a more optimized approach with larger batches
+							loadingManager.updateLoading(`Preparing spatial hash update for ${totalBlocks} blocks...`, 40);
 							
-							return true;
-						};
-						
-						// Process all spatial hash batches
-						await processSpatialHashBatches();
+							// Clear the spatial hash grid
+							spatialGridManagerRef.current.clear();
+							
+							// Use our initialization function instead of manual batching
+							await initializeSpatialHash();
+							
+							// Set the flag to indicate spatial hash is built
+							firstLoadCompletedRef.current = true;
+							
+							// Disable all future spatial hash updates - it's only needed once at load time
+							disableSpatialHashUpdatesRef.current = true;
+							console.log("Spatial hash updates disabled - only needed once on load");
+						} else {
+							console.log("Skipping spatial hash update - already initialized");
+						}
 						
 						// Reset throttle but set last update time to prevent immediate re-update
 						spatialHashUpdateThrottleRef.current = prevThrottle;
 						spatialHashLastUpdateRef.current = performance.now(); // Mark as just updated
-						
-						// Log that spatial hash is fully updated
-						console.log(`Spatial hash fully updated with ${spatialGridManagerRef.current.size} blocks`);
 						
 						// Final steps
 						loadingManager.updateLoading(`Finalizing terrain display...`, 90);
@@ -2181,6 +2444,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				return Promise.resolve();
 			}
 			
+			// Set loading flag to prevent saving during loading
+			isLoadingRef.current = true;
+			console.log("*** Setting loading flag to prevent auto-saves ***");
+			
 			// Show loading screen
 			loadingManager.showLoading('Loading terrain blocks...');
 			
@@ -2196,6 +2463,37 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Flag to prevent duplicate update attempts
 			isUpdatingChunksRef.current = true;
 			
+			// IMPORTANT: Completely disable spatial hash updates during loading
+			// This is the key change to make loading faster
+			disableSpatialHashUpdatesRef.current = true;
+			console.log("*** DISABLED spatial hash updates during loading for faster performance ***");
+			
+			// Clear any pending updates before starting
+			pendingSpatialHashUpdatesRef.current = { added: [], removed: [] };
+			
+			// Set a global loading flag to suppress unnecessary updates
+			const prevIsBulkLoading = isBulkLoadingRef.current;
+			isBulkLoadingRef.current = true;
+			console.log("Setting bulk loading flag to TRUE - optimizing visibility updates");
+			
+			// Temporarily disable chunk visibility updates during loading
+			const chunkSystem = getChunkSystem();
+			if (chunkSystem) {
+				console.log("Temporarily disabling chunk visibility updates during loading");
+				// Store the current settings to restore later
+				const wasEnabled = chunkSystem._chunkManager._viewDistanceEnabled;
+				chunkSystem._chunkManager._viewDistanceEnabled = false;
+				
+				// Enable bulk loading mode to defer distant chunk mesh creation
+				const cameraPos = currentCameraRef.current?.position || new THREE.Vector3();
+				console.log(`Enabling chunk system bulk loading mode with camera at ${cameraPos.x.toFixed(1)}, ${cameraPos.y.toFixed(1)}, ${cameraPos.z.toFixed(1)}`);
+				
+				// Calculate a good priority distance based on view distance
+				const priorityDistance = Math.min(32, getViewDistance() / 2);
+				chunkSystem.setBulkLoadingMode(true, priorityDistance);
+				console.log(`Only chunks within ${priorityDistance} units of camera will be meshed immediately`);
+			}
+			
 			// Use larger batch size for better performance
 			const MAX_BLOCKS_PER_BATCH = 100000;
 			const totalBlocks = blocks.length;
@@ -2203,18 +2501,79 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			console.log(`Loading terrain with ${totalBlocks} blocks in ${totalBatches} batches`);
 			
+			// Sort blocks by distance to camera before batching for faster perceived loading
+			const cameraPos = currentCameraRef.current?.position || new THREE.Vector3();
+			console.log("Sorting blocks by distance to camera at", cameraPos);
+			
+			// Clone original blocks before sorting
+			const sortedBlocks = [...blocks];
+			
+			// Sort blocks by distance to camera
+			if (currentCameraRef.current) {
+				console.time("sortBlocksByDistance");
+				sortedBlocks.sort((a, b) => {
+					// Extract positions based on different possible formats
+					const posA = getBlockPosition(a);
+					const posB = getBlockPosition(b);
+					
+					if (!posA || !posB) return 0;
+					
+					// Calculate squared distances (faster than using sqrt)
+					const distA = Math.pow(posA.x - cameraPos.x, 2) + 
+								 Math.pow(posA.y - cameraPos.y, 2) + 
+								 Math.pow(posA.z - cameraPos.z, 2);
+					
+					const distB = Math.pow(posB.x - cameraPos.x, 2) + 
+								 Math.pow(posB.y - cameraPos.y, 2) + 
+								 Math.pow(posB.z - cameraPos.z, 2);
+					
+					return distA - distB;
+				});
+				console.timeEnd("sortBlocksByDistance");
+				console.log("Blocks sorted by distance to camera");
+			}
+			
+			// Helper function to extract position from different block formats
+			function getBlockPosition(block) {
+				if (block.position) return block.position;
+				if (block.posKey) {
+					const parts = block.posKey.split(',');
+					if (parts.length === 3) {
+						return {
+							x: parseInt(parts[0]),
+							y: parseInt(parts[1]),
+							z: parseInt(parts[2])
+						};
+					}
+				}
+				if (Array.isArray(block) && block.length >= 1) {
+					const posKey = block[0];
+					if (typeof posKey === 'string') {
+						const parts = posKey.split(',');
+						if (parts.length === 3) {
+							return {
+								x: parseInt(parts[0]),
+								y: parseInt(parts[1]),
+								z: parseInt(parts[2])
+							};
+						}
+					}
+				}
+				return null;
+			}
+			
 			// Function to process one batch
 			const processBatch = async (startIndex, promiseResolve) => {
 				try {
 					const endIndex = Math.min(startIndex + MAX_BLOCKS_PER_BATCH, totalBlocks);
-					const batchBlocks = blocks.slice(startIndex, endIndex);
+					const batchBlocks = sortedBlocks.slice(startIndex, endIndex);
 					const currentBatch = Math.floor(startIndex / MAX_BLOCKS_PER_BATCH) + 1;
 					
 					// Update loading progress
-					const progress = Math.floor((startIndex / totalBlocks) * 40);
+					const progress = Math.floor((startIndex / totalBlocks) * 80); // Only use 80% for loading, keep 20% for finalization
 					loadingManager.updateLoading(`Loading blocks: batch ${currentBatch}/${totalBatches} (${progress}%)`, progress);
 					
-					// Process blocks in this batch
+					// Process blocks in this batch without triggering visibility updates
 					batchBlocks.forEach(block => {
 						try {
 							// Handle different block formats
@@ -2235,64 +2594,58 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						}
 					});
 					
-					// Update scene on every batch or final batch for larger batch sizes
+					// Update visibility for chunks near camera every batch during loading
+					// This helps user see progress for blocks near them
+					if (currentBatch % 1 === 0 && chunkSystem) {
+						chunkSystem._chunkManager.forceUpdateAllChunkVisibility(true);
+					}
+					
+					// Update scene on final batch only to avoid redundant updates
 					if (currentBatch === totalBatches) {
-						loadingManager.updateLoading(`Building terrain meshes...`, 45);
+						loadingManager.updateLoading(`Building terrain meshes...`, 82);
 						await buildUpdateTerrain();
-						
-						// Now handle the spatial hash update - the slow part
-						loadingManager.updateLoading(`Preparing spatial hash update...`, 50);
-						
-						// Clear the spatial hash grid
-						spatialGridManagerRef.current.clear();
-						
-						// Prepare the data for faster processing
-						const blockEntries = Object.entries(terrainRef.current);
-						const totalEntries = blockEntries.length;
-						
-						// Use larger batches for better performance
-						const SPATIAL_HASH_BATCH_SIZE = 100000;
-						const totalSpatialHashBatches = Math.ceil(totalEntries / SPATIAL_HASH_BATCH_SIZE);
-						
-						// Process spatial hash in batches
-						loadingManager.updateLoading(`Updating spatial hash (0/${totalSpatialHashBatches} batches)...`, 55);
-						
-						// Process all spatial hash batches
-						for (let batchIndex = 0; batchIndex < totalSpatialHashBatches; batchIndex++) {
-							const startIdx = batchIndex * SPATIAL_HASH_BATCH_SIZE;
-							const endIdx = Math.min(startIdx + SPATIAL_HASH_BATCH_SIZE, totalEntries);
-							
-							// Update loading screen with detailed progress
-							const progress = 55 + Math.floor((batchIndex / totalSpatialHashBatches) * 35);
-							loadingManager.updateLoading(
-								`Updating spatial hash: batch ${batchIndex + 1}/${totalSpatialHashBatches} (${Math.floor((batchIndex / totalSpatialHashBatches) * 100)}%)`, 
-								progress
-							);
-							
-							// Process this batch
-							for (let i = startIdx; i < endIdx; i++) {
-								const [posKey, blockId] = blockEntries[i];
-								spatialGridManagerRef.current.setBlock(posKey, blockId);
-							}
-							
-							// Allow UI to update between batches
-							await new Promise(r => setTimeout(r, 0));
-						}
-						
-						// Reset throttle
-						spatialHashUpdateThrottleRef.current = prevSpatialHashUpdateThrottle;
 						
 						// Final steps
 						loadingManager.updateLoading(`Finalizing terrain display...`, 90);
-						updateVisibleChunks();
 						
-						// Save to database
-						loadingManager.updateLoading(`Saving terrain data...`, 95);
-						efficientTerrainSave();
+						// Reset bulk loading flag
+						console.log("Setting bulk loading flag back to FALSE");
+						isBulkLoadingRef.current = prevIsBulkLoading;
 						
-						console.log("Terrain data saved to database");
+						// Turn off chunk system bulk loading mode to process deferred chunks
+						if (chunkSystem) {
+							console.log("Turning off chunk system bulk loading mode");
+							chunkSystem.setBulkLoadingMode(false);
+							
+							console.log("Re-enabling chunk visibility updates");
+							// Restore previous visibility setting
+							chunkSystem._chunkManager._viewDistanceEnabled = true;
+							// Now do a single visibility update with normal settings
+							chunkSystem._chunkManager.forceUpdateAllChunkVisibility(false);
+						}
+						
+						// Only now re-enable spatial hash updates, but DON'T trigger an update
+						disableSpatialHashUpdatesRef.current = false;
+						console.log("*** Re-enabled spatial hash updates but NOT triggering an immediate update ***");
+						
+						// Reset throttle to normal
+						spatialHashUpdateThrottleRef.current = prevSpatialHashUpdateThrottle;
+						
+						// Skip auto-save after loading
+						console.log("Skipping auto-save after loading");
+						initialSaveCompleteRef.current = true;
+						lastSaveTimeRef.current = Date.now();
+						
+						// Complete loading
+						loadingManager.updateLoading(`Loading complete!`, 100);
+						
+						// Final cleanup
 						loadingManager.hideLoading();
 						isUpdatingChunksRef.current = false;
+						
+						// Clear loading flag now that we're done
+						isLoadingRef.current = false;
+						console.log("*** Cleared loading flag, auto-saves re-enabled ***");
 						
 						if (promiseResolve) promiseResolve();
 					} else {
@@ -2306,61 +2659,32 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					loadingManager.hideLoading();
 					isUpdatingChunksRef.current = false;
 					
+					// Clear loading flag in case of error
+					isLoadingRef.current = false;
+					console.log("*** Cleared loading flag (error recovery) ***");
+					
+					// Restore loading flag even on error
+					console.log("Setting bulk loading flag back to FALSE (error recovery)");
+					isBulkLoadingRef.current = prevIsBulkLoading;
+					
+					// Re-enable spatial hash updates
+					disableSpatialHashUpdatesRef.current = false;
+					
+					// Turn off chunk system bulk loading mode even on error
+					if (chunkSystem) {
+						chunkSystem.setBulkLoadingMode(false);
+						chunkSystem._chunkManager._viewDistanceEnabled = true;
+					}
+					
 					if (promiseResolve) promiseResolve();
 				}
 			};
 			
 			// Start processing
 			return new Promise(resolve => {
-				processBatch(0, resolve);
-			});
-		},
-		
-		// Add method to activate a tool
-		activateTool: (toolName) => {
-			if (toolManagerRef.current) {
-				return toolManagerRef.current.activateTool(toolName);
-			}
-			return false;
-		},
-		// Add method to get active tool name
-		getActiveToolName: () => {
-			if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
-				return toolManagerRef.current.getActiveTool().name;
-			}
-			return null;
-		},
-
-		updateTerrainBlocks,
-	
-		// Add new chunk-related methods
-		rebuildChunk,
-		getChunkKey,
-	
-		// Add greedy meshing toggle
-		toggleGreedyMeshing,
-		getGreedyMeshingEnabled, // Use the imported function
-		
-		// Add instancing toggle
-		toggleInstancing,
-		getInstancingEnabled,
-		
-		// Add spatial hash toggle
-		toggleSpatialHashRayCasting,
-		isSpatialHashRayCastingEnabled: () => useSpatialHashRef.current,
-		
-		// Add selection distance functions
-		getSelectionDistance: () => selectionDistanceRef.current,
-		setSelectionDistance: (distance) => {
-			const newDistance = Math.max(16, Math.min(256, distance)); // Clamp between 16 and 256
-			selectionDistanceRef.current = newDistance;
-			return newDistance;
-		},
-		
-		// Add view distance functions
-		getViewDistance,  // Use the imported function
-		setViewDistance,  // Use the imported function
-		get isSaving() { return isSaving; }
+					processBatch(0, resolve);
+				});
+		}
 	}));  // This is the correct syntax with just one closing parenthesis
 
 	// Add resize listener to update canvasRect
@@ -2409,181 +2733,95 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// update the terrain blocks for added and removed blocks
 	const updateTerrainBlocks = (addedBlocks, removedBlocks) => {
-		const startTime = performance.now();
-		console.log('Updating terrain blocks:', addedBlocks);
+		if (!addedBlocks && !removedBlocks) {
+			return;
+		}
+
+		// Validate input
+		if (typeof addedBlocks !== 'object') addedBlocks = {};
+		if (typeof removedBlocks !== 'object') removedBlocks = {};
+
+		// Skip if no blocks to update
+		if (Object.keys(addedBlocks).length === 0 && Object.keys(removedBlocks).length === 0) {
+			return;
+		}
+
+		console.time('updateTerrainBlocks');
+		console.log(`Updating terrain with ${Object.keys(addedBlocks).length} added blocks and ${Object.keys(removedBlocks).length} removed blocks`);
+
+		// Track changes for undo/redo
+		trackTerrainChanges(addedBlocks, removedBlocks);
+
+		// Update the terrain data structure
+		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
+			terrainRef.current[posKey] = blockId;
+		});
+			
+		Object.entries(removedBlocks).forEach(([posKey]) => {
+			delete terrainRef.current[posKey];
+		});
+			
+		// Update total block count
+		totalBlocksRef.current = Object.keys(terrainRef.current).length;
 		
-		// If we placed any blocks, update the scene
-		if (Object.keys(addedBlocks).length > 0 || Object.keys(removedBlocks).length > 0) {
-			
-			// Track affected chunks instead of rebuilding everything
-			const affectedChunks = new Set();
-			
-			const chunkTrackingStartTime = performance.now();
-			
-			// Find chunks affected by added blocks
-			Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				// Use imported CHUNK_SIZE
-				const chunkKey = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
-				affectedChunks.add(chunkKey);
-				
-				// Update chunksRef with the new block
-				if (!chunksRef.current.has(chunkKey)) {
-					chunksRef.current.set(chunkKey, {});
-				}
-				chunksRef.current.get(chunkKey)[posKey] = blockId;
-				
-				// Update terrainRef
-				terrainRef.current[posKey] = blockId;
-			});
-			
-			// Find chunks affected by removed blocks
-			Object.entries(removedBlocks).forEach(([posKey, blockId]) => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				const chunkKey = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
-				affectedChunks.add(chunkKey);
-				
-				// Remove block from chunksRef
-				if (chunksRef.current.has(chunkKey) && chunksRef.current.get(chunkKey)[posKey]) {
-					delete chunksRef.current.get(chunkKey)[posKey];
-				}
-				
-				// Remove from terrainRef
-				delete terrainRef.current[posKey];
-			});
-			
-			const chunkTrackingEndTime = performance.now();
-			console.log(`Performance: Chunk tracking took ${chunkTrackingEndTime - chunkTrackingStartTime}ms`);
-			
-			// Update chunks with appropriate spatial hash
-			const spatialHashStart = performance.now();
-			if (Object.keys(addedBlocks).length > 0 || Object.keys(removedBlocks).length > 0) {
-				// Prepare the added blocks for spatial hash update
-				const addedBlocksForSpatialHash = Object.entries(addedBlocks).map(([key, blockId]) => ({ key, blockId }));
-				
-				// Prepare the removed blocks for spatial hash update - just need the keys
-				const removedBlocksForSpatialHash = Object.keys(removedBlocks);
-				
-				console.log("Updating spatial hash with:", {
-					addedCount: addedBlocksForSpatialHash.length,
-					removedCount: removedBlocksForSpatialHash.length,
-					removedKeys: removedBlocksForSpatialHash
-				});
-				
-				// Update the spatial hash with modified blocks
-				updateSpatialHashForBlocks(addedBlocksForSpatialHash, removedBlocksForSpatialHash);
-			}
-			const spatialHashEnd = performance.now();
-			console.log(`Performance: Spatial hash update took ${spatialHashEnd - spatialHashStart}ms`);
-			
-			// Rebuild only the affected chunks
-			const rebuildStart = performance.now();
-			affectedChunks.forEach(chunkKey => {
-				rebuildChunk(chunkKey);
-			});
-			const rebuildEnd = performance.now();
-			console.log(`Performance: Chunk rebuild queueing took ${rebuildEnd - rebuildStart}ms (for ${affectedChunks.size} chunks)`);
-			
-			playPlaceSound();
-
-			// Track changes for incremental saving
-			trackTerrainChanges(addedBlocks, removedBlocks);
-
-			// Don't save to database on every update - will do this on mouse up instead
-			// DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current);
-
-			// Track changes for undo/redo if we're in the middle of a placement
-			const changeTrackingStart = performance.now();
-			if (isPlacingRef.current) {
-				// Add to our placement changes tracker
-				Object.entries(addedBlocks).forEach(([key, value]) => {
-					placementChangesRef.current.terrain.added[key] = value;
-				});
-				
-				Object.entries(removedBlocks).forEach(([key, value]) => {
-					placementChangesRef.current.terrain.removed[key] = value;
-				});
-			}
-			const changeTrackingEnd = performance.now();
-			console.log(`Performance: Change tracking took ${changeTrackingEnd - changeTrackingStart}ms`);
+		// Send total blocks count back to parent component
+		if (sendTotalBlocks) {
+			sendTotalBlocks(totalBlocksRef.current);
 		}
 		
-		const endTime = performance.now();
-		console.log(`Performance: updateTerrainBlocks total time ${endTime - startTime}ms`);
-	}
+		// Update debug info
+		updateDebugInfo();
+
+		// Delegate to the optimized imported function for chunk and spatial hash updates
+		importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
+		
+		console.timeEnd('updateTerrainBlocks');
+	};
 
 	
 	// Special optimized version for undo/redo operations
 	const updateTerrainForUndoRedo = (addedBlocks, removedBlocks, source = "undo/redo") => {
-		const startTime = performance.now();
-		console.log(`${source}: Updating terrain with ${Object.keys(addedBlocks).length} additions, ${Object.keys(removedBlocks).length} removals`);
+		console.time(`updateTerrainForUndoRedo-${source}`);
 		
-		// If we have blocks to update, proceed
-		if (Object.keys(addedBlocks).length > 0 || Object.keys(removedBlocks).length > 0) {
-			// Track affected chunks instead of rebuilding everything
-			const affectedChunks = new Set();
-			const chunkTrackingStartTime = performance.now();
-			
-			// Process added blocks
-			Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				// Calculate chunk key
-				const chunkKey = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
-				affectedChunks.add(chunkKey);
-				
-				// Update chunksRef with the new block
-				if (!chunksRef.current.has(chunkKey)) {
-					chunksRef.current.set(chunkKey, {});
-				}
-				chunksRef.current.get(chunkKey)[posKey] = blockId;
-				
-				// Update terrainRef
-				terrainRef.current[posKey] = blockId;
-			});
-			
-			// Process removed blocks
-			Object.entries(removedBlocks).forEach(([posKey, blockId]) => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				const chunkKey = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(y / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
-				affectedChunks.add(chunkKey);
-				
-				// Remove block from chunksRef
-				if (chunksRef.current.has(chunkKey) && chunksRef.current.get(chunkKey)[posKey]) {
-					delete chunksRef.current.get(chunkKey)[posKey];
-				}
-				
-				// Remove from terrainRef
-				delete terrainRef.current[posKey];
-			});
-			
-			const chunkTrackingEndTime = performance.now();
-			console.log(`Performance: Undo/Redo chunk tracking took ${chunkTrackingEndTime - chunkTrackingStartTime}ms`);
-			
-			// Optimize spatial hash update - only for undo/redo
-			const spatialHashStart = performance.now();
-			updateSpatialHashForBlocks(
-				Object.entries(addedBlocks).map(([key, blockId]) => ({ key, blockId })), 
-				Object.keys(removedBlocks)
-			);
-			const spatialHashEnd = performance.now();
-			console.log(`Performance: Undo/Redo spatial hash update took ${spatialHashEnd - spatialHashStart}ms`);
-			
-			// Instead of queueing all chunks, batch them for efficiency
-			const rebuildStart = performance.now();
-			console.log(`Rebuilding ${affectedChunks.size} affected chunks for undo/redo`);
-			
-			// Use a more efficient approach: directly rebuild only affected chunks
-			// This bypasses the regular queue system for more direct and focused updates
-			affectedChunks.forEach(chunkKey => {
-				rebuildChunk(chunkKey);
-			});
-			
-			const rebuildEnd = performance.now();
-			console.log(`Performance: Undo/Redo chunk rebuild took ${rebuildEnd - rebuildStart}ms (for ${affectedChunks.size} chunks)`);
+		// Skip if no blocks to update
+		if ((!addedBlocks || Object.keys(addedBlocks).length === 0) && 
+			(!removedBlocks || Object.keys(removedBlocks).length === 0)) {
+			console.log(`No blocks to update for ${source}`);
+			console.timeEnd(`updateTerrainForUndoRedo-${source}`);
+			return;
 		}
 		
-		const endTime = performance.now();
-		console.log(`Performance: updateTerrainForUndoRedo total time ${endTime - startTime}ms`);
+		// Log operation
+		console.log(`${source} operation: Adding ${Object.keys(addedBlocks || {}).length} blocks, removing ${Object.keys(removedBlocks || {}).length} blocks`);
+		
+		// Validate input
+		addedBlocks = addedBlocks || {};
+		removedBlocks = removedBlocks || {};
+
+		// Update the terrain data structure
+		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
+			terrainRef.current[posKey] = blockId;
+		});
+			
+		Object.entries(removedBlocks).forEach(([posKey]) => {
+			delete terrainRef.current[posKey];
+		});
+			
+		// Update total block count
+		totalBlocksRef.current = Object.keys(terrainRef.current).length;
+		
+		// Send updated total blocks count back to parent component
+		if (sendTotalBlocks) {
+			sendTotalBlocks(totalBlocksRef.current);
+		}
+		
+		// Update debug info
+		updateDebugInfo();
+		
+		// Delegate to the optimized imported function for chunk and spatial hash updates
+		importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
+		
+		console.timeEnd(`updateTerrainForUndoRedo-${source}`);
 	};
 
 	// Function to rebuild a single chunk
@@ -2927,718 +3165,65 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Function to update which chunks are visible based on camera position and frustum
 	const updateVisibleChunks = () => {
-		if (!threeCamera || !scene) return;
-		
-		const currentTime = performance.now();
-		
-		// Don't perform full visibility updates too frequently
-		// This significantly reduces lag spikes during movement
-		if (currentTime - lastVisibilityUpdateTimeRef.current < visibilityUpdateIntervalRef.current) {
-			// We're updating too frequently, skip this update
+		// Skip if we don't have necessary components
+		if (!scene || !threeCamera) {
 			return;
 		}
 		
-		// Record the time of this update
-		lastVisibilityUpdateTimeRef.current = currentTime;
-		
-		// Performance tracking
-		const startTime = performance.now();
-		
-		// Clear adjacency cache if it gets too large
-		if (chunkAdjacencyCache.size > 10000) {
-			chunkAdjacencyCache.clear();
-		}
-		
-		// Update frustum for culling
-		frustumRef.current.setFromProjectionMatrix(
-		frustumMatrixRef.current.multiplyMatrices(
-			threeCamera.projectionMatrix,
-			threeCamera.matrixWorldInverse
-			)
-		);
-		
-		// Track visible chunks for this update
-		const visibleChunks = new Set();
-		
-		// Track chunks that are verified visible (not occluded)
-		const verifiedVisibleChunks = new Set();
-		
-		// Track chunks that need to be loaded, with distance to camera for prioritization
-		const chunksToLoad = [];
-		
-		// Get current and next history frames
-		const currentHistoryFrame = chunkVisibilityHistoryRef.current.currentFrameIndex;
-		const nextHistoryFrame = (currentHistoryFrame + 1) % visibilityHistoryFramesRef.current;
-		
-		// Clear the next frame (which will become our current frame)
-		chunkVisibilityHistoryRef.current.frames[nextHistoryFrame].clear();
-		
-		// Get camera position for distance calculations
-		const cameraPos = threeCamera.position.clone();
-		
-		// Get camera forward vector for predictive loading during rotation
-		const cameraForward = new THREE.Vector3(0, 0, -1).applyQuaternion(threeCamera.quaternion);
-		
-		// Get camera chunk coordinates
-		const cameraChunkX = Math.floor(cameraPos.x / CHUNK_SIZE);
-		const cameraChunkY = Math.floor(cameraPos.y / CHUNK_SIZE);
-		const cameraChunkZ = Math.floor(cameraPos.z / CHUNK_SIZE);
-		
-		// Calculate view radius in chunks (add margin of 1 chunk)
-		const viewRadiusInChunks = Math.ceil(getViewDistance() / CHUNK_SIZE) + 1;
-		
-		// Cache this calculation to avoid recomputing for each chunk
-		const viewRadiusSquared = (viewRadiusInChunks * CHUNK_SIZE) * (viewRadiusInChunks * CHUNK_SIZE);
-		
-		// Track chunks that are within view distance (for occlusion culling)
-		const chunksWithinViewDistance = new Set();
-		
-		// Pre-filter chunks more efficiently using square distance
-		const chunksToCheck = [...chunksRef.current.keys()].filter(chunkKey => {
-			const [x, y, z] = chunkKey.split(',').map(Number);
-			
-			// Quick approximate distance check in chunk coordinates (Manhattan distance first)
-			const dx = Math.abs(x - cameraChunkX);
-			const dy = Math.abs(y - cameraChunkY);
-			const dz = Math.abs(z - cameraChunkZ);
-	  
-			// If any dimension is greater than view radius, chunk is definitely too far
-			if (dx > viewRadiusInChunks || dy > viewRadiusInChunks || dz > viewRadiusInChunks) {
-				return false;
-			}
-	  
-			// For chunks that pass the quick check, do a more accurate but still fast check
-			// Calculate squared distance between chunk center and camera
-			const worldX = x * CHUNK_SIZE + CHUNK_SIZE/2;
-			const worldY = y * CHUNK_SIZE + CHUNK_SIZE/2;
-			const worldZ = z * CHUNK_SIZE + CHUNK_SIZE/2;
-			
-			const sqDx = worldX - cameraPos.x;
-			const sqDy = worldY - cameraPos.y;
-			const sqDz = worldZ - cameraPos.z;
-			const sqDistance = sqDx*sqDx + sqDy*sqDy + sqDz*sqDz;
-			
-			// Check if chunk is within view distance
-			const isWithinViewDistance = sqDistance <= viewRadiusSquared;
-			
-			// If it's within view distance, add to our set for occlusion culling
-			if (isWithinViewDistance) {
-				chunksWithinViewDistance.add(chunkKey);
-			}
-			
-			// Include chunks within the view radius plus some margin
-			return isWithinViewDistance;
-		});
-		
-		// FIRST PASS: Identify all chunks that are definitely visible (not occluded)
-		chunksToCheck.forEach(chunkKey => {
-			// Check if chunk is visible using our improved function
-			if (isChunkVisible(chunkKey, threeCamera, frustumRef.current)) {
-				// Apply occlusion culling if enabled and chunk is within view distance
-				if (occlusionCullingEnabledRef.current && 
-					spatialGridManagerRef.current && 
-					chunksWithinViewDistance.has(chunkKey) &&
-					spatialGridManagerRef.current.isChunkOccluded(chunkKey, cameraPos, getOcclusionThreshold())) {
-					// Chunk is occluded - we'll handle it in the second pass
-				} else {
-					// Chunk is visible and not occluded - mark it as verified visible
-					verifiedVisibleChunks.add(chunkKey);
-					visibleChunks.add(chunkKey);
-					
-					// Reset the visibility change timer since chunk is now visible
-					delete chunkVisibilityChangeTimeRef.current[chunkKey];
-					
-					// Track this chunk as visible for this frame
-					chunkVisibilityHistoryRef.current.frames[nextHistoryFrame].add(chunkKey);
-					
-					// Get chunk center for distance calculation
-					const [x, y, z] = chunkKey.split(',').map(Number);
-					const chunkSize = CHUNK_SIZE;
-					const chunkCenter = new THREE.Vector3(
-						x * chunkSize + chunkSize/2,
-						y * chunkSize + chunkSize/2,
-						z * chunkSize + chunkSize/2
-					);
-					
-					// Calculate distance to camera
-					const distanceToCamera = chunkCenter.distanceTo(cameraPos);
-					
-					// Ensure chunk mesh exists and is visible
-					if (!chunkMeshesRef.current[chunkKey]) {
-						// Add to load queue with distance priority
-						chunksToLoad.push({
-							chunkKey,
-							distance: distanceToCamera
-						});
-					} else {
-						// Make sure all meshes in the chunk are visible
-						const meshes = chunkMeshesRef.current[chunkKey];
-						Object.values(meshes).forEach(mesh => {
-							if (Array.isArray(mesh)) {
-								// Handle array of meshes
-								mesh.forEach(m => {
-									if (!scene.children.includes(m)) {
-										safeAddToScene(m);
-									}
-								});
-							} else if (!scene.children.includes(mesh)) {
-								safeAddToScene(mesh);
-							}
-						});
-					}
-				}
-			} else {
-				// Check if chunk has been visible in recent frames
-				let wasRecentlyVisible = false;
-				let recentVisibilityCount = 0;
-				
-				// Count how many recent frames had this chunk visible
-				for (let i = 0; i < visibilityHistoryFramesRef.current; i++) {
-					if (i !== nextHistoryFrame && // Skip the frame we're currently updating
-						chunkVisibilityHistoryRef.current.frames[i].has(chunkKey)) {
-						wasRecentlyVisible = true;
-						recentVisibilityCount++;
-					}
-				}
-				
-				// Calculate visibility stability based on recent history
-				// Higher count means chunk has been stable for longer
-				const visibilityStability = recentVisibilityCount / visibilityHistoryFramesRef.current;
-				
-				// Keep recently visible chunks visible for a few frames to reduce flickering
-				// The longer it's been visible, the more we want to keep showing it
-				if (wasRecentlyVisible && chunkMeshesRef.current[chunkKey]) {
-					// For very stable chunks (visible in most recent frames), add to next frame history
-					// This makes stable chunks "stick" longer and prevents random flickering
-					if (visibilityStability > 0.5) {
-						visibleChunks.add(chunkKey);
-						// Add to the next frame history to maintain visibility
-						chunkVisibilityHistoryRef.current.frames[nextHistoryFrame].add(chunkKey);
-					} else {
-						// For less stable chunks, still show them but don't add to history
-						visibleChunks.add(chunkKey);
-						// Do not add to the next frame's history to let it naturally fade out
-						// if it stays invisible
-					}
-					
-					// Existing code for chunk handling...
-					Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
-						if (Array.isArray(mesh)) {
-							mesh.forEach(m => {
-								if (!scene.children.includes(m)) {
-									safeAddToScene(m);
-								}
-							});
-						} else if (!scene.children.includes(mesh)) {
-							safeAddToScene(mesh);
-						}
-					});
-				}
-			}
-		});
-		
-		// SECOND PASS: Make all chunks adjacent to verified visible chunks also visible
-		// But only if they're within view distance
-		chunksToCheck.forEach(chunkKey => {
-			// Skip chunks that are already marked as visible
-			if (visibleChunks.has(chunkKey)) {
-				return;
-			}
-			
-			// Use the optimized adjacency check
-			if (isAdjacentToVisibleChunk(chunkKey, verifiedVisibleChunks)) {
-				visibleChunks.add(chunkKey);
-				
-				// Reset the visibility change timer
-				delete chunkVisibilityChangeTimeRef.current[chunkKey];
-				
-				// Get chunk center for distance calculation
-				const [x, y, z] = chunkKey.split(',').map(Number);
-				const chunkSize = CHUNK_SIZE;
-				const chunkCenter = new THREE.Vector3(
-					x * chunkSize + chunkSize/2,
-					y * chunkSize + chunkSize/2,
-					z * chunkSize + chunkSize/2
-				);
-				
-				// Calculate distance to camera
-				const distanceToCamera = chunkCenter.distanceTo(cameraPos);
-				
-				// Ensure chunk mesh exists and is visible
-				if (!chunkMeshesRef.current[chunkKey]) {
-					// Add to load queue with slightly lower priority than verified visible chunks
-					chunksToLoad.push({
-						chunkKey,
-						distance: distanceToCamera + 5 // Small penalty compared to verified visible chunks
-					});
-				} else {
-					// Make sure all meshes in the chunk are visible
-					const meshes = chunkMeshesRef.current[chunkKey];
-					Object.values(meshes).forEach(mesh => {
-						if (Array.isArray(mesh)) {
-							// Handle array of meshes
-							mesh.forEach(m => {
-								if (!scene.children.includes(m)) {
-									safeAddToScene(m);
-								}
-							});
-						} else if (!scene.children.includes(mesh)) {
-							safeAddToScene(mesh);
-						}
-					});
-				}
-			} else {
-				// Chunk is not visible and not adjacent to any visible chunk
-				// Check if it might soon be visible due to camera rotation
-				const [x, y, z] = chunkKey.split(',').map(Number);
-				const chunkSize = CHUNK_SIZE;
-				const chunkCenter = new THREE.Vector3(
-					x * chunkSize + chunkSize/2,
-					y * chunkSize + chunkSize/2,
-					z * chunkSize + chunkSize/2
-				);
-				
-				// Vector from camera to chunk center
-				const camToChunk = chunkCenter.clone().sub(cameraPos);
-				const distanceToCamera = camToChunk.length();
-				
-				// Only consider chunks within view distance
-				if (distanceToCamera <= getViewDistance()) {
-					// Check if chunk is in the general direction of where camera is looking
-					camToChunk.normalize();
-					const dotProduct = camToChunk.dot(cameraForward);
-					
-					// If chunk is in front of camera (within a 120-degree cone)
-					// and close enough to potentially become visible during rotation
-					if (dotProduct > 0.3 && cameraMoving.current) {
-						// Preload this chunk with a lower priority
-						chunksToLoad.push({
-							chunkKey,
-							distance: distanceToCamera + 10 // Higher penalty for predictive loading
-						});
-					} else {
-						// Chunk is not visible, not adjacent to visible chunks, and not likely to become visible soon
-						// Hide its meshes
-						if (chunkMeshesRef.current[chunkKey]) {
-							const currentTime = performance.now();
-							
-							// Only hide if it's been invisible for a while (debounce)
-							if (!chunkVisibilityChangeTimeRef.current[chunkKey]) {
-								// First time chunk is invisible, just record the time
-								chunkVisibilityChangeTimeRef.current[chunkKey] = currentTime;
-							} else if (currentTime - chunkVisibilityChangeTimeRef.current[chunkKey] > visibilityChangeDelayRef.current) {
-								// Chunk has been invisible for long enough, hide it
-								Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
-									if (Array.isArray(mesh)) {
-										// Handle array of meshes
-										mesh.forEach(m => {
-											if (scene.children.includes(m)) {
-												safeRemoveFromScene(m);
-											}
-										});
-									} else if (scene.children.includes(mesh)) {
-										safeRemoveFromScene(mesh);
-									}
-								});
-							}
-						}
-					}
-				}
-			}
-		});
-		
-		// Process chunks that weren't checked in the pre-filtering to ensure they are hidden
-		// This fixes the issue where distant chunks remain visible
-		[...chunksRef.current.keys()].forEach(chunkKey => {
-			if (!chunksToCheck.includes(chunkKey) && chunkMeshesRef.current[chunkKey]) {
-				// This chunk is definitely out of view distance, make sure it's hidden
-				Object.values(chunkMeshesRef.current[chunkKey]).forEach(mesh => {
-					if (Array.isArray(mesh)) {
-						mesh.forEach(m => {
-							if (scene.children.includes(m)) {
-								safeRemoveFromScene(m);
-							}
-						});
-					} else if (scene.children.includes(mesh)) {
-						safeRemoveFromScene(mesh);
-					}
-				});
-			}
-		});
-		
-		// Sort chunks to load by distance (closest first)
-		chunksToLoad.sort((a, b) => a.distance - b.distance);
-		
-		// Limit the number of chunks to load per frame
-		const maxChunksToLoad = 5;
-		chunksToLoad.slice(0, maxChunksToLoad).forEach(({ chunkKey }) => {
-			// Add to update queue with high priority
-			addChunkToUpdateQueue(chunkKey, 10);
-		});
-		
-		// Update the current frame index for the next update
-		chunkVisibilityHistoryRef.current.currentFrameIndex = nextHistoryFrame;
-		
-		// Performance tracking
-		const endTime = performance.now();
-		const updateTime = endTime - startTime;
-		
-		// Adjust update interval based on performance
-		// If updates are taking too long, reduce frequency
-		if (updateTime > 16) { // 16ms = ~60fps
-			visibilityUpdateIntervalRef.current = Math.min(visibilityUpdateIntervalRef.current * 1.1, 500);
-		} else {
-			// If updates are fast, gradually increase frequency
-			visibilityUpdateIntervalRef.current = Math.max(visibilityUpdateIntervalRef.current * 0.95, 100);
-		}
-	};
-
-	// Call update visible chunks when camera moves
-	useEffect(() => {
-		if (!threeCamera.current) return;
-		
-		// Initial update
-		updateVisibleChunks();
-		
-		// Set up a render loop to check camera changes
-		const handler = () => {
-			updateVisibleChunks();
-		};
-		
-		// Capture the current value of orbitControlsRef when the effect runs
-		const currentOrbitControls = orbitControlsRef.current;
-		
-		// Listen for camera movements
-		currentOrbitControls?.addEventListener('change', handler);
-		
-		// Clean up
-		return () => {
-			// Use the captured value in cleanup
-			currentOrbitControls?.removeEventListener('change', handler);
-		};
-	}, [updateVisibleChunks]); // Only depend on updateVisibleChunks
-
-	// Add camera movement hook to update visible chunks
-	useEffect(() => {
-		const animate = () => {
-			// Only update when camera is moving
-			if (orbitControlsRef.current?.isMoving) {
-				updateVisibleChunks();
-			}
-			
-			// Store the animation ID in the ref
-			cameraAnimationRef.current = requestAnimationFrame(animate);
-		};
-		
-		// Start the animation
-		cameraAnimationRef.current = requestAnimationFrame(animate);
-		
-		return () => {
-			// Clean up animation on unmount
-			if (cameraAnimationRef.current) {
-				cancelAnimationFrame(cameraAnimationRef.current);
-				cameraAnimationRef.current = null;
-			}
-		};
-	}, [updateVisibleChunks]); // Add updateVisibleChunks as dependency
-
-	// Add clean-up code for caches
-	useEffect(() => {
-		return () => {
-			clearMaterialGeometryCaches();
-		};
-	}, []);
-
-	// Function to get cached or create new geometry
-	const getCachedGeometry = (blockType) => {
-		const cacheKey = blockType.id;
-		
-		if (geometryCache.current.has(cacheKey)) {
-			return geometryCache.current.get(cacheKey);
-		}
-		
-		const geometry = createBlockGeometry(blockType);
-		geometryCache.current.set(cacheKey, geometry);
-		return geometry;
-	};
-	
-	// Function to get cached or create new material
-	const getCachedMaterial = (blockType) => {
-		const cacheKey = blockType.id;
-		
-		if (materialCache.current.has(cacheKey)) {
-			return materialCache.current.get(cacheKey);
-		}
-		
-		const material = blockType.isMultiTexture 
-			? createBlockMaterial(blockType)
-			: createBlockMaterial(blockType)[0];
-			
-		materialCache.current.set(cacheKey, material);
-		return material;
-	};
-	
-	// Clear geometry and material caches when blocks are modified
-	const clearMaterialGeometryCaches = () => {
-		// Dispose of all geometries in the cache
-		geometryCache.current.forEach(geometry => {
-			if (geometry && geometry.dispose) {
-				geometry.dispose();
-			}
-		});
-		
-		// Dispose of all materials in the cache
-		materialCache.current.forEach(material => {
-			if (material) {
-				if (Array.isArray(material)) {
-					material.forEach(m => m?.dispose?.());
-				} else if (material.dispose) {
-					material.dispose();
-				}
-			}
-		});
-		
-		// Clear the caches
-		geometryCache.current.clear();
-		materialCache.current.clear();
-	};
-
-	// Add a ref to track chunks waiting for atlas initialization
-	const chunksWaitingForAtlasRef = useRef([]);
-	
-	// Implement createGreedyMeshForChunk to use our optimized version
-	const createGreedyMeshForChunk = (chunksBlocks) => {
-		// Skip texture atlas if disabled
-		if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas && isAtlasInitialized()) {
-			try {
-				const optimizedMesh = getChunkMeshBuilder().buildChunkMesh(chunksBlocks, getBlockTypes());
-				if (optimizedMesh) {
-					// Return a single mesh as an object for compatibility with existing code
-					return { 'optimized': optimizedMesh };
-				}
-			} catch (error) {
-				console.error("Error building greedy mesh:", error);
-				// Fall back to original implementation
-			}
-		} else if (TEXTURE_ATLAS_SETTINGS.useTextureAtlas) {
-			// Texture atlas is enabled but not initialized yet
-			// Force initialization
-			if (!isAtlasInitialized()) {
-				// Extract chunk key from the first block key
-				const blockKey = Object.keys(chunksBlocks)[0];
-				if (blockKey) {
-					// Extract just the chunk coordinates (first 3 components of the position)
-					const [x, y, z] = blockKey.split(',').map(Number);
-					if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-						const chunkCoords = getChunkCoords(x, y, z);
-						const chunkKey = `${chunkCoords.cx},${chunkCoords.cy},${chunkCoords.cz}`;
-						
-						// Add to the waiting list if not already there
-						if (chunksWaitingForAtlasRef && chunksWaitingForAtlasRef.current && 
-							!chunksWaitingForAtlasRef.current.includes(chunkKey)) {
-							console.log(`Adding chunk ${chunkKey} to atlas waiting list`);
-							chunksWaitingForAtlasRef.current.push(chunkKey);
-						}
-					}
-				}
-			}
-		}
-		
-		// Use our generateGreedyMesh function as fallback
-		const meshData = generateGreedyMesh(chunksBlocks, getBlockTypes());
-		
-		// If using original implementation that returns meshData, convert it to meshes
-		if (meshData) {
-				const geometry = new THREE.BufferGeometry();
-			geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.vertices, 3));
-			geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
-			geometry.setAttribute('uv', new THREE.Float32BufferAttribute(meshData.uvs, 2));
-			geometry.setIndex(meshData.indices);
-			
-			const material = new THREE.MeshStandardMaterial({
-				map: getTextureAtlas() ? getTextureAtlas().getAtlasTexture() : null,
-				side: THREE.FrontSide,
-				transparent: false,
-				alphaTest: 0.5
-			});
-			
-				const mesh = new THREE.Mesh(geometry, material);
-			return { 'greedy': mesh };
-		}
-		
-		// If all else fails, return null
-		return null;
-	};
-
-	// Toggle greedy meshing on/off
-	const toggleGreedyMeshing = (enabled) => {
-	  console.log(`Setting greedy meshing to ${enabled}`);
-	  const changed = setGreedyMeshingEnabled(enabled);
-	  
-	  // Also update the ChunkMeshBuilder if it exists
-	  const meshBuilder = getChunkMeshBuilder();
-	  if (meshBuilder) {
-	    meshBuilder.setGreedyMeshing(enabled);
-	  }
-	  
-	  // If changed, rebuild all chunks
-	  if (changed) {
-	    console.log("Rebuilding all chunks with greedy meshing", enabled ? "enabled" : "disabled");
-	    Object.keys(chunkMeshesRef.current).forEach(chunkKey => {
-	      rebuildChunk(chunkKey);
-	    });
-	  }
-	  
-	  return changed;
-	};
-
-	// Add these variables near the top of the component
-	const spatialHashLastUpdateRef = useRef(0);
-	const spatialHashUpdateQueuedRef = useRef(false);
-	const spatialHashUpdateThrottleRef = useRef(1000); // 1 second minimum between updates
-
-	// Replace the updateSpatialHash function with this throttled version
-	const updateSpatialHash = () => {
-		// If an update is already queued, don't queue another one
-		if (spatialHashUpdateQueuedRef.current) {
-			console.log("Skipping redundant spatial hash update (update already queued)");
-			return;
-		}
-		
-		const now = performance.now();
-		
-		// If it's been less than the throttle time since the last update, queue an update
-		// Note: During bulk operations like loading a map, spatialHashUpdateThrottleRef.current can be
-		// temporarily set to a high value to prevent excessive updates
-		if (now - spatialHashLastUpdateRef.current < spatialHashUpdateThrottleRef.current) {
-			console.log(`Throttling spatial hash update (last update was ${((now - spatialHashLastUpdateRef.current) / 1000).toFixed(2)}s ago, throttle is ${(spatialHashUpdateThrottleRef.current / 1000).toFixed(2)}s)`);
-			spatialHashUpdateQueuedRef.current = true;
-			
-			// Schedule an update after the throttle time has passed
-			setTimeout(() => {
-				spatialHashUpdateQueuedRef.current = false;
-				// Only update if no other updates were scheduled while waiting
-				if (!spatialHashUpdateQueuedRef.current) {
-					console.log("Executing delayed spatial hash update after throttle period");
-					updateSpatialHashImpl();
-				}
-			}, spatialHashUpdateThrottleRef.current - (now - spatialHashLastUpdateRef.current));
-			
-			return;
-		}
-		
-		// Otherwise, update immediately
-		console.log("Executing immediate spatial hash update");
-		updateSpatialHashImpl();
-	};
-
-	// Implement the actual spatial hash update logic
-	const updateSpatialHashImpl = () => {
-		// Safety check - ensure spatialGridManagerRef.current is initialized
-		if (!spatialGridManagerRef.current) {
-			console.error("SpatialGridManager not initialized in updateSpatialHashImpl");
-			return;
-		}
-		
-		const blockCount = Object.keys(terrainRef.current).length;
-		console.log(`Starting spatial hash grid update for ${blockCount} blocks (throttle: ${spatialHashUpdateThrottleRef.current}ms, queued: ${spatialHashUpdateQueuedRef.current})`);
-		
-		const startTime = performance.now();
-		
-		// Update the last update time
-		spatialHashLastUpdateRef.current = startTime;
-		
-		// Clear existing hash
-		spatialGridManagerRef.current.clear();
-		
-		// If there are too many blocks, use a chunked approach
-		if (blockCount > 100000) {
-			// Schedule the chunked update
-			updateSpatialHashChunked();
-			
-			// Return early with a partial update for immediate interaction
-			// Just add blocks from visible chunks for now
-			const visibleChunks = getVisibleChunks();
-			let visibleBlockCount = 0;
-			
-			visibleChunks.forEach(chunkKey => {
-				const chunkBlocks = chunksRef.current.get(chunkKey);
-				if (chunkBlocks) {
-					Object.entries(chunkBlocks).forEach(([posKey, blockId]) => {
-						spatialGridManagerRef.current.setBlock(posKey, blockId);
-						visibleBlockCount++;
-					});
-				}
-			});
-			
-			const endTime = performance.now();
-			console.log(`Spatial hash partially updated with ${visibleBlockCount} visible blocks in ${(endTime - startTime).toFixed(2)}ms. Full update scheduled.`);
-			return;
-		}
-		
-		// For smaller maps, add all blocks to the hash in one go
-		Object.entries(terrainRef.current).forEach(([posKey, blockId]) => {
-			spatialGridManagerRef.current.setBlock(posKey, blockId);
-		});
-		
-		const endTime = performance.now();
-		console.log(`Spatial hash fully updated with ${spatialGridManagerRef.current.size} blocks in ${(endTime - startTime).toFixed(2)}ms`);
-	};
-
-	// Get visible chunks based on camera position and frustum
-	const getVisibleChunks = () => {
-		if (!threeCamera || !scene) return [];
-		
-		// Create frustum from camera
-		const frustum = new THREE.Frustum();
+		// Simply update the camera and frustum for raycasting
+		threeCamera.updateMatrixWorld();
 		const projScreenMatrix = new THREE.Matrix4();
 		projScreenMatrix.multiplyMatrices(threeCamera.projectionMatrix, threeCamera.matrixWorldInverse);
+		const frustum = new THREE.Frustum();
 		frustum.setFromProjectionMatrix(projScreenMatrix);
+		frustumRef.current = frustum;
 		
-		// Get camera position for calculations
-		const cameraPos = threeCamera.position.clone();
-		
-		// Get chunks within view distance
-		const cameraChunkX = Math.floor(cameraPos.x / CHUNK_SIZE);
-		const cameraChunkY = Math.floor(cameraPos.y / CHUNK_SIZE);
-		const cameraChunkZ = Math.floor(cameraPos.z / CHUNK_SIZE);
-		
-		// Collect visible chunks
-		const visibleChunks = [];
-		// Use the getViewDistance() function instead of a hardcoded value
-		
-		// Check all chunks in our data
-		chunksRef.current.forEach((_, chunkKey) => {
-			// Check if this chunk is visible
-			if (isChunkVisible(chunkKey, threeCamera, frustum)) {
-				visibleChunks.push(chunkKey);
-			}
-		});
-		
-		// If we have very few visible chunks, add some nearby chunks
-		if (visibleChunks.length < 5) {
-			// Add chunks in a small radius around the camera
-			for (let x = -2; x <= 2; x++) {
-				for (let y = -2; y <= 2; y++) {
-					for (let z = -2; z <= 2; z++) {
-						const chunkKey = `${cameraChunkX + x},${cameraChunkY + y},${cameraChunkZ + z}`;
-						if (chunksRef.current.has(chunkKey) && !visibleChunks.includes(chunkKey)) {
-							visibleChunks.push(chunkKey);
-						}
-					}
-				}
-			}
-		}
-		
-		return visibleChunks;
+		// Let the chunk system handle visibility entirely - it's more efficient
+		// Just make sure it gets processed
+		processChunkRenderQueue();
 	};
 
 	// Update spatial hash in chunks to avoid blocking the main thread
 	const updateSpatialHashChunked = () => {
-		// Use the SpatialGridManager's updateFromTerrain method instead of implementing it here
+		// Skip if disabled globally
+		if (disableSpatialHashUpdatesRef.current) {
+				return;
+			}
+			
+		// Skip if not initialized
+		if (!spatialGridManagerRef.current) {
+			return;
+		}
+		
+		// VERY aggressive throttling to prevent performance issues
+		const now = performance.now();
+		if (now - spatialHashLastUpdateRef.current < 2000) { // Limit to once every 2 seconds
+			return;
+		}
+		
+		// Skip update if camera is moving to prioritize smooth movement
+		if (cameraMoving.current) {
+			return;
+		}
+		
+		// Only update if we actually have a significant number of blocks
+		const blockCount = Object.keys(terrainRef.current).length;
+		if (blockCount < 100) {
+			// For small scenes, update more often
+			if (now - spatialHashLastUpdateRef.current < 1000) {
+			return;
+		}
+		}
+		
+		// Update timestamp before the operation to prevent any overlapping calls
+		spatialHashLastUpdateRef.current = now;
+		
+		// Don't show loading screen, use larger batches to reduce updates
 		return spatialGridManagerRef.current.updateFromTerrain(terrainRef.current, {
-			showLoadingScreen: true,
-			batchSize: 50000
+			showLoadingScreen: false,  // Never show loading screen for routine updates
+			batchSize: 100000,         // Use much larger batches to reduce update frequency
+			silent: true,              // Suppress all console logs
+			skipIfBusy: true           // Skip update if another one is in progress
 		});
 	};
 
@@ -3690,82 +3275,42 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Initialize texture atlas
 		initAtlas = async () => {
-			// Check if we have block types
-			if (!blockTypes || blockTypes.length === 0) {
-				console.error("No block types available for texture atlas initialization");
+			console.log("Initializing with new BlockTextureAtlas and ChunkSystem");
+			
+			// Don't initialize if already initialized
+			if (isAtlasInitialized()) {
+				console.log("Texture atlas already initialized");
 				return;
 			}
 			
-			console.log("Initializing texture atlas in TerrainBuilder with", blockTypes.length, "block types");
-			
-			// Initialize the texture atlas
-			const atlas = await initTextureAtlas(blockTypes);
-			
-			if (!atlas) {
-				console.error("Texture atlas initialization failed");
-				return;
-			}
-			
-			// Initialize chunk load manager if needed
-			if (!chunkLoadManager.current) {
-				// Define the processor function that will handle rebuilding chunks
-				const chunkProcessor = async (chunkKey) => {
-					await rebuildChunk(chunkKey);
-				};
-				
-				// Calculate appropriate max concurrent loads based on device
-				const maxConcurrent = navigator.hardwareConcurrency ? 
-					Math.max(2, Math.min(4, navigator.hardwareConcurrency - 1)) : 2;
-				
-				// Create the chunk load manager
-				chunkLoadManager.current = createChunkLoadManager({
-					processor: chunkProcessor,
-					maxConcurrentLoads: maxConcurrent,
-					processingTimeLimit: 25 // ms per frame for chunk rebuilding
-				});
-				
-				console.log(`Chunk load manager initialized with max ${maxConcurrent} concurrent chunks`);
-			}
-			
-			// Process any chunks that were waiting for atlas initialization
-			if (chunksWaitingForAtlasRef && chunksWaitingForAtlasRef.current && chunksWaitingForAtlasRef.current.length > 0) {
-				console.log(`Processing ${chunksWaitingForAtlasRef.current.length} chunks that were waiting for atlas`);
-				
-				// Process chunks in batches to avoid blocking the main thread
-				const processBatch = (index) => {
-					const batchSize = 5;
-					const end = Math.min(index + batchSize, chunksWaitingForAtlasRef.current.length);
+			try {
+				// The new ChunkSystem automatically initializes BlockTextureAtlas
+				if (scene) {
+					await initChunkSystem(scene, {
+						viewDistance: getViewDistance(),
+						viewDistanceEnabled: true
+					});
+					console.log("ChunkSystem and BlockTextureAtlas initialized successfully");
 					
-					for (let i = index; i < end; i++) {
-						const chunkKey = chunksWaitingForAtlasRef.current[i];
-						rebuildChunk(chunkKey);
-					}
-					
-					if (end < chunksWaitingForAtlasRef.current.length) {
-						setTimeout(() => processBatch(end), 0);
+					// Set initial camera reference in chunk system
+					const chunkSystem = getChunkSystem();
+					if (chunkSystem && threeCamera) {
+						console.log("[Initialization] Setting initial camera reference in chunk system");
+						chunkSystem._scene.camera = threeCamera;
+						currentCameraRef.current = threeCamera;
+						console.log("[Initialization] Camera position:", 
+							threeCamera.position.toArray().map(v => v.toFixed(2)));
+						
+						// Update once to apply the camera
+						updateChunkSystemWithCamera();
 					} else {
-						chunksWaitingForAtlasRef.current = [];
+						console.error("[Initialization] Failed to set initial camera reference");
 					}
-				};
-				
-				// Start processing
-				setTimeout(() => processBatch(0), 100);
-			}
-				
-			// If there are chunks in the queue, process them now
-			if (chunkUpdateQueueRef.current.length > 0) {
-				console.log(`Rebuilding ${chunkUpdateQueueRef.current.length} chunks after texture atlas initialized`);
-				
-				// Process all the chunks in the queue
-				chunkUpdateQueueRef.current.forEach(entry => {
-					const { chunkKey, priority } = entry;
-					chunkLoadManager.current.addChunkToQueue(chunkKey, priority);
-				});
-				
-				// Clear the queue
-				chunkUpdateQueueRef.current = [];
-			} else {
-				console.log("Texture atlas ready, no chunks to rebuild");
+				} else {
+					console.error("Scene not available for ChunkSystem initialization");
+				}
+			} catch (error) {
+				console.error("Error initializing ChunkSystem:", error);
 			}
 		};
 		
@@ -3788,6 +3333,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const lastCameraRotation = new THREE.Euler();
 	const cameraMovementTimeout = { current: null };
 	const chunkUpdateThrottle = { current: 0 };
+	const logThrottle = { current: 0, lastTime: 0 }; // Add throttling for logs
 
 	// Update the usages of these optimizations
 	useEffect(() => {
@@ -3811,77 +3357,138 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			// Only run heavy operations every few frames to reduce lag
 			frameCount++;
-			const shouldRunHeavyOperations = frameCount % 3 === 0; // Only every 3rd frame
+			const shouldRunHeavyOperations = frameCount % 2 === 0; // Reduced from 3 to 2 for more frequent updates
+			
+			// Check for valid camera
+			if (!threeCamera) {
+				console.warn("[Animation] Three camera is null or undefined");
+				return;
+			}
+
+			// Check the currentCameraRef to ensure it's properly set
+			if (!currentCameraRef.current) {
+				console.warn("[Animation] Current camera reference is not set");
+				currentCameraRef.current = threeCamera;
+			}
 			
 			// Detect camera movement (cheaper comparison)
-			if (threeCamera) {
-				const posX = threeCamera.position.x;
-				const posY = threeCamera.position.y;
-				const posZ = threeCamera.position.z;
+			const posX = threeCamera.position.x;
+			const posY = threeCamera.position.y;
+			const posZ = threeCamera.position.z;
+			
+			const rotX = threeCamera.rotation.x;
+			const rotY = threeCamera.rotation.y;
+			const rotZ = threeCamera.rotation.z;
+			
+			const positionChanged = 
+				Math.abs(posX - lastCameraPosition.x) > 0.01 ||
+				Math.abs(posY - lastCameraPosition.y) > 0.01 ||
+				Math.abs(posZ - lastCameraPosition.z) > 0.01;
 				
-				const rotX = threeCamera.rotation.x;
-				const rotY = threeCamera.rotation.y;
-				const rotZ = threeCamera.rotation.z;
-				
-				const positionChanged = 
-					Math.abs(posX - lastCameraPosition.x) > 0.01 ||
-					Math.abs(posY - lastCameraPosition.y) > 0.01 ||
-					Math.abs(posZ - lastCameraPosition.z) > 0.01;
+			const rotationChanged = 
+				Math.abs(rotX - lastCameraRotation.x) > 0.01 ||
+				Math.abs(rotY - lastCameraRotation.y) > 0.01 ||
+				Math.abs(rotZ - lastCameraRotation.z) > 0.01;
+			
+			const isCameraMoving = positionChanged || rotationChanged;
+			
+			// Update stored values (cheaper than .copy())
+			lastCameraPosition.x = posX;
+			lastCameraPosition.y = posY;
+			lastCameraPosition.z = posZ;
+			
+			lastCameraRotation.x = rotX;
+			lastCameraRotation.y = rotY;
+			lastCameraRotation.z = rotZ;
+			
+			// Log camera movement details (throttled to prevent console spam)
+			logThrottle.current++;
+			const now = Date.now();
+			if ((isCameraMoving && logThrottle.current >= 30) || (now - logThrottle.lastTime > 5000)) {
+				logThrottle.current = 0;
+				logThrottle.lastTime = now;
+			}
+			
+			// Update chunk system with the current camera and process render queue
+			// Always do this regardless of movement
+			const updateResult = updateChunkSystemWithCamera();
+			
+			// If camera is moving, update more frequently and force visibility updates
+			if (isCameraMoving) {
+				// Force an extra chunk system update to ensure visibility is updated
+				const chunkSystem = getChunkSystem();
+				if (chunkSystem && chunkSystem._scene && chunkSystem._scene.camera) {
 					
-				const rotationChanged = 
-					Math.abs(rotX - lastCameraRotation.x) > 0.01 ||
-					Math.abs(rotY - lastCameraRotation.y) > 0.01 ||
-					Math.abs(rotZ - lastCameraRotation.z) > 0.01;
-				
-				const isCameraMoving = positionChanged || rotationChanged;
-				
-				// Update stored values (cheaper than .copy())
-				lastCameraPosition.x = posX;
-				lastCameraPosition.y = posY;
-				lastCameraPosition.z = posZ;
-				
-				lastCameraRotation.x = rotX;
-				lastCameraRotation.y = rotY;
-				lastCameraRotation.z = rotZ;
-				
-				// Set camera moving state
-				if (isCameraMoving) {
-					cameraMoving.current = true;
-					
-					// Clear any existing timeout
-					if (cameraMovementTimeout.current) {
-						clearTimeout(cameraMovementTimeout.current);
+					// Only force update visibility every 5 frames during movement
+					// This reduces performance impact while maintaining visual quality
+					if (frameCount % 10 === 0) {
+						// IMPORTANT: Use the new method to force chunk visibility updates
+						// This bypasses the render queue and directly updates all chunks
+						const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
+						forceUpdateChunkVisibility();
 					}
-					
-					// Set timeout to detect when camera stops moving
-					cameraMovementTimeout.current = setTimeout(() => {
-						cameraMoving.current = false;
-						chunkUpdateThrottle.current = 0;
-						
-						// Force a full visibility update when camera stops
-						if (shouldRunHeavyOperations) {
-							updateVisibleChunks();
-						} else {
-							// Schedule for next frame when heavy operations are allowed
-							requestAnimationFrame(() => updateVisibleChunks());
-						}
-					}, 100); // Reduced from 150ms to 100ms for quicker response
+				}
+			} else {
+				// When camera is still, update much less frequently (every ~1 second at 60fps)
+				// Force a full chunk update periodically even if the camera isn't moving
+				// This ensures chunk visibility is refreshed regularly but at a lower cost
+				if (frameCount % 60 === 0) { // Every ~1 second at 60fps
+					// Use direct force update instead of the older refresh method
+					const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
+					forceUpdateChunkVisibility();
 				}
 			}
 			
+			// Only log failure occasionally
+			if (!updateResult && logThrottle.current % 60 === 0) {
+				console.error("[Animation] Failed to update chunk system with camera");
+			}
+			
+			// Set camera moving state
+			if (isCameraMoving) {
+				cameraMoving.current = true;
+				
+				// Clear any existing timeout
+				if (cameraMovementTimeout.current) {
+					clearTimeout(cameraMovementTimeout.current);
+				}
+				
+				// Set timeout to detect when camera stops moving
+				cameraMovementTimeout.current = setTimeout(() => {
+					cameraMoving.current = false;
+					console.log("[Animation] Camera stopped moving");
+					
+					// Force a full update when camera stops
+					updateChunkSystemWithCamera();
+					// Force a second update after a short delay to ensure chunks are properly visible
+					setTimeout(() => {
+						updateChunkSystemWithCamera();
+						updateVisibleChunks();
+					}, 50);
+				}, 100); // Reduced from 150ms to 100ms for faster response
+			}
+			
 			// Only update if enough time has passed (throttle updates)
-			if (delta > 16 && shouldRunHeavyOperations) { // ~60fps max and only every 3rd frame
+			if (delta > 16 && shouldRunHeavyOperations) { // ~60fps max and only every 2nd frame
 				// Throttle chunk updates during camera movement
 				if (cameraMoving.current) {
-					// Increase throttle during camera movement (update less frequently)
+					// Decrease throttle during camera movement (update more frequently)
 					chunkUpdateThrottle.current++;
-					if (chunkUpdateThrottle.current >= 3) { // Keep at 3 frames to maintain balance
+					if (chunkUpdateThrottle.current >= 2) { // Reduced from 3 to 2 for more frequent updates
 						updateVisibleChunks();
 						chunkUpdateThrottle.current = 0;
 					}
-				} else if (frameCount % 10 === 0) { // Even less frequent updates when camera is still
+					
+					// Skip spatial hash updates completely during camera movement
+				} else if (frameCount % 5 === 0) { // Reduced from 10 to 5 for more frequent updates when camera is still
 					// Normal updates when camera is still, but less frequent
 					updateVisibleChunks();
+					
+					// Extremely infrequent spatial hash updates (only once every ~5 seconds)
+					if (frameCount % 300 === 0) {
+						// Don't update spatial hash in the animation loop at all
+						// This should only happen on explicit user actions or when the map is first loaded
+					}
 				}
 				
 				// Only update shadows periodically and even less frequently
@@ -3896,7 +3503,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}
 				}
 			}
-		};
+		}
 		
 		// Start the animation loop
 		frameId = requestAnimationFrame(animate);
@@ -3951,69 +3558,47 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Function to process chunks from the queue with frame timing
 	const processChunkQueue = () => {
-		isProcessingChunkQueueRef.current = true;
-		
-		// If queue is empty, stop processing
-		if (chunkUpdateQueueRef.current.length === 0) {
-			isProcessingChunkQueueRef.current = false;
-			return;
-		}
-		
-		const startTime = performance.now();
-		const maxTimePerFrame = 20; // Increased from 10ms to allow more processing time
-		
-		// Process a limited number of chunks per frame
-		let chunksProcessed = 0;
-		const maxChunksPerFrame = 8; // Increased from 3 to process more chunks per frame
-		
-		while (chunkUpdateQueueRef.current.length > 0 && 
-				(performance.now() - startTime < maxTimePerFrame) &&
-				(chunksProcessed < maxChunksPerFrame)) {
-			
-			// Get the highest priority chunk
-			const { chunkKey } = chunkUpdateQueueRef.current.shift();
-			
-			// Rebuild the chunk
-			rebuildChunkNoVisibilityUpdate(chunkKey);
-			
-			// Record last process time and increment counter
-			lastChunkProcessTimeRef.current = performance.now();
-			chunksProcessed++;
-		}
-		
-		// If there are more chunks to process, continue in the next frame
-		if (chunkUpdateQueueRef.current.length > 0) {
-			requestAnimationFrame(processChunkQueue);
-		} else {
-			isProcessingChunkQueueRef.current = false;
-		}
+		// Use the new chunk system's process function
+		processChunkRenderQueue();
 	};
 
 	// Handle camera movement to pause chunk processing during navigation
 	const handleCameraMove = () => {
-		// Pause chunk processing during camera movement to prevent stutters
-		if (chunkLoadManager.current && TEXTURE_ATLAS_SETTINGS.batchedChunkRebuilding) {
-			chunkLoadManager.current.pause();
-			
-			// Resume after a short delay when camera stops moving
+		// Update view distance based on camera position
+		const chunkSystem = getChunkSystem();
+		if (chunkSystem) {
+			// No need to explicitly pause/resume - the chunk system handles this internally
+			// Just update visible chunks after camera stops moving
 			clearTimeout(cameraMovementTimeoutRef.current);
 			cameraMovementTimeoutRef.current = setTimeout(() => {
-				if (chunkLoadManager.current) {
-					chunkLoadManager.current.resume();
-				}
-				
-				// Update visible chunks after camera stops moving
-				// Use requestAnimationFrame to ensure it's synchronized with the render cycle
+				// Trigger a visible chunk update after camera stops moving
 				requestAnimationFrame(() => {
+					// Force update the camera frustum
 					updateVisibleChunks();
+					
+					// Explicitly update the chunk system with the current view distance
+					chunkSystem.setViewDistance(getViewDistance());
 				});
-			}, 50); // Reduced from 75ms to 50ms for faster response
+			}, 50); // 50ms delay after camera stops
 		}
 		
-		// Also request a visible chunk update immediately (but throttled for performance)
-		// This makes movement more responsive without waiting for the camera to stop
-		if (!handleCameraMove.lastUpdateTime || performance.now() - handleCameraMove.lastUpdateTime > 75) { // Reduced from 100ms to 75ms for more frequent updates
+		// Request a visible chunk update immediately (but throttled for performance)
+		if (!handleCameraMove.lastUpdateTime || performance.now() - handleCameraMove.lastUpdateTime > 75) {
 			requestAnimationFrame(() => {
+				// Mark camera as explicitly moving to handle view distance culling
+				cameraMoving.current = true;
+				
+				// Clear any existing camera stop timeout
+				if (cameraMovementTimeout?.current) {
+					clearTimeout(cameraMovementTimeout.current);
+				}
+				
+				// Set a new timeout to mark camera as stopped
+				cameraMovementTimeout.current = setTimeout(() => {
+					cameraMoving.current = false;
+				}, 150);
+				
+				// Update the frustum and visible chunks
 				updateVisibleChunks();
 				handleCameraMove.lastUpdateTime = performance.now();
 			});
@@ -4024,23 +3609,284 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	handleCameraMove.lastUpdateTime = 0;
 
 	// Add this function to efficiently update the spatial hash for a batch of blocks
-	const updateSpatialHashForBlocks = (addedBlocks = [], removedBlocks = []) => {
-		// Safety check - ensure spatialGridManagerRef.current is initialized
-		if (!spatialGridManagerRef.current) {
-			console.error("SpatialGridManager not initialized in updateSpatialHashForBlocks");
+	const updateSpatialHashForBlocks = (addedBlocks = [], removedBlocks = [], options = {}) => {
+		// Skip if disabled globally
+		if (disableSpatialHashUpdatesRef.current) {
 			return;
 		}
 		
-		console.log("Updating spatial hash:", {
-			addedBlocks: addedBlocks.length,
-			removedBlocks: removedBlocks.length
-		});
+		// Safety check - ensure spatialGridManagerRef.current is initialized
+		if (!spatialGridManagerRef.current) {
+			return;
+		}
 		
-		// Use the SpatialGridManager's updateBlocks method
-		spatialGridManagerRef.current.updateBlocks(
-			addedBlocks.map(({ key, blockId }) => [key, blockId]),
-			removedBlocks
-		);
+		// Ensure both arrays are valid
+		const validAddedBlocks = Array.isArray(addedBlocks) ? addedBlocks : [];
+		const validRemovedBlocks = Array.isArray(removedBlocks) ? removedBlocks : [];
+		
+		// Skip if both arrays are empty
+		if (validAddedBlocks.length === 0 && validRemovedBlocks.length === 0) {
+			return;
+		}
+
+		// If we're currently in bulk loading mode, just collect updates for later processing
+		if (deferSpatialHashUpdatesRef.current && !options.force) {
+			console.log(`Deferring spatial hash update for ${validAddedBlocks.length} added and ${validRemovedBlocks.length} removed blocks`);
+			// Collect updates to apply later
+			pendingSpatialHashUpdatesRef.current.added.push(...validAddedBlocks);
+			pendingSpatialHashUpdatesRef.current.removed.push(...validRemovedBlocks);
+			return;
+		}
+		
+		// Skip if too many blocks - will be handled by periodic updates instead
+		// But always process if force option is set
+		if (!options.force && (validAddedBlocks.length > 100 || validRemovedBlocks.length > 100)) {
+			return;
+		}
+		
+		// Very aggressive throttling to avoid performance impact
+		const now = performance.now();
+		if (now - spatialHashLastUpdateRef.current < 1000 && !options.force) { // Wait at least 1 second between updates
+			// For small numbers of blocks (1-10), queue for later update
+			if (validAddedBlocks.length + validRemovedBlocks.length <= 10 && !spatialHashUpdateQueuedRef.current) {
+				spatialHashUpdateQueuedRef.current = true;
+				
+				// Use longer delay
+				setTimeout(() => {
+					// Only update if not processing something else
+					if (spatialGridManagerRef.current && !spatialGridManagerRef.current.isProcessing) {
+						try {
+							// Filter blocks to only those in or near the frustum
+							const camera = cameraRef.current;
+							
+							if (camera && !options.force) {
+								// Update the frustum cache
+								spatialGridManagerRef.current.updateFrustumCache(camera, getViewDistance());
+								
+								// Filter added blocks to those in frustum
+								const filteredAddedBlocks = validAddedBlocks.filter(block => {
+									if (!block || typeof block !== 'object') return false;
+									
+									// Handle different possible formats
+									let x, y, z;
+									if (Array.isArray(block.position)) {
+										[x, y, z] = block.position;
+									} else if (block.x !== undefined && block.y !== undefined && block.z !== undefined) {
+										x = block.x;
+										y = block.y;
+										z = block.z;
+									} else if (typeof block === 'string') {
+										[x, y, z] = block.split(',').map(Number);
+									} else {
+										return false;
+									}
+									
+									const chunkX = Math.floor(x / CHUNK_SIZE);
+									const chunkY = Math.floor(y / CHUNK_SIZE);
+									const chunkZ = Math.floor(z / CHUNK_SIZE);
+									const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+									
+									return spatialGridManagerRef.current.chunksInFrustum.has(chunkKey);
+								});
+								
+								// Filter removed blocks to those in frustum
+								const filteredRemovedBlocks = validRemovedBlocks.filter(block => {
+									if (!block) return false;
+									
+									// Handle different possible formats
+									let x, y, z;
+									if (typeof block === 'object' && Array.isArray(block.position)) {
+										[x, y, z] = block.position;
+									} else if (typeof block === 'object' && block.x !== undefined && block.y !== undefined && block.z !== undefined) {
+										x = block.x;
+										y = block.y;
+										z = block.z;
+									} else if (typeof block === 'string') {
+										[x, y, z] = block.split(',').map(Number);
+									} else {
+										return false;
+									}
+									
+									const chunkX = Math.floor(x / CHUNK_SIZE);
+									const chunkY = Math.floor(y / CHUNK_SIZE);
+									const chunkZ = Math.floor(z / CHUNK_SIZE);
+									const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+									
+									return spatialGridManagerRef.current.chunksInFrustum.has(chunkKey);
+								});
+								
+								// Only update if there are blocks to process
+								if (filteredAddedBlocks.length > 0 || filteredRemovedBlocks.length > 0) {
+									spatialGridManagerRef.current.updateBlocks(
+										filteredAddedBlocks,
+										filteredRemovedBlocks,
+										{ 
+											showLoadingScreen: false, 
+											silent: true,
+											skipIfBusy: true
+										}
+									);
+								}
+							} else {
+								// Use regular update if no camera or forced
+								spatialGridManagerRef.current.updateBlocks(
+										validAddedBlocks,
+										validRemovedBlocks,
+										{ 
+											showLoadingScreen: false, 
+											silent: true,
+											skipIfBusy: true
+										}
+									);
+							}
+						} catch (e) {
+							// Silence errors
+							console.error("Error updating spatial hash:", e);
+						}
+					}
+					
+					// Reset flag - but with delay to prevent rapid sequential updates
+					setTimeout(() => {
+						spatialHashUpdateQueuedRef.current = false;
+					}, 1000);
+				}, 1000);
+			}
+			return;
+		}
+		
+		// Update timestamp first to prevent overlapping calls
+		spatialHashLastUpdateRef.current = now;
+		
+		// Skip update if camera is moving and not forced
+		if (cameraMoving.current && !options.force) {
+			return;
+		}
+		
+		// Use a try/catch to handle any potential errors
+		try {
+			// For forced updates or large batches, use regular update
+			if (options.force || validAddedBlocks.length > 1000 || validRemovedBlocks.length > 1000) {
+				spatialGridManagerRef.current.updateBlocks(
+					validAddedBlocks, 
+					validRemovedBlocks,
+					{ 
+						showLoadingScreen: options.force ? true : false, 
+						silent: options.force ? false : true,
+						skipIfBusy: options.force ? false : true
+					}
+				);
+				return;
+			}
+			
+			// For smaller updates, filter to frustum
+			const camera = cameraRef.current;
+			
+			if (camera) {
+				// Update the frustum cache
+				spatialGridManagerRef.current.updateFrustumCache(camera, getViewDistance());
+				
+				// Filter added blocks to those in frustum
+				const filteredAddedBlocks = validAddedBlocks.filter(block => {
+					if (!block || typeof block !== 'object') return false;
+					
+					// Handle different possible formats
+					let x, y, z;
+					if (Array.isArray(block.position)) {
+						[x, y, z] = block.position;
+					} else if (block.x !== undefined && block.y !== undefined && block.z !== undefined) {
+						x = block.x;
+						y = block.y;
+						z = block.z;
+					} else if (typeof block === 'string') {
+						[x, y, z] = block.split(',').map(Number);
+					} else {
+						return false;
+					}
+					
+					const chunkX = Math.floor(x / CHUNK_SIZE);
+					const chunkY = Math.floor(y / CHUNK_SIZE);
+					const chunkZ = Math.floor(z / CHUNK_SIZE);
+					const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+					
+					return spatialGridManagerRef.current.chunksInFrustum.has(chunkKey);
+				});
+				
+				// Filter removed blocks to those in frustum
+				const filteredRemovedBlocks = validRemovedBlocks.filter(block => {
+					if (!block) return false;
+					
+					// Handle different possible formats
+					let x, y, z;
+					if (typeof block === 'object' && Array.isArray(block.position)) {
+						[x, y, z] = block.position;
+					} else if (typeof block === 'object' && block.x !== undefined && block.y !== undefined && block.z !== undefined) {
+						x = block.x;
+						y = block.y;
+						z = block.z;
+					} else if (typeof block === 'string') {
+						[x, y, z] = block.split(',').map(Number);
+					} else {
+						return false;
+					}
+					
+					const chunkX = Math.floor(x / CHUNK_SIZE);
+					const chunkY = Math.floor(y / CHUNK_SIZE);
+					const chunkZ = Math.floor(z / CHUNK_SIZE);
+					const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
+					
+					return spatialGridManagerRef.current.chunksInFrustum.has(chunkKey);
+				});
+				
+				console.log(`Filtered blocks for spatial hash update: ${filteredAddedBlocks.length}/${validAddedBlocks.length} added, ${filteredRemovedBlocks.length}/${validRemovedBlocks.length} removed`);
+				
+				// Only update if there are blocks to process
+				if (filteredAddedBlocks.length > 0 || filteredRemovedBlocks.length > 0) {
+					spatialGridManagerRef.current.updateBlocks(
+						filteredAddedBlocks,
+						filteredRemovedBlocks,
+						{ 
+							showLoadingScreen: false, 
+							silent: true,
+							skipIfBusy: true
+						}
+					);
+				}
+			} else {
+				// Fallback to regular update if no camera
+				spatialGridManagerRef.current.updateBlocks(
+					validAddedBlocks, 
+					validRemovedBlocks,
+					{ 
+						showLoadingScreen: options.force ? true : false, 
+						silent: options.force ? false : true,
+						skipIfBusy: options.force ? false : true
+					}
+				);
+			}
+		} catch (e) {
+			// Silence any errors
+			console.error("Error updating spatial hash:", e);
+		}
+	};
+
+	// Add a new function to apply deferred spatial hash updates
+	const applyDeferredSpatialHashUpdates = async () => {
+		// If there are no pending updates, just return
+		if (pendingSpatialHashUpdatesRef.current.added.length === 0 && 
+			pendingSpatialHashUpdatesRef.current.removed.length === 0) {
+			return;
+		}
+
+		console.log(`Applying deferred spatial hash updates: ${pendingSpatialHashUpdatesRef.current.added.length} added and ${pendingSpatialHashUpdatesRef.current.removed.length} removed blocks`);
+		
+		const added = [...pendingSpatialHashUpdatesRef.current.added];
+		const removed = [...pendingSpatialHashUpdatesRef.current.removed];
+		
+		// Clear the pending updates first to avoid potential duplicates
+		pendingSpatialHashUpdatesRef.current = { added: [], removed: [] };
+		
+		// Process all spatial hash updates in one go
+		return updateSpatialHashForBlocks(added, removed, { force: true });
 	};
 
 	// Effect to initialize and maintain visibility tracking
@@ -4077,29 +3923,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Update the toggleOcclusionCulling function to use the performance settings
 	const toggleOcclusionCullingLocal = (enabled) => {
-		// Update the global setting
+		// Just update the global setting - ChunkSystem handles culling now
 		toggleOcclusionCulling(enabled);
-		
-		// Update the local ref
-		occlusionCullingEnabledRef.current = enabled;
-		
-		// Clear the solidity cache when toggling
-		chunkSolidityCacheRef.current.clear();
-		
-		// Force an update of visible chunks
-		updateVisibleChunks();
+		// No need for custom occlusion culling implementation
 	};
 
 	// Add a method to set the occlusion threshold
 	const setOcclusionThresholdLocal = (threshold) => {
-		// Update the global setting
+		// Just update the global setting - ChunkSystem handles culling now
 		setOcclusionThreshold(threshold);
-		
-		// Clear the solidity cache when changing threshold
-		chunkSolidityCacheRef.current.clear();
-		
-		// Force an update of visible chunks
-		updateVisibleChunks();
+		// No need for custom occlusion culling implementation
 	};
 
 	// Add a cache for chunk adjacency information
@@ -4300,6 +4133,90 @@ export default forwardRef(TerrainBuilder);
 // Re-export functions from the BlockTypesManager for backward compatibility
 export { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks };
 
-// Re-export functions from the TextureAtlasManager for backward compatibility
-export { initTextureAtlas, generateGreedyMesh, isAtlasInitialized, getChunkMeshBuilder, getTextureAtlas, createChunkLoadManager, getChunkLoadManager };
+// Define view distance functions at module level
+const updateViewDistance = (distance) => {
+  console.log(`Updating view distance to ${distance} blocks`);
+  
+  // Update the terrain constant
+  setViewDistance(distance);
+  
+  // Just update the chunk system's view distance since we don't have access to camera here
+  setChunkViewDistance(distance);
+  
+  // Note: Camera-dependent refresh will happen through the component-level methods
+};
 
+// Toggle view distance culling at module level
+const toggleViewDistanceCulling = (enabled) => {
+  // Update the chunk system's view distance culling
+  setChunkViewDistanceEnabled(enabled);
+};
+
+// Module-level function for forcing chunk culling update
+// Camera must be provided by the caller
+const forceChunkCullingUpdate = (viewDistance, camera) => {
+  console.log("Force updating chunk culling...");
+  
+  if (!camera) {
+    console.error("No camera available for culling update");
+    return false;
+  }
+  
+  const chunkSystem = getChunkSystem();
+  if (!chunkSystem) {
+    console.error("Chunk system not available");
+    return false;
+  }
+  
+  // Step 1: Update the camera in the chunk system
+  console.log("Updating camera in chunk system:", camera.position);
+  updateChunkSystemCamera(camera);
+  
+  // Step 2: Make sure view distance is set correctly
+  chunkSystem.setViewDistance(viewDistance);
+  console.log(`Ensured view distance is set to ${viewDistance}`);
+  
+  // Step 3: Make sure view distance culling is enabled
+  chunkSystem.setViewDistanceEnabled(true);
+  console.log("Ensured view distance culling is enabled");
+  
+  // Step 4: Process the render queue to update visibility
+  chunkSystem.processRenderQueue();
+  console.log("Processed render queue to update chunk visibility");
+  
+  return true;
+};
+
+// Re-export functions from the TextureAtlasManager for backward compatibility
+export { initTextureAtlas, generateGreedyMesh, isAtlasInitialized, getChunkMeshBuilder, getTextureAtlas, createChunkLoadManager, getChunkLoadManager, updateViewDistance, toggleViewDistanceCulling, forceChunkCullingUpdate };
+
+// Add a method to explicitly set deferred chunk meshing mode
+const setDeferredChunkMeshing = (defer) => {
+	const chunkSystem = getChunkSystem();
+	if (!chunkSystem) {
+		console.error("Cannot set deferred chunk meshing: chunk system not available");
+		return false;
+	}
+
+	console.log(`${defer ? 'Enabling' : 'Disabling'} deferred chunk meshing`);
+
+	// If enabling, use a more conservative priority distance to ensure at least some content is visible
+	// Calculate a reasonable priority distance based on view distance
+	let priorityDistance = Math.min(32, getViewDistance() / 2);
+
+	// Make sure it's not too small to prevent blank screens
+	priorityDistance = Math.max(24, priorityDistance);
+
+	// When disabling, force all chunks to be visible
+	if (!defer) {
+		// Force process any deferred chunks
+		chunkSystem.forceUpdateChunkVisibility(false);
+	}
+
+	console.log(`Using priority distance of ${priorityDistance} blocks`);
+	chunkSystem.setBulkLoadingMode(defer, priorityDistance);
+
+	return true;
+};
+
+// Add these functions somewhere before they are first used (around line 2300)
