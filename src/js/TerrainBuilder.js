@@ -2159,6 +2159,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		fastUpdateBlock, // Ultra-optimized function for drag operations
 		updateDebugInfo, // Expose debug info updates for tools
 		
+		// Tool management
+		activateTool: (toolName) => {
+			if (!toolManagerRef.current) {
+				console.error("Cannot activate tool: tool manager not initialized");
+				return false;
+			}
+			return toolManagerRef.current.activateTool(toolName);
+		},
+		
+		// Expose toolManagerRef for direct access (but only as read-only)
+		get toolManagerRef() {
+			return { current: toolManagerRef.current };
+		},
+		
 		// Performance optimization APIs
 		setDeferredChunkMeshing,
 		
