@@ -1,15 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../../css/DebugInfo.css';
-import { 
-  getOcclusionCullingEnabled, 
-  getOcclusionThreshold
-} from '../constants/performance';
 
 const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBuilderRef }) => {
   const [instancingEnabled, setInstancingEnabled] = useState(true);
   const [greedyMeshingEnabled, setGreedyMeshingEnabled] = useState(true);
-  const [occlusionCullingEnabled, setOcclusionCullingEnabled] = useState(getOcclusionCullingEnabled());
-  const [occlusionThreshold, setOcclusionThreshold] = useState(getOcclusionThreshold());
   const [selectionDistance, setSelectionDistance] = useState(128); // Default to 64
   const [viewDistance, setViewDistance] = useState(64); // Default to 64
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true); // Default to true
@@ -108,27 +102,6 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
     
     if (terrainBuilderRef && terrainBuilderRef.current) {
       terrainBuilderRef.current.toggleGreedyMeshing(newValue);
-    }
-  };
-  
-  const handleOcclusionCullingToggle = (e) => {
-    const newValue = e.target.checked;
-    setOcclusionCullingEnabled(newValue);
-    
-    if (terrainBuilderRef && terrainBuilderRef.current) {
-      terrainBuilderRef.current.toggleOcclusionCulling(newValue);
-    }
-  };
-  
-  const handleOcclusionThresholdChange = (e) => {
-    const newValue = parseFloat(e.target.value);
-    setOcclusionThreshold(newValue);
-    
-    if (terrainBuilderRef && terrainBuilderRef.current) {
-      // Assuming there's a setOcclusionThreshold method exposed
-      if (terrainBuilderRef.current.setOcclusionThreshold) {
-        terrainBuilderRef.current.setOcclusionThreshold(newValue);
-      }
     }
   };
   
@@ -264,14 +237,6 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
               />
               Greedy Meshing
             </label>
-            <label className="toggle-label">
-              <input 
-                type="checkbox" 
-                checked={occlusionCullingEnabled} 
-                onChange={handleOcclusionCullingToggle}
-              />
-              Occlusion Culling
-            </label>
             
             <label className="toggle-label">
               <input 
@@ -281,22 +246,6 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
               />
               Auto-Save (5 min)
             </label>
-            
-            {occlusionCullingEnabled && (
-              <div className="slider-container">
-                <span className="slider-label">Occlusion Threshold: {occlusionThreshold.toFixed(2)}</span>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="0.9"
-                  step="0.05"
-                  value={occlusionThreshold}
-                  onChange={handleOcclusionThresholdChange}
-                  className="range-slider"
-                />
-                <div className="slider-hint">Higher values = more aggressive culling</div>
-              </div>
-            )}
             
             <div className="slider-container">
               <span className="slider-label">Selection Distance: {selectionDistance}</span>

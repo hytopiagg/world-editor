@@ -17,7 +17,7 @@ import { initChunkSystem, updateTerrainChunks, updateTerrainBlocks as importedUp
 import { loadingManager } from './LoadingManager';
 import { PERFORMANCE_SETTINGS, TEXTURE_ATLAS_SETTINGS, getTextureAtlasSettings, 
 	    meshesNeedsRefresh, toggleInstancing, getInstancingEnabled,
-		setTextureAtlasSetting, toggleOcclusionCulling, getOcclusionCullingEnabled, getOcclusionThreshold, setOcclusionThreshold } from "./constants/performance";
+		setTextureAtlasSetting } from "./constants/performance";
 
 import {CHUNK_SIZE, GREEDY_MESHING_ENABLED, 
 		 getViewDistance, setViewDistance, MAX_SELECTION_DISTANCE, 
@@ -2217,8 +2217,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		getCurrentTerrainData,
 		clearMap,
 		// Keeping these for compatibility, but they now just pass through to ChunkSystem
-		toggleOcclusionCulling: toggleOcclusionCullingLocal,
-		setOcclusionThreshold: setOcclusionThresholdLocal,
 		saveTerrainManually, // Add manual save function
 		updateTerrainBlocks, // Expose for selective updates in undo/redo
 		updateTerrainForUndoRedo, // Optimized version specifically for undo/redo operations
@@ -4041,110 +4039,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Add a ref for the chunk solidity cache
 	const chunkSolidityCacheRef = useRef(new Map());
 	
-	// Use the performance settings for occlusion culling
-	const occlusionCullingEnabledRef = useRef(getOcclusionCullingEnabled());
+	// No need for adjacency cache anymore since occlusion culling is removed
+	// const chunkAdjacencyCache = new Map();
 	
-	// Update the toggleOcclusionCulling function to use the performance settings
-	const toggleOcclusionCullingLocal = (enabled) => {
-		// Just update the global setting - ChunkSystem handles culling now
-		toggleOcclusionCulling(enabled);
-		// No need for custom occlusion culling implementation
-	};
-
-	// Add a method to set the occlusion threshold
-	const setOcclusionThresholdLocal = (threshold) => {
-		// Just update the global setting - ChunkSystem handles culling now
-		setOcclusionThreshold(threshold);
-		// No need for custom occlusion culling implementation
-	};
-
-	// Add a cache for chunk adjacency information
-	const chunkAdjacencyCache = new Map();
-	
-	// Helper function to check if a chunk is adjacent to any verified visible chunk
-	const isAdjacentToVisibleChunk = (chunkKey, verifiedVisibleChunks) => {
-		// Check if we have cached result
-		if (chunkAdjacencyCache.has(chunkKey)) {
-			const cachedAdjacentChunks = chunkAdjacencyCache.get(chunkKey);
-			// Check if any of the cached adjacent chunks are in the verified visible set
-			for (const adjacentChunk of cachedAdjacentChunks) {
-				if (verifiedVisibleChunks.has(adjacentChunk)) {
-					return true;
-				}
-			}
-			return false;
-		}
-		
-		// Parse chunk coordinates
-		const [cx, cy, cz] = chunkKey.split(',').map(Number);
-		
-		// Store adjacent chunks for caching
-		const adjacentChunks = [];
-		
-		// First check the 6 face-adjacent neighbors (more likely to be visible)
-		const faceAdjacentOffsets = [
-			[1, 0, 0], [-1, 0, 0],  // X axis
-			[0, 1, 0], [0, -1, 0],  // Y axis
-			[0, 0, 1], [0, 0, -1]   // Z axis
-		];
-		
-		for (const [dx, dy, dz] of faceAdjacentOffsets) {
-			const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
-			adjacentChunks.push(adjacentChunkKey);
-			
-			if (verifiedVisibleChunks.has(adjacentChunkKey)) {
-				// Cache the result before returning
-				chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-				return true;
-			}
-		}
-		
-		// If no face-adjacent chunks are visible, check the 20 diagonal neighbors
-		// 8 corner diagonals
-		for (let dx = -1; dx <= 1; dx += 2) {
-			for (let dy = -1; dy <= 1; dy += 2) {
-				for (let dz = -1; dz <= 1; dz += 2) {
-					const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
-					adjacentChunks.push(adjacentChunkKey);
-					
-					if (verifiedVisibleChunks.has(adjacentChunkKey)) {
-						// Cache the result before returning
-						chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-						return true;
-					}
-				}
-			}
-		}
-		
-		// 12 edge diagonals
-		const edgeDiagonalOffsets = [
-			// X-Y plane edges
-			[1, 1, 0], [1, -1, 0], [-1, 1, 0], [-1, -1, 0],
-			// X-Z plane edges
-			[1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1],
-			// Y-Z plane edges
-			[0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1]
-		];
-		
-		for (const [dx, dy, dz] of edgeDiagonalOffsets) {
-			const adjacentChunkKey = `${cx + dx},${cy + dy},${cz + dz}`;
-			adjacentChunks.push(adjacentChunkKey);
-			
-			if (verifiedVisibleChunks.has(adjacentChunkKey)) {
-				// Cache the result before returning
-				chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-				return true;
-			}
-		}
-		
-		// Cache the result before returning
-		chunkAdjacencyCache.set(chunkKey, adjacentChunks);
-		return false;
-	};
-	
-	// Function to update which chunks are visible based on camera position and frustum
-	// Delete the old updateVisibleChunks function and keep only this optimized version
-	// ... existing code ...
+	// Helper function is no longer needed
+	// const isAdjacentToVisibleChunk = (chunkKey, verifiedVisibleChunks) => {
+	//   ...
+	// };
 
 	
 	
