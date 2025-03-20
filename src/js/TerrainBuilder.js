@@ -796,16 +796,25 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Skip if block doesn't exist
 			if (!terrainRef.current[posKey]) return;
 
-			// Add to undo stack
-			const removedBlocks = { [posKey]: terrainRef.current[posKey] };
+			// Save the original block ID for undo
+			const originalBlockId = terrainRef.current[posKey];
+			
+			// Add to database tracking changes
+			const removedBlocks = { [posKey]: originalBlockId };
 			trackTerrainChanges({}, removedBlocks);
+
+			// IMPORTANT: Track for undo/redo
+			placementChangesRef.current.terrain.removed[posKey] = originalBlockId;
 
 			// Remove from terrain
 			delete terrainRef.current[posKey];
 		} else {
-			// Add to terrain and undo stack
+			// Add to database tracking changes
 			const addedBlocks = { [posKey]: blockId };
 			trackTerrainChanges(addedBlocks, {});
+
+			// IMPORTANT: Track for undo/redo
+			placementChangesRef.current.terrain.added[posKey] = blockId;
 
 			// Add to terrain
 			terrainRef.current[posKey] = blockId;
@@ -1361,14 +1370,19 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						
 						// Track this block to avoid removing it if we drag through
 						recentlyPlacedBlocksRef.current.add(blockKey);
+						
+						// IMPORTANT: Track for undo/redo
+						placementChangesRef.current.terrain.added[blockKey] = currentBlockTypeRef.current.id;
 					}
 				});
 
 				// Update terrain with new blocks
 				const preUpdateTime = performance.now();
 				console.log(`Performance: Block placement preparation took ${preUpdateTime - placeStartTime}ms`);
+				console.log(`Added ${Object.keys(addedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.added).length} for undo/redo`);
 				
 				importedUpdateTerrainBlocks(addedBlocks, {});
+				
 				
 				// Explicitly update the spatial hash for collisions with force option
 				const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
@@ -1404,12 +1418,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					if (terrainRef.current[blockKey]) {
 						removedBlocks[blockKey] = terrainRef.current[blockKey];
 						delete terrainRef.current[blockKey];
+						
+						// IMPORTANT: Track for undo/redo
+						placementChangesRef.current.terrain.removed[blockKey] = removedBlocks[blockKey];
 					}
 				});
 				
 				// Update terrain with removed blocks
 				const preUpdateTime = performance.now();
 				console.log(`Performance: Block removal preparation took ${preUpdateTime - removeStartTime}ms`);
+				console.log(`Removed ${Object.keys(removedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.removed).length} for undo/redo`);
 				
 				importedUpdateTerrainBlocks({}, removedBlocks);
 				
@@ -2204,6 +2222,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		saveTerrainManually, // Add manual save function
 		updateTerrainBlocks, // Expose for selective updates in undo/redo
 		updateTerrainForUndoRedo, // Optimized version specifically for undo/redo operations
+		updateVisibleChunks, // Add this for undo/redo operations to force visibility updates
+		updateSpatialHashForBlocks, // Expose for external spatial hash updates
 		fastUpdateBlock, // Ultra-optimized function for drag operations
 		updateDebugInfo, // Expose debug info updates for tools
 		
