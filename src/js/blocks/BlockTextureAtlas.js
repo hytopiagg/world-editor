@@ -615,6 +615,47 @@ class BlockTextureAtlas {
   clearTextureUVCache() {
     this._textureUVCache.clear();
   }
+  
+  /**
+   * Reset and rebuild the texture atlas
+   * This will clear the current atlas and reload all essential textures
+   * @returns {Promise<boolean>} True if successful
+   */
+  async rebuildTextureAtlas() {
+    try {
+      console.log("Rebuilding texture atlas...");
+      
+      // Clear caches
+      this._textureUVCache.clear();
+      
+      // Clear the canvas
+      this._textureAtlasContext.clearRect(0, 0, this._textureAtlasCanvas.width, this._textureAtlasCanvas.height);
+      
+      // Reset metadata
+      this._textureAtlasMetadata = new Map();
+      
+      // Reset failure tracking
+      this._textureLoadFailures = new Set();
+      
+      // Force texture update
+      this._textureAtlas.needsUpdate = true;
+      
+      // Reload essential textures
+      for (const textureUri of this._essentialTextures) {
+        try {
+          await this.loadTexture(textureUri);
+        } catch (error) {
+          console.error(`Failed to reload essential texture ${textureUri}:`, error);
+        }
+      }
+      
+      console.log("Texture atlas rebuilt successfully");
+      return true;
+    } catch (error) {
+      console.error("Error rebuilding texture atlas:", error);
+      return false;
+    }
+  }
 }
 
 // Initialize the singleton instance

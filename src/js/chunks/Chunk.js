@@ -295,12 +295,20 @@ class Chunk {
                 }
               }
               
-              // Get UV coordinates
-              const uvCoord = BlockTextureAtlas.instance.getTextureUVCoordinateSync 
-                ? BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv)
-                : [0, 0]; // Fallback if sync method not available
+              // Get UV coordinates for this texture (may be cached)
+              const texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
               
-              meshUvs.push(...uvCoord);
+              // If the coordinates are [0,0], it means the texture wasn't found
+              // Queue it for loading so it will be available on next render
+              if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
+                if (BlockTextureAtlas.instance.queueTextureForLoading) {
+                  BlockTextureAtlas.instance.queueTextureForLoading(actualTextureUri);
+                  // Also ensure error texture is loaded
+                  BlockTextureAtlas.instance.queueTextureForLoading('./assets/blocks/error.png');
+                }
+              }
+              
+              meshUvs.push(...texCoords);
 
               // Calculate vertex colors (Ambient occlusion)
               meshColors.push(...this._calculateVertexColor(
@@ -512,6 +520,17 @@ class Chunk {
             
             // Get UV coordinates for this texture (may be cached)
             const texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+            
+            // If the coordinates are [0,0], it means the texture wasn't found
+            // Queue it for loading so it will be available on next render
+            if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
+              if (BlockTextureAtlas.instance.queueTextureForLoading) {
+                BlockTextureAtlas.instance.queueTextureForLoading(actualTextureUri);
+                // Also ensure error texture is loaded
+                BlockTextureAtlas.instance.queueTextureForLoading('./assets/blocks/error.png');
+              }
+            }
+            
             meshUvs.push(...texCoords);
 
             // Calculate vertex color with ambient occlusion

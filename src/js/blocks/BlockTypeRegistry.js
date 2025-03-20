@@ -12,7 +12,13 @@ class BlockTypeRegistry {
   constructor() {
     this._blockTypes = {};
     this._initialized = false;
-    this._essentialBlockTypes = new Set([1, 2, 3]); // IDs of essential block types to preload
+    
+    // Expanded list of essential block types to preload - include more common blocks
+    // This ensures more textures are loaded immediately on startup
+    this._essentialBlockTypes = new Set([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
+      11, 12, 13, 14, 15  // Add more common block IDs
+    ]); 
   }
 
   /**
@@ -130,22 +136,26 @@ class BlockTypeRegistry {
   async preload() {
     console.time('BlockTypeRegistry.preload');
     
-    // Only preload essential block types
-    const essentialBlockTypes = Object.values(this._blockTypes)
-      .filter(blockType => this._essentialBlockTypes.has(blockType.id));
+    // Mark ALL block types as essential to ensure everything loads properly
+    Object.values(this._blockTypes).forEach(blockType => {
+      this._essentialBlockTypes.add(blockType.id);
+    });
     
-    console.log(`Preloading textures for ${essentialBlockTypes.length} essential block types...`);
+    // Now all block types are considered essential
+    const essentialBlockTypes = Object.values(this._blockTypes);
+    
+    console.log(`Preloading textures for ALL ${essentialBlockTypes.length} block types...`);
     
     await Promise.all(essentialBlockTypes.map(blockType => blockType.preloadTextures()));
     
-    // Queue non-essential block types for background loading
-    const nonEssentialBlockTypes = Object.values(this._blockTypes)
-      .filter(blockType => !this._essentialBlockTypes.has(blockType.id));
+    // No need for this anymore since all blocks are essential
+    // const nonEssentialBlockTypes = Object.values(this._blockTypes)
+    //   .filter(blockType => !this._essentialBlockTypes.has(blockType.id));
     
-    console.log(`Queuing ${nonEssentialBlockTypes.length} non-essential block types for background loading...`);
+    // console.log(`Queuing ${nonEssentialBlockTypes.length} non-essential block types for background loading...`);
     
     // Queue textures for background loading
-    nonEssentialBlockTypes.forEach(blockType => blockType.queueTexturesForLoading());
+    // nonEssentialBlockTypes.forEach(blockType => blockType.queueTexturesForLoading());
     
     console.timeEnd('BlockTypeRegistry.preload');
   }

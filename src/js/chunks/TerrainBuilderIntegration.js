@@ -1,9 +1,12 @@
 // TerrainBuilderIntegration.js
 // Integration of the chunk system with TerrainBuilder
 
+import * as THREE from 'three';
+import BlockTextureAtlas from '../blocks/BlockTextureAtlas';
+import BlockMaterial from '../blocks/BlockMaterial';
+import BlockTypeRegistry from '../blocks/BlockTypeRegistry';
 import ChunkSystem from './ChunkSystem';
 import { CHUNK_SIZE } from './ChunkConstants';
-import * as THREE from 'three';
 
 /**
  * Integrates the chunk system with TerrainBuilder
@@ -45,12 +48,42 @@ let chunkSystem = null;
  */
 export const initChunkSystem = async (scene, options = {}) => {
 	if (!chunkSystem) {
+		// Create the chunk system
 		chunkSystem = new ChunkSystem(scene, options);
+		
+		// Initialize the system
 		await chunkSystem.initialize();
-
-		// The setupConsoleFiltering is now called during ChunkSystem initialization
-		// No need to call it here anymore
-
+		
+		// Rebuild the texture atlas to ensure all textures are properly loaded
+		// This is crucial for fixing texture loading issues, especially on page reload
+		await rebuildTextureAtlas();
+		
+		// Set up multiple texture verification checks at different intervals
+		// This helps catch textures that might load at different times
+		const verifyTextures = async (attempt = 1) => {
+			console.log(`Texture verification check #${attempt}`);
+			const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
+			
+			if (!textureAtlas || !textureAtlas.image) {
+				console.warn("Texture atlas not properly loaded, rebuilding...");
+				await rebuildTextureAtlas();
+			} else {
+				// Refresh chunk materials to apply the texture atlas
+				refreshChunkMaterials();
+				// Process the render queue to update visuals
+				processChunkRenderQueue();
+			}
+			
+			// Schedule next check if we haven't reached the maximum attempts
+			if (attempt < 3) {
+				setTimeout(() => verifyTextures(attempt + 1), 2000 * attempt);
+			}
+		};
+		
+		// Start the verification process
+		setTimeout(() => verifyTextures(), 1000);
+		
+		// Log initialization
 		console.log('Chunk system initialized with options:', options);
 	}
 	return chunkSystem;
@@ -91,6 +124,14 @@ export const processChunkRenderQueue = () => {
 		return;
 	}
 
+	// Check if texture queue needs processing (every ~5 seconds)
+	// This uses a simple random check to avoid doing it every frame
+	if (Math.random() < 0.01) {
+		// Get latest texture atlas and ensure materials are updated
+		const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
+		BlockMaterial.instance.setTextureAtlas(textureAtlas);
+	}
+
 	// Make sure camera matrices are up to date before processing
 	if (chunkSystem._scene.camera) {
 		const camera = chunkSystem._scene.camera;
@@ -105,17 +146,12 @@ export const processChunkRenderQueue = () => {
 
 		// Store the frustum in the chunk system for visibility checks
 		chunkSystem._frustum = frustum;
-
-
 	} else {
 		console.warn("No camera set in chunk system for render queue processing");
 	}
 
 	// Process the render queue
 	chunkSystem.processRenderQueue();
-
-	// Force visibility update for all chunks if camera has moved significantly
-	// This is checked internally by the chunk manager
 };
 
 /**
@@ -157,6 +193,44 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
 		};
 	});
 
+	// Mark newly added block types as essential and preload their textures
+	if (addedBlocksArray.length > 0) {
+		// Create a set of block IDs to avoid duplicates
+		const blockIdsToPreload = new Set();
+		
+		// Collect all block IDs added
+		addedBlocksArray.forEach(block => {
+			blockIdsToPreload.add(parseInt(block.id));
+		});
+		
+		// Preload textures for these block types if they're not already loaded
+		if (blockIdsToPreload.size > 0 && typeof BlockTypeRegistry !== 'undefined') {
+			// Try to load asynchronously without blocking the update
+			setTimeout(async () => {
+				try {
+					console.log(`Preloading textures for ${blockIdsToPreload.size} newly added block types...`);
+					
+					// Mark blocks as essential and preload them
+					blockIdsToPreload.forEach(id => {
+						if (BlockTypeRegistry.instance) {
+							BlockTypeRegistry.instance.markBlockTypeAsEssential(id);
+						}
+					});
+					
+					// Force a texture preload
+					if (BlockTypeRegistry.instance) {
+						await BlockTypeRegistry.instance.preload();
+					}
+					
+					// Refresh chunk materials to ensure textures are applied
+					refreshChunkMaterials();
+				} catch (error) {
+					console.error('Error preloading textures for new blocks:', error);
+				}
+			}, 10);
+		}
+	}
+	
 	// Convert removed blocks to the format expected by ChunkSystem
 	const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
 		const [x, y, z] = posKey.split(',').map(Number);
@@ -276,4 +350,106 @@ export const forceUpdateChunkVisibility = () => {
 	}
 
 	return chunkSystem.forceUpdateChunkVisibility();
+};
+
+/**
+ * Force refresh of chunk materials with current texture atlas
+ * This can be called when textures have been updated
+ * @returns {boolean} True if materials were refreshed
+ */
+export const refreshChunkMaterials = () => {
+	if (!chunkSystem) {
+		console.error("Chunk system not available for refreshing materials");
+		return false;
+	}
+
+	try {
+		// Get the current texture atlas
+		const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
+		
+		// Update the materials with the current texture atlas
+		BlockMaterial.instance.setTextureAtlas(textureAtlas);
+		
+		console.log("Chunk materials refreshed with current texture atlas");
+		return true;
+	} catch (error) {
+		console.error("Error refreshing chunk materials:", error);
+		return false;
+	}
+};
+
+/**
+ * Rebuild the texture atlas completely and reload all textures
+ * Call this when textures are missing or when the page reloads
+ * @returns {Promise<boolean>} True if the rebuild was successful
+ */
+export const rebuildTextureAtlas = async () => {
+	console.log("Rebuilding texture atlas and refreshing all materials...");
+	
+	try {
+		// Step 1: Rebuild the texture atlas
+		await BlockTextureAtlas.instance.rebuildTextureAtlas();
+		
+		// Step 2: Reload textures for ALL block types (now they're all essential)
+		await BlockTypeRegistry.instance.preload();
+		
+		// Step 3: Update materials with the new texture atlas
+		const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
+		BlockMaterial.instance.setTextureAtlas(textureAtlas);
+		
+		// Step 4: Force an update of chunk visibility to refresh rendering
+		if (chunkSystem) {
+			console.log("Forcing chunk visibility update to apply textures");
+			chunkSystem.forceUpdateChunkVisibility();
+			
+			// Force a quick render queue update to apply new textures
+			processChunkRenderQueue();
+		}
+		
+		// Step 5: Set up multiple retries for any textures that might still be missing
+		// This uses a more aggressive approach with multiple attempts
+		const maxRetries = 3;
+		const retryDelay = 500;
+		
+		const retryMissingTextures = async (attempt = 1) => {
+			// Only retry if we still have missing texture warnings
+			if (BlockTextureAtlas.instance._missingTextureWarnings && 
+				BlockTextureAtlas.instance._missingTextureWarnings.size > 0) {
+				
+				console.log(`Retry #${attempt}: Loading ${BlockTextureAtlas.instance._missingTextureWarnings.size} missing textures`);
+				
+				// Try to load any missing textures
+				const missingTextures = Array.from(BlockTextureAtlas.instance._missingTextureWarnings);
+				await Promise.allSettled(missingTextures.map(uri => 
+					BlockTextureAtlas.instance.loadTexture(uri)
+				));
+				
+				// Update materials again
+				BlockMaterial.instance.setTextureAtlas(BlockTextureAtlas.instance.textureAtlas);
+				
+				// Force render update again
+				if (chunkSystem) {
+					processChunkRenderQueue();
+				}
+				
+				// Schedule next retry if we haven't reached max attempts
+				if (attempt < maxRetries) {
+					setTimeout(() => retryMissingTextures(attempt + 1), retryDelay);
+				} else {
+					console.log("Completed all texture loading retries");
+				}
+			} else {
+				console.log("No missing textures detected, skipping retry");
+			}
+		};
+		
+		// Start the retry process
+		setTimeout(() => retryMissingTextures(), retryDelay);
+		
+		console.log("Texture atlas rebuild completed successfully");
+		return true;
+	} catch (error) {
+		console.error("Error during texture atlas rebuild:", error);
+		return false;
+	}
 }; 
