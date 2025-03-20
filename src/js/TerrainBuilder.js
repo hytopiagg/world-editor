@@ -779,12 +779,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Ultra-optimized direct block update path for drag operations
 	const fastUpdateBlock = (position, blockId) => {
+		// Early validation
 		if (!position) return;
-
-		// Generate the position key
-		const posKey = `${position[0]},${position[1]},${position[2]}`;
-
-		// Skip if block type is unchanged
+		
+		// Convert to integer positions and get position key
+		const x = Math.round(position[0] || position.x);
+		const y = Math.round(position[1] || position.y);
+		const z = Math.round(position[2] || position.z);
+		const posKey = `${x},${y},${z}`;
+		
+		// Skip if no change
 		if (terrainRef.current[posKey] === blockId) return;
 
 		// For removal (blockId = 0), use a different approach
@@ -816,6 +820,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				position: position,
 				id: blockId
 			}], []);
+		}
+		
+		// Explicitly update the spatial hash for collisions
+		// Format the block for updateSpatialHashForBlocks
+		const blockArray = [{
+			id: blockId,
+			position: [x, y, z]
+		}];
+		
+		// Call with force option to ensure immediate update
+		if (blockId === 0) {
+			// For removal
+			updateSpatialHashForBlocks([], blockArray, { force: true });
+		} else {
+			// For addition
+			updateSpatialHashForBlocks(blockArray, [], { force: true });
 		}
 
 		// We'll update debug info and total blocks count later in bulk
@@ -1350,6 +1370,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				
 				importedUpdateTerrainBlocks(addedBlocks, {});
 				
+				// Explicitly update the spatial hash for collisions with force option
+				const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+					const [x, y, z] = posKey.split(',').map(Number);
+					return {
+						id: blockId,
+						position: [x, y, z]
+					};
+				});
+				
+				// Force immediate update of spatial hash for collision detection
+				if (addedBlocksArray.length > 0) {
+					updateSpatialHashForBlocks(addedBlocksArray, [], { force: true });
+				}
+				
 				const postUpdateTime = performance.now();
 				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
 			} else if (modeRef.current === "remove") {
@@ -1378,6 +1412,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				console.log(`Performance: Block removal preparation took ${preUpdateTime - removeStartTime}ms`);
 				
 				importedUpdateTerrainBlocks({}, removedBlocks);
+				
+				// Explicitly update the spatial hash for collisions with force option
+				const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
+					const [x, y, z] = posKey.split(',').map(Number);
+					return {
+						id: 0, // Use 0 for removed blocks
+						position: [x, y, z]
+					};
+				});
+				
+				// Force immediate update of spatial hash for collision detection
+				if (removedBlocksArray.length > 0) {
+					updateSpatialHashForBlocks([], removedBlocksArray, { force: true });
+				}
 				
 				const postUpdateTime = performance.now();
 				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
@@ -2789,6 +2837,27 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Delegate to the optimized imported function for chunk and spatial hash updates
 		importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
 		
+		// Convert blocks to the format expected by updateSpatialHashForBlocks
+		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: blockId,
+				position: [x, y, z]
+			};
+		});
+
+		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: 0, // Use 0 for removed blocks
+				position: [x, y, z]
+			};
+		});
+		
+		// Explicitly update the spatial hash for collisions with force option
+		// This ensures that the spatial hash is updated immediately, not deferred
+		updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, { force: true });
+		
 		console.timeEnd('updateTerrainBlocks');
 	};
 
@@ -2834,6 +2903,26 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Delegate to the optimized imported function for chunk and spatial hash updates
 		importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
+		
+		// Convert blocks to the format expected by updateSpatialHashForBlocks
+		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: blockId,
+				position: [x, y, z]
+			};
+		});
+
+		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: 0, // Use 0 for removed blocks
+				position: [x, y, z]
+			};
+		});
+		
+		// Explicitly update the spatial hash for collisions with force option
+		updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, { force: true });
 		
 		console.timeEnd(`updateTerrainForUndoRedo-${source}`);
 	};

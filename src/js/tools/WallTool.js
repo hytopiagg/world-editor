@@ -359,6 +359,21 @@ class WallTool extends BaseTool {
 		// Use the optimized imported update function to update all blocks at once
 		this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {});
 		
+		// Convert blocks to the format expected by updateSpatialHashForBlocks
+		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: blockId,
+				position: [x, y, z]
+			};
+		});
+		
+		// Explicitly update the spatial hash for collisions with force option
+		if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
+			console.log('WallTool: Explicitly updating spatial hash after placement');
+			this.terrainBuilderRef.current.updateSpatialHashForBlocks(addedBlocksArray, [], { force: true });
+		}
+		
 		// Add to placement changes for undo/redo
 		if (this.placementChangesRef) {
 			console.log('WallTool: Adding placed blocks to placementChangesRef');
@@ -440,6 +455,21 @@ class WallTool extends BaseTool {
 		
 		// Use the optimized update function to remove all blocks at once
 		this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks);
+		
+		// Convert blocks to the format expected by updateSpatialHashForBlocks
+		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: 0, // Use 0 for removed blocks
+				position: [x, y, z]
+			};
+		});
+		
+		// Explicitly update the spatial hash for collisions with force option
+		if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
+			console.log('WallTool: Explicitly updating spatial hash after erasure');
+			this.terrainBuilderRef.current.updateSpatialHashForBlocks([], removedBlocksArray, { force: true });
+		}
 		
 		// Add to placement changes for undo/redo
 		if (this.placementChangesRef) {
