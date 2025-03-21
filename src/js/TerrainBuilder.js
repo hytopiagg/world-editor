@@ -1269,9 +1269,11 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Clear the terrain
 	const clearMap = () => {
-		// Clear terrain object
-				terrainRef.current = {};
-				totalBlocksRef.current = 0;
+		console.log("Clearing map...");
+		
+		// Remove all blocks from the terrain object
+		terrainRef.current = {};
+		totalBlocksRef.current = 0;
 		
 		// Send total blocks count to parent component
 		if (sendTotalBlocks) {
@@ -1279,33 +1281,66 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		// Clear all chunks from the system
+		console.log("Clearing chunks from the chunk system...");
 		clearChunks();
 		
 		// Clear spatial grid for raycasting
 		if (spatialGridManagerRef.current) {
+			console.log("Clearing spatial grid manager...");
 			spatialGridManagerRef.current.clear();
+			
+			// Reset the firstLoadCompleted flag to ensure it gets initialized for the next terrain
+			firstLoadCompletedRef.current = false;
 		}
+		
+		// Reset placement state
+		isPlacingRef.current = false;
+		recentlyPlacedBlocksRef.current = new Set();
 		
 		// Reset pending changes
 		pendingChangesRef.current = { added: {}, removed: {} };
 		
+		// Reset undo/redo stack
+		if (undoRedoManager) {
+			console.log("Clearing undo/redo history...");
+			// Use DatabaseManager directly instead of non-existent clearHistory method
+			import('./DatabaseManager').then(({ DatabaseManager, STORES }) => {
+				// Clear undo and redo stacks
+				DatabaseManager.saveData(STORES.UNDO, 'states', []);
+				DatabaseManager.saveData(STORES.REDO, 'states', []);
+				console.log("Undo/redo history cleared");
+			}).catch(error => {
+				console.error("Failed to clear undo/redo history:", error);
+			});
+		}
+		
 		// Update debug info
 		updateDebugInfo();
 		
+		// Force scene update
+		if (scene) {
+			console.log("Forcing scene update...");
+			scene.updateMatrixWorld(true);
+			// Don't need to call render directly - the animation loop will handle it
+		}
+		
 		// Save empty terrain to database
+		console.log("Saving empty terrain to database...");
 		efficientTerrainSave();
+		
+		console.log("Map cleared successfully");
 	};
 
 	// Function to initialize spatial hash once after map is loaded
-	const initializeSpatialHash = () => {
-		// If already initialized, don't do it again
-		if (firstLoadCompletedRef.current && !scheduleSpatialHashUpdateRef.current) {
+	const initializeSpatialHash = (forceUpdate = false) => {
+		// If already initialized and not forced, don't do it again
+		if (firstLoadCompletedRef.current && !scheduleSpatialHashUpdateRef.current && !forceUpdate) {
 			console.log("Spatial hash already initialized, skipping...");
 			return Promise.resolve();
 		}
 		
 		// Only call this once after initial map loading, not during regular updates
-		console.log("Initializing spatial hash (one-time operation)...");
+		console.log("Initializing spatial hash...");
 		
 		if (!spatialGridManagerRef.current) {
 			console.warn("Spatial grid manager not initialized, cannot initialize spatial hash");
@@ -1313,7 +1348,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		// Mark as completed to prevent duplicate calls
-		firstLoadCompletedRef.current = true;
+		if (!forceUpdate) {
+			firstLoadCompletedRef.current = true;
+		}
 		
 		// Show loading screen only for this initial full build - this is an expensive operation
 		return spatialGridManagerRef.current.updateFromTerrain(terrainRef.current, {
@@ -1890,26 +1927,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						// Build terrain - this will not rebuild spatial hash if firstLoadCompletedRef is true
 						await buildUpdateTerrain();
 						
-						// Check if we need to update the spatial hash
-						if (!firstLoadCompletedRef.current && spatialGridManagerRef.current) {
-							// Now for the slow part - spatial hash update
-							// We'll use a more optimized approach with larger batches
-							loadingManager.updateLoading(`Preparing spatial hash update for ${totalBlocks} blocks...`, 40);
-							
-							// Clear the spatial hash grid
+						// IMPORTANT: Force a spatial hash rebuild even if it's already initialized once
+						// This fixes issues with raycasting after clearing and loading new maps
+						loadingManager.updateLoading(`Rebuilding spatial hash for ${totalBlocks} blocks...`, 40);
+						
+						// Clear the spatial hash grid
+						if (spatialGridManagerRef.current) {
 							spatialGridManagerRef.current.clear();
 							
-							// Use our initialization function instead of manual batching
-							await initializeSpatialHash();
+							// Mark as not initialized to force a rebuild
+							firstLoadCompletedRef.current = false;
+							
+							// Use our initialization function with force=true to ensure it runs
+							await initializeSpatialHash(true);
 							
 							// Set the flag to indicate spatial hash is built
 							firstLoadCompletedRef.current = true;
-							
-							// Disable all future spatial hash updates - it's only needed once at load time
-							disableSpatialHashUpdatesRef.current = true;
-							console.log("Spatial hash updates disabled - only needed once on load");
-						} else {
-							console.log("Skipping spatial hash update - already initialized");
 						}
 						
 						// Reset throttle but set last update time to prevent immediate re-update

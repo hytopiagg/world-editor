@@ -184,6 +184,19 @@ class ChunkManager {
 			}
 			return;
 		}
+		
+		// DEBUGGING: Log when a new chunk is being added to the mesh queue
+		const chunk = this._chunks.get(chunkId);
+		if (!chunk) {
+			console.warn(`DEBUG: markChunkForRemesh called for non-existent chunk ${chunkId}`);
+			return; // Don't add non-existent chunks to the queue
+		}
+		
+		// If we're adding a chunk that has no existing mesh, log it
+		const hasMesh = chunk.hasMesh();
+		if (!hasMesh) {
+			console.log(`DEBUG: Adding chunk ${chunkId} to mesh queue - no existing mesh yet`);
+		}
 
 		// Add to the queue with options
 		if (hasBlockCoords) {
@@ -199,16 +212,21 @@ class ChunkManager {
 				this._renderChunkQueue.unshift(chunkId);
 			} else {
 				// If we have specific blocks to update, add close to the front of the queue
-				// for faster processing, but not the very front to maintain some order
-				this._renderChunkQueue.splice(Math.min(3, this._renderChunkQueue.length), 0, chunkId);
+				// But not all the way at the front to avoid pushing back more important chunks
+				this._renderChunkQueue.splice(3, 0, chunkId);
 			}
 		} else {
-			// Otherwise, add to the end of the queue
+			// For full chunk remeshing, add to the back of the queue
 			this._renderChunkQueue.push(chunkId);
 		}
 
+		// Store the options for later when we process the chunk
+		if (hasBlockCoords) {
+			this._chunkRemeshOptions.set(chunkId, options);
+		}
+
+		// Mark this chunk as pending render to avoid duplicates in the queue
 		this._pendingRenderChunks.add(chunkId);
-		this._chunkRemeshOptions.set(chunkId, options);
 	}
 
 	/**

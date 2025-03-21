@@ -101,6 +101,14 @@ class Chunk {
   }
 
   /**
+   * Check if the chunk has a mesh
+   * @returns {boolean} True if the chunk has at least one mesh
+   */
+  hasMesh() {
+    return !!(this._solidMesh || this._liquidMesh);
+  }
+
+  /**
    * Get whether the chunk is visible
    * @returns {boolean} Whether the chunk is visible
    */
@@ -627,6 +635,20 @@ class Chunk {
     }
     
     return BlockTypeRegistry.instance.getBlockType(blockId);
+  }
+
+  /**
+   * Set the block ID at a local coordinate
+   * @param {Object} localCoordinate - The local coordinate
+   * @param {number} blockId - The block ID
+   */
+  setLocalBlockId(localCoordinate, blockId) {
+    if (!Chunk.isValidLocalCoordinate(localCoordinate)) {
+      throw new Error('Chunk.setLocalBlockId(): Block coordinate is out of bounds');
+    }
+    
+    const blockIndex = this._getIndex(localCoordinate);
+    this._blocks[blockIndex] = blockId;
   }
 
   /**

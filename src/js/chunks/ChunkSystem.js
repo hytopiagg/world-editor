@@ -200,79 +200,182 @@ class ChunkSystem {
       return;
     }
     
-    //console.time('ChunkSystem.updateBlocks');
-    //console.log(`ChunkSystem.updateBlocks: Processing ${addedBlocks.length} added blocks and ${removedBlocks.length} removed blocks`);
+    console.time('ChunkSystem.updateBlocks');
     
-    // Group blocks by chunk to minimize chunk updates
-    //console.time('ChunkSystem.updateBlocks-grouping');
-    const blocksByChunk = new Map();
+    // Organize blocks by chunk
+    const chunkMap = new Map();
     
-    // Process added blocks
-    for (const block of addedBlocks) {
-      const globalCoordinate = {
-        x: block.position[0],
-        y: block.position[1],
-        z: block.position[2]
-      };
+    // First, handle removed blocks
+    removedBlocks.forEach(block => {
+      const x = block.position[0];
+      const y = block.position[1];
+      const z = block.position[2];
       
-      const originCoordinate = {
-        x: Math.floor(globalCoordinate.x / CHUNK_SIZE) * CHUNK_SIZE,
-        y: Math.floor(globalCoordinate.y / CHUNK_SIZE) * CHUNK_SIZE,
-        z: Math.floor(globalCoordinate.z / CHUNK_SIZE) * CHUNK_SIZE
-      };
-      const chunkId = `${originCoordinate.x},${originCoordinate.y},${originCoordinate.z}`;
+      const originX = Math.floor(x / CHUNK_SIZE) * CHUNK_SIZE;
+      const originY = Math.floor(y / CHUNK_SIZE) * CHUNK_SIZE;
+      const originZ = Math.floor(z / CHUNK_SIZE) * CHUNK_SIZE;
       
-      if (!blocksByChunk.has(chunkId)) {
-        blocksByChunk.set(chunkId, []);
+      const chunkId = `${originX},${originY},${originZ}`;
+      
+      if (!chunkMap.has(chunkId)) {
+        chunkMap.set(chunkId, { added: [], removed: [] });
       }
       
-      blocksByChunk.get(chunkId).push({
-        id: block.id,
-        globalCoordinate
+      chunkMap.get(chunkId).removed.push({
+        position: { x, y, z },
+        id: block.id
       });
-    }
+    });
     
-    // Process removed blocks (set ID to 0 for air)
-    for (const block of removedBlocks) {
-      const globalCoordinate = {
-        x: block.position[0],
-        y: block.position[1],
-        z: block.position[2]
-      };
+    // Then, handle added blocks
+    addedBlocks.forEach(block => {
+      const x = block.position[0];
+      const y = block.position[1];
+      const z = block.position[2];
       
-      const originCoordinate = {
-        x: Math.floor(globalCoordinate.x / CHUNK_SIZE) * CHUNK_SIZE,
-        y: Math.floor(globalCoordinate.y / CHUNK_SIZE) * CHUNK_SIZE,
-        z: Math.floor(globalCoordinate.z / CHUNK_SIZE) * CHUNK_SIZE
-      };
-      const chunkId = `${originCoordinate.x},${originCoordinate.y},${originCoordinate.z}`;
+      const originX = Math.floor(x / CHUNK_SIZE) * CHUNK_SIZE;
+      const originY = Math.floor(y / CHUNK_SIZE) * CHUNK_SIZE;
+      const originZ = Math.floor(z / CHUNK_SIZE) * CHUNK_SIZE;
       
-      if (!blocksByChunk.has(chunkId)) {
-        blocksByChunk.set(chunkId, []);
+      const chunkId = `${originX},${originY},${originZ}`;
+      
+      // Debug: Log info about creating new chunks when placing in empty space
+      const chunkExists = this._chunkManager._chunks.has(chunkId);
+      if (!chunkExists) {
+        console.log(`DEBUG: Creating new chunk for ${chunkId} to place block at ${x},${y},${z}`);
       }
       
-      blocksByChunk.get(chunkId).push({
-        id: 0, // Air
-        globalCoordinate
+      if (!chunkMap.has(chunkId)) {
+        chunkMap.set(chunkId, { added: [], removed: [] });
+      }
+      
+      chunkMap.get(chunkId).added.push({
+        position: { x, y, z },
+        id: block.id
       });
-    }
-    //console.timeEnd('ChunkSystem.updateBlocks-grouping');
+    });
     
-    // Update blocks in the chunk manager, one chunk at a time
-    //console.time('ChunkSystem.updateBlocks-processing');
-   // console.log(`ChunkSystem.updateBlocks: Updating ${blocksByChunk.size} chunks`);
-    
-    for (const [chunkId, blocks] of blocksByChunk.entries()) {
-      // Process blocks in batches to avoid overwhelming the system
-      const batchSize = 10;
-      for (let i = 0; i < blocks.length; i += batchSize) {
-        const batch = blocks.slice(i, i + batchSize);
-        this._chunkManager.updateBlocks(batch);
+    // Update chunks
+    for (const [chunkId, { added, removed }] of chunkMap.entries()) {
+      const [originX, originY, originZ] = chunkId.split(',').map(Number);
+      
+      // Get or create the chunk
+      let chunk = this._chunkManager._chunks.get(chunkId);
+      
+      if (!chunk) {
+        // Create a new chunk if it doesn't exist
+        console.log(`DEBUG: Creating new chunk for ${chunkId}`);
+        // Create an empty blocks array for the new chunk
+        const blocks = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
+        
+        // Create the chunk
+        this._chunkManager.updateChunk({
+          originCoordinate: { x: originX, y: originY, z: originZ },
+          blocks
+        });
+        
+        // Get the created chunk
+        chunk = this._chunkManager._chunks.get(chunkId);
+        
+        if (!chunk) {
+          console.error(`Failed to create chunk for ${chunkId}`);
+          continue;
+        }
+      }
+      
+      // Update blocks in the chunk
+      added.forEach(block => {
+        const localX = block.position.x - originX;
+        const localY = block.position.y - originY;
+        const localZ = block.position.z - originZ;
+        
+        chunk.setLocalBlockId({
+          x: localX,
+          y: localY,
+          z: localZ
+        }, block.id);
+      });
+      
+      removed.forEach(block => {
+        const localX = block.position.x - originX;
+        const localY = block.position.y - originY;
+        const localZ = block.position.z - originZ;
+        
+        chunk.setLocalBlockId({
+          x: localX,
+          y: localY,
+          z: localZ
+        }, 0); // 0 is reserved for air/no-block
+      });
+      
+      // Mark the chunk for remeshing
+      this._chunkManager.markChunkForRemesh(chunkId);
+      
+      // Also mark neighboring chunks for remeshing if blocks were added on the chunk boundary
+      // This ensures seamless chunk transitions
+      const checkForNeighbors = [...added, ...removed];
+      if (checkForNeighbors.some(block => this._isOnChunkBoundary(block.position, originX, originY, originZ))) {
+        this._markNeighboringChunks(originX, originY, originZ);
       }
     }
-    //console.timeEnd('ChunkSystem.updateBlocks-processing');
     
-    //console.timeEnd('ChunkSystem.updateBlocks');
+    console.timeEnd('ChunkSystem.updateBlocks');
+  }
+  
+  /**
+   * Check if a block position is on the boundary of a chunk
+   * @param {Object} position - The block position
+   * @param {number} originX - The chunk origin X
+   * @param {number} originY - The chunk origin Y
+   * @param {number} originZ - The chunk origin Z
+   * @returns {boolean} True if the block is on a chunk boundary
+   * @private
+   */
+  _isOnChunkBoundary(position, originX, originY, originZ) {
+    const localX = position.x - originX;
+    const localY = position.y - originY;
+    const localZ = position.z - originZ;
+    
+    return (
+      localX === 0 || localX === CHUNK_SIZE - 1 ||
+      localY === 0 || localY === CHUNK_SIZE - 1 ||
+      localZ === 0 || localZ === CHUNK_SIZE - 1
+    );
+  }
+  
+  /**
+   * Mark neighboring chunks for remeshing
+   * @param {number} originX - The chunk origin X
+   * @param {number} originY - The chunk origin Y
+   * @param {number} originZ - The chunk origin Z
+   * @private
+   */
+  _markNeighboringChunks(originX, originY, originZ) {
+    // X axis neighbors
+    this._markNeighborIfExists(originX - CHUNK_SIZE, originY, originZ);
+    this._markNeighborIfExists(originX + CHUNK_SIZE, originY, originZ);
+    
+    // Y axis neighbors
+    this._markNeighborIfExists(originX, originY - CHUNK_SIZE, originZ);
+    this._markNeighborIfExists(originX, originY + CHUNK_SIZE, originZ);
+    
+    // Z axis neighbors
+    this._markNeighborIfExists(originX, originY, originZ - CHUNK_SIZE);
+    this._markNeighborIfExists(originX, originY, originZ + CHUNK_SIZE);
+  }
+  
+  /**
+   * Mark a neighbor chunk for remeshing if it exists
+   * @param {number} x - The chunk origin X
+   * @param {number} y - The chunk origin Y
+   * @param {number} z - The chunk origin Z
+   * @private
+   */
+  _markNeighborIfExists(x, y, z) {
+    const chunkId = `${x},${y},${z}`;
+    if (this._chunkManager._chunks.has(chunkId)) {
+      this._chunkManager.markChunkForRemesh(chunkId);
+    }
   }
 
   /**
@@ -343,19 +446,36 @@ class ChunkSystem {
     console.log('Clearing all chunks from the chunk system');
     
     // Get all chunks from the chunk manager
-    const chunks = this._chunkManager._chunks;
+    const chunks = Array.from(this._chunkManager._chunks.values());
     
-    // For each existing chunk, mark it for removal
-    for (const [chunkId, chunk] of chunks.entries()) {
-      this._chunkManager.updateChunk({
-        removed: true,
-        originCoordinate: chunk.originCoordinate
-      });
+    // For each existing chunk, properly remove it
+    for (const chunk of chunks) {
+      // Remove meshes from the scene
+      if (chunk._solidMesh) {
+        this._scene.remove(chunk._solidMesh);
+        this._chunkManager.chunkMeshManager.removeSolidMesh(chunk);
+      }
+      
+      if (chunk._liquidMesh) {
+        this._scene.remove(chunk._liquidMesh);
+        this._chunkManager.chunkMeshManager.removeLiquidMesh(chunk);
+      }
+      
+      // Delete the chunk from the manager
+      this._chunkManager._chunks.delete(chunk.chunkId);
     }
     
-    // Clear the render queue
+    // Clear all internal collections
     this._chunkManager._renderChunkQueue = [];
-    this._chunkManager._pendingRenderChunks = new Set();
+    this._chunkManager._pendingRenderChunks.clear();
+    this._chunkManager._chunkRemeshOptions.clear();
+    this._chunkManager._blockTypeCache.clear();
+    this._chunkManager._deferredMeshChunks.clear();
+    
+    // Force THREE.js to update
+    if (this._scene) {
+      this._scene.updateMatrixWorld(true);
+    }
     
     console.log('All chunks cleared from the chunk system');
   }

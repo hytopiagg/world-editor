@@ -327,7 +327,19 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 	const onMapFileSelected = (event) => {
 		console.log("Map file selected:", event.target.files[0]);
 		if (event.target.files && event.target.files[0]) {
-			importMap(event.target.files[0], terrainBuilderRef, environmentBuilderRef);
+			// Import the file
+			importMap(event.target.files[0], terrainBuilderRef, environmentBuilderRef)
+				.then(() => {
+					// Reset the file input value after successful import
+					// This allows the same file to be imported again
+					event.target.value = '';
+					console.log("Reset file input after successful import");
+				})
+				.catch((error) => {
+					// Also reset on error to allow retry
+					event.target.value = '';
+					console.error("Error during import:", error);
+				});
 		}
 	};
 

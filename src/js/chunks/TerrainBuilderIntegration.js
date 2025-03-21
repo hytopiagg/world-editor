@@ -183,6 +183,16 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
 	console.time('TerrainBuilderIntegration.updateTerrainBlocks');
 	console.log(`TerrainBuilderIntegration.updateTerrainBlocks: Processing ${Object.keys(addedBlocks).length} added blocks and ${Object.keys(removedBlocks).length} removed blocks`);
 
+	// DEBUGGING: Check if we're adding blocks to empty space
+	if (Object.keys(addedBlocks).length > 0) {
+		const firstBlockKey = Object.keys(addedBlocks)[0];
+		const [x, y, z] = firstBlockKey.split(',').map(Number);
+		const chunkKey = Math.floor(x / 16) * 16 + ',' + Math.floor(y / 16) * 16 + ',' + Math.floor(z / 16) * 16;
+		console.log(`DEBUG: Adding block at position ${firstBlockKey}, chunk key: ${chunkKey}`);
+		console.log(`DEBUG: Chunk system initialized: ${chunkSystem._initialized}`);
+		console.log(`DEBUG: Chunk exists: ${chunkSystem._chunkManager._chunks.has(chunkKey)}`);
+	}
+
 	// Convert added blocks to the format expected by ChunkSystem
 	console.time('TerrainBuilderIntegration.updateTerrainBlocks-conversion');
 	const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
@@ -305,8 +315,29 @@ export const hasBlock = (position) => {
  * Clear all chunks from the chunk system
  */
 export const clearChunks = () => {
-	if (chunkSystem) {
+	if (!chunkSystem) {
+		console.warn('Cannot clear chunks: Chunk system not initialized');
+		return;
+	}
+	
+	try {
+		console.time('clearChunks');
+		console.log('Clearing all chunks from chunk system');
 		chunkSystem.clearChunks();
+		
+		// Force texture atlas rebuild to ensure clean state
+		setTimeout(() => {
+			try {
+				rebuildTextureAtlas();
+				refreshChunkMaterials();
+			} catch (error) {
+				console.error('Error rebuilding texture atlas after clearing chunks:', error);
+			}
+		}, 100);
+		
+		console.timeEnd('clearChunks');
+	} catch (error) {
+		console.error('Error clearing chunks:', error);
 	}
 };
 
