@@ -1218,15 +1218,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		// Start terrain update immediately for faster response
-		buildUpdateTerrain()
-			.then(() => {
-				// Force a full visibility update after terrain is loaded
-				processChunkRenderQueue();
-			})
-			.catch((error) => {
-				console.error('Error updating terrain:', error);
-				loadingManager.hideLoading();
-			});
+		// The buildUpdateTerrain function doesn't return a Promise, so we can't use .then()
+		buildUpdateTerrain();
+		
+		// Process render queue after a short delay to ensure terrain is updated
+		setTimeout(() => {
+			// Force a full visibility update after terrain is loaded
+			processChunkRenderQueue();
+			// Hide loading screen
+			loadingManager.hideLoading();
+		}, 1000);
 	};
 
 	// Update
