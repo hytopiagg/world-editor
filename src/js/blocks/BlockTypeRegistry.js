@@ -141,21 +141,21 @@ class BlockTypeRegistry {
       this._essentialBlockTypes.add(blockType.id);
     });
     
-    // Now all block types are considered essential
-    const essentialBlockTypes = Object.values(this._blockTypes);
+    // Get all block types, but only preload those that actually need it
+    const allBlockTypes = Object.values(this._blockTypes);
+    const blockTypesToPreload = allBlockTypes.filter(blockType => 
+      blockType.needsTexturePreload?.() ?? true
+    );
     
-    console.log(`Preloading textures for ALL ${essentialBlockTypes.length} block types...`);
+    if (blockTypesToPreload.length === 0) {
+      console.log('No block types need texture preloading, skipping.');
+      console.timeEnd('BlockTypeRegistry.preload');
+      return;
+    }
     
-    await Promise.all(essentialBlockTypes.map(blockType => blockType.preloadTextures()));
+    console.log(`Preloading textures for ${blockTypesToPreload.length} block types...`);
     
-    // No need for this anymore since all blocks are essential
-    // const nonEssentialBlockTypes = Object.values(this._blockTypes)
-    //   .filter(blockType => !this._essentialBlockTypes.has(blockType.id));
-    
-    // console.log(`Queuing ${nonEssentialBlockTypes.length} non-essential block types for background loading...`);
-    
-    // Queue textures for background loading
-    // nonEssentialBlockTypes.forEach(blockType => blockType.queueTexturesForLoading());
+    await Promise.all(blockTypesToPreload.map(blockType => blockType.preloadTextures()));
     
     console.timeEnd('BlockTypeRegistry.preload');
   }

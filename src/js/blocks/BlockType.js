@@ -121,6 +121,29 @@ class BlockType {
   }
 
   /**
+   * Check if this block type has multi-sided textures
+   * @returns {boolean} True if the block has different textures for different faces
+   */
+  get isMultiSided() {
+    // If there's more than one unique texture URI, it's multi-sided
+    const uniqueTextureUris = new Set(Object.values(this._textureUris).filter(Boolean));
+    
+    // If we have more than one unique texture URI, it's clearly multi-sided
+    if (uniqueTextureUris.size > 1) {
+      return true;
+    }
+    
+    // If we have exactly one unique texture URI, check if it's a folder path
+    if (uniqueTextureUris.size === 1) {
+      const textureUri = Array.from(uniqueTextureUris)[0];
+      // If the texture URI doesn't have an extension, it's likely a folder path
+      return !textureUri.match(/\.(png|jpe?g)$/i);
+    }
+    
+    return false;
+  }
+
+  /**
    * Convert a single texture URI to a map of face texture URIs
    * @param {string} textureUri - The texture URI
    * @returns {Object} The face texture URIs
@@ -255,6 +278,68 @@ class BlockType {
     } catch (error) {
       console.warn('Failed to preload some textures', error);
     }
+  }
+
+  /**
+   * Check if this block type's textures need to be preloaded
+   * @returns {boolean} True if any textures need to be preloaded
+   */
+  needsTexturePreload() {
+    // If there are no texture URIs, no need to preload
+    if (!this._textureUris || Object.keys(this._textureUris).length === 0) {
+      return false;
+    }
+    
+    // Check if any of the textures are not loaded
+    for (const [face, textureUri] of Object.entries(this._textureUris)) {
+      if (!textureUri) continue;
+      
+      const textureAtlas = BlockTextureAtlas.instance;
+      
+      // For non-extension textures (multi-sided blocks)
+      if (!textureUri.match(/\.(png|jpe?g)$/i)) {
+        const faceMap = {
+          'top': '+y.png',
+          'bottom': '-y.png',
+          'left': '-x.png',
+          'right': '+x.png',
+          'front': '+z.png',
+          'back': '-z.png'
+        };
+        
+        // Check if the face-specific texture is loaded
+        if (faceMap[face]) {
+          const facePath = `${textureUri}/${faceMap[face]}`;
+          if (!textureAtlas.getTextureMetadata(facePath)) {
+            return true; // Needs preloading
+          }
+        }
+        
+        // Check if any fallback texture is loaded
+        const basePaths = [
+          `${textureUri}.png`,
+          `${textureUri}/all.png`,
+          `${textureUri}/default.png`
+        ];
+        
+        // If none of the possible textures are loaded, needs preloading
+        const anyTextureLoaded = basePaths.some(path => 
+          textureAtlas.getTextureMetadata(path)
+        );
+        
+        if (!anyTextureLoaded) {
+          return true; // Needs preloading
+        }
+      } else {
+        // Direct check for single textures with extensions
+        if (!textureAtlas.getTextureMetadata(textureUri)) {
+          return true; // Needs preloading
+        }
+      }
+    }
+    
+    // All textures are already loaded
+    return false;
   }
 }
 

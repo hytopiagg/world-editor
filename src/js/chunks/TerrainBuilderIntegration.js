@@ -218,22 +218,44 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
 			// Try to load asynchronously without blocking the update
 			setTimeout(async () => {
 				try {
-					console.log(`Preloading textures for ${blockIdsToPreload.size} newly added block types...`);
+					// Instead of preloading ALL textures, only preload the ones for new block types
+					// that aren't already loaded
 					
-					// Mark blocks as essential and preload them
+					// Store block types that actually need preloading
+					const newBlockTypesToPreload = [];
+					
+					// Check each block type
 					blockIdsToPreload.forEach(id => {
-						if (BlockTypeRegistry.instance) {
-							BlockTypeRegistry.instance.markBlockTypeAsEssential(id);
+						if (!BlockTypeRegistry.instance) return;
+						
+						// Get the block type
+						const blockType = BlockTypeRegistry.instance.getBlockType(id);
+						if (!blockType) return;
+						
+						// Mark as essential
+						BlockTypeRegistry.instance.markBlockTypeAsEssential(id);
+						
+						// Check if this block type's textures are already loaded
+						// We'll use a simple check to see if we need to preload
+						const needsPreload = blockType.needsTexturePreload?.() ?? false;
+						
+						if (needsPreload) {
+							newBlockTypesToPreload.push(blockType);
 						}
 					});
 					
-					// Force a texture preload
-					if (BlockTypeRegistry.instance) {
-						await BlockTypeRegistry.instance.preload();
+					// Only preload textures for block types that need it
+					if (newBlockTypesToPreload.length > 0) {
+						console.log(`Preloading textures for ${newBlockTypesToPreload.length} newly added block types...`);
+						
+						// Preload each block type individually instead of calling preload() for all blocks
+						for (const blockType of newBlockTypesToPreload) {
+							await blockType.preloadTextures();
+						}
+						
+						// Refresh chunk materials to ensure textures are applied
+						refreshChunkMaterials();
 					}
-					
-					// Refresh chunk materials to ensure textures are applied
-					refreshChunkMaterials();
 				} catch (error) {
 					console.error('Error preloading textures for new blocks:', error);
 				}

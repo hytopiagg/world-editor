@@ -263,8 +263,57 @@ class Chunk {
                 }
               }
               
-              // Check if the texture URI is a folder path without extension
-              if (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i)) {
+              // Detect multi-sided blocks based on the texture path or block metadata
+              const isMultiSided = blockType.isMultiSided || 
+                                 (blockType.textureUris && Object.keys(blockType.textureUris).length > 1) ||
+                                 (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i));
+              
+              const blockName = blockType.name || '';
+                                 
+              // Handle multi-sided blocks generically
+              if (isMultiSided) {
+                // Get the block type name from textureUri or block metadata
+                let blockTypeName = '';
+                
+                if (blockType.name) {
+                  blockTypeName = blockType.name;
+                } else if (actualTextureUri) {
+                  // Try to extract block type from the texture URI
+                  const match = actualTextureUri.match(/\/blocks\/([^\/]+)(?:\/|$)/);
+                  if (match) {
+                    blockTypeName = match[1];
+                  }
+                }
+                
+                if (blockTypeName) {
+                  // Comment out excessive logging
+                  // console.log(`🧊 Processing multi-sided block (${blockTypeName}) at (${globalX},${globalY},${globalZ}) - face: ${blockFace}`);
+                  
+                  // Force correct texture selection based on face
+                  const faceMap = {
+                    'top': '+y.png',
+                    'bottom': '-y.png',
+                    'left': '-x.png',
+                    'right': '+x.png',
+                    'front': '+z.png',
+                    'back': '-z.png'
+                  };
+                  
+                  if (faceMap[blockFace]) {
+                    const specificFaceTexture = `./assets/blocks/${blockTypeName}/${faceMap[blockFace]}`;
+                    actualTextureUri = specificFaceTexture;
+                    
+                    // Uncomment for debugging specific issues only
+                    /*
+                    if (blockFace === 'top' || blockFace === 'bottom') {
+                      console.log(`🧊 Using ${blockFace} texture for ${blockTypeName}: ${actualTextureUri}`);
+                    }
+                    */
+                  }
+                }
+              }
+              // Original multi-sided texture handling for backwards compatibility
+              else if (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i)) {
                 // Map the blockFace to the corresponding face-specific texture
                 const faceMap = {
                   'top': '+y.png',
@@ -275,36 +324,53 @@ class Chunk {
                   'back': '-z.png'
                 };
                 
-                // Try specific face texture first
+                // Create a specific face texture path
                 if (faceMap[blockFace]) {
                   const specificFaceTexture = `${actualTextureUri}/${faceMap[blockFace]}`;
+                  actualTextureUri = specificFaceTexture;
                   
-                  // Check if this specific face texture has been loaded
-                  if (BlockTextureAtlas.instance.getTextureMetadata(specificFaceTexture)) {
-                    actualTextureUri = specificFaceTexture;
-                  } else {
-                    // Try fallbacks in order: all.png, default.png, or the base path
-                    const fallbacks = [
-                      `${actualTextureUri}/all.png`,
-                      `${actualTextureUri}/default.png`,
-                      `${actualTextureUri}.png`
-                    ];
-                    
-                    for (const fallback of fallbacks) {
-                      if (BlockTextureAtlas.instance.getTextureMetadata(fallback)) {
-                        actualTextureUri = fallback;
-                        break;
-                      }
-                    }
+                  // Uncomment for debugging specific issues only
+                  /*
+                  if (blockFace === 'top' || blockFace === 'bottom') {
+                    console.log(`Using ${blockFace} texture: ${actualTextureUri}`);
                   }
+                  */
                 } else {
                   // If no specific face mapping, try to use a default texture
-                  actualTextureUri = `${actualTextureUri}/all.png`;
+                  const allTexture = `${actualTextureUri}/all.png`;
+                  const defaultTexture = `${actualTextureUri}/default.png`;
+                  
+                  // Let the texture atlas handle fallbacks
+                  actualTextureUri = allTexture;
                 }
               }
               
               // Get UV coordinates for this texture (may be cached)
-              const texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+              let texCoords;
+              
+              // Special handling for multi-sided blocks
+              if (isMultiSided && blockType.name) {
+                // Use our specialized method for multi-sided textures
+                texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
+                // Comment out excessive logging
+                // console.log(`🧊 Using multi-sided UV for ${blockType.name} ${blockFace} at ${globalX},${globalY},${globalZ}: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
+              } 
+              // Backward compatibility for grass blocks
+              else if (blockName.includes('grass')) {
+                // Use grass-specific method for backward compatibility
+                texCoords = BlockTextureAtlas.instance.getGrassTextureUV(blockFace, uv);
+              }
+              else {
+                // Normal texture handling for regular blocks
+                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+              }
+              
+              // Debug logging for multi-sided blocks - only enable when needed
+              /*
+              if (isMultiSided) {
+                console.log(`🧊 ${blockFace} texture at ${globalX},${globalY},${globalZ}: ${actualTextureUri} → UV: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
+              }
+              */
               
               // If the coordinates are [0,0], it means the texture wasn't found
               // Queue it for loading so it will be available on next render
@@ -521,13 +587,119 @@ class Chunk {
                 // Use the first available texture
                 actualTextureUri = blockType.textureUris[availableFaces[0]];
               } else {
-                // Fallback to a default texture URI
-                actualTextureUri = 'blocks/stone';
+                // Use error texture as last resort
+                actualTextureUri = './assets/blocks/error.png';
+              }
+            }
+            
+            // Detect multi-sided blocks based on the texture path or block metadata
+            const isMultiSided = blockType.isMultiSided || 
+                               (blockType.textureUris && Object.keys(blockType.textureUris).length > 1) ||
+                               (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i));
+            
+            const blockName = blockType.name || '';
+                               
+            // Handle multi-sided blocks generically
+            if (isMultiSided) {
+              // Get the block type name from textureUri or block metadata
+              let blockTypeName = '';
+              
+              if (blockType.name) {
+                blockTypeName = blockType.name;
+              } else if (actualTextureUri) {
+                // Try to extract block type from the texture URI
+                const match = actualTextureUri.match(/\/blocks\/([^\/]+)(?:\/|$)/);
+                if (match) {
+                  blockTypeName = match[1];
+                }
+              }
+              
+              if (blockTypeName) {
+                // Comment out excessive logging
+                // console.log(`🧊 Processing multi-sided block (${blockTypeName}) at (${globalX},${globalY},${globalZ}) - face: ${blockFace}`);
+                
+                // Force correct texture selection based on face
+                const faceMap = {
+                  'top': '+y.png',
+                  'bottom': '-y.png',
+                  'left': '-x.png',
+                  'right': '+x.png',
+                  'front': '+z.png',
+                  'back': '-z.png'
+                };
+                
+                if (faceMap[blockFace]) {
+                  const specificFaceTexture = `./assets/blocks/${blockTypeName}/${faceMap[blockFace]}`;
+                  actualTextureUri = specificFaceTexture;
+                  
+                  // Uncomment for debugging specific issues only
+                  /*
+                  if (blockFace === 'top' || blockFace === 'bottom') {
+                    console.log(`🧊 Using ${blockFace} texture for ${blockTypeName}: ${actualTextureUri}`);
+                  }
+                  */
+                }
+              }
+            }
+            // Original multi-sided texture handling for backwards compatibility
+            else if (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i)) {
+              // Map the blockFace to the corresponding face-specific texture
+              const faceMap = {
+                'top': '+y.png',
+                'bottom': '-y.png',
+                'left': '-x.png',
+                'right': '+x.png',
+                'front': '+z.png',
+                'back': '-z.png'
+              };
+              
+              // Create a specific face texture path
+              if (faceMap[blockFace]) {
+                const specificFaceTexture = `${actualTextureUri}/${faceMap[blockFace]}`;
+                actualTextureUri = specificFaceTexture;
+                
+                // Uncomment for debugging specific issues only
+                /*
+                if (blockFace === 'top' || blockFace === 'bottom') {
+                  console.log(`Using ${blockFace} texture: ${actualTextureUri}`);
+                }
+                */
+              } else {
+                // If no specific face mapping, try to use a default texture
+                const allTexture = `${actualTextureUri}/all.png`;
+                const defaultTexture = `${actualTextureUri}/default.png`;
+                
+                // Let the texture atlas handle fallbacks
+                actualTextureUri = allTexture;
               }
             }
             
             // Get UV coordinates for this texture (may be cached)
-            const texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+            let texCoords;
+            
+            // Special handling for multi-sided blocks
+            if (isMultiSided && blockType.name) {
+              // Use our specialized method for multi-sided textures
+              texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
+              // Comment out excessive logging
+              // console.log(`🧊 Using multi-sided UV for ${blockType.name} ${blockFace} at ${globalX},${globalY},${globalZ}: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
+            } 
+            // Backward compatibility for grass blocks
+            else if (blockName.includes('grass')) {
+              // Use grass-specific method for backward compatibility
+              texCoords = BlockTextureAtlas.instance.getGrassTextureUV(blockFace, uv);
+            }
+            else {
+              // Normal texture handling for regular blocks
+              texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+            }
+            
+            // Debug logging for multi-sided blocks - only enable when needed
+            /*
+            if (isMultiSided) {
+              console.log(`🧊 ${blockFace} texture at ${globalX},${globalY},${globalZ}: ${actualTextureUri} → UV: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
+            }
+            */
             
             // If the coordinates are [0,0], it means the texture wasn't found
             // Queue it for loading so it will be available on next render
@@ -920,8 +1092,9 @@ class Chunk {
       this._vertexColorCache = new Map();
     }
 
-    // Create a cache key from the vertex coordinate, block type, and AO data
-    const cacheKey = `${vertexCoordinate.x},${vertexCoordinate.y},${vertexCoordinate.z}-${blockType.id}-${JSON.stringify(blockFaceAO)}`;
+    // Create a cache key from the vertex coordinate, block type
+    // Using coordinates and block ID is enough, no need to include AO data in the key
+    const cacheKey = `${vertexCoordinate.x},${vertexCoordinate.y},${vertexCoordinate.z}-${blockType.id}`;
     
     // Check if we have a cached result
     if (this._vertexColorCache.has(cacheKey)) {
