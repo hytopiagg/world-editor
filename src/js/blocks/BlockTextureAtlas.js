@@ -277,7 +277,7 @@ class BlockTextureAtlas {
     // Create a cache key from the texture URI and UV offset
     const cacheKey = `${textureUri}-${uvOffset[0]}-${uvOffset[1]}`;
     
-   
+    
     // Check if we have a cached result
     if (this._textureUVCache.has(cacheKey)) {
       return this._textureUVCache.get(cacheKey);
@@ -340,20 +340,20 @@ class BlockTextureAtlas {
         const basePath = textureUri.replace(facePattern, '');
         
         // Try checking if there are any textures with this base path
-        const possibleFacePaths = [
+      const possibleFacePaths = [
           `${basePath}${face}.png`,   // Try with face
           `${basePath}/all.png`,      // Try all-faces texture
           `${basePath}/default.png`,  // Try default texture
           `${basePath}.png`           // Try direct base path
         ];
         
-        for (const path of possibleFacePaths) {
-          const pathMetadata = this._textureAtlasMetadata.get(path);
-          if (pathMetadata) {
-            metadata = pathMetadata;
-            break;
-          }
+      for (const path of possibleFacePaths) {
+        const pathMetadata = this._textureAtlasMetadata.get(path);
+        if (pathMetadata) {
+          metadata = pathMetadata;
+          break;
         }
+      }
       } else if (!textureUri.match(/\.(png|jpe?g)$/i)) {
         // This is a base path for a multi-sided texture (e.g., "blocks/grass")
         // Determine if we're looking for specific faces based on the context
@@ -429,7 +429,7 @@ class BlockTextureAtlas {
     // atlas having Y coordinates inverted from being a canvas.
     const u = (imageX + (uvOffset[0] * tileWidth)) / atlasWidth;
     const v = (atlasHeight - imageInvertedY - ((1 - uvOffset[1]) * tileHeight)) / atlasHeight;
-   
+
     return [u, v];
   }
 
@@ -676,28 +676,28 @@ class BlockTextureAtlas {
         // Regular single texture loading
         // Only log for non-common textures
        
-        textureLoader.load(
-          textureUri,
-          texture => {
-            if (!texture.image) {
-              reject(new Error(`Failed to load texture image for URI: ${textureUri}`));
-              return;
-            }
+      textureLoader.load(
+        textureUri,
+        texture => {
+          if (!texture.image) {
+            reject(new Error(`Failed to load texture image for URI: ${textureUri}`));
+            return;
+          }
             
-           
-            // Draw texture to atlas and store metadata
+          
+          // Draw texture to atlas and store metadata
             this._textureAtlasMetadata.set(textureUri, this._drawTextureToAtlas(texture, textureUri, false)); // Don't update yet
             
             // Update the texture atlas
             this._updateTextureAtlas();
-            
-            // Update materials with new atlas
-            BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
-            
-            resolve();
-          },
-          undefined,
-          error => {
+          
+          // Update materials with new atlas
+          BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
+          
+          resolve();
+        },
+        undefined,
+        error => {
             // Try to use error texture as fallback
             const errorTexture = this._textureAtlasMetadata.get('./assets/blocks/error.png');
             if (errorTexture) {
@@ -705,12 +705,12 @@ class BlockTextureAtlas {
               this._textureAtlasMetadata.set(textureUri, errorTexture);
               resolve();
             } else {
-              // Prevent retries on textures that failed to load
-              this._textureLoadFailures.add(textureUri);
-              reject(error);
+          // Prevent retries on textures that failed to load
+          this._textureLoadFailures.add(textureUri);
+          reject(error);
             }
-          }
-        );
+        }
+      );
       }
     });
 
@@ -823,8 +823,8 @@ class BlockTextureAtlas {
       // Restore previous content
       this._textureAtlasContext.drawImage(tempCanvas, 0, 0);
 
-      // Recreate the CanvasTexture 
-      this._textureAtlas.dispose(); // Dispose of the old texture 
+      // Recreate the CanvasTexture
+      this._textureAtlas.dispose(); // Dispose of the old texture
       this._textureAtlas = new THREE.CanvasTexture(this._textureAtlasCanvas);
       this._textureAtlas.minFilter = THREE.NearestFilter;
       this._textureAtlas.magFilter = THREE.NearestFilter;
@@ -853,7 +853,7 @@ class BlockTextureAtlas {
     this._textureAtlasContext.drawImage(
       texture.image,
       0, // sx
-      0, // sy 
+      0, // sy
       imageWidth, // sw
       1, // sh - just one pixel for padding
       metadata.x + TEXTURE_IMAGE_PADDING, // dx
@@ -1027,15 +1027,15 @@ class BlockTextureAtlas {
    */
   async rebuildTextureAtlas() {
     console.log('Rebuilding texture atlas from scratch...');
-    
+      
     // Save a copy of the currently loaded textures
     const loadedTextures = Array.from(this._textureAtlasMetadata.keys());
-    
+      
     // Recreate the canvas and context
     this._textureAtlasCanvas.width = 512;
     this._textureAtlasCanvas.height = 512;
-    this._textureAtlasContext.clearRect(0, 0, this._textureAtlasCanvas.width, this._textureAtlasCanvas.height);
-    
+      this._textureAtlasContext.clearRect(0, 0, this._textureAtlasCanvas.width, this._textureAtlasCanvas.height);
+      
     // Clear metadata and caches
     this._textureAtlasMetadata.clear();
     this._textureUVCache.clear();
@@ -1053,10 +1053,10 @@ class BlockTextureAtlas {
     this._textureAtlas.colorSpace = THREE.SRGBColorSpace;
     
     // Load all essential textures first
-    for (const textureUri of this._essentialTextures) {
-      try {
-        await this.loadTexture(textureUri);
-      } catch (error) {
+      for (const textureUri of this._essentialTextures) {
+        try {
+          await this.loadTexture(textureUri);
+        } catch (error) {
         console.warn(`Failed to load essential texture: ${textureUri}`, error);
       }
     }
@@ -1079,7 +1079,7 @@ class BlockTextureAtlas {
           // This looks like a block type reference (e.g., blocks/stone)
           possibleBlockTypes.add(match[1]);
         }
-        return true;
+      return true;
       }
       return false;
     });

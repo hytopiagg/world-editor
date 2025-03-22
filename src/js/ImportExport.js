@@ -115,7 +115,18 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
           
           // Refresh terrain and environment builders
           if (terrainBuilderRef && terrainBuilderRef.current) {
+            console.log("Refreshing terrain from DB after import with FORCED spatial hash rebuild");
             await terrainBuilderRef.current.refreshTerrainFromDB();
+            
+            // Force a complete rebuild of the spatial hash grid
+            if (terrainBuilderRef.current.spatialGridManager) {
+              console.log("Forcing complete spatial hash rebuild after import");
+              await terrainBuilderRef.current.spatialGridManager.updateFromTerrain(terrainData, {
+                showLoadingScreen: true,
+                force: true,
+                message: "Rebuilding spatial index after import..."
+              });
+            }
           }
           
           if (environmentBuilderRef && environmentBuilderRef.current) {

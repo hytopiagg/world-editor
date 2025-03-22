@@ -975,24 +975,68 @@ class Chunk {
       const isAirToBlock = oldBlockTypeId === 0 && newBlockTypeId !== 0;
       const isBlockToAir = oldBlockTypeId !== 0 && newBlockTypeId === 0;
       const isBlockTypeChange = oldBlockTypeId !== 0 && newBlockTypeId !== 0 && oldBlockTypeId !== newBlockTypeId;
-
-      // For any block change, include immediate face neighbors
-      for (const { coord } of neighbors) {
-        // Skip neighbors outside chunk boundaries
-        if (coord.x < 0 || coord.x > CHUNK_INDEX_RANGE || 
-            coord.y < 0 || coord.y > CHUNK_INDEX_RANGE || 
-            coord.z < 0 || coord.z > CHUNK_INDEX_RANGE) {
-          continue;
+      
+      // Special case for block removal - we need to make sure all neighboring solid blocks 
+      // update their faces that were previously hidden by this block
+      if (isBlockToAir) {
+        // For block removal, we definitely need to update all direct neighbors
+        // to ensure they show the previously hidden faces
+        for (const { coord } of neighbors) {
+          // Skip neighbors outside chunk boundaries
+          if (coord.x < 0 || coord.x > CHUNK_INDEX_RANGE || 
+              coord.y < 0 || coord.y > CHUNK_INDEX_RANGE || 
+              coord.z < 0 || coord.z > CHUNK_INDEX_RANGE) {
+            // For neighbors outside our chunk, we need to notify those chunks to update
+            // Get the global coordinate
+            const globalCoord = this._getGlobalCoordinate(localCoordinate);
+            
+            // Calculate the adjacent block's global coordinate
+            const neighborGlobal = {
+              x: globalCoord.x + (coord.x - localCoordinate.x),
+              y: globalCoord.y + (coord.y - localCoordinate.y),
+              z: globalCoord.z + (coord.z - localCoordinate.z)
+            };
+            
+            // Get the chunk for this neighbor
+            const neighborChunkOrigin = Chunk.globalCoordinateToOriginCoordinate(neighborGlobal);
+            const neighborChunkId = Chunk.getChunkId(neighborChunkOrigin);
+            
+            // If it's a different chunk, mark it for remeshing
+            if (neighborChunkId !== this.chunkId && chunkManager._chunks.has(neighborChunkId)) {
+              chunkManager.markChunkForRemesh(neighborChunkId);
+            }
+            
+            continue;
+          }
+          
+          // Check if this neighbor has a solid block
+          const neighborBlockId = this.getLocalBlockId(coord);
+          if (neighborBlockId !== 0) {
+            // Add to affected blocks
+            const coordKey = `${coord.x},${coord.y},${coord.z}`;
+            if (!affectedSet.has(coordKey)) {
+              affectedSet.add(coordKey);
+              affectedBlocks.push({ ...coord });
+            }
+          }
         }
-        
-        // Check if this neighbor has a block
-        const neighborBlockId = this.getLocalBlockId(coord);
-        
-        // Always include direct neighbors in the update
-        const coordKey = `${coord.x},${coord.y},${coord.z}`;
-        if (!affectedSet.has(coordKey)) {
-          affectedSet.add(coordKey);
-          affectedBlocks.push({ ...coord });
+      }
+      // For normal cases, include direct face neighbors
+      else {
+        for (const { coord } of neighbors) {
+          // Skip neighbors outside chunk boundaries
+          if (coord.x < 0 || coord.x > CHUNK_INDEX_RANGE || 
+              coord.y < 0 || coord.y > CHUNK_INDEX_RANGE || 
+              coord.z < 0 || coord.z > CHUNK_INDEX_RANGE) {
+            continue;
+          }
+          
+          // Always include direct neighbors in the update
+          const coordKey = `${coord.x},${coord.y},${coord.z}`;
+          if (!affectedSet.has(coordKey)) {
+            affectedSet.add(coordKey);
+            affectedBlocks.push({ ...coord });
+          }
         }
       }
 
@@ -1036,7 +1080,8 @@ class Chunk {
           (isBlockTypeChange && (newBlockType?.transparent || oldBlockType?.transparent))) {
         
         // For special cases, do a second pass with extended radius
-        const additionalRadius = 1; // Extend radius by 1 more block
+        // For block removal, use a larger radius to ensure all previously hidden faces update properly
+        const additionalRadius = isBlockToAir ? 2 : 1; 
         const additionalBlocks = [...affectedBlocks]; // Start with current blocks
         
         for (const block of additionalBlocks) {
@@ -1068,7 +1113,12 @@ class Chunk {
         }
       }
 
-      console.log(`Block update affected ${affectedBlocks.length} blocks in chunk ${this.chunkId}`);
+      // For block removal, make sure to log status for debugging
+      if (isBlockToAir) {
+        console.log(`Block removal at ${x},${y},${z} affected ${affectedBlocks.length} blocks in chunk ${this.chunkId}`);
+      } else {
+        console.log(`Block update affected ${affectedBlocks.length} blocks in chunk ${this.chunkId}`);
+      }
       
       // Mark the chunk for remeshing with the affected blocks
       chunkManager.markChunkForRemesh(this.chunkId, { blockCoordinates: affectedBlocks });

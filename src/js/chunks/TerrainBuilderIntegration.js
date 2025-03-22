@@ -157,10 +157,61 @@ export const processChunkRenderQueue = () => {
 /**
  * Update the chunk system from terrain data
  * @param {Object} terrainData - The terrain data in format { "x,y,z": blockId }
+ * @param {boolean} onlyVisibleChunks - If true, only create meshes for chunks within view distance
+ * @returns {Object} Statistics about loaded blocks
  */
-export const updateTerrainChunks = (terrainData) => {
-	if (chunkSystem) {
+export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
+	if (!chunkSystem) {
+		console.error("Chunk system not initialized, can't update terrain chunks");
+		return { totalBlocks: 0, visibleBlocks: 0 };
+	}
+
+	// Check if we need to filter for mesh creation
+	if (onlyVisibleChunks && chunkSystem._scene.camera) {
+		console.log("Setting deferred mesh creation mode for distant chunks");
+		
+		// Set the chunk system to defer mesh creation for chunks far from camera
+		// This loads all data into memory but only creates meshes for visible chunks
+		const camera = chunkSystem._scene.camera;
+		const viewDistance = chunkSystem._viewDistance || 96; // Default 6 chunks
+		
+		// Enable bulk loading mode with near chunks getting immediate priority
+		// This uses less memory at start and speeds up initial display
+		chunkSystem.setBulkLoadingMode(true, viewDistance * 0.5);
+		
+		// Update the chunk system with all terrain data
 		chunkSystem.updateFromTerrainData(terrainData);
+		
+		// After a moment, process all chunks near the camera first
+		setTimeout(() => {
+			if (chunkSystem) {
+				console.log("Processing chunk render queue for nearby chunks...");
+				chunkSystem._chunkManager.processRenderQueue(true);
+			}
+		}, 100);
+		
+		// After some time, disable bulk loading mode to load the rest
+		// This ensures all chunks are eventually loaded
+		setTimeout(() => {
+			if (chunkSystem) {
+				console.log("Disabling deferred mesh creation, loading remaining chunks...");
+				chunkSystem.setBulkLoadingMode(false);
+				chunkSystem._chunkManager.processRenderQueue(false);
+			}
+		}, 5000);
+		
+		return {
+			totalBlocks: Object.keys(terrainData).length,
+			visibleBlocks: Object.keys(terrainData).length
+		};
+	} else {
+		// Load all chunks immediately
+		chunkSystem.updateFromTerrainData(terrainData);
+		
+		return {
+			totalBlocks: Object.keys(terrainData).length,
+			visibleBlocks: Object.keys(terrainData).length
+		};
 	}
 };
 

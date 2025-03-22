@@ -23,11 +23,12 @@ import {CHUNK_SIZE, GREEDY_MESHING_ENABLED,
 import { ToolManager, WallTool } from "./tools";
 
 // Import chunk utility functions
-import { getChunkKey as getChunkKeyUtil, getChunkCoords, getLocalCoords, getLocalKey, isChunkVisible as isChunkVisibleUtil } from "./utils/terrain/chunkUtils";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks } from "./managers/BlockTypesManager";
 import BlockTextureAtlas from './blocks/BlockTextureAtlas';
 import BlockTypeRegistry from './blocks/BlockTypeRegistry';
+// At the top of the file, add this import
+import { SpatialHashGrid } from './chunks/SpatialHashGrid';
 
 
 // Function to optimize rendering performance
@@ -531,6 +532,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const placementSizeRef = useRef(placementSize);
 	const previewIsGroundPlaneRef = useRef(false);
 	const isBulkLoadingRef = useRef(false);
+	const placedBlockCountRef = useRef(0); // Track number of blocks placed during a mouse down/up cycle
 
 	// state for preview position to force re-render of preview cube when it changes
 	const [previewPosition, setPreviewPosition] = useState(new THREE.Vector3());
@@ -570,7 +572,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		if (chunkSystem) {
 			console.log("Updating chunk system with terrain data...");
 			// Tell the chunk system to update with terrain data
-			updateTerrainChunks(terrainRef.current);
+			// This will load all blocks into memory but only create meshes for visible chunks initially
+			const stats = updateTerrainChunks(terrainRef.current, true);
+			console.log(`Loaded all ${stats.totalBlocks} blocks into chunk system memory`);
 		} else {
 			console.warn("Chunk system not initialized, cannot build terrain");
 		}
@@ -726,6 +730,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Clear recently placed blocks on mouse down
 				recentlyPlacedBlocksRef.current.clear();
 
+				// Reset the placed block counter for a new placement session
+				placedBlockCountRef.current = 0;
+
 				// Store initial position for axis lock
 				if (axisLockEnabledRef.current) {
 					placementStartPosition.current = previewPositionRef.current.clone();
@@ -835,6 +842,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				
 				const postUpdateTime = performance.now();
 				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
+
+				// Increment the placed block counter
+				placedBlockCountRef.current += Object.keys(addedBlocks).length;
 			} else if (modeRef.current === "remove") {
 				// Removal logic
 				const removeStartTime = performance.now();
@@ -882,6 +892,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				
 				const postUpdateTime = performance.now();
 				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
+
+				// Increment the placed block counter (even for removals)
+				placedBlockCountRef.current += Object.keys(removedBlocks).length;
 			}
 			
 			// Set flag to avoid placing at the same position again
@@ -1006,16 +1019,58 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					tempVectorRef.current.z = Math.round(tempVectorRef.current.z - blockIntersection.normal.z * 0.5);
 				}
 			} else {
-				// For add mode, add a small offset in the normal direction before rounding
-				tempVectorRef.current.add(blockIntersection.normal.clone().multiplyScalar(0.01));
-				// Replace simple rounding with a more consistent approach for negative coordinates
-				tempVectorRef.current.x = Math.sign(tempVectorRef.current.x) * Math.round(Math.abs(tempVectorRef.current.x));
-				tempVectorRef.current.y = Math.sign(tempVectorRef.current.y) * Math.round(Math.abs(tempVectorRef.current.y));
-				tempVectorRef.current.z = Math.sign(tempVectorRef.current.z) * Math.round(Math.abs(tempVectorRef.current.z));
+				// For add mode, calculate placement position precisely based on the face that was hit
+				// First, get the block coordinates where we hit
+				const hitBlock = blockIntersection.block || {
+					x: Math.floor(blockIntersection.point.x),
+					y: Math.floor(blockIntersection.point.y),
+					z: Math.floor(blockIntersection.point.z)
+				};
+
+				// Use the face information if available for more precise placement
+				if (blockIntersection.face && blockIntersection.normal) {
+					// Position the new block adjacent to the face that was hit
+					// By adding the normal vector, we place the block directly against the hit face
+					tempVectorRef.current.x = hitBlock.x + blockIntersection.normal.x;
+					tempVectorRef.current.y = hitBlock.y + blockIntersection.normal.y;
+					tempVectorRef.current.z = hitBlock.z + blockIntersection.normal.z;
+					
+					// Ensure we have integer coordinates for block placement
+					tempVectorRef.current.x = Math.round(tempVectorRef.current.x);
+					tempVectorRef.current.y = Math.round(tempVectorRef.current.y);
+					tempVectorRef.current.z = Math.round(tempVectorRef.current.z);
+					
+					// Log face detection for debugging
+					console.log(`Placing block against face: ${blockIntersection.face}, normal: ${blockIntersection.normal.x},${blockIntersection.normal.y},${blockIntersection.normal.z}`);
+				} else {
+					// Fallback to the old method if face information is not available
+					tempVectorRef.current.add(blockIntersection.normal.clone().multiplyScalar(0.5));
+					tempVectorRef.current.x = Math.round(tempVectorRef.current.x);
+					tempVectorRef.current.y = Math.round(tempVectorRef.current.y);
+					tempVectorRef.current.z = Math.round(tempVectorRef.current.z);
+				}
 				
 				// Handle y-coordinate special case if this is a ground plane hit
-				if (previewIsGroundPlaneRef.current && modeRef.current === "add") {
+				if (blockIntersection.isGroundPlane && modeRef.current === "add") {
 					tempVectorRef.current.y = 0; // Position at y=0 when placing on ground plane
+				}
+				
+				// Apply axis lock if enabled
+				if (axisLockEnabled) {
+					// Keep only movement along the selected axis
+					const originalPos = previewPositionRef.current.clone();
+					const axisLock = lockedAxisRef.current;
+					
+					if (axisLock === 'x') {
+						tempVectorRef.current.y = originalPos.y;
+						tempVectorRef.current.z = originalPos.z;
+					} else if (axisLock === 'y') {
+						tempVectorRef.current.x = originalPos.x;
+						tempVectorRef.current.z = originalPos.z;
+					} else if (axisLock === 'z') {
+						tempVectorRef.current.x = originalPos.x;
+						tempVectorRef.current.y = originalPos.y;
+					}
 				}
 			}
 			
@@ -1045,59 +1100,43 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	updatePreviewPosition.lastUpdate = 0;
 
 	// Move undo state saving to handlePointerUp
-	const handleMouseUp = (event) => {
-		const startTime = performance.now();
+	const handleMouseUp = (e) => {
+		// Performance tracking
+		const t0 = performance.now();
 		
-		// If a tool is active, delegate the event to it
-		if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
-			const intersection = getRaycastIntersection();
-			if (intersection) {
-				toolManagerRef.current.handleMouseUp(event, intersection.point);
-				return; // Let the tool handle it
-			}
-		}
-		
-		// Otherwise use default behavior
-		if (event.button === 0) {
+		// Only process if we were actually placing blocks
+		if (isPlacingRef.current) {
+			// Stop placing blocks
 			isPlacingRef.current = false;
+			
+			console.log(`handleMouseUp: Placed ${placedBlockCountRef.current} blocks`);
+			
+			// Only update the spatial grid if blocks were placed
+			if (placedBlockCountRef.current > 0) {
+				// Update only the newly placed blocks instead of rebuilding entire grid
+				if (spatialGridManagerRef.current) {
+					// Use the recently placed blocks array directly
+					const addedBlocks = Array.from(recentlyPlacedBlocksRef.current).map(posKey => {
+						return [posKey, terrainRef.current[posKey]];
+					});
+					
+					// Update spatial grid with just these blocks
+					spatialGridManagerRef.current.updateBlocks(addedBlocks, []);
+				}
+				
+				// Reset the block counter
+				placedBlockCountRef.current = 0;
+			}
+			
 			// Clear recently placed blocks
 			recentlyPlacedBlocksRef.current.clear();
-
-			// Check if we have any changes to save for undo
-			const changes = placementChangesRef.current;
-				if (
-					Object.keys(changes.terrain.added).length > 0 ||
-				Object.keys(changes.terrain.removed).length > 0 ||
-				changes.environment.added.length > 0 ||
-				changes.environment.removed.length > 0
-				) {
-				const undoStartTime = performance.now();
-				// Save Undo with our tracked changes
-					undoRedoManager.saveUndo(changes);
-				const undoEndTime = performance.now();
-				console.log(`Performance: Undo state saving took ${undoEndTime - undoStartTime}ms`);
-				
-				// REMOVED: No longer saving to database on mouse up
-				// Just track the changes for when we do save
-				trackTerrainChanges(changes.terrain.added, changes.terrain.removed);
-				console.log(`Performance: Changes tracked for future save (${Object.keys(pendingChangesRef.current.added).length} additions, ${Object.keys(pendingChangesRef.current.removed).length} removals)`);
-			}
-
-			// Reset tracking
-			placementChangesRef.current = { 
-				terrain: { added: {}, removed: {} }, 
-				environment: { added: [], removed: [] } 
-			};
-
-			// If axis lock was on, reset
-			if (axisLockEnabled) {
-				lockedAxisRef.current = null;
-				placementStartPosition.current = null;
-			}
 		}
 		
-		const endTime = performance.now();
-		console.log(`Performance: handleMouseUp total time ${endTime - startTime}ms`);
+		// Log performance
+		const duration = performance.now() - t0;
+		if (duration > 5) {
+			console.log(`handleMouseUp processing took ${duration.toFixed(2)}ms`);
+		}
 	};
 
 	const getPlacementPositions = (centerPos, placementSize) => {
@@ -1343,7 +1382,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		console.log("Initializing spatial hash...");
 		
 		if (!spatialGridManagerRef.current) {
-			console.warn("Spatial grid manager not initialized, cannot initialize spatial hash");
+			console.error("⚠️ Spatial grid manager not initialized, cannot initialize spatial hash");
 			return Promise.resolve();
 		}
 		
@@ -1352,12 +1391,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			firstLoadCompletedRef.current = true;
 		}
 		
+		// Log current terrain data size
+		console.log(`Initializing spatial hash with ${Object.keys(terrainRef.current).length} blocks`);
+		
+		// Check if the spatialHashGrid in the manager is properly initialized
+		if (!spatialGridManagerRef.current.spatialHashGrid) {
+			console.error("⚠️ spatialHashGrid is null in SpatialGridManager, re-initializing...");
+			spatialGridManagerRef.current.spatialHashGrid = new SpatialHashGrid({ chunkSize: CHUNK_SIZE });
+		}
+		
 		// Show loading screen only for this initial full build - this is an expensive operation
 		return spatialGridManagerRef.current.updateFromTerrain(terrainRef.current, {
 			showLoadingScreen: true,  // Show loading screen for initial build only
 			batchSize: 100000,        // Use large batches for efficiency
 			silent: false,            // Log progress
-			message: "Building Spatial Index..."
+			message: "Building Spatial Index...",
+			force: forceUpdate        // Pass along the force flag
 		});
 	};
 
@@ -1528,13 +1577,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 								
 								// Update the chunk system with the loaded terrain only AFTER textures are loaded
 								console.log("Textures preloaded, updating terrain chunks...");
-								updateTerrainChunks(terrainRef.current);
-								
-								// Hide loading screen
-								loadingManager.hideLoading();
+								updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
 								
 								// Process chunks to ensure everything is visible
 								processChunkRenderQueue();
+								
+								// Store all terrain data in a separate reference for incremental loading
+								// This will be used to load additional chunks as the camera moves
+								window.fullTerrainDataRef = terrainRef.current;
+								
+								// Add a new "pendingChunksToLoad" state to track chunks that need loading
+								window.pendingChunksToLoad = new Set();
+								
+								// Hide loading screen
+								loadingManager.hideLoading();
 								
 								// Set page as loaded
 								setPageIsLoaded(true);
@@ -1583,8 +1639,45 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		initialize();
 
+		// Add at the end of the initialize() function, right before the final closing bracket
+		// Also register a keydown event listener to detect WASD movement
+		window.addEventListener('keydown', (event) => {
+			// For WASD/arrow keys movement, also trigger chunk loading
+			const key = event.key.toLowerCase();
+			if (['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright'].includes(key)) {
+				// Throttle calls during continuous movement
+				if (!window.lastKeyMoveTime || Date.now() - window.lastKeyMoveTime > 200) {
+					handleCameraMove();
+					window.lastKeyMoveTime = Date.now();
+				}
+			}
+		});
+
+		// Set up periodic check for chunks to load, even if camera isn't moving
+		// This ensures chunks eventually load even without camera movement
+		window.chunkLoadCheckInterval = setInterval(() => {
+			if (window.fullTerrainDataRef && terrainRef.current &&
+				Object.keys(window.fullTerrainDataRef).length > Object.keys(terrainRef.current).length) {
+				console.log("Performing periodic check for chunks to load");
+				loadNewChunksInViewDistance();
+			} else if (window.fullTerrainDataRef && terrainRef.current &&
+				Object.keys(window.fullTerrainDataRef).length === Object.keys(terrainRef.current).length) {
+				// All chunks loaded, clear the interval
+				console.log("All chunks loaded, clearing periodic check");
+				clearInterval(window.chunkLoadCheckInterval);
+			}
+		}, 3000); // Check every 3 seconds
+
+		// Return cleanup function
 		return () => {
-			mounted = false; // Prevent state updates after unmount
+			console.log("TerrainBuilder component unmounting, cleaning up resources");
+			mounted = false;
+			
+			// Clean up any chunk-related timers
+			if (window.chunkLoadCheckInterval) {
+				clearInterval(window.chunkLoadCheckInterval);
+				window.chunkLoadCheckInterval = null;
+			}
 		};
 	}, [threeCamera, scene]);
 	
@@ -2440,37 +2533,71 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Optimized ray intersection using spatial hash
 	const getOptimizedRaycastIntersection = (prioritizeBlocks = true) => {
+		// Safety checks
+		if (!scene || !threeCamera || !threeRaycaster) return null;
+		
+		// Use the raw pointer coordinates directly from THREE.js
+		const normalizedMouse = pointer.clone();
+		
+		// Setup raycaster with the normalized coordinates
+		threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
+		
+		// First, check for block collisions using optimized ray casting
+		let intersection = null;
+		
 		// Safety check - ensure spatialGridManagerRef.current is initialized
-		if (!threeRaycaster || !threeCamera || !spatialGridManagerRef.current) return null;
-		
-		// In erase mode, we need to make sure we're not hitting blocks that have been removed
-		// but might still be in the spatial hash due to caching or other issues
-		const currentMode = modeRef.current;
-		
-		// Use the SpatialGridManager's raycast method instead of implementing it here
-		const result = spatialGridManagerRef.current.raycast(threeRaycaster, threeCamera, {
-			maxDistance: selectionDistanceRef.current,
-			prioritizeBlocks,
-			gridSize: gridSizeRef.current, // Use the current grid size from ref instead of prop
-			recentlyPlacedBlocks: recentlyPlacedBlocksRef.current,
-			isPlacing: isPlacingRef.current,
-			mode: currentMode // Pass the current mode to help with block selection
-		});
-		
-		// If we're in erase mode and got a block intersection, double-check that the block still exists
-		if (result && !result.isGroundPlane && (currentMode === "delete" || currentMode === "remove")) {
-			const blockKey = `${result.block.x},${result.block.y},${result.block.z}`;
-			if (!terrainRef.current[blockKey]) {
-				console.log(`Block at ${blockKey} no longer exists in terrain, but was found in spatial hash`);
-				// The block doesn't exist in the terrain anymore, so we should ignore this intersection
-				// and try again with the block removed from the spatial hash
-				spatialGridManagerRef.current.deleteBlock(blockKey);
-				// Recursively call this function again to get a new intersection
-				return getOptimizedRaycastIntersection(prioritizeBlocks);
+		if (useSpatialHashRef.current && spatialGridManagerRef.current && spatialGridManagerRef.current.size > 0) {
+			// Prepare raycast options
+			const raycastOptions = {
+				maxDistance: selectionDistanceRef.current,
+				prioritizeBlocks,
+				gridSize: gridSizeRef.current,
+				recentlyPlacedBlocks: recentlyPlacedBlocksRef.current,
+				isPlacing: isPlacingRef.current,
+				mode: modeRef.current,
+				debug: true // Enable debug logging for this call
+			};
+			
+			// Perform raycast against spatial hash grid
+			const gridResult = spatialGridManagerRef.current.raycast(
+				threeRaycaster, 
+				threeCamera, 
+				raycastOptions
+			);
+			
+			
+			intersection = gridResult;
+		} else {
+			// Fallback to simple ground plane detection if spatial hash is not available
+			const rayOrigin = threeRaycaster.ray.origin;
+			const rayDirection = threeRaycaster.ray.direction;
+			
+			// Calculate intersection with the ground plane
+			const target = new THREE.Vector3();
+			const intersectionDistance = rayOrigin.y / -rayDirection.y;
+			
+			// Only consider intersections in front of the camera and within selection distance
+			if (intersectionDistance > 0 && intersectionDistance < selectionDistanceRef.current) {
+				// Calculate the intersection point
+				target.copy(rayOrigin).addScaledVector(rayDirection, intersectionDistance);
+				
+				// Check if this point is within our valid grid area
+				const gridSizeHalf = gridSizeRef.current / 2;
+				if (Math.abs(target.x) <= gridSizeHalf && Math.abs(target.z) <= gridSizeHalf) {
+					// This is a hit against the ground plane within the valid build area
+					intersection = {
+						point: target.clone(),
+						normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
+						block: { x: Math.floor(target.x), y: 0, z: Math.floor(target.z) },
+						blockId: null, // No block here - it's the ground
+						distance: intersectionDistance,
+						isGroundPlane: true
+					};
+				}
 			}
 		}
 		
-		return result;
+		return intersection;
 	};
 
 	
@@ -2665,62 +2792,30 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Handle camera movement to pause chunk processing during navigation
 	const handleCameraMove = () => {
-		// Update view distance based on camera position
-		const chunkSystem = getChunkSystem();
-		if (chunkSystem) {
-			// No need to explicitly pause/resume - the chunk system handles this internally
-			// Just update visible chunks after camera stops moving
-			clearTimeout(cameraMovementTimeoutRef.current);
-			cameraMovementTimeoutRef.current = setTimeout(() => {
-				// Trigger a visible chunk update after camera stops moving
-				requestAnimationFrame(() => {
-					// Force update the camera frustum
-					// Update camera frustum for raycasting
-					threeCamera.updateMatrixWorld();
-					const projScreenMatrix = new THREE.Matrix4();
-					projScreenMatrix.multiplyMatrices(threeCamera.projectionMatrix, threeCamera.matrixWorldInverse);
-					const frustum = new THREE.Frustum();
-					frustum.setFromProjectionMatrix(projScreenMatrix);
-					frustumRef.current = frustum;
-					
-					processChunkRenderQueue();
-					
-					// Explicitly update the chunk system with the current view distance
-					chunkSystem.setViewDistance(getViewDistance());
-				});
-			}, 50); // 50ms delay after camera stops
+		if (!threeCamera) return;
+		
+		// Update the camera in the chunk system for culling
+		updateChunkSystemCamera(threeCamera);
+		
+		// Check if we need to load additional chunks from the full terrain data
+		loadNewChunksInViewDistance();
+		
+		// Process the chunk render queue to update visibility
+		processChunkRenderQueue();
+	};
+
+	// Handle camera movement for instant processing of chunks as they come into view
+	const loadNewChunksInViewDistance = () => {
+		// Skip if no camera or chunk system
+		if (!getChunkSystem() || !threeCamera) {
+			return;
 		}
 		
-		// Request a visible chunk update immediately (but throttled for performance)
-		if (!handleCameraMove.lastUpdateTime || performance.now() - handleCameraMove.lastUpdateTime > 75) {
-			requestAnimationFrame(() => {
-				// Mark camera as explicitly moving to handle view distance culling
-				cameraMoving.current = true;
-				
-				// Clear any existing camera stop timeout
-				if (cameraMovementTimeout?.current) {
-					clearTimeout(cameraMovementTimeout.current);
-				}
-				
-				// Set a new timeout to mark camera as stopped
-				cameraMovementTimeout.current = setTimeout(() => {
-					cameraMoving.current = false;
-				}, 150);
-				
-				// Update the frustum for raycasting
-				threeCamera.updateMatrixWorld();
-				const projScreenMatrix = new THREE.Matrix4();
-				projScreenMatrix.multiplyMatrices(threeCamera.projectionMatrix, threeCamera.matrixWorldInverse);
-				const frustum = new THREE.Frustum();
-				frustum.setFromProjectionMatrix(projScreenMatrix);
-				frustumRef.current = frustum;
-				
-				processChunkRenderQueue();
-				handleCameraMove.lastUpdateTime = performance.now();
-			});
-		}
+		// Just process the render queue - no need to load new blocks as all are already loaded
+		// This ensures chunks become visible as the camera moves
+		processChunkRenderQueue();
 	};
-	
+
 	// Initialize the last update time
 	handleCameraMove.lastUpdateTime = 0;
 

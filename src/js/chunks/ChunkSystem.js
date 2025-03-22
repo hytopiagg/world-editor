@@ -205,6 +205,9 @@ class ChunkSystem {
     // Organize blocks by chunk
     const chunkMap = new Map();
     
+    // Track chunks that need neighbor updates
+    const needsNeighborUpdate = new Set();
+    
     // First, handle removed blocks
     removedBlocks.forEach(block => {
       const x = block.position[0];
@@ -225,6 +228,9 @@ class ChunkSystem {
         position: { x, y, z },
         id: block.id
       });
+      
+      // Always check neighbors for removed blocks to ensure proper mesh updates
+      needsNeighborUpdate.add(chunkId);
     });
     
     // Then, handle added blocks
@@ -253,6 +259,11 @@ class ChunkSystem {
         position: { x, y, z },
         id: block.id
       });
+      
+      // Check if the block is on chunk boundary for added blocks too
+      if (this._isOnChunkBoundary({ x, y, z }, originX, originY, originZ)) {
+        needsNeighborUpdate.add(chunkId);
+      }
     });
     
     // Update chunks
@@ -311,10 +322,16 @@ class ChunkSystem {
       // Mark the chunk for remeshing
       this._chunkManager.markChunkForRemesh(chunkId);
       
-      // Also mark neighboring chunks for remeshing if blocks were added on the chunk boundary
-      // This ensures seamless chunk transitions
-      const checkForNeighbors = [...added, ...removed];
-      if (checkForNeighbors.some(block => this._isOnChunkBoundary(block.position, originX, originY, originZ))) {
+      // Also mark neighboring chunks for remeshing if needed
+      if (needsNeighborUpdate.has(chunkId)) {
+        // For removed blocks, we need to update neighboring chunks more aggressively
+        const hasRemovedBlocks = removed.length > 0;
+        
+        // Debug for block removal
+        if (hasRemovedBlocks) {
+          console.log(`Marking neighbors for remeshing because of block removal in chunk ${chunkId}`);
+        }
+        
         this._markNeighboringChunks(originX, originY, originZ);
       }
     }
@@ -323,23 +340,30 @@ class ChunkSystem {
   }
   
   /**
-   * Check if a block position is on the boundary of a chunk
+   * Check if a block is on the chunk boundary
    * @param {Object} position - The block position
    * @param {number} originX - The chunk origin X
    * @param {number} originY - The chunk origin Y
    * @param {number} originZ - The chunk origin Z
-   * @returns {boolean} True if the block is on a chunk boundary
+   * @returns {boolean} Whether the block is on the chunk boundary
    * @private
    */
   _isOnChunkBoundary(position, originX, originY, originZ) {
-    const localX = position.x - originX;
-    const localY = position.y - originY;
-    const localZ = position.z - originZ;
+    const x = position.x;
+    const y = position.y;
+    const z = position.z;
+    
+    // For blocks near the chunk boundary (within 1 block distance)
+    // This ensures we catch all cases that might affect neighboring chunks
+    const boundary = 1; // 1 block buffer
     
     return (
-      localX === 0 || localX === CHUNK_SIZE - 1 ||
-      localY === 0 || localY === CHUNK_SIZE - 1 ||
-      localZ === 0 || localZ === CHUNK_SIZE - 1
+      x <= originX + boundary ||
+      x >= originX + CHUNK_SIZE - 1 - boundary ||
+      y <= originY + boundary ||
+      y >= originY + CHUNK_SIZE - 1 - boundary ||
+      z <= originZ + boundary ||
+      z >= originZ + CHUNK_SIZE - 1 - boundary
     );
   }
   
