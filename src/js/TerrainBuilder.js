@@ -20,7 +20,7 @@ import {CHUNK_SIZE, GREEDY_MESHING_ENABLED,
         getGreedyMeshingEnabled, setGreedyMeshingEnabled } from "./constants/terrain";
 
 // Import tools
-import { ToolManager, WallTool } from "./tools";
+import { ToolManager, WallTool, BrushTool } from "./tools";
 
 // Import chunk utility functions
 import { SpatialGridManager } from "./managers/SpatialGridManager";
@@ -696,29 +696,27 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	/// Placement and Modification Functions ///
 	/// Placement and Modification Functions ///
 
-	const handleMouseDown = (event) => {
-		const startTime = performance.now();
-		
+	// Handle pointer/mouse down
+	const handleMouseDown = (e) => {
 		// Check if a tool is active
 		const isToolActive = toolManagerRef.current && toolManagerRef.current.getActiveTool();
-		
-		// If a tool is active, delegate the event to it
 		if (isToolActive) {
+			// Get the raycast intersection to determine mouse position in 3D space
 			const intersection = getRaycastIntersection();
 			if (intersection) {
-				toolManagerRef.current.handleMouseDown(event, intersection.point, event.button);
-				// Important: Return immediately to prevent default block placement
-				return;
-			} else {
-				// If we didn't get an intersection but a tool is active, still return
-				// to prevent default block placement behavior
-				//console.log('TerrainBuilder: No intersection found for tool, but tool is active');
+				// Create a synthetic mouse event with normal information
+				const mouseEvent = {
+					...e,
+					normal: intersection.normal
+				};
+				// Forward to tool manager
+				toolManagerRef.current.handleMouseDown(mouseEvent, intersection.point, e.button);
 				return;
 			}
 		}
 		
 		// Otherwise use default behavior for block placement
-		if (event.button === 0) {
+		if (e.button === 0) {
 			// Only set isPlacingRef.current to true if no tool is active
 			// (This check is redundant now, but kept for clarity)
 			if (!isToolActive) {
@@ -748,9 +746,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				updatePreviewPosition();
 				playPlaceSound();
 			}
-			
-			const endTime = performance.now();
-			console.log(`Performance: handleMouseDown took ${endTime - startTime}ms`);
 		}
 	};
 
@@ -994,7 +989,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					const mouseEvent = {
 						// Calculate client coordinates based on normalized pointer and canvas rect
 						clientX: ((pointer.x + 1) / 2) * canvasRect.width + canvasRect.left,
-						clientY: ((1 - pointer.y) / 2) * canvasRect.height + canvasRect.top
+						clientY: ((1 - pointer.y) / 2) * canvasRect.height + canvasRect.top,
+						// Add normal information from blockIntersection for proper tool positioning
+						normal: blockIntersection.normal
 					};
 					
 					// Call the tool's handleMouseMove
@@ -1041,7 +1038,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					tempVectorRef.current.z = Math.round(tempVectorRef.current.z);
 					
 					// Log face detection for debugging
-					console.log(`Placing block against face: ${blockIntersection.face}, normal: ${blockIntersection.normal.x},${blockIntersection.normal.y},${blockIntersection.normal.z}`);
 				} else {
 					// Fallback to the old method if face information is not available
 					tempVectorRef.current.add(blockIntersection.normal.clone().multiplyScalar(0.5));
@@ -1103,6 +1099,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const handleMouseUp = (e) => {
 		// Performance tracking
 		const t0 = performance.now();
+		
+		// Check if a tool is active and forward the event
+		const isToolActive = toolManagerRef.current && toolManagerRef.current.getActiveTool();
+		if (isToolActive) {
+			const intersection = getRaycastIntersection();
+			if (intersection) {
+				// Create a synthetic mouse event with normal information
+				const mouseEvent = {
+					...e,
+					normal: intersection.normal
+				};
+				// Forward to tool manager with button parameter
+				toolManagerRef.current.handleMouseUp(mouseEvent, intersection.point, e.button);
+				return;
+			}
+		}
 		
 		// Only process if we were actually placing blocks
 		if (isPlacingRef.current) {
@@ -1628,6 +1640,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			undoRedoManager: undoRedoManager, // Pass the undoRedoManager to the tools
 			placementChangesRef: placementChangesRef, // Add placement changes ref for tracking undo/redo
 			isPlacingRef: isPlacingRef, // Add placing state ref
+			modeRef, // Add mode reference for add/remove functionality
+			getPlacementPositions, // Share position calculation utility
+			importedUpdateTerrainBlocks, // Direct access to optimized terrain update function
+			updateSpatialHashForBlocks, // Direct access to spatial hash update function
 			// Add any other properties tools might need
 		};
 		
@@ -1636,6 +1652,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Register tools
 		const wallTool = new WallTool(terrainBuilderProps);
 		toolManagerRef.current.registerTool("wall", wallTool);
+		
+		// Register the new BrushTool
+		const brushTool = new BrushTool(terrainBuilderProps);
+		toolManagerRef.current.registerTool("brush", brushTool);
 		
 		initialize();
 
@@ -1831,6 +1851,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		updateSpatialHashForBlocks, // Expose for external spatial hash updates
 		fastUpdateBlock, // Ultra-optimized function for drag operations
 		updateDebugInfo, // Expose debug info updates for tools
+		forceChunkUpdate, // Direct chunk updating for tools like BrushTool
+		forceRefreshAllChunks, // Force refresh of all chunks
 		
 		// Tool management
 		activateTool: (toolName) => {
@@ -2356,6 +2378,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Add key event handlers to delegate to tools
 	const handleKeyDown = (event) => {
+		// Add keyboard shortcut for Brush tool - 'B' key
+		if (event.key === 'b' || event.key === 'B') {
+			// Toggle brush tool (activate if not active, deactivate if active)
+			const activeTool = toolManagerRef.current?.getActiveTool();
+			if (activeTool && activeTool.name === "BrushTool") {
+				// Tool is already active, deactivate it
+				toolManagerRef.current?.activateTool(null);
+			} else {
+				// Activate the brush tool
+				toolManagerRef.current?.activateTool("brush");
+			}
+			// Don't propagate the event further
+			return;
+		}
+		
+		// Forward event to active tool
 		if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
 			toolManagerRef.current.handleKeyDown(event);
 		}
@@ -2390,7 +2428,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	
 	// update the terrain blocks for added and removed blocks
-	const updateTerrainBlocks = (addedBlocks, removedBlocks) => {
+	const updateTerrainBlocks = (addedBlocks, removedBlocks, options = {}) => {
 		if (!addedBlocks && !removedBlocks) {
 			return;
 		}
@@ -2433,26 +2471,32 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Delegate to the optimized imported function for chunk and spatial hash updates
 		importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
 		
-		// Convert blocks to the format expected by updateSpatialHashForBlocks
-		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
-			const [x, y, z] = posKey.split(',').map(Number);
-			return {
-				id: blockId,
-				position: [x, y, z]
-			};
-		});
+		// Only update spatial hash if not explicitly skipped
+		// This allows BrushTool to skip spatial hash updates during dragging
+		if (!options.skipSpatialHash) {
+			// Convert blocks to the format expected by updateSpatialHashForBlocks
+			const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+				const [x, y, z] = posKey.split(',').map(Number);
+				return {
+					id: blockId,
+					position: [x, y, z]
+				};
+			});
 
-		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
-			const [x, y, z] = posKey.split(',').map(Number);
-			return {
-				id: 0, // Use 0 for removed blocks
-				position: [x, y, z]
-			};
-		});
-		
-		// Explicitly update the spatial hash for collisions with force option
-		// This ensures that the spatial hash is updated immediately, not deferred
-		updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, { force: true });
+			const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
+				const [x, y, z] = posKey.split(',').map(Number);
+				return {
+					id: 0, // Use 0 for removed blocks
+					position: [x, y, z]
+				};
+			});
+			
+			// Explicitly update the spatial hash for collisions with force option
+			// This ensures that the spatial hash is updated immediately, not deferred
+			updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, { force: true });
+		} else {
+			console.log('Skipping spatial hash update as requested');
+		}
 		
 		console.timeEnd('updateTerrainBlocks');
 	};
@@ -3237,3 +3281,44 @@ const setDeferredChunkMeshing = (defer) => {
 
 // Export the deferred chunk meshing function
 export { setDeferredChunkMeshing };
+
+/**
+ * Force an update for specific chunks by key
+ * @param {Array<String>} chunkKeys - Array of chunk keys to update, e.g. ["32,48,0", "16,48,0"]
+ * @param {Object} options - Options for the update
+ * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates (faster but less accurate at boundaries)
+ */
+const forceChunkUpdate = (chunkKeys, options = {}) => {
+	const chunkSystem = getChunkSystem();
+	if (!chunkSystem || chunkKeys.length === 0) {
+		return;
+	}
+	
+	console.log(`TerrainBuilder: Forcing update for ${chunkKeys.length} chunks${options.skipNeighbors ? ' (skipping neighbors)' : ''}`);
+	
+	// Pass the chunk keys to the chunk system for direct update
+	chunkSystem.forceUpdateChunks(chunkKeys, options);
+};
+
+/**
+ * Force update a chunk by its origin
+ * @param {Array} chunkOrigin - Array with the chunk's origin coordinates [x, y, z]
+ * @param {Object} options - Options for the update
+ * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates for faster processing
+ */
+const forceChunkUpdateByOrigin = (chunkOrigin, options = {}) => {
+  const chunkSystem = getChunkSystem();
+  if (!chunkSystem) {
+    console.warn('forceChunkUpdateByOrigin: No chunk system available');
+    return;
+  }
+  
+  const skipNeighbors = options.skipNeighbors === true;
+  console.log(`Forcing update for chunk at [${chunkOrigin.join(',')}]${skipNeighbors ? ' (skipping neighbors)' : ''}`);
+  
+  const chunkId = `${chunkOrigin[0]},${chunkOrigin[1]},${chunkOrigin[2]}`;
+  chunkSystem.forceUpdateChunks([chunkId], { skipNeighbors });
+}
+
+// Export the chunk update by origin function
+export { forceChunkUpdateByOrigin };

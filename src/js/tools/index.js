@@ -3,10 +3,12 @@
  */
 import BaseTool from './BaseTool';
 import WallTool from './WallTool';
+import BrushTool from './BrushTool';
 import ToolManager from './ToolManager';
 
 export {
   BaseTool,
   WallTool,
+  BrushTool,
   ToolManager
 }; 

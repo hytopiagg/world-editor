@@ -137,107 +137,54 @@ class ChunkManager {
 
 	/**
 	 * Mark a chunk for remeshing
-	 * @param {string} chunkId - The chunk ID
+	 * @param {string} chunkId - The chunk ID to remesh
 	 * @param {Object} options - Options for remeshing
-	 * @param {Array} options.blockCoordinates - The block coordinates to update
+	 * @param {Array<Object>} options.blockCoordinates - Specific block coordinates to update
+	 * @param {boolean} options.skipNeighbors - Whether to skip neighbor chunk updates
 	 */
 	markChunkForRemesh(chunkId, options = {}) {
-		// Skip performance timing for this common operation to reduce console noise
-		const hasBlockCoords = !!(options.blockCoordinates && options.blockCoordinates.length > 0);
-
-		// If this chunk is already in the queue, update its options if needed
-		if (this._pendingRenderChunks.has(chunkId)) {
-			// Chunk is already in the queue, update options if needed
-			if (hasBlockCoords) {
-				const existingOptions = this._chunkRemeshOptions.get(chunkId) || {};
-				const existingBlocks = existingOptions.blockCoordinates || [];
-
-				// Merge block coordinates
-				const mergedBlocks = [...existingBlocks];
-				for (const block of options.blockCoordinates) {
-					// Check if this block is already in the list
-					const exists = mergedBlocks.some(b =>
-						b.x === block.x && b.y === block.y && b.z === block.z
-					);
-
-					if (!exists) {
-						mergedBlocks.push(block);
-					}
-				}
-
-				this._chunkRemeshOptions.set(chunkId, {
-					...existingOptions,
-					blockCoordinates: mergedBlocks
-				});
-
-				// Check if any blocks are on chunk boundaries - if so, prioritize this chunk
-				const hasBoundaryBlocks = mergedBlocks.some(block => 
-					block.x === 0 || block.y === 0 || block.z === 0 || 
-					block.x === CHUNK_INDEX_RANGE || block.y === CHUNK_INDEX_RANGE || block.z === CHUNK_INDEX_RANGE
-				);
-
-				// If this chunk is already in the queue but has boundary blocks or is not at the front,
-				// consider moving it forward for faster processing
-				const queueIndex = this._renderChunkQueue.indexOf(chunkId);
-				if (hasBoundaryBlocks && queueIndex > 2) {
-					// Remove from current position
-					this._renderChunkQueue.splice(queueIndex, 1);
-					// Add right to the front for boundary blocks for visual continuity
-					this._renderChunkQueue.unshift(chunkId);
-				} else if (queueIndex > 5) { 
-					// Don't bother if it's already near the front
-					// Remove from current position
-					this._renderChunkQueue.splice(queueIndex, 1);
-					// Add to a position closer to the front, but not the very front
-					// to avoid constantly reshuffling priorities
-					this._renderChunkQueue.splice(3, 0, chunkId);
-				}
-			}
+		if (!this._chunks.has(chunkId)) {
 			return;
 		}
 		
-		// DEBUGGING: Log when a new chunk is being added to the mesh queue
 		const chunk = this._chunks.get(chunkId);
-		if (!chunk) {
-			console.warn(`DEBUG: markChunkForRemesh called for non-existent chunk ${chunkId}`);
-			return; // Don't add non-existent chunks to the queue
-		}
 		
-		// If we're adding a chunk that has no existing mesh, log it
-		const hasMesh = chunk.hasMesh();
-		if (!hasMesh) {
-			console.log(`DEBUG: Adding chunk ${chunkId} to mesh queue - no existing mesh yet`);
-		}
-
-		// Add to the queue with options
-		if (hasBlockCoords) {
-			// Check if any blocks are on chunk boundaries
-			const hasBoundaryBlocks = options.blockCoordinates.some(block => 
-				block.x === 0 || block.y === 0 || block.z === 0 || 
-				block.x === CHUNK_INDEX_RANGE || block.y === CHUNK_INDEX_RANGE || block.z === CHUNK_INDEX_RANGE
-			);
-
-			// If we have blocks on chunk boundaries, put at the very front for immediate processing
-			// to maintain visual continuity between chunks
-			if (hasBoundaryBlocks) {
-				this._renderChunkQueue.unshift(chunkId);
-			} else {
-				// If we have specific blocks to update, add close to the front of the queue
-				// But not all the way at the front to avoid pushing back more important chunks
-				this._renderChunkQueue.splice(3, 0, chunkId);
+		// Merge options if they already exist
+		if (this._chunkRemeshOptions.has(chunkId)) {
+			const existingOptions = this._chunkRemeshOptions.get(chunkId);
+			
+			// Handle block coordinates
+			if (options.blockCoordinates && existingOptions.blockCoordinates) {
+				const existingCoords = existingOptions.blockCoordinates;
+				
+				// Add new block coordinates to the existing set
+				options.blockCoordinates.forEach(coord => {
+					// Check if this coordinate already exists
+					const exists = existingCoords.some(existing => 
+						existing.x === coord.x && 
+						existing.y === coord.y && 
+						existing.z === coord.z
+					);
+					
+					if (!exists) {
+						existingCoords.push(coord);
+					}
+				});
+			} else if (options.blockCoordinates) {
+				existingOptions.blockCoordinates = options.blockCoordinates;
+			}
+			
+			// Handle skipNeighbors option
+			if (options.skipNeighbors !== undefined) {
+				existingOptions.skipNeighbors = options.skipNeighbors;
 			}
 		} else {
-			// For full chunk remeshing, add to the back of the queue
-			this._renderChunkQueue.push(chunkId);
+			// Create new options entry
+			this._chunkRemeshOptions.set(chunkId, { ...options });
 		}
-
-		// Store the options for later when we process the chunk
-		if (hasBlockCoords) {
-			this._chunkRemeshOptions.set(chunkId, options);
-		}
-
-		// Mark this chunk as pending render to avoid duplicates in the queue
-		this._pendingRenderChunks.add(chunkId);
+		
+		// Always queue the chunk for render
+		this.queueChunkForRender(chunk, { skipNeighbors: options.skipNeighbors });
 	}
 
 	/**
@@ -266,10 +213,26 @@ class ChunkManager {
 		const partialUpdateChunks = [];
 		const fullRebuildChunks = [];
 
-		for (const chunkId of this._renderChunkQueue) {
+		// Process the queue entries
+		for (const queueEntry of this._renderChunkQueue) {
+			const chunkId = typeof queueEntry === 'string' ? queueEntry : queueEntry.chunkId;
+			const options = typeof queueEntry === 'object' ? queueEntry.options : null;
+			
 			const chunk = this._chunks.get(chunkId);
 			if (!chunk) {
 				continue;
+			}
+
+			// Store option data for use during rendering
+			if (options) {
+				// If we have skipNeighbors option, store it for use during mesh building
+				if (options.skipNeighbors === true) {
+					if (!this._chunkRemeshOptions.has(chunkId)) {
+						this._chunkRemeshOptions.set(chunkId, {});
+					}
+					const remeshOptions = this._chunkRemeshOptions.get(chunkId);
+					remeshOptions.skipNeighbors = true;
+				}
 			}
 
 			// Check if this is a chunk with only one block (first block placement)
@@ -280,8 +243,8 @@ class ChunkManager {
 				// Prioritize chunks with first block placement
 				firstBlockChunks.push(chunkId);
 			} else {
-				const options = this._chunkRemeshOptions ? this._chunkRemeshOptions.get(chunkId) : null;
-				if (options && options.blockCoordinates && options.blockCoordinates.length > 0) {
+				const remeshOptions = this._chunkRemeshOptions ? this._chunkRemeshOptions.get(chunkId) : null;
+				if (remeshOptions && remeshOptions.blockCoordinates && remeshOptions.blockCoordinates.length > 0) {
 					partialUpdateChunks.push(chunkId);
 				} else {
 					fullRebuildChunks.push(chunkId);
@@ -754,7 +717,7 @@ class ChunkManager {
 		}
 
 		// Reduce log spam - only log if radius is larger than 1 or if sampling
-		const shouldLog = radius > 1 && Math.random() < 0.01; // Only log 1% of clearing operations
+		const shouldLog = false;//radius > 1 && Math.random() < 0.01; // Only log 1% of clearing operations
 		
 		if (shouldLog) {
 			console.log(`Clearing block type cache around (${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z}) with radius ${radius}`);
@@ -1082,6 +1045,44 @@ class ChunkManager {
 			changed: visibilityChangedCount,
 			toggled: forcedToggleCount
 		};
+	}
+
+	/**
+	 * Get a chunk by its key string
+	 * @param {String} chunkKey - The chunk key in format "x,y,z"
+	 * @returns {Chunk|null} The chunk or null if not found
+	 */
+	getChunkByKey(chunkKey) {
+		if (!chunkKey || typeof chunkKey !== 'string') {
+			return null;
+		}
+		
+		return this._chunks.get(chunkKey) || null;
+	}
+
+	/**
+	 * Queue a chunk for rendering
+	 * @param {Chunk} chunk - The chunk to queue
+	 * @param {Object} options - Options for rendering
+	 * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates
+	 */
+	queueChunkForRender(chunk, options = {}) {
+		if (!chunk) {
+			return;
+		}
+		
+		// Skip if this chunk is already in the queue
+		if (this._pendingRenderChunks.has(chunk.chunkId)) {
+			console.log(`Chunk ${chunk.chunkId} already queued for render, skipping duplicate`);
+			return;
+		}
+		
+		// Add to the render queue
+		this._renderChunkQueue.push({
+			chunkId: chunk.chunkId,
+			options: options || {}
+		});
+		this._pendingRenderChunks.add(chunk.chunkId);
 	}
 }
 

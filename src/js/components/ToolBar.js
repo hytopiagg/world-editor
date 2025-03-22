@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon, FaCubes } from "react-icons/fa";
+import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon, FaCubes, FaPaintBrush } from "react-icons/fa";
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
 import "../../css/ToolBar.css";
@@ -536,6 +536,16 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								}}
 								className={`control-button ${activeTool === "wall" ? "selected" : ""}`}>
 								<FaDrawPolygon />
+							</button>
+						</Tooltip>
+						<Tooltip text="Brush Tool - Click to place/erase blocks. Use 1-9 to adjust size. Press 3 to toggle shape (square/circle). Hold Ctrl to erase.">
+							<button
+								onClick={() => {
+									handleToolToggle("brush");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "brush" ? "selected" : ""}`}>
+								<FaPaintBrush />
 							</button>
 						</Tooltip>
 					</div>

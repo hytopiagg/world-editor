@@ -1,0 +1,1110 @@
+/**
+ * BrushTool.js - Tool for placing blocks in the world editor with brush functionality
+ * 
+ * This tool handles block placement with customizable brush size and shape.
+ */
+
+import * as THREE from 'three';
+import BaseTool from './BaseTool';
+import TerrainBuilder, { 
+	blockTypes as BlockTypes, 
+	forceChunkUpdateByOrigin 
+} from '../TerrainBuilder';
+
+class BrushTool extends BaseTool {
+	/**
+	 * Creates a new BrushTool instance
+	 */
+	constructor(terrainBuilderProps) {
+		console.log('BrushTool initialized');
+		super(terrainBuilderProps);
+
+		// Tool properties
+		this.name = "BrushTool";
+		this.tooltip = "Brush Tool: 1/2 to adjust size. 3 to toggle shape (square/circle). 4 to toggle flat/3D mode. Hold Ctrl to erase.";
+		
+		// Brush properties
+		this.brushSize = 1; // Default size (radius)
+		this.isCircular = false; // Default shape is square
+		this.isEraseMode = false; // Default mode is place
+		this.isPlacing = false; // Tracks active block placement
+		this.isFlatMode = true; // Default is flat mode (when set to true, only places blocks at one Y level)
+		this.previewMesh = null; // Visual preview of brush area
+		this.lastPosition = null; // Last position for drag placement
+		this.placedPositions = new Set(); // Track positions where blocks have been placed in current drag
+		this.processedPositionsMap = new Map(); // Track positions processed during drag for efficient lookup
+		
+		// Performance optimizations
+		this.positionCache = new Map(); // Cache brush positions for faster retrieval
+		this.lastPreviewPosition = null; // Track last preview position to avoid unnecessary updates
+		this.previewGeometry = null; // Reuse preview geometry
+		this.previewMaterialAdd = null; // Reuse preview material for add mode
+		this.previewMaterialErase = null; // Reuse preview material for erase mode
+		
+		// Mesh update optimizations
+		this.chunkUpdateQueue = new Set(); // Track chunks that need updates
+		this.debounceTimer = null; // Timer for debouncing mesh updates
+		this.DEBOUNCE_DELAY = 50; // Milliseconds to wait before triggering a mesh rebuild
+		this.dirtyChunks = new Map(); // Map of chunks with pending updates
+		this.processingChunks = new Set(); // Track chunks currently being processed
+
+		// Batch processing for smoother performance
+		this.batchSize = 10; // Number of blocks to process in each batch
+		this.updateInterval = 50; // Milliseconds between batch updates
+		this.pendingBatch = { added: {}, removed: {} }; // Blocks waiting to be processed
+		this.lastBatchTime = 0; // Last time a batch was processed
+
+		// Get references from terrainBuilder
+		if (terrainBuilderProps) {
+			this.terrainRef = terrainBuilderProps.terrainRef;
+			this.currentBlockTypeRef = terrainBuilderProps.currentBlockTypeRef;
+			this.scene = terrainBuilderProps.scene;
+			this.toolManagerRef = terrainBuilderProps.toolManagerRef;
+			this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
+			this.undoRedoManager = terrainBuilderProps.undoRedoManager;
+			this.placementChangesRef = terrainBuilderProps.placementChangesRef;
+			this.isPlacingRef = terrainBuilderProps.isPlacingRef;
+			this.previewPositionRef = terrainBuilderProps.previewPositionRef;
+			this.modeRef = terrainBuilderProps.modeRef;
+			this.importedUpdateTerrainBlocks = terrainBuilderProps.importedUpdateTerrainBlocks;
+			this.getPlacementPositions = terrainBuilderProps.getPlacementPositions;
+			this.updateSpatialHashForBlocks = terrainBuilderProps.updateSpatialHashForBlocks;
+			
+			// Apply safe brush size to ensure we start with a valid size
+			this.brushSize = this.getSafeBrushSize(this.brushSize);
+			
+			// Set a global reference for tools
+			window.activeTool = this.name;
+		} else {
+			console.error('BrushTool: terrainBuilderProps is undefined in constructor');
+		}
+		
+		// Initialize reusable preview objects
+		this.initializePreviewObjects();
+	}
+
+	onActivate() {
+		super.onActivate();
+
+		// Log activation details for debugging
+		console.log('BrushTool activated');
+		console.log('terrainRef exists:', !!this.terrainRef);
+		console.log('terrainRef.current exists:', this.terrainRef && !!this.terrainRef.current);
+		console.log('currentBlockTypeRef exists:', !!this.currentBlockTypeRef);
+		console.log('currentBlockTypeRef.current exists:', this.currentBlockTypeRef && !!this.currentBlockTypeRef.current);
+		console.log('undoRedoManager exists:', !!this.undoRedoManager);
+		console.log('placementChangesRef exists:', !!this.placementChangesRef);
+		console.log('isPlacingRef exists:', !!this.isPlacingRef);
+
+		// Initialize empty objects if needed
+		if (this.terrainRef && !this.terrainRef.current) {
+			console.log('Initializing empty terrainRef.current in onActivate');
+			this.terrainRef.current = {};
+		}
+
+		// Reset state on activation
+		this.isPlacing = false;
+		this.lastPosition = null;
+		this.placedPositions.clear();
+		this.processedPositionsMap.clear();
+		this.removeBrushPreview();
+		
+		// Reset tracking state to ensure clean activation
+		if (this.isPlacingRef) {
+			this.isPlacingRef.current = false;
+		}
+		
+		// Reset placement changes to ensure we don't have leftover changes
+		if (this.placementChangesRef) {
+			this.placementChangesRef.current = { 
+				terrain: { added: {}, removed: {} }, 
+				environment: { added: [], removed: [] } 
+			};
+		}
+		
+		// Initialize reusable preview objects
+		this.initializePreviewObjects();
+	}
+	
+	/**
+	 * Initialize reusable preview objects for better performance
+	 */
+	initializePreviewObjects() {
+		// Create reusable preview materials if they don't exist
+		if (!this.previewMaterialAdd) {
+			this.previewMaterialAdd = new THREE.MeshBasicMaterial({
+				color: 0x4e8eff, // Blue
+				transparent: true, 
+				opacity: 0.5,
+				depthTest: true,
+				depthWrite: false
+			});
+		}
+		
+		if (!this.previewMaterialErase) {
+			this.previewMaterialErase = new THREE.MeshBasicMaterial({
+				color: 0xff4e4e, // Red
+				transparent: true, 
+				opacity: 0.5,
+				depthTest: true,
+				depthWrite: false
+			});
+		}
+	}
+
+	onDeactivate() {
+		super.onDeactivate();
+		this.removeBrushPreview();
+		this.isPlacing = false;
+		this.lastPosition = null;
+		this.placedPositions.clear();
+		this.processedPositionsMap.clear();
+		
+		// Clear position cache on deactivation to free memory
+		this.positionCache.clear();
+		this.lastPreviewPosition = null;
+		
+		// Clear any pending chunk updates
+		this.clearChunkUpdates();
+	}
+
+	/**
+	 * Clear any pending chunk updates
+	 */
+	clearChunkUpdates() {
+		if (this.debounceTimer) {
+			clearTimeout(this.debounceTimer);
+			this.debounceTimer = null;
+		}
+		this.chunkUpdateQueue.clear();
+		this.dirtyChunks.clear();
+		this.processingChunks.clear();
+	}
+
+	/**
+	 * Queue a chunk for update with debouncing to reduce rebuilds
+	 * @param {Object} position - Position within the chunk to update
+	 * @param {String} action - 'add' or 'remove'
+	 */
+	queueChunkUpdate(position, action) {
+		// Calculate chunk coordinates using the utility method to ensure valid chunk origins
+		const chunkOrigin = this.ensureValidChunkOrigin(position);
+		const chunkKey = `${chunkOrigin.x},${chunkOrigin.y},${chunkOrigin.z}`;
+		
+		// Skip if this chunk is currently being processed
+		if (this.processingChunks && this.processingChunks.has(chunkKey)) {
+			// console.log(`BrushTool: Skipping chunk ${chunkKey} as it's currently being processed`);
+			return;
+		}
+		
+		// Add to the update queue
+		this.chunkUpdateQueue.add(chunkKey);
+		
+		// Track changes for this chunk
+		if (!this.dirtyChunks.has(chunkKey)) {
+			this.dirtyChunks.set(chunkKey, { adds: new Set(), removes: new Set() });
+		}
+		
+		// Record the specific change
+		const posKey = `${position.x},${position.y},${position.z}`;
+		if (action === 'add') {
+			this.dirtyChunks.get(chunkKey).adds.add(posKey);
+		} else if (action === 'remove') {
+			this.dirtyChunks.get(chunkKey).removes.add(posKey);
+		}
+		
+		// Debounce the update to avoid excessive rebuilds
+		if (this.debounceTimer) {
+			clearTimeout(this.debounceTimer);
+		}
+		
+		this.debounceTimer = setTimeout(() => {
+			this.processChunkUpdates();
+		}, this.DEBOUNCE_DELAY);
+	}
+	
+	/**
+	 * Process all queued chunk updates
+	 */
+	processChunkUpdates() {
+		if (!this.chunkUpdateQueue || this.chunkUpdateQueue.size === 0) {
+			return;
+		}
+		
+		console.log(`BrushTool: Processing ${this.chunkUpdateQueue.size} chunk updates`);
+		
+		// Convert the updates back to string keys
+		const chunkKeys = Array.from(this.chunkUpdateQueue);
+		
+		// Use the directly imported forceChunkUpdate instead of trying to access it through TerrainBuilder
+		if (this.terrainBuilderRef && this.terrainBuilderRef.current) {
+			// Check if the method exists on the terrainBuilderRef object
+			if (this.terrainBuilderRef.current.forceChunkUpdate) {
+				this.terrainBuilderRef.current.forceChunkUpdate(chunkKeys, { skipNeighbors: true });
+			} else {
+				console.warn('BrushTool: terrainBuilderRef.current.forceChunkUpdate is not available, falling back to forceRefreshAllChunks');
+				// Fall back to refreshing all chunks as a last resort
+				if (this.terrainBuilderRef.current.forceRefreshAllChunks) {
+					this.terrainBuilderRef.current.forceRefreshAllChunks();
+				}
+			}
+		}
+		
+		// Clear the tracked updates
+		this.chunkUpdateQueue.clear();
+	}
+
+	/**
+	 * Add blocks to the pending batch for optimized processing
+	 * @param {Object} blocks - Object containing block data keyed by position
+	 * @param {Boolean} isRemoval - Whether these are blocks to be removed
+	 */
+	addToPendingBatch(blocks, isRemoval = false) {
+		if (!blocks || Object.keys(blocks).length === 0) {
+			return;
+		}
+		
+		// Add to the appropriate collection in the pending batch
+		const batchCollection = isRemoval ? this.pendingBatch.removed : this.pendingBatch.added;
+		
+		// Add each block to the batch
+		for (const [posKey, blockId] of Object.entries(blocks)) {
+			batchCollection[posKey] = blockId;
+		}
+		
+		// If this is the first addition, initialize the timer
+		if (this.lastBatchTime === 0) {
+			this.lastBatchTime = performance.now();
+		}
+	}
+
+	/**
+	 * Process any pending batches of blocks
+	 */
+	processPendingBatch() {
+		const hasAdded = Object.keys(this.pendingBatch.added).length > 0;
+		const hasRemoved = Object.keys(this.pendingBatch.removed).length > 0;
+		
+		if (!hasAdded && !hasRemoved) {
+			return;
+		}
+		
+		console.log(`BrushTool: Processing pending batch - added: ${Object.keys(this.pendingBatch.added).length}, removed: ${Object.keys(this.pendingBatch.removed).length}`);
+		
+		// Use imported fast update method for better performance
+		if (this.importedUpdateTerrainBlocks) {
+			this.importedUpdateTerrainBlocks(
+				this.pendingBatch.added, 
+				this.pendingBatch.removed, 
+				{ skipSpatialHash: true }
+			);
+		} else if (this.terrainBuilderRef && this.terrainBuilderRef.current) {
+			// Fallback to standard update method
+			this.terrainBuilderRef.current.updateTerrainBlocks(
+				this.pendingBatch.added, 
+				this.pendingBatch.removed, 
+				{ skipSpatialHash: true }
+			);
+		}
+		
+		// Clear the pending batch
+		this.pendingBatch = { added: {}, removed: {} };
+	}
+
+	/**
+	 * Handles mouse down events for brush placement
+	 */
+	handleMouseDown(event, position, button) {
+		// Safety check - if position is undefined, we can't do anything
+		if (!position) {
+			console.error('BrushTool: position is undefined in handleMouseDown');
+			return;
+		}
+
+		// Only handle left mouse button (button 0)
+		if (button !== undefined && button !== 0) {
+			return;
+		}
+
+		console.log('BrushTool: handleMouseDown', {
+			position,
+			button,
+			brushSize: this.brushSize,
+			isCircular: this.isCircular,
+			isEraseMode: this.isEraseMode
+		});
+
+		// Make sure the terrain reference is valid before placing
+		if (!this.terrainRef || !this.terrainRef.current) {
+			console.error('BrushTool: terrainRef is undefined or empty when attempting to place blocks');
+			return;
+		}
+
+		// Start placement tracking for undo/redo
+		if (this.isPlacingRef) {
+			console.log('BrushTool: Setting isPlacingRef to true');
+			this.isPlacingRef.current = true;
+		}
+		
+		// Make sure placement changes are initialized
+		if (this.placementChangesRef) {
+			console.log('BrushTool: Ensuring placementChangesRef is initialized');
+			this.placementChangesRef.current = { 
+				terrain: { added: {}, removed: {} }, 
+				environment: { added: [], removed: [] } 
+			};
+		} else {
+			console.warn('BrushTool: placementChangesRef is not available, changes won\'t be tracked for undo/redo');
+		}
+
+		// Use the previewPositionRef from TerrainBuilder which has the correct green cursor position
+		let finalPosition;
+		if (this.previewPositionRef && this.previewPositionRef.current) {
+			// Use the position from the standard green cursor
+			finalPosition = this.previewPositionRef.current;
+		} else {
+			// Fallback to manual calculation if previewPositionRef isn't available
+			console.warn('BrushTool: previewPositionRef not available, using less accurate positioning');
+			
+			// Process position to match standard cursor calculation
+			const processedPosition = { 
+				x: position.x,
+				y: position.y,
+				z: position.z
+			};
+
+			// Get normal from the event if it exists
+			const normal = event.normal || { x: 0, y: 1, z: 0 }; 
+			
+			// Add normal * 0.5 to position
+			processedPosition.x += normal.x * 0.5;
+			processedPosition.y += normal.y * 0.5;
+			processedPosition.z += normal.z * 0.5;
+			
+			// Round X and Z, but FLOOR the Y coordinate
+			processedPosition.x = Math.round(processedPosition.x);
+			processedPosition.y = Math.floor(processedPosition.y);
+			processedPosition.z = Math.round(processedPosition.z);
+			
+			finalPosition = processedPosition;
+		}
+
+		// Start block placement or erasure
+		this.isPlacing = true;
+		this.lastPosition = new THREE.Vector3(finalPosition.x, finalPosition.y, finalPosition.z);
+		this.placedPositions.clear();
+		
+		// Perform the placement or erasure
+		if (this.isEraseMode) {
+			this.eraseBlocksAtPosition(finalPosition);
+		} else {
+			this.placeBlocksAtPosition(finalPosition);
+		}
+	}
+
+	/**
+	 * Handles mouse move events for brush placement
+	 */
+	handleMouseMove(event, position) {
+		// Safety check
+		if (!position) return;
+
+		// Instead of calculating our own position, use the previewPositionRef from TerrainBuilder
+		// which already has the correct position calculation logic
+		if (this.previewPositionRef && this.previewPositionRef.current) {
+			// Use the previewPositionRef position which matches the green cursor exactly
+			const cursorPosition = this.previewPositionRef.current;
+			
+			// Update the brush preview based on the cursor position
+			this.updateBrushPreview(cursorPosition);
+
+			// Process any pending updates to keep the UI responsive
+			// This ensures we don't wait too long between updates during fast movements
+			const now = performance.now();
+			if (now - this.lastBatchTime > this.updateInterval && 
+				(Object.keys(this.pendingBatch.added).length > 0 || Object.keys(this.pendingBatch.removed).length > 0)) {
+				this.processPendingBatch();
+				this.lastBatchTime = now;
+			}
+
+			// If we're placing blocks and the mouse is down, handle continuous placement
+			if (this.isPlacing && this.lastPosition) {
+				// Check if left mouse button is still pressed (as a safety measure)
+				if (event.buttons !== undefined && (event.buttons & 1) === 0) {
+					console.log('BrushTool: Left mouse button no longer pressed during move, stopping placement');
+					this.isPlacing = false;
+					this.handleMouseUp(event, cursorPosition, 0);
+					return;
+				}
+				
+				// For performance, only place blocks if position has changed significantly
+				// Convert cursor position to Vector3 for distance calculation
+				const positionVector = new THREE.Vector3(
+					cursorPosition.x, 
+					cursorPosition.y, 
+					cursorPosition.z
+				);
+				
+				// Calculate distance moved and compare to a threshold based on brush size
+				// Smaller brush = smaller steps needed for good coverage
+				const distanceMoved = positionVector.distanceTo(this.lastPosition);
+				const placementThreshold = Math.max(this.brushSize * 0.15, 0.2); 
+				
+				if (
+					// Either position has changed in integer coordinates
+					!this.lastPosition.equals(positionVector) && 
+					// And we've moved far enough for a new placement
+					distanceMoved >= placementThreshold
+				) {
+					// Place or erase blocks based on current mode
+					if (this.isEraseMode) {
+						this.eraseBlocksAtPosition(cursorPosition);
+					} else {
+						this.placeBlocksAtPosition(cursorPosition);
+					}
+					
+					// Update last position
+					this.lastPosition.copy(positionVector);
+				}
+			}
+		} else {
+			// Fallback to old behavior if previewPositionRef isn't available
+			console.warn('BrushTool: previewPositionRef not available, using less accurate positioning');
+			
+			// Process position to match exactly how the standard green cursor calculates it
+			const processedPosition = { 
+				x: position.x,
+				y: position.y,
+				z: position.z
+			};
+
+			// Get normal from the event if it exists
+			const normal = event.normal || { x: 0, y: 1, z: 0 }; 
+			
+			// Add normal * 0.5 to position
+			processedPosition.x += normal.x * 0.5;
+			processedPosition.y += normal.y * 0.5;
+			processedPosition.z += normal.z * 0.5;
+			
+			// Round X and Z, but FLOOR the Y coordinate 
+			processedPosition.x = Math.round(processedPosition.x);
+			processedPosition.y = Math.floor(processedPosition.y);
+			processedPosition.z = Math.round(processedPosition.z);
+			
+			// Update brush preview
+			this.updateBrushPreview(processedPosition);
+		}
+	}
+
+	/**
+	 * Handles mouse up events for brush placement
+	 */
+	handleMouseUp(event, position, button) {
+		// Only handle left mouse button (button 0)
+		if (button !== undefined && button !== 0) {
+			return;
+		}
+
+		// Process any remaining blocks in the batch
+		this.processPendingBatch();
+
+		// Now that all blocks are placed, update the spatial hash for all affected blocks at once
+		if (this.updateSpatialHashForBlocks && this.placedPositions.size > 0) {
+			console.time('updateSpatialHash');
+			// Convert the Set of position strings back to an array of positions
+			const positions = Array.from(this.placedPositions).map(posKey => {
+				const [x, y, z] = posKey.split(',').map(Number);
+				return { x, y, z };
+			});
+			
+			console.log(`BrushTool: Updating spatial hash for ${positions.length} blocks`);
+			this.updateSpatialHashForBlocks(positions);
+			console.timeEnd('updateSpatialHash');
+		}
+
+		// Finish placement and notify the undo/redo manager
+		if (this.isPlacingRef) {
+			this.isPlacingRef.current = false;
+		}
+
+		// Clear tracking variables
+		this.isPlacing = false;
+		this.lastPosition = null;
+		this.placedPositions.clear();
+
+		// Set a small timeout to make sure batch processing is complete before allowing new ones
+		setTimeout(() => {
+			this.lastBatchTime = 0;
+		}, 50);
+	}
+
+	/**
+	 * Handles key down events
+	 */
+	handleKeyDown(event) {
+		// Check for Control key
+		if (event.key === 'Control') {
+			this.isEraseMode = true;
+			
+			// Update the preview to reflect erase mode
+			if (this.previewPositionRef && this.previewPositionRef.current) {
+				this.updateBrushPreview(this.previewPositionRef.current);
+			}
+			return;
+		}
+		
+		// Updated control scheme:
+		// 1: Decrease brush size
+		// 2: Increase brush size
+		// 3: Toggle shape (square/circle)
+		// 4: Toggle flat (Y height = 1) / 3D (full height)
+		
+		// Handle size adjustments
+		if (event.key === '1') {
+			// Decrease size (minimum 1)
+			const newSize = Math.max(1, this.brushSize - 1);
+			if (newSize !== this.brushSize) {
+				this.brushSize = newSize;
+				console.log(`BrushTool: Size decreased to ${this.brushSize}`);
+				this.positionCache.clear();
+			}
+		}
+		else if (event.key === '2') {
+			// Increase size (with safe maximum)
+			const newSize = this.brushSize + 1;
+			const safeSize = this.getSafeBrushSize(newSize);
+			
+			if (safeSize !== this.brushSize) {
+				this.brushSize = safeSize;
+				console.log(`BrushTool: Size increased to ${this.brushSize}`);
+				this.positionCache.clear();
+				
+				// Notify if the size was capped
+				if (safeSize !== newSize) {
+					console.warn(`BrushTool: Size was limited to ${safeSize} to prevent chunk boundary issues`);
+				}
+			}
+		}
+		// Toggle shape (square/circle)
+		else if (event.key === '3') {
+			this.isCircular = !this.isCircular;
+			console.log(`BrushTool: Shape changed to ${this.isCircular ? 'circle' : 'square'}`);
+			this.positionCache.clear();
+		}
+		// Toggle flat/3D mode
+		else if (event.key === '4') {
+			this.isFlatMode = !this.isFlatMode;
+			console.log(`BrushTool: Mode changed to ${this.isFlatMode ? 'flat' : '3D'}`);
+			this.positionCache.clear();
+		}
+		
+		// Update the preview after any changes
+		if (['1', '2', '3', '4'].includes(event.key) && this.previewPositionRef && this.previewPositionRef.current) {
+			this.updateBrushPreview(this.previewPositionRef.current);
+		}
+	}
+
+	/**
+	 * Get a safe brush size that won't cause out-of-bounds errors
+	 * @param {number} requestedSize - The requested brush size
+	 * @returns {number} - A safe brush size
+	 */
+	getSafeBrushSize(requestedSize) {
+		// The maximum safe size is determined by the chunk size
+		// Since we want to avoid out-of-bounds errors when placing blocks near chunk boundaries,
+		// we need to limit the brush radius to less than half the chunk size
+		
+		const CHUNK_SIZE = 16; // Standard chunk size
+		const MAX_SAFE_RADIUS = Math.floor(CHUNK_SIZE / 4); // Conservative limit to prevent issues
+		
+		// Cap the brush size to the maximum safe radius
+		return Math.min(requestedSize, MAX_SAFE_RADIUS);
+	}
+
+	/**
+	 * Handles key up events
+	 */
+	handleKeyUp(event) {
+		// Check for Control key release
+		if (event.key === 'Control') {
+			this.isEraseMode = false;
+			
+			// Update the preview to reflect place mode
+			if (this.previewPositionRef && this.previewPositionRef.current) {
+				this.updateBrushPreview(this.previewPositionRef.current);
+			}
+		}
+	}
+
+	/**
+	 * Check if coordinates are valid for block placement
+	 * @param {Object} position - Position to validate
+	 * @returns {boolean} - True if the position is valid
+	 */
+	isValidBlockPosition(position) {
+		// Check if position is defined
+		if (!position || typeof position.x !== 'number' || typeof position.y !== 'number' || typeof position.z !== 'number') {
+			return false;
+		}
+		
+		// Check if coordinates are within valid bounds
+		// The valid range would typically depend on your chunk system implementation
+		// For example, if using 16-bit integers, the range would be -32768 to 32767
+		// Use a conservative range to ensure we're within valid chunk bounds
+		const MAX_COORDINATE = 4000; // Use a reasonable limit
+		
+		return position.x >= -MAX_COORDINATE && position.x <= MAX_COORDINATE &&
+			   position.y >= -MAX_COORDINATE && position.y <= MAX_COORDINATE &&
+			   position.z >= -MAX_COORDINATE && position.z <= MAX_COORDINATE;
+	}
+
+	/**
+	 * Check if the position is valid for the chunk system
+	 * This is a more specific validation than isValidBlockPosition
+	 * @param {Object} position - Position to validate
+	 * @returns {boolean} - True if the position is valid for chunk placement
+	 */
+	isValidForChunk(position) {
+		// First do basic position validation
+		if (!this.isValidBlockPosition(position)) {
+			return false;
+		}
+		
+		// Import what we know about chunks from the error message
+		// The coordinates are still within valid range, we just need to ensure
+		// they're properly aligned with chunk boundaries
+		
+		// This method should always return true as we'll let the chunk system handle
+		// the block alignment. The error was happening because we were trying to directly
+		// manipulate local chunk coordinates, but we should be working with global coordinates.
+		return true;
+	}
+
+	/**
+	 * Places blocks at the specified position using the brush shape and size
+	 * @param {Object} position - The position to place blocks at
+	 * @returns {Number} - The number of blocks placed
+	 */
+	placeBlocksAtPosition(position) {
+		const currentBlockTypeId = this.getCurrentBlockTypeId();
+		if (!currentBlockTypeId) {
+			console.error('BrushTool: No current block type id');
+			return 0;
+		}
+
+		// Skip if terrain reference is missing
+		if (!this.terrainRef || !this.terrainRef.current) {
+			console.error('BrushTool: terrainRef is undefined or null');
+			return 0;
+		}
+
+		// Get the brush positions
+		const brushPositions = this.getBrushPositions(position);
+		
+		// Track how many blocks we actually place (excluding existing blocks)
+		let placedCount = 0;
+		
+		// Batch these blocks
+		const blocksToAdd = {};
+		
+		// Process each position in the brush area
+		for (const brushPos of brushPositions) {
+			// Only place if the position doesn't already have this block type
+			const posKey = `${brushPos.x},${brushPos.y},${brushPos.z}`;
+			
+			// Skip if we've already processed this position in the current operation
+			if (this.processedPositionsMap.has(posKey)) {
+				continue;
+			}
+			
+			// Check if position already has a block
+			const existingBlockId = this.terrainRef.current[posKey];
+			if (existingBlockId === currentBlockTypeId) {
+				continue; // Skip if same block type already exists
+			}
+			
+			// Add this block to the batch
+			blocksToAdd[posKey] = currentBlockTypeId;
+			
+			// Track for undo/redo
+			if (this.placementChangesRef && this.placementChangesRef.current) {
+				// If this position had a different block, record it as removed for undo
+				if (existingBlockId !== undefined && existingBlockId !== 0) {
+					this.placementChangesRef.current.terrain.removed[posKey] = existingBlockId;
+				}
+				
+				// Record the added block
+				this.placementChangesRef.current.terrain.added[posKey] = currentBlockTypeId;
+			}
+			
+			// Mark this position as processed
+			this.processedPositionsMap.set(posKey, true);
+			
+			// Track for spatial hash update on mouse up
+			this.placedPositions.add(posKey);
+			
+			// Update the chunk for this position
+			this.queueChunkUpdate(brushPos, 'add');
+			
+			// Increment placed count
+			placedCount++;
+		}
+		
+		// Only process batches if we have blocks to place
+		if (placedCount > 0) {
+			this.addToPendingBatch(blocksToAdd);
+			
+			// Process batches based on time interval
+			const now = performance.now();
+			if (now - this.lastBatchTime > this.updateInterval) {
+				this.processPendingBatch();
+				this.lastBatchTime = now;
+			}
+		}
+		
+		return placedCount;
+	}
+
+	/**
+	 * Erase blocks at the specified position using the brush shape and size
+	 * @param {Object} position - The position to erase blocks at
+	 * @returns {Number} - The number of blocks erased
+	 */
+	eraseBlocksAtPosition(position) {
+		// Skip if terrain reference is missing
+		if (!this.terrainRef || !this.terrainRef.current) {
+			console.error('BrushTool: terrainRef is undefined or null');
+			return 0;
+		}
+
+		// Get the brush positions
+		const brushPositions = this.getBrushPositions(position);
+		
+		// Track how many blocks we actually erase
+		let erasedCount = 0;
+		
+		// Batch these blocks
+		const blocksToRemove = {};
+		
+		// Process each position in the brush area
+		for (const brushPos of brushPositions) {
+			// Create a position key
+			const posKey = `${brushPos.x},${brushPos.y},${brushPos.z}`;
+			
+			// Skip if we've already processed this position in the current operation
+			if (this.processedPositionsMap.has(posKey)) {
+				continue;
+			}
+			
+			// Check if position has a block to erase
+			const existingBlockId = this.terrainRef.current[posKey];
+			if (existingBlockId === undefined || existingBlockId === 0) {
+				continue; // Skip if no block exists
+			}
+			
+			// Add this block to the batch for removal
+			blocksToRemove[posKey] = 0; // 0 = air
+			
+			// Track for undo/redo
+			if (this.placementChangesRef && this.placementChangesRef.current) {
+				// Record the removed block for undo
+				this.placementChangesRef.current.terrain.removed[posKey] = existingBlockId;
+			}
+			
+			// Mark as processed to avoid duplicates
+			this.processedPositionsMap.set(posKey, true);
+			
+			// Track for spatial hash update on mouse up
+			this.placedPositions.add(posKey);
+			
+			// Queue chunk for optimized update
+			this.queueChunkUpdate(brushPos, 'remove');
+			
+			// Increment erased count
+			erasedCount++;
+		}
+		
+		// Only process batches if we have blocks to erase
+		if (erasedCount > 0) {
+			this.addToPendingBatch(blocksToRemove, true);
+			
+			// Process batches based on time interval
+			const now = performance.now();
+			if (now - this.lastBatchTime > this.updateInterval) {
+				this.processPendingBatch();
+				this.lastBatchTime = now;
+			}
+		}
+		
+		return erasedCount;
+	}
+
+	/**
+	 * Gets all positions within the brush area based on current brush settings
+	 * @param {Object} centerPos The center position of the brush
+	 * @returns {Array} Array of positions covered by the brush
+	 */
+	getBrushPositions(centerPos) {
+		// Check if we have a cached result for this input
+		const cacheKey = `${centerPos.x},${centerPos.y},${centerPos.z},${this.brushSize},${this.isCircular},${this.isFlatMode}`;
+		
+		if (this.positionCache.has(cacheKey)) {
+			return this.positionCache.get(cacheKey);
+		}
+		
+		// Limit the cache size to prevent memory issues
+		if (this.positionCache.size > 100) {
+			// Remove the oldest entries
+			const keysToDelete = Array.from(this.positionCache.keys()).slice(0, 20);
+			keysToDelete.forEach(key => this.positionCache.delete(key));
+		}
+		
+		// Ensure center position is grid-aligned
+		const gridAlignedCenter = this.alignPositionToGrid(centerPos);
+		
+		// Generate positions array
+		const positions = [];
+		
+		// For size 1, just return the center position (1x1x1 block)
+		if (this.brushSize === 1) {
+			positions.push(gridAlignedCenter);
+			this.positionCache.set(cacheKey, positions);
+			//console.log(`BrushTool: Generated ${positions.length} position(s) for size 1 brush`);
+			return positions;
+		}
+		
+		// Size 2 is a 3x3 square or circle (in flat mode) or 3x3x3 cube/sphere (in 3D mode)
+		// Size 3 is a 5x5 square or circle (in flat mode) or 5x5x5 cube/sphere (in 3D mode)
+		// And so on...
+		
+		// Calculate the actual size - each brush size unit adds 2 blocks to the dimension
+		const actualSize = (this.brushSize - 1) * 2 + 1;
+		const radius = Math.floor(actualSize / 2);
+		
+		// Calculate min/max coordinates
+		const min = {
+			x: gridAlignedCenter.x - radius,
+			y: this.isFlatMode ? gridAlignedCenter.y : gridAlignedCenter.y - radius,
+			z: gridAlignedCenter.z - radius
+		};
+		
+		const max = {
+			x: gridAlignedCenter.x + radius,
+			y: this.isFlatMode ? gridAlignedCenter.y : gridAlignedCenter.y + radius,
+			z: gridAlignedCenter.z + radius
+		};
+		
+		// Generate positions
+		for (let x = min.x; x <= max.x; x++) {
+			for (let y = min.y; y <= max.y; y++) {
+				for (let z = min.z; z <= max.z; z++) {
+					// For circular brush, check distance
+					if (this.isCircular) {
+						let distance;
+						
+						if (this.isFlatMode) {
+							// In flat mode, only consider x and z for distance calculation
+							const dx = x - gridAlignedCenter.x;
+							const dz = z - gridAlignedCenter.z;
+							distance = Math.sqrt(dx * dx + dz * dz);
+						} else {
+							// In 3D mode, consider all coordinates
+							const dx = x - gridAlignedCenter.x;
+							const dy = y - gridAlignedCenter.y;
+							const dz = z - gridAlignedCenter.z;
+							distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+						}
+						
+						if (distance > radius) {
+							continue; // Skip positions outside the circle
+						}
+					}
+					
+					// Ensure the position is grid-aligned
+					const pos = this.alignPositionToGrid({ x, y, z });
+					
+					// Check if this is a valid position
+					if (this.isValidBlockPosition({ x: pos.x, y: pos.y, z: pos.z })) {
+						positions.push(pos);
+					}
+				}
+			}
+		}
+		
+		// Add debug logging to verify brush size
+		//console.log(`BrushTool: Generated ${positions.length} position(s) for size ${this.brushSize} brush (${this.isCircular ? 'circle' : 'square'}, ${this.isFlatMode ? 'flat' : '3D'}) - Actual dimensions: ${actualSize}x${this.isFlatMode ? 1 : actualSize}x${actualSize}`);
+		
+		// Cache the result
+		this.positionCache.set(cacheKey, positions);
+		
+		return positions;
+	}
+
+	/**
+	 * Update the brush preview visualization
+	 */
+	updateBrushPreview(position) {
+		if (!position) {
+			this.removeBrushPreview();
+			return;
+		}
+
+		// Check if position is the same as last time (to avoid needless updates)
+		if (this.lastPreviewPosition &&
+			this.lastPreviewPosition.x === position.x &&
+			this.lastPreviewPosition.y === position.y &&
+			this.lastPreviewPosition.z === position.z) {
+			return;
+		}
+
+		// Save current position
+		this.lastPreviewPosition = {
+			x: position.x,
+			y: position.y,
+			z: position.z
+		};
+
+		// Align position to grid for consistent preview
+		const alignedPosition = this.alignPositionToGrid(position);
+
+		// Create or update the preview mesh
+		if (!this.previewMesh) {
+			// Create new mesh if one doesn't exist
+			this.initializePreviewObjects();
+		}
+
+		// Get positions for blocks in the brush
+		const brushPositions = this.getBrushPositions(alignedPosition);
+
+		// Early exit if no positions
+		if (!brushPositions || brushPositions.length === 0) {
+			return;
+		}
+
+		// Use the appropriate material based on current mode
+		const material = this.isEraseMode ? this.previewMaterialErase : this.previewMaterialAdd;
+
+		// Generate blocks for each position
+		const blockSize = 1.02; // Slightly larger than 1 for visibility
+		let previewGeometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+
+		// Create instances for each brush position
+		const instances = new THREE.InstancedMesh(previewGeometry, material, brushPositions.length);
+		instances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+		
+		// Set position for each instance
+		const matrix = new THREE.Matrix4();
+		brushPositions.forEach((pos, index) => {
+			// Verify each position is grid-aligned
+			const verifiedPos = this.alignPositionToGrid(pos);
+			matrix.setPosition(verifiedPos.x, verifiedPos.y, verifiedPos.z);
+			instances.setMatrixAt(index, matrix);
+		});
+
+		// Update the instance matrix
+		instances.instanceMatrix.needsUpdate = true;
+
+		// Remove old preview if it exists
+		this.removeBrushPreview();
+
+		// Add the new preview mesh
+		this.previewMesh = instances;
+		if (this.scene) {
+			this.scene.add(this.previewMesh);
+		}
+	}
+
+	/**
+	 * Removes the brush preview from the scene
+	 */
+	removeBrushPreview() {
+		if (this.previewMesh) {
+			this.scene.remove(this.previewMesh);
+			this.previewMesh = null;
+		}
+	}
+	
+	/**
+	 * Clean up resources when the tool is disposed
+	 */
+	dispose() {
+		super.dispose();
+		this.removeBrushPreview();
+		
+		// Cancel any pending timers
+		if (this.debounceTimer) {
+			clearTimeout(this.debounceTimer);
+			this.debounceTimer = null;
+		}
+		
+		// Dispose of any created geometries and materials
+		if (this.previewGeometry) {
+			this.previewGeometry.dispose();
+			this.previewGeometry = null;
+		}
+		
+		if (this.previewMaterialAdd) {
+			this.previewMaterialAdd.dispose();
+			this.previewMaterialAdd = null;
+		}
+		
+		if (this.previewMaterialErase) {
+			this.previewMaterialErase.dispose();
+			this.previewMaterialErase = null;
+		}
+		
+		// Clear caches and state
+		this.positionCache.clear();
+		this.processedPositionsMap.clear();
+		this.placedPositions.clear();
+		this.clearChunkUpdates();
+		this.pendingBatch = { added: {}, removed: {} };
+		this.lastBatchTime = 0;
+		
+		// Null out references to avoid memory leaks
+		this.lastPosition = null;
+		this.lastPreviewPosition = null;
+	}
+
+	/**
+	 * Ensures a position is properly aligned to the grid
+	 * @param {Object} position - The position to align
+	 * @returns {Object} The aligned position
+	 */
+	alignPositionToGrid(position) {
+		return {
+			x: Math.floor(position.x),
+			y: Math.floor(position.y), 
+			z: Math.floor(position.z)
+		};
+	}
+
+	/**
+	 * Ensures a coordinate is a valid chunk origin
+	 * @param {Object} coordinate - The coordinate to check/correct
+	 * @returns {Object} A valid chunk origin coordinate
+	 */
+	ensureValidChunkOrigin(coordinate) {
+		const CHUNK_SIZE = 16;
+		return {
+			x: Math.floor(coordinate.x / CHUNK_SIZE) * CHUNK_SIZE,
+			y: Math.floor(coordinate.y / CHUNK_SIZE) * CHUNK_SIZE,
+			z: Math.floor(coordinate.z / CHUNK_SIZE) * CHUNK_SIZE
+		};
+	}
+
+	/**
+	 * Gets the current block type ID from the current block type reference
+	 * @returns {number|null} The current block type ID or null if not available
+	 */
+	getCurrentBlockTypeId() {
+		if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+			console.error('BrushTool: currentBlockTypeRef is undefined or null');
+			return null;
+		}
+		
+		return this.currentBlockTypeRef.current.id;
+	}
+}
+
+export default BrushTool; 

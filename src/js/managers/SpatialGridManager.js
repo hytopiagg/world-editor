@@ -430,7 +430,6 @@ class SpatialGridManager {
 				}
 				
 				// Add to spatial hash
-				console.log(`Setting block at (${x},${y},${z}) with ID ${blockId}`);
 				this.spatialHashGrid.set(x, y, z, blockId);
 			}
 		}
@@ -460,7 +459,7 @@ class SpatialGridManager {
 			}
 		}
 		
-		console.log(`Successfully updated spatial hash: added ${addedBlocks.length}, removed ${removedBlocks.length}`);
+		//console.log(`Successfully updated spatial hash: added ${addedBlocks.length}, removed ${removedBlocks.length}`);
 	}
 	
 	/**
@@ -529,7 +528,7 @@ class SpatialGridManager {
 		}
 		
 		// Use a very small step size for more accurate detection of all faces
-		const stepSize = 0.05; // Reduced for better accuracy with thin walls
+		const stepSize = 0.02; // Reduced for better accuracy with thin walls
 		const maxSteps = Math.ceil(maxDistance / stepSize);
 		
 		// DDA algorithm for efficient ray traversal through the grid
@@ -575,7 +574,7 @@ class SpatialGridManager {
 		let lastEmptyBlockZ = Math.floor(currentZ);
 		
 		// Debug logging for troubleshooting
-		const isDebugEnabled = debug && isPlacing;
+		const isDebugEnabled = false;//debug && isPlacing;
 		if (isDebugEnabled) {
 			console.log(`RAYCAST: Starting ray from (${rayOrigin.x.toFixed(2)}, ${rayOrigin.y.toFixed(2)}, ${rayOrigin.z.toFixed(2)})`);
 			console.log(`RAYCAST: Ray direction (${dirNormalized.x.toFixed(2)}, ${dirNormalized.y.toFixed(2)}, ${dirNormalized.z.toFixed(2)})`);

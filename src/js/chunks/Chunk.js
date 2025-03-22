@@ -166,15 +166,31 @@ class Chunk {
   }
 
   /**
-   * Build the meshes for the chunk
+   * Build meshes for this chunk
    * @param {ChunkManager} chunkManager - The chunk manager
+   * @param {Object} options - Additional options
+   * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates
    * @returns {Promise<Object>} The meshes
    */
-  async buildMeshes(chunkManager) {
-    const perfId = `buildMeshes-${this.chunkId}`;
-    console.time(perfId);
-    console.log(`Building full meshes for chunk ${this.chunkId}`);
+  async buildMeshes(chunkManager, options = {}) {
+    const skipNeighbors = options && options.skipNeighbors === true;
+    const perfId = `buildMeshes-${this.chunkId}${skipNeighbors ? '-fast' : ''}`;
     
+    // Skip neighbors if specified
+    if (skipNeighbors) {
+      console.log(`Building meshes for chunk ${this.chunkId} with skipNeighbors option`);
+    }
+    
+    // Add a safety check for existing timers
+    try {
+      console.time(perfId);
+    } catch (e) {
+      // If timer already exists, log a warning but continue
+      console.warn(`Timer '${perfId}' already exists, continuing with mesh build`);
+    }
+      
+    //console.log(`Building full meshes for chunk ${this.chunkId}`);
+
     // Always remove any existing meshes first
     if (this._solidMesh) {
       chunkManager.chunkMeshManager.removeSolidMesh(this);
@@ -192,7 +208,7 @@ class Chunk {
     }
     
     // Instead of clearing the entire cache for every block, just clear once for the chunk
-    console.log(`Clearing block type cache for chunk ${this.chunkId}`);
+    //console.log(`Clearing block type cache for chunk ${this.chunkId}`);
     const { x: originX, y: originY, z: originZ } = this.originCoordinate;
     
     // Clear cache for the chunk corners to ensure the whole chunk is refreshed
@@ -260,17 +276,6 @@ class Chunk {
                 (neighborBlockType.isLiquid || !neighborBlockType.isFaceTransparent(blockFace)) &&
                 (!neighborBlockType.isLiquid || neighborBlockType.id === blockType.id);
             
-            // Reduced logging frequency to avoid console spam
-            if (Math.random() < 0.001) { // Only log 0.1% to avoid console spam
-              console.log(`Face culling for block at (${globalX},${globalY},${globalZ}), face ${blockFace}:
-                Block Type: ${blockType.name || blockType.id}
-                Neighbor: ${neighborBlockType ? (neighborBlockType.name || neighborBlockType.id) : 'none/air'}
-                Neighbor Liquid: ${neighborBlockType ? neighborBlockType.isLiquid : 'N/A'}
-                Face Transparent: ${neighborBlockType ? neighborBlockType.isFaceTransparent(blockFace) : 'N/A'}
-                Culled: ${shouldCullFace}
-              `);
-            }
-
             if (shouldCullFace) {
               continue; // cull face
             }
@@ -481,7 +486,14 @@ class Chunk {
     this._updateMeshVisibility();
     //console.timeEnd(`${perfId}-createMeshes`);
     
-    //console.timeEnd(perfId);
+    // Add a safety check for the timer end
+    try {
+      console.timeEnd(perfId);
+    } catch (e) {
+      // If timer doesn't exist, just log a completion message
+      console.log(`Completed building meshes for chunk ${this.chunkId}`);
+    }
+    
     return {
       liquidMesh: this._liquidMesh,
       solidMesh: this._solidMesh,

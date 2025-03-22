@@ -543,6 +543,47 @@ class ChunkSystem {
     console.log(`Setting ChunkSystem bulk loading mode to: ${isLoading ? 'ON' : 'OFF'}`);
     this._chunkManager.setBulkLoadingMode(isLoading, priorityDistance);
   }
+
+  /**
+   * Force update specific chunks by key
+   * @param {Array<String>} chunkKeys - Array of chunk keys to update
+   * @param {Object} options - Options for the update
+   * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates
+   */
+  forceUpdateChunks(chunkKeys, options = {}) {
+    if (!this._initialized || !chunkKeys || chunkKeys.length === 0) {
+      return;
+    }
+    
+    const skipNeighbors = options.skipNeighbors === true;
+    console.log(`ChunkSystem: Forcing update for ${chunkKeys.length} chunks${skipNeighbors ? ' (skipping neighbors)' : ''}`);
+    
+    // Keep track of chunks we're already updating to avoid duplication
+    const updatingChunks = new Set(chunkKeys);
+    
+    // Directly queue the specified chunks for rendering
+    for (const chunkKey of chunkKeys) {
+      const chunk = this._chunkManager.getChunkByKey(chunkKey);
+      if (chunk) {
+        // Add to render queue directly
+        this._chunkManager.queueChunkForRender(chunk, { skipNeighbors });
+        
+        if (!skipNeighbors) {
+          // Add neighbor chunks if we're not skipping them
+          const neighbors = this._chunkManager.getChunkNeighbors(chunk);
+          for (const neighbor of neighbors) {
+            if (neighbor && !updatingChunks.has(neighbor.chunkId)) {
+              updatingChunks.add(neighbor.chunkId);
+              this._chunkManager.queueChunkForRender(neighbor, { skipNeighbors: true });
+            }
+          }
+        }
+      }
+    }
+    
+    // Process the render queue immediately to avoid waiting for the next frame
+    this.processRenderQueue();
+  }
 }
 
 export default ChunkSystem; 
