@@ -112,7 +112,18 @@ class ChunkManager {
 
 		// Check if we have a cached result
 		if (this._blockTypeCache.has(cacheKey)) {
-			return this._blockTypeCache.get(cacheKey);
+			const cachedType = this._blockTypeCache.get(cacheKey);
+			// Validate that the cache isn't stale by comparing with actual block ID
+			const currentId = this.getGlobalBlockId(globalCoordinate);
+			
+			// If the ID has changed (most likely due to block removal), 
+			// don't use the cached value
+			if (cachedType && currentId === 0) {
+				console.log(`Cache hit but block was removed at ${cacheKey} - invalidating cache`);
+				this._blockTypeCache.delete(cacheKey);
+			} else {
+				return cachedType;
+			}
 		}
 
 		const blockId = this.getGlobalBlockId(globalCoordinate);
@@ -634,6 +645,7 @@ class ChunkManager {
 		const options = this._chunkRemeshOptions ? this._chunkRemeshOptions.get(chunk.chunkId) || {} : {};
 		const hasBlockCoords = !!(options.blockCoordinates && options.blockCoordinates.length > 0);
 		const hasExistingMeshes = !!(chunk._solidMesh || chunk._liquidMesh);
+		const forceCompleteRebuild = !!options.forceCompleteRebuild;
 
 		// Check if this is the first block in the chunk
 		const isFirstBlockInChunk = chunk._blocks.filter(id => id !== 0).length <= 1;
@@ -665,9 +677,14 @@ class ChunkManager {
 
 		// Use a try-catch to handle potential errors during mesh building
 		try {
-			// For the first block in a chunk or if we don't have existing meshes, always do a full rebuild
-			// This is faster than partial updates for the first block
-			if (isFirstBlockInChunk || !hasExistingMeshes || !hasBlockCoords) {
+			// Force a complete rebuild if specifically requested (for block removal operations)
+			// or for first blocks and chunks with no existing meshes
+			if (forceCompleteRebuild || isFirstBlockInChunk || !hasExistingMeshes || !hasBlockCoords) {
+				// If this is a forced rebuild for block removal, log it
+				if (forceCompleteRebuild) {
+					console.log(`Performing forced complete rebuild for chunk ${chunk.chunkId}`);
+				}
+				
 				// Full rebuild
 				//console.time(`${perfId}-buildMeshes`);
 				chunk.buildMeshes(this)
@@ -736,19 +753,41 @@ class ChunkManager {
 			return;
 		}
 
-		//  console.time('ChunkManager.clearBlockTypeCache');
+		// Reduce log spam - only log if radius is larger than 1 or if sampling
+		const shouldLog = radius > 1 && Math.random() < 0.01; // Only log 1% of clearing operations
+		
+		if (shouldLog) {
+			console.log(`Clearing block type cache around (${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z}) with radius ${radius}`);
+		}
+
+		// For radius 0, just clear this exact coordinate without logging
+		if (radius === 0) {
+			const exactKey = `${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z}`;
+			if (this._blockTypeCache.has(exactKey)) {
+				this._blockTypeCache.delete(exactKey);
+			}
+			return;
+		}
+
+		// Track number of entries cleared (but only if we're logging)
+		let entriesCleared = shouldLog ? 0 : -1;
 
 		// Clear cache entries within the radius
 		for (let x = -radius; x <= radius; x++) {
 			for (let y = -radius; y <= radius; y++) {
 				for (let z = -radius; z <= radius; z++) {
 					const cacheKey = `${globalCoordinate.x + x},${globalCoordinate.y + y},${globalCoordinate.z + z}`;
-					this._blockTypeCache.delete(cacheKey);
+					if (this._blockTypeCache.has(cacheKey)) {
+						this._blockTypeCache.delete(cacheKey);
+						if (shouldLog) entriesCleared++;
+					}
 				}
 			}
 		}
 
-		//console.timeEnd('ChunkManager.clearBlockTypeCache');
+		if (shouldLog && entriesCleared > 0) {
+			console.log(`Cleared ${entriesCleared} cache entries around (${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z})`);
+		}
 	}
 
 	/**
@@ -771,10 +810,68 @@ class ChunkManager {
 			return;
 		}
 
-		// Clear the block type cache for this region
-		this.clearBlockTypeCache(globalCoordinate);
-
+		// Get the current block ID to determine if this is a block removal
 		const localCoordinate = Chunk.globalCoordinateToLocalCoordinate(globalCoordinate);
+		const currentBlockId = chunk.getLocalBlockId(localCoordinate);
+		const isBlockRemoval = currentBlockId !== 0 && id === 0;
+		
+		// For block removal, use a more targeted approach to cache clearing
+		// rather than a large radius that causes excessive updates
+		const cacheRadius = isBlockRemoval ? 2 : 1;
+		
+		// Clear the block type cache for this region with the appropriate radius
+		this.clearBlockTypeCache(globalCoordinate, cacheRadius);
+		
+		// For block removal, clear caches for immediate neighbors only
+		if (isBlockRemoval) {
+			// Only log once in a while to prevent console spam
+			if (Math.random() < 0.1) {
+				console.log(`Block removal at (${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z})`);
+			}
+			
+			// Check for chunk boundaries 
+			const isOnChunkBoundaryX = localCoordinate.x === 0 || localCoordinate.x === CHUNK_INDEX_RANGE;
+			const isOnChunkBoundaryY = localCoordinate.y === 0 || localCoordinate.y === CHUNK_INDEX_RANGE;
+			const isOnChunkBoundaryZ = localCoordinate.z === 0 || localCoordinate.z === CHUNK_INDEX_RANGE;
+			
+			// Helper to build key to check if edge block is in cache
+			const buildKey = (x, y, z) => `${x},${y},${z}`;
+			
+			// Only clear immediate 6-connected neighbors
+			const neighbors = [
+				[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+			];
+			
+			for (const [dx, dy, dz] of neighbors) {
+				const neighborX = globalCoordinate.x + dx;
+				const neighborY = globalCoordinate.y + dy;
+				const neighborZ = globalCoordinate.z + dz;
+				
+				// Force clear just this neighbor's exact cache entry
+				const neighborKey = buildKey(neighborX, neighborY, neighborZ);
+				if (this._blockTypeCache.has(neighborKey)) {
+					this._blockTypeCache.delete(neighborKey);
+				}
+			}
+			
+			// For chunk boundaries, only clear adjacent chunks when necessary
+			if (isOnChunkBoundaryX) {
+				const adjacentX = globalCoordinate.x + (localCoordinate.x === 0 ? -1 : 1);
+				this.clearBlockTypeCache({x: adjacentX, y: globalCoordinate.y, z: globalCoordinate.z}, 1);
+			}
+			
+			if (isOnChunkBoundaryY) {
+				const adjacentY = globalCoordinate.y + (localCoordinate.y === 0 ? -1 : 1);
+				this.clearBlockTypeCache({x: globalCoordinate.x, y: adjacentY, z: globalCoordinate.z}, 1);
+			}
+			
+			if (isOnChunkBoundaryZ) {
+				const adjacentZ = globalCoordinate.z + (localCoordinate.z === 0 ? -1 : 1);
+				this.clearBlockTypeCache({x: globalCoordinate.x, y: globalCoordinate.y, z: adjacentZ}, 1);
+			}
+		}
+
+		// Update the block in the chunk
 		chunk.setBlock(localCoordinate, id, this);
 
 		//console.timeEnd(perfId);

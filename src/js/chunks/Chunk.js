@@ -172,15 +172,47 @@ class Chunk {
    */
   async buildMeshes(chunkManager) {
     const perfId = `buildMeshes-${this.chunkId}`;
-    //console.time(perfId);
-    //console.log(`Building full meshes for chunk ${this.chunkId}`);
+    console.time(perfId);
+    console.log(`Building full meshes for chunk ${this.chunkId}`);
     
-    // Removed unnecessary texture preloading that was causing performance issues
-    // The textures should already be preloaded during initialization
-
-    //console.time(`${perfId}-setup`);
+    // Always remove any existing meshes first
+    if (this._solidMesh) {
+      chunkManager.chunkMeshManager.removeSolidMesh(this);
+      this._solidMesh = undefined;
+    }
+    
+    if (this._liquidMesh) {
+      chunkManager.chunkMeshManager.removeLiquidMesh(this);
+      this._liquidMesh = undefined;
+    }
+    
+    // Force THREE.js to update the scene to ensure old meshes are gone
+    if (chunkManager._scene && chunkManager._scene.updateMatrixWorld) {
+      chunkManager._scene.updateMatrixWorld(true);
+    }
+    
+    // Instead of clearing the entire cache for every block, just clear once for the chunk
+    console.log(`Clearing block type cache for chunk ${this.chunkId}`);
     const { x: originX, y: originY, z: originZ } = this.originCoordinate;
-
+    
+    // Clear cache for the chunk corners to ensure the whole chunk is refreshed
+    // This reduces the number of cache clearing operations significantly
+    const corners = [
+      {x: originX, y: originY, z: originZ},
+      {x: originX + CHUNK_SIZE - 1, y: originY, z: originZ},
+      {x: originX, y: originY + CHUNK_SIZE - 1, z: originZ},
+      {x: originX, y: originY, z: originZ + CHUNK_SIZE - 1},
+      {x: originX + CHUNK_SIZE - 1, y: originY + CHUNK_SIZE - 1, z: originZ},
+      {x: originX + CHUNK_SIZE - 1, y: originY, z: originZ + CHUNK_SIZE - 1},
+      {x: originX, y: originY + CHUNK_SIZE - 1, z: originZ + CHUNK_SIZE - 1},
+      {x: originX + CHUNK_SIZE - 1, y: originY + CHUNK_SIZE - 1, z: originZ + CHUNK_SIZE - 1}
+    ];
+    
+    // Clear cache for each corner with a larger radius
+    for (const corner of corners) {
+      chunkManager.clearBlockTypeCache(corner, 2);
+    }
+    
     const liquidMeshColors = [];
     const liquidMeshIndices = [];
     const liquidMeshNormals = [];
@@ -192,9 +224,11 @@ class Chunk {
     const solidMeshNormals = [];
     const solidMeshPositions = [];
     const solidMeshUvs = [];
-    //console.timeEnd(`${perfId}-setup`);
+    
+    // Debug logging: Track all air blocks and their neighbors for debugging
+    const debugBlocks = [];
+    let visibleFacesGenerated = 0;
 
-    //console.time(`${perfId}-buildGeometry`);
     let verticesProcessed = 0;
     for (let y = 0; y < CHUNK_SIZE; y++) {
       const globalY = originY + y;
@@ -204,10 +238,12 @@ class Chunk {
           const globalX = originX + x;
           const blockType = this.getLocalBlockType({ x, y, z });
 
-          if (!blockType) { // air, ignore
+          // Skip air blocks for mesh generation
+          if (!blockType) {
             continue;
           }
 
+          // Process each face of this block
           for (const blockFace of blockType.faces) {
             const { normal: dir, vertices } = blockType.faceGeometries[blockFace];
             const neighborGlobalCoordinate = {
@@ -215,16 +251,31 @@ class Chunk {
               y: globalY + dir[1],
               z: globalZ + dir[2],
             };
-
+            
+            // Get neighbor block type - we don't need to clear cache for every check
             const neighborBlockType = chunkManager.getGlobalBlockType(neighborGlobalCoordinate);
 
-            if (
-              neighborBlockType &&
-              (neighborBlockType.isLiquid || !neighborBlockType.isFaceTransparent(blockFace)) &&
-              (!neighborBlockType.isLiquid || neighborBlockType.id === blockType.id)
-            ) {
+            // Detailed debug logging for face culling decisions (reduced frequency)
+            const shouldCullFace = neighborBlockType &&
+                (neighborBlockType.isLiquid || !neighborBlockType.isFaceTransparent(blockFace)) &&
+                (!neighborBlockType.isLiquid || neighborBlockType.id === blockType.id);
+            
+            // Reduced logging frequency to avoid console spam
+            if (Math.random() < 0.001) { // Only log 0.1% to avoid console spam
+              console.log(`Face culling for block at (${globalX},${globalY},${globalZ}), face ${blockFace}:
+                Block Type: ${blockType.name || blockType.id}
+                Neighbor: ${neighborBlockType ? (neighborBlockType.name || neighborBlockType.id) : 'none/air'}
+                Neighbor Liquid: ${neighborBlockType ? neighborBlockType.isLiquid : 'N/A'}
+                Face Transparent: ${neighborBlockType ? neighborBlockType.isFaceTransparent(blockFace) : 'N/A'}
+                Culled: ${shouldCullFace}
+              `);
+            }
+
+            if (shouldCullFace) {
               continue; // cull face
             }
+            
+            visibleFacesGenerated++;
 
             const meshColors = blockType.isLiquid ? liquidMeshColors : solidMeshColors;
             const meshIndices = blockType.isLiquid ? liquidMeshIndices : solidMeshIndices;
@@ -234,7 +285,8 @@ class Chunk {
 
             const ndx = meshPositions.length / 3;
             const textureUri = blockType.textureUris[blockFace];
-
+            
+            // Process vertices for this face
             for (const { pos, uv, ao } of vertices) {
               verticesProcessed++;
               const vertexX = globalX + pos[0] - 0.5;
@@ -399,8 +451,7 @@ class Chunk {
       }
     }
    // console.log(`Processed ${verticesProcessed} vertices for chunk ${this.chunkId}`);
-    //console.timeEnd(`${perfId}-buildGeometry`);
-
+    
     // Create meshes using ChunkMeshManager
     //console.time(`${perfId}-createMeshes`);
     //console.time(`${perfId}-createLiquidMesh`);
@@ -456,10 +507,67 @@ class Chunk {
     }
 
     try {
-      // For now, it's safer to do a full rebuild if the block count is over 7
-      // This avoids visual artifacts from partial updates
-      if (blockCoordinates.length > 7) {
-        console.log(`Using full rebuild for chunk ${this.chunkId} with ${blockCoordinates.length} affected blocks for visual consistency`);
+      // Always check all coordinates to see if any are air blocks
+      // This is crucial for proper handling of removed blocks
+      let containsAirBlocks = false;
+      
+      // First check the directly specified coordinates
+      for (const blockCoord of blockCoordinates) {
+        if (!this.getLocalBlockType(blockCoord)) {  // This means air
+          containsAirBlocks = true;
+          console.log(`Air block detected at (${blockCoord.x},${blockCoord.y},${blockCoord.z}) - using full rebuild`);
+          break;
+        }
+      }
+      
+      // If no air blocks found yet, check the surrounding blocks too
+      if (!containsAirBlocks) {
+        // Create a set to check a wider range
+        const blockSet = new Set();
+        for (const blockCoord of blockCoordinates) {
+          blockSet.add(`${blockCoord.x},${blockCoord.y},${blockCoord.z}`);
+          
+          // Check surrounding blocks
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dz = -1; dz <= 1; dz++) {
+                if (dx === 0 && dy === 0 && dz === 0) continue;
+                
+                const nx = blockCoord.x + dx;
+                const ny = blockCoord.y + dy;
+                const nz = blockCoord.z + dz;
+                
+                // Skip if out of bounds
+                if (nx < 0 || nx > CHUNK_INDEX_RANGE || 
+                    ny < 0 || ny > CHUNK_INDEX_RANGE || 
+                    nz < 0 || nz > CHUNK_INDEX_RANGE) {
+                  continue;
+                }
+                
+                const key = `${nx},${ny},${nz}`;
+                if (!blockSet.has(key)) {
+                  blockSet.add(key);
+                  
+                  // Check if this is an air block
+                  if (!this.getLocalBlockType({x: nx, y: ny, z: nz})) {
+                    containsAirBlocks = true;
+                    console.log(`Air block detected in surrounding area at (${nx},${ny},${nz}) - using full rebuild`);
+                    break;
+                  }
+                }
+              }
+              if (containsAirBlocks) break;
+            }
+            if (containsAirBlocks) break;
+          }
+          if (containsAirBlocks) break;
+        }
+      }
+      
+      // For operations involving air blocks, or if many blocks are affected, 
+      // always do a full rebuild for safety
+      if (containsAirBlocks || blockCoordinates.length > 3) {
+        console.log(`Using full rebuild for chunk ${this.chunkId} instead of partial update - ${containsAirBlocks ? 'contains air blocks' : 'too many blocks'}`);
         console.timeEnd(perfId);
         return this.buildMeshes(chunkManager);
       }
@@ -535,7 +643,7 @@ class Chunk {
         const blockType = this.getLocalBlockType({ x, y, z });
 
         if (!blockType) { // air, ignore
-          continue;
+          continue; 
         }
 
         for (const blockFace of blockType.faces) {
@@ -843,10 +951,16 @@ class Chunk {
    * @param {ChunkManager} chunkManager - The chunk manager
    */
   setBlock(localCoordinate, blockTypeId, chunkManager) {
-    console.time(`setBlock-${this.chunkId}`);
+    // Reduce performance logging to avoid console spam
+    const shouldLogPerf = Math.random() < 0.01; // Only log 1% of operations
+    if (shouldLogPerf) {
+      console.time(`setBlock-${this.chunkId}`);
+    }
     
     if (!Chunk.isValidLocalCoordinate(localCoordinate)) {
-      console.timeEnd(`setBlock-${this.chunkId}`);
+      if (shouldLogPerf) {
+        console.timeEnd(`setBlock-${this.chunkId}`);
+      }
       throw new Error('Chunk.setBlock(): Block coordinate is out of bounds');
     }
 
@@ -855,10 +969,15 @@ class Chunk {
 
     // If the block type is the same, no need to update
     if (oldBlockTypeId === blockTypeId) {
-      console.timeEnd(`setBlock-${this.chunkId}`);
+      if (shouldLogPerf) {
+        console.timeEnd(`setBlock-${this.chunkId}`);
+      }
       return;
     }
 
+    // Is this a block removal operation?
+    const isBlockRemoval = oldBlockTypeId !== 0 && blockTypeId === 0;
+    
     // Update the block
     this._blocks[blockIndex] = blockTypeId;
 
@@ -872,65 +991,103 @@ class Chunk {
     // For the first block in a chunk, we need a full remesh
     if (isFirstBlockInChunk) {
       chunkManager.markChunkForRemesh(this.chunkId);
-      console.timeEnd(`setBlock-${this.chunkId}`);
+      if (shouldLogPerf) {
+        console.timeEnd(`setBlock-${this.chunkId}`);
+      }
       return;
     }
     
-    // For air to block or block to air transitions, we need to update faces
-    const isAirToBlock = oldBlockTypeId === 0 && blockTypeId !== 0;
-    const isBlockToAir = oldBlockTypeId !== 0 && blockTypeId === 0;
-    
-    if (isAirToBlock || isBlockToAir) {
-      // Instead of marking the entire chunk for remeshing,
-      // we'll update only the affected faces
-      this._updateBlockFaces(localCoordinate, oldBlockTypeId, blockTypeId, chunkManager);
-    } else {
-      // For block to different block transitions, just mark the chunk for remesh
-      // This is faster than calculating all the face updates
-      chunkManager.markChunkForRemesh(this.chunkId);
-    }
-
-    // Only check adjacent chunks if this block is on the edge of the chunk
-    const isOnChunkEdge = 
-      localCoordinate.x === 0 || 
-      localCoordinate.y === 0 || 
-      localCoordinate.z === 0 || 
-      localCoordinate.x === CHUNK_INDEX_RANGE || 
-      localCoordinate.y === CHUNK_INDEX_RANGE || 
-      localCoordinate.z === CHUNK_INDEX_RANGE;
-
-    if (isOnChunkEdge) {
-      const globalCoordinate = this._getGlobalCoordinate(localCoordinate);
-      const adjacentEdgeBlockCoordinateDeltas = [];
+    // For block removal (block to air transitions), ALWAYS do a full chunk rebuild
+    // This ensures all faces are properly updated
+    if (isBlockRemoval) {
+      // Reduce logging to avoid spam
+      if (Math.random() < 0.1) {
+        console.log(`Block removal at (${localCoordinate.x},${localCoordinate.y},${localCoordinate.z}) - doing full chunk rebuild`);
+      }
       
-      // Only add the directions where the block is on the edge
-      if (localCoordinate.x === 0) adjacentEdgeBlockCoordinateDeltas.push({ x: -1, y: 0, z: 0 });
-      if (localCoordinate.y === 0) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: -1, z: 0 });
-      if (localCoordinate.z === 0) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: 0, z: -1 });
-      if (localCoordinate.x === CHUNK_INDEX_RANGE) adjacentEdgeBlockCoordinateDeltas.push({ x: 1, y: 0, z: 0 });
-      if (localCoordinate.y === CHUNK_INDEX_RANGE) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: 1, z: 0 });
-      if (localCoordinate.z === CHUNK_INDEX_RANGE) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: 0, z: 1 });
+      // Force removal of all existing meshes before requesting a rebuild
+      if (this._solidMesh) {
+        chunkManager.chunkMeshManager.removeSolidMesh(this);
+        this._solidMesh = undefined;
+      }
+      
+      if (this._liquidMesh) {
+        chunkManager.chunkMeshManager.removeLiquidMesh(this);
+        this._liquidMesh = undefined;
+      }
+      
+      // Special flag to force complete rebuild
+      chunkManager.markChunkForRemesh(this.chunkId, { forceCompleteRebuild: true });
+      
+      // Check adjacent chunks only if this block is on the edge of the chunk
+      const isOnChunkEdge = 
+        localCoordinate.x === 0 || 
+        localCoordinate.y === 0 || 
+        localCoordinate.z === 0 || 
+        localCoordinate.x === CHUNK_INDEX_RANGE || 
+        localCoordinate.y === CHUNK_INDEX_RANGE || 
+        localCoordinate.z === CHUNK_INDEX_RANGE;
 
-      // Only remesh adjacent chunks that have blocks
-      for (const adjacentEdgeBlockCoordinateDelta of adjacentEdgeBlockCoordinateDeltas) {
-        const adjacentEdgeBlockGlobalCoordinate = {
-          x: globalCoordinate.x + adjacentEdgeBlockCoordinateDelta.x,
-          y: globalCoordinate.y + adjacentEdgeBlockCoordinateDelta.y,
-          z: globalCoordinate.z + adjacentEdgeBlockCoordinateDelta.z,
-        };
-
-        // Get the adjacent chunk's ID
-        const adjacentChunkOriginCoordinate = Chunk.globalCoordinateToOriginCoordinate(adjacentEdgeBlockGlobalCoordinate);
-        const adjacentChunkId = Chunk.getChunkId(adjacentChunkOriginCoordinate);
+      if (isOnChunkEdge) {
+        const globalCoordinate = this._getGlobalCoordinate(localCoordinate);
+        const adjacentEdgeBlockCoordinateDeltas = [];
         
-        // Only remesh if the adjacent chunk exists and is different from this chunk
-        if (adjacentChunkId !== this.chunkId && chunkManager._chunks.has(adjacentChunkId)) {
-          chunkManager.markChunkForRemesh(adjacentChunkId);
+        // Only add the directions where the block is on the edge
+        if (localCoordinate.x === 0) adjacentEdgeBlockCoordinateDeltas.push({ x: -1, y: 0, z: 0 });
+        if (localCoordinate.y === 0) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: -1, z: 0 });
+        if (localCoordinate.z === 0) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: 0, z: -1 });
+        if (localCoordinate.x === CHUNK_INDEX_RANGE) adjacentEdgeBlockCoordinateDeltas.push({ x: 1, y: 0, z: 0 });
+        if (localCoordinate.y === CHUNK_INDEX_RANGE) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: 1, z: 0 });
+        if (localCoordinate.z === CHUNK_INDEX_RANGE) adjacentEdgeBlockCoordinateDeltas.push({ x: 0, y: 0, z: 1 });
+
+        // Force remesh adjacent chunks
+        for (const adjacentEdgeBlockCoordinateDelta of adjacentEdgeBlockCoordinateDeltas) {
+          const adjacentEdgeBlockGlobalCoordinate = {
+            x: globalCoordinate.x + adjacentEdgeBlockCoordinateDelta.x,
+            y: globalCoordinate.y + adjacentEdgeBlockCoordinateDelta.y,
+            z: globalCoordinate.z + adjacentEdgeBlockCoordinateDelta.z,
+          };
+
+          // Get the adjacent chunk's ID
+          const adjacentChunkOriginCoordinate = Chunk.globalCoordinateToOriginCoordinate(adjacentEdgeBlockGlobalCoordinate);
+          const adjacentChunkId = Chunk.getChunkId(adjacentChunkOriginCoordinate);
+          
+          // Only remesh if the adjacent chunk exists and is different from this chunk
+          if (adjacentChunkId !== this.chunkId && chunkManager._chunks.has(adjacentChunkId)) {
+            // Reduce logging to avoid spam
+            if (Math.random() < 0.1) {
+              console.log(`Also rebuilding adjacent chunk ${adjacentChunkId} due to edge block removal`);
+            }
+            
+            // Get the chunk and clean up its meshes too 
+            const adjacentChunk = chunkManager._chunks.get(adjacentChunkId);
+            if (adjacentChunk._solidMesh) {
+              chunkManager.chunkMeshManager.removeSolidMesh(adjacentChunk);
+              adjacentChunk._solidMesh = undefined;
+            }
+            
+            if (adjacentChunk._liquidMesh) {
+              chunkManager.chunkMeshManager.removeLiquidMesh(adjacentChunk);
+              adjacentChunk._liquidMesh = undefined;
+            }
+            
+            chunkManager.markChunkForRemesh(adjacentChunkId, { forceCompleteRebuild: true });
+          }
         }
       }
+      
+      if (shouldLogPerf) {
+        console.timeEnd(`setBlock-${this.chunkId}`);
+      }
+      return;
     }
     
-    console.timeEnd(`setBlock-${this.chunkId}`);
+    // For air to block or block to different block transitions, use the normal face updating logic
+    this._updateBlockFaces(localCoordinate, oldBlockTypeId, blockTypeId, chunkManager);
+
+    if (shouldLogPerf) {
+      console.timeEnd(`setBlock-${this.chunkId}`);
+    }
   }
 
   /**
@@ -981,7 +1138,7 @@ class Chunk {
       if (isBlockToAir) {
         // For block removal, we definitely need to update all direct neighbors
         // to ensure they show the previously hidden faces
-        for (const { coord } of neighbors) {
+        for (const { coord, face } of neighbors) {
           // Skip neighbors outside chunk boundaries
           if (coord.x < 0 || coord.x > CHUNK_INDEX_RANGE || 
               coord.y < 0 || coord.y > CHUNK_INDEX_RANGE || 
@@ -1009,15 +1166,12 @@ class Chunk {
             continue;
           }
           
-          // Check if this neighbor has a solid block
-          const neighborBlockId = this.getLocalBlockId(coord);
-          if (neighborBlockId !== 0) {
-            // Add to affected blocks
-            const coordKey = `${coord.x},${coord.y},${coord.z}`;
-            if (!affectedSet.has(coordKey)) {
-              affectedSet.add(coordKey);
-              affectedBlocks.push({ ...coord });
-            }
+          // Always add adjacent blocks when removing a block, even if they're air
+          // This ensures proper face visibility calculations during the mesh rebuild
+          const coordKey = `${coord.x},${coord.y},${coord.z}`;
+          if (!affectedSet.has(coordKey)) {
+            affectedSet.add(coordKey);
+            affectedBlocks.push({ ...coord });
           }
         }
       }
@@ -1081,7 +1235,7 @@ class Chunk {
         
         // For special cases, do a second pass with extended radius
         // For block removal, use a larger radius to ensure all previously hidden faces update properly
-        const additionalRadius = isBlockToAir ? 2 : 1; 
+        const additionalRadius = isBlockToAir ? 3 : 1; 
         const additionalBlocks = [...affectedBlocks]; // Start with current blocks
         
         for (const block of additionalBlocks) {
@@ -1116,6 +1270,14 @@ class Chunk {
       // For block removal, make sure to log status for debugging
       if (isBlockToAir) {
         console.log(`Block removal at ${x},${y},${z} affected ${affectedBlocks.length} blocks in chunk ${this.chunkId}`);
+        
+        // For block removal, it's safer to just do a full chunk rebuild
+        // This ensures there are no visual artifacts
+        if (affectedBlocks.length > 5) {
+          console.log(`Block removal triggered full rebuild of chunk ${this.chunkId}`);
+          chunkManager.markChunkForRemesh(this.chunkId);
+          return;
+        }
       } else {
         console.log(`Block update affected ${affectedBlocks.length} blocks in chunk ${this.chunkId}`);
       }
