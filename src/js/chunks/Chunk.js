@@ -494,6 +494,17 @@ class Chunk {
       console.log(`Completed building meshes for chunk ${this.chunkId}`);
     }
     
+    // Add meshes to the scene
+    if (chunkManager._scene) {
+      if (this._solidMesh) {
+        chunkManager._scene.add(this._solidMesh);
+      }
+      
+      if (this._liquidMesh) {
+        chunkManager._scene.add(this._liquidMesh);
+      }
+    }
+    
     return {
       liquidMesh: this._liquidMesh,
       solidMesh: this._solidMesh,

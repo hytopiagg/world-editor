@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import BlockTypeRegistry from '../blocks/BlockTypeRegistry';
 import Chunk from './Chunk';
 import ChunkMeshManager from './ChunkMeshManager';
-import { CHUNKS_NUM_TO_BUILD_AT_ONCE, CHUNK_INDEX_RANGE } from './ChunkConstants';
+import { CHUNKS_NUM_TO_BUILD_AT_ONCE, CHUNK_INDEX_RANGE, CHUNK_SIZE } from './ChunkConstants';
 
 /**
  * Manages chunks in the world
@@ -24,6 +24,9 @@ class ChunkManager {
 		this._isBulkLoading = false;  // Flag to indicate if we're in a bulk loading operation
 		this._deferredMeshChunks = new Set(); // Store chunks that need meshes but are deferred
 		this._loadingPriorityDistance = 32; // Chunks within this distance get immediate meshes during loading
+		this._lastMeshBuildTime = null; // Added for rate limiting
+		this._meshBuildCount = 0;
+		this._meshBuildStartTime = null;
 	}
 
 	/**
@@ -198,257 +201,109 @@ class ChunkManager {
 
 	/**
 	 * Process the render queue
+	 * @param {boolean} prioritizeCloseChunks - If true, prioritize chunks closer to the camera
 	 */
-	processRenderQueue() {
-		// If there are no chunks to process, return early
+	processRenderQueue(prioritizeCloseChunks = false) {
+		// Skip if there are no chunks to render
 		if (this._renderChunkQueue.length === 0) {
 			return;
 		}
 
-		//console.time('processRenderQueue');
-
-		// First, identify chunks with first blocks, partial updates, and full rebuilds
-		//console.time('processRenderQueue-sort');
-		const firstBlockChunks = [];
-		const partialUpdateChunks = [];
-		const fullRebuildChunks = [];
-
-		// Process the queue entries
-		for (const queueEntry of this._renderChunkQueue) {
-			const chunkId = typeof queueEntry === 'string' ? queueEntry : queueEntry.chunkId;
-			const options = typeof queueEntry === 'object' ? queueEntry.options : null;
-			
-			const chunk = this._chunks.get(chunkId);
-			if (!chunk) {
-				continue;
-			}
-
-			// Store option data for use during rendering
-			if (options) {
-				// If we have skipNeighbors option, store it for use during mesh building
-				if (options.skipNeighbors === true) {
-					if (!this._chunkRemeshOptions.has(chunkId)) {
-						this._chunkRemeshOptions.set(chunkId, {});
-					}
-					const remeshOptions = this._chunkRemeshOptions.get(chunkId);
-					remeshOptions.skipNeighbors = true;
-				}
-			}
-
-			// Check if this is a chunk with only one block (first block placement)
-			const blockCount = chunk._blocks.filter(id => id !== 0).length;
-			const isFirstBlock = blockCount <= 1;
-
-			if (isFirstBlock) {
-				// Prioritize chunks with first block placement
-				firstBlockChunks.push(chunkId);
-			} else {
-				const remeshOptions = this._chunkRemeshOptions ? this._chunkRemeshOptions.get(chunkId) : null;
-				if (remeshOptions && remeshOptions.blockCoordinates && remeshOptions.blockCoordinates.length > 0) {
-					partialUpdateChunks.push(chunkId);
-				} else {
-					fullRebuildChunks.push(chunkId);
-				}
-			}
+		// Max chunks to build is smaller for camera-prioritized operations to prevent stuttering
+		// but larger for bulk loading operations to speed up initial load
+		const maxChunksToBuild = prioritizeCloseChunks 
+			? Math.min(5, CHUNKS_NUM_TO_BUILD_AT_ONCE) 
+			: Math.min(20, CHUNKS_NUM_TO_BUILD_AT_ONCE);
+		
+		// Log queue status occasionally for debugging
+		if (Math.random() < 0.01 || this._renderChunkQueue.length > 100) {
+			console.log(`Processing render queue with ${this._renderChunkQueue.length} chunks (max: ${maxChunksToBuild} at once)`);
 		}
 
-		// Sort the remaining chunks by distance to camera
-		if (this._scene.camera) {
+		// If we want to prioritize by distance, sort the queue by distance to camera
+		if (prioritizeCloseChunks && this._scene.camera) {
 			const cameraPos = this._scene.camera.position;
-
-			// Sort first block chunks by distance to camera
-			firstBlockChunks.sort((chunkIdA, chunkIdB) => {
-				const chunkA = this._chunks.get(chunkIdA);
-				const chunkB = this._chunks.get(chunkIdB);
-
-				if (!chunkA || !chunkB) return 0;
-
-				const distA = new THREE.Vector3(
-					chunkA.originCoordinate.x,
-					chunkA.originCoordinate.y,
-					chunkA.originCoordinate.z
-				).distanceToSquared(cameraPos);
-
-				const distB = new THREE.Vector3(
-					chunkB.originCoordinate.x,
-					chunkB.originCoordinate.y,
-					chunkB.originCoordinate.z
-				).distanceToSquared(cameraPos);
-
-				return distA - distB;
-			});
-
-			// Sort partial update chunks by distance to camera
-			partialUpdateChunks.sort((chunkIdA, chunkIdB) => {
-				const chunkA = this._chunks.get(chunkIdA);
-				const chunkB = this._chunks.get(chunkIdB);
-
-				if (!chunkA || !chunkB) return 0;
-
-				const distA = new THREE.Vector3(
-					chunkA.originCoordinate.x,
-					chunkA.originCoordinate.y,
-					chunkA.originCoordinate.z
-				).distanceToSquared(cameraPos);
-
-				const distB = new THREE.Vector3(
-					chunkB.originCoordinate.x,
-					chunkB.originCoordinate.y,
-					chunkB.originCoordinate.z
-				).distanceToSquared(cameraPos);
-
-				return distA - distB;
-			});
-
-			// Sort full rebuild chunks by distance to camera
-			fullRebuildChunks.sort((chunkIdA, chunkIdB) => {
-				const chunkA = this._chunks.get(chunkIdA);
-				const chunkB = this._chunks.get(chunkIdB);
-
-				if (!chunkA || !chunkB) return 0;
-
-				const distA = new THREE.Vector3(
-					chunkA.originCoordinate.x,
-					chunkA.originCoordinate.y,
-					chunkA.originCoordinate.z
-				).distanceToSquared(cameraPos);
-
-				const distB = new THREE.Vector3(
-					chunkB.originCoordinate.x,
-					chunkB.originCoordinate.y,
-					chunkB.originCoordinate.z
-				).distanceToSquared(cameraPos);
-
-				return distA - distB;
-			});
-		}
-
-		// Combine the sorted queues, with first blocks first, then partial updates, then full rebuilds
-		this._renderChunkQueue = [...firstBlockChunks, ...partialUpdateChunks, ...fullRebuildChunks];
-		//console.timeEnd('processRenderQueue-sort');
-
-		// Process a limited number of chunks per frame
-		// Always process all first block chunks, then more partial updates than full rebuilds
-		const maxFirstBlocks = firstBlockChunks.length; // Process all first blocks
-		const maxPartialUpdates = Math.min(partialUpdateChunks.length, CHUNKS_NUM_TO_BUILD_AT_ONCE * 4);
-		const maxFullRebuilds = Math.min(
-			fullRebuildChunks.length,
-			Math.max(1, CHUNKS_NUM_TO_BUILD_AT_ONCE / 2)
-		);
-
-		// Track how many of each type we've processed
-		let firstBlocksProcessed = 0;
-		let partialUpdatesProcessed = 0;
-		let fullRebuildsProcessed = 0;
-
-		//console.time('processRenderQueue-process');
-		// Process chunks up to the maximum allowed
-		for (let i = 0; i < this._renderChunkQueue.length; i++) {
-			const chunkId = this._renderChunkQueue[i];
-			const chunk = this._chunks.get(chunkId);
-			if (!chunk) {
-				// Remove invalid chunks
-				this._renderChunkQueue.splice(i, 1);
-				i--;
-				continue;
-			}
-
-			// Check what type of update this is
-			const blockCount = chunk._blocks.filter(id => id !== 0).length;
-			const isFirstBlock = blockCount <= 1;
-
-			const options = this._chunkRemeshOptions ? this._chunkRemeshOptions.get(chunkId) : null;
-			const isPartialUpdate = !isFirstBlock && options && options.blockCoordinates && options.blockCoordinates.length > 0;
-
-			// Skip if we've reached the limit for this type
-			if (isFirstBlock && firstBlocksProcessed >= maxFirstBlocks) {
-				continue;
-			}
-			if (isPartialUpdate && partialUpdatesProcessed >= maxPartialUpdates) {
-				continue;
-			}
-			if (!isFirstBlock && !isPartialUpdate && fullRebuildsProcessed >= maxFullRebuilds) {
-				continue;
-			}
-
-			// Process this chunk
-			this._renderChunkQueue.splice(i, 1);
-			i--; // Adjust index since we removed an item
-
-			this._pendingRenderChunks.delete(chunkId);
-
-			this._renderChunk(chunk);
-
-			// Increment the appropriate counter
-			if (isFirstBlock) {
-				firstBlocksProcessed++;
-			} else if (isPartialUpdate) {
-				partialUpdatesProcessed++;
-			} else {
-				fullRebuildsProcessed++;
-			}
-		}
-		//console.timeEnd('processRenderQueue-process');
-
-		//console.time('processRenderQueue-visibility');
-		// Update chunk visibility based on distance from camera
-		if (this._viewDistanceEnabled) {
-			const cameraPos = this._scene.camera ? this._scene.camera.position : new THREE.Vector3();
-			const cameraPos2D = new THREE.Vector2(cameraPos.x, cameraPos.z);
-
-			// Add a timestamp to force regular visibility updates regardless of camera position
-			const now = Date.now();
-			const shouldLog = false;//now % 5000 < 50; // Only log every ~5 seconds
-
-			if (shouldLog) {
-				console.log(`Updating chunk visibility based on view distance: ${this._viewDistance}, camera at ${cameraPos.x.toFixed(1)},${cameraPos.y.toFixed(1)},${cameraPos.z.toFixed(1)}`);
-			}
-
-			let visibleCount = 0;
-			let hiddenCount = 0;
-			let visibilityChangedCount = 0;
-
-			this._chunks.forEach((chunk) => {
-				const coord = chunk.originCoordinate;
-				// Use 3D distance instead of 2D for more accurate visibility
-				const chunkPos = new THREE.Vector3(coord.x, coord.y, coord.z);
-				const distance = chunkPos.distanceTo(cameraPos);
-				const wasVisible = chunk.visible;
-
-				// Determine if the chunk should be visible based on distance
-				chunk.visible = distance <= this._viewDistance;
-
-				if (chunk.visible) {
-					visibleCount++;
-				} else {
-					hiddenCount++;
-				}
-
-				// Track chunks with changed visibility
-				if (wasVisible !== chunk.visible) {
-					visibilityChangedCount++;
-					// Log chunks that changed visibility (but throttle to avoid console spam)
-					if (shouldLog) {
-						console.log(`Chunk ${chunk.chunkId} changed visibility to ${chunk.visible ? 'visible' : 'hidden'}, distance: ${distance.toFixed(1)}`);
+			
+			// Process queue items to ensure they're all strings (chunk IDs)
+			// This is for backward compatibility with any code that might push objects
+			this._renderChunkQueue = this._renderChunkQueue.map(item => {
+				if (typeof item === 'object' && item !== null && item.chunkId) {
+					// If options were included with the chunk, add them to _chunkRemeshOptions
+					if (item.options && Object.keys(item.options).length > 0) {
+						if (!this._chunkRemeshOptions.has(item.chunkId)) {
+							this._chunkRemeshOptions.set(item.chunkId, item.options);
+						} else {
+							// Merge with existing options
+							const existingOptions = this._chunkRemeshOptions.get(item.chunkId);
+							this._chunkRemeshOptions.set(item.chunkId, { ...existingOptions, ...item.options });
+						}
 					}
+					return item.chunkId;
 				}
+				return item;
 			});
-
-			// Force at least one chunk visibility update per second to ensure chunks update even if camera doesn't move
-			if (shouldLog || visibilityChangedCount > 0) {
-				console.log(`Visibility update: ${visibleCount} chunks visible, ${hiddenCount} chunks hidden, ${visibilityChangedCount} changed visibility (total: ${this._chunks.size})`);
-			}
+			
+			// Sort the renderChunkQueue by distance to camera
+			this._renderChunkQueue.sort((a, b) => {
+				const chunkA = this._chunks.get(a);
+				const chunkB = this._chunks.get(b);
+				
+				if (!chunkA || !chunkB) return 0;
+				
+				const originA = chunkA.originCoordinate;
+				const originB = chunkB.originCoordinate;
+				
+				// Calculate distance from chunk center to camera
+				const distA = Math.sqrt(
+					Math.pow(originA.x + CHUNK_SIZE/2 - cameraPos.x, 2) + 
+					Math.pow(originA.y + CHUNK_SIZE/2 - cameraPos.y, 2) + 
+					Math.pow(originA.z + CHUNK_SIZE/2 - cameraPos.z, 2)
+				);
+				
+				const distB = Math.sqrt(
+					Math.pow(originB.x + CHUNK_SIZE/2 - cameraPos.x, 2) + 
+					Math.pow(originB.y + CHUNK_SIZE/2 - cameraPos.y, 2) + 
+					Math.pow(originB.z + CHUNK_SIZE/2 - cameraPos.z, 2)
+				);
+				
+				return distA - distB;
+			});
+			
+			console.log(`Sorted ${this._renderChunkQueue.length} chunks by distance to camera`);
 		} else {
-			// If view distance culling is disabled, make everything visible
-			console.log('View distance culling is disabled, making all chunks visible');
-			this._chunks.forEach(chunk => {
-				chunk.visible = true;
+			// Normalize queue items to chunk IDs
+			this._renderChunkQueue = this._renderChunkQueue.map(item => {
+				if (typeof item === 'object' && item !== null && item.chunkId) {
+					// Extract chunkId if it's an object
+					return item.chunkId;
+				}
+				return item;
 			});
 		}
-		//console.timeEnd('processRenderQueue-visibility');
 
-		//console.log(`Processed ${firstBlocksProcessed} first blocks, ${partialUpdatesProcessed} partial updates, and ${fullRebuildsProcessed} full rebuilds. Remaining in queue: ${this._renderChunkQueue.length}`);
-		//console.timeEnd('processRenderQueue');
+		// Process chunks up to the maximum
+		const chunksToProcess = this._renderChunkQueue.splice(0, maxChunksToBuild);
+		
+		// Remove processed chunks from pending set and call renderChunk with the actual chunk object
+		for (const chunkId of chunksToProcess) {
+			// Get the actual chunk object
+			const chunk = this._chunks.get(chunkId);
+			
+			// Remove from pending set
+			this._pendingRenderChunks.delete(chunkId);
+			
+			// Process the chunk if it exists
+			if (chunk) {
+				// Call renderChunk with the chunk object
+				this._renderChunk(chunk);
+			}
+		}
+		
+		// If there are more chunks to process, schedule another call
+		if (this._renderChunkQueue.length > 0) {
+			// Schedule next render queue processing
+			window.requestAnimationFrame(() => this.processRenderQueue(prioritizeCloseChunks));
+		}
 	}
 
 	/**
@@ -533,7 +388,7 @@ class ChunkManager {
 			return;
 		}
 
-		console.log(`Processing ${this._deferredMeshChunks.size} deferred chunks in batches`);
+		console.log(`Processing ${this._deferredMeshChunks.size} deferred chunks in larger batches`);
 
 		const cameraPos = this._scene.camera ? this._scene.camera.position : new THREE.Vector3();
 		const deferredChunks = Array.from(this._deferredMeshChunks);
@@ -546,52 +401,66 @@ class ChunkManager {
 			if (!chunkA || !chunkB) return 0;
 
 			const distA = new THREE.Vector3(
-				chunkA.originCoordinate.x,
-				chunkA.originCoordinate.y,
-				chunkA.originCoordinate.z
+				chunkA.originCoordinate.x + CHUNK_SIZE/2,
+				chunkA.originCoordinate.y + CHUNK_SIZE/2,
+				chunkA.originCoordinate.z + CHUNK_SIZE/2
 			).distanceToSquared(cameraPos);
 
 			const distB = new THREE.Vector3(
-				chunkB.originCoordinate.x,
-				chunkB.originCoordinate.y,
-				chunkB.originCoordinate.z
+				chunkB.originCoordinate.x + CHUNK_SIZE/2,
+				chunkB.originCoordinate.y + CHUNK_SIZE/2,
+				chunkB.originCoordinate.z + CHUNK_SIZE/2
 			).distanceToSquared(cameraPos);
 
 			return distA - distB;
 		});
 
-		// Process in smaller batches to avoid freezing
-		const BATCH_SIZE = 10;
+		// Process in larger batches for quicker loading
+		const BATCH_SIZE = 20; // Process 20 chunks at a time
 		let processedCount = 0;
-
+		
 		// Function to process a batch of deferred chunks
 		const processBatch = () => {
-			const batchChunks = deferredChunks.slice(processedCount, processedCount + BATCH_SIZE);
+			// Skip if no more chunks to process
+			if (processedCount >= deferredChunks.length) {
+				console.log(`ChunkManager: All ${deferredChunks.length} deferred chunks processed.`);
+				return;
+			}
 
+			// Process a batch of chunks
+			const endIndex = Math.min(processedCount + BATCH_SIZE, deferredChunks.length);
+			const batchChunks = deferredChunks.slice(processedCount, endIndex);
+			
+			console.log(`Processing batch ${Math.floor(processedCount/BATCH_SIZE) + 1}: ${batchChunks.length} chunks (${processedCount+1}-${endIndex} of ${deferredChunks.length})`);
+			
 			// Add these chunks to the render queue
 			for (const chunkId of batchChunks) {
 				if (this._pendingRenderChunks.has(chunkId)) continue;
 
-				// Add at the end of the queue since these are lower priority than
-				// chunks that changed during normal operation
+				// Add to the render queue with forced meshing
 				this._renderChunkQueue.push(chunkId);
 				this._pendingRenderChunks.add(chunkId);
+				
+				// Add special option to force mesh creation and complete rebuild
+				this._chunkRemeshOptions.set(chunkId, { 
+					forceMesh: true,
+					forceCompleteRebuild: true 
+				});
 
 				// Remove from deferred set since it's now in the queue
 				this._deferredMeshChunks.delete(chunkId);
 			}
+			
+			// Update processed count
+			processedCount = endIndex;
 
-			processedCount += batchChunks.length;
-
-			// Process next batch after a delay if more chunks remain
-			if (processedCount < deferredChunks.length) {
-				setTimeout(processBatch, 100); // Delay between batches to avoid freezing
-			} else {
-				console.log(`ChunkManager: All ${deferredChunks.length} deferred chunks added to render queue.`);
-			}
+			// Schedule next batch after the current one has a chance to process
+			// Use a delay proportional to the batch size - larger batches need more time
+			const delay = Math.max(100, batchChunks.length * 5); // 5ms per chunk, minimum 100ms
+			setTimeout(processBatch, delay);
 		};
 
-		// Start processing
+		// Start first batch immediately
 		processBatch();
 	}
 
@@ -601,6 +470,36 @@ class ChunkManager {
 	 * @private
 	 */
 	_renderChunk(chunk) {
+		// Add a rate limiter - allow more frequent builds during bulk loading
+		if (!this._lastMeshBuildTime) {
+			this._lastMeshBuildTime = performance.now();
+			this._meshBuildCount = 0;
+			this._meshBuildStartTime = performance.now();
+		} else {
+			const now = performance.now();
+			const elapsed = now - this._lastMeshBuildTime;
+			
+			// Much faster rate during bulk loading - 5ms vs 20ms between builds
+			const timeBetweenBuilds = this._renderChunkQueue.length > 10 ? 5 : 20;
+			
+			if (elapsed < timeBetweenBuilds) {
+				// Too soon, try again next frame
+				window.requestAnimationFrame(() => this._renderChunk(chunk));
+				return;
+			}
+			
+			// Reset the timer and increment the count
+			this._lastMeshBuildTime = now;
+			this._meshBuildCount++;
+			
+			// Log progress every 100 chunks
+			if (this._meshBuildCount % 100 === 0) {
+				const totalElapsed = (now - this._meshBuildStartTime) / 1000;
+				const rate = this._meshBuildCount / totalElapsed;
+				console.log(`Built ${this._meshBuildCount} chunk meshes at ${rate.toFixed(1)} meshes/sec`);
+			}
+		}
+
 		const perfId = `renderChunk-${chunk.chunkId}`;
 		//console.time(perfId);
 
@@ -614,13 +513,13 @@ class ChunkManager {
 		const isFirstBlockInChunk = chunk._blocks.filter(id => id !== 0).length <= 1;
 
 		// In bulk loading mode, check if this chunk should have mesh creation deferred
-		if (this._isBulkLoading && !hasExistingMeshes && !isFirstBlockInChunk && !options.forceMesh) {
+		if (this._isBulkLoading && !options.forceMesh) {
 			// Need to check distance to camera to decide if we build mesh now or defer
 			const cameraPos = this._scene.camera ? this._scene.camera.position : new THREE.Vector3();
 			const chunkPos = new THREE.Vector3(
-				chunk.originCoordinate.x,
-				chunk.originCoordinate.y,
-				chunk.originCoordinate.z
+				chunk.originCoordinate.x + CHUNK_SIZE/2,
+				chunk.originCoordinate.y + CHUNK_SIZE/2,
+				chunk.originCoordinate.z + CHUNK_SIZE/2
 			);
 			const distance = chunkPos.distanceTo(cameraPos);
 
@@ -629,12 +528,12 @@ class ChunkManager {
 				// Add to deferred set and skip mesh creation for now
 				this._deferredMeshChunks.add(chunk.chunkId);
 
-				// Log this decision occasionally for debugging
-				if (Math.random() < 0.01) {  // Log only ~1% of deferrals to avoid spam
+				// Only build meshes if chunk is within the priority distance, or if it has existing
+				// meshes that need updating, or if it has only one block (is new)
+				if (!hasExistingMeshes && !isFirstBlockInChunk) {
 					console.log(`Deferred mesh creation for distant chunk ${chunk.chunkId} at distance ${distance.toFixed(1)}`);
+					return;  // Skip mesh creation for now
 				}
-
-				return;  // Skip mesh creation for now
 			}
 		}
 
@@ -649,60 +548,31 @@ class ChunkManager {
 				}
 				
 				// Full rebuild
-				//console.time(`${perfId}-buildMeshes`);
-				chunk.buildMeshes(this)
-					.then(meshes => {
-						//console.timeEnd(`${perfId}-buildMeshes`);
-						if (meshes.solidMesh) {
-							this._scene.add(meshes.solidMesh);
-						}
-
-						if (meshes.liquidMesh) {
-							this._scene.add(meshes.liquidMesh);
-						}
-
-						// Clear options after processing
-						if (this._chunkRemeshOptions) {
-							this._chunkRemeshOptions.delete(chunk.chunkId);
-						}
-
-						//console.timeEnd(perfId);
-					})
-					.catch(error => {
-						//console.error(`Error building meshes for chunk ${chunk.chunkId}:`, error);
-						//console.timeEnd(`${perfId}-buildMeshes`);
-						//console.timeEnd(perfId);
-					});
+				chunk.buildMeshes(this);
+				
+				// Check visibility after building mesh
+				const shouldBeVisible = this._isChunkVisible(chunk.chunkId);
+				chunk.visible = shouldBeVisible;
+				
+				// Clear options after processing
+				if (this._chunkRemeshOptions) {
+					this._chunkRemeshOptions.delete(chunk.chunkId);
+				}
 			} else {
 				// Use partial mesh update for specific blocks
-				//console.time(`${perfId}-buildPartialMeshes`);
-				chunk.buildPartialMeshes(this, options.blockCoordinates)
-					.then(meshes => {
-						//console.timeEnd(`${perfId}-buildPartialMeshes`);
-						if (meshes.solidMesh) {
-							this._scene.add(meshes.solidMesh);
-						}
-
-						if (meshes.liquidMesh) {
-							this._scene.add(meshes.liquidMesh);
-						}
-
-						// Clear options after processing
-						if (this._chunkRemeshOptions) {
-							this._chunkRemeshOptions.delete(chunk.chunkId);
-						}
-
-						//console.timeEnd(perfId);
-					})
-					.catch(error => {
-						console.error(`Error building partial meshes for chunk ${chunk.chunkId}:`, error);
-						//console.timeEnd(`${perfId}-buildPartialMeshes`);
-						//console.timeEnd(perfId);
-					});
+				chunk.buildMeshes(this);
+				
+				// Check visibility after building mesh
+				const shouldBeVisible = this._isChunkVisible(chunk.chunkId);
+				chunk.visible = shouldBeVisible;
+				
+				// Clear options after processing
+				if (this._chunkRemeshOptions) {
+					this._chunkRemeshOptions.delete(chunk.chunkId);
+				}
 			}
 		} catch (error) {
 			console.error(`Error initiating mesh building for chunk ${chunk.chunkId}:`, error);
-			//console.timeEnd(perfId);
 		}
 	}
 
@@ -1077,12 +947,55 @@ class ChunkManager {
 			return;
 		}
 		
-		// Add to the render queue
-		this._renderChunkQueue.push({
-			chunkId: chunk.chunkId,
-			options: options || {}
-		});
+		// Store options for this chunk if provided
+		if (options && Object.keys(options).length > 0) {
+			if (!this._chunkRemeshOptions.has(chunk.chunkId)) {
+				this._chunkRemeshOptions.set(chunk.chunkId, options);
+			} else {
+				// Merge with existing options
+				const existingOptions = this._chunkRemeshOptions.get(chunk.chunkId);
+				this._chunkRemeshOptions.set(chunk.chunkId, { ...existingOptions, ...options });
+			}
+		}
+		
+		// Add to the render queue (just the chunkId, not the full object)
+		this._renderChunkQueue.push(chunk.chunkId);
 		this._pendingRenderChunks.add(chunk.chunkId);
+	}
+
+	/**
+	 * Check if a chunk should be visible based on distance to camera
+	 * @param {string} chunkId - The chunk ID
+	 * @returns {boolean} True if the chunk should be visible
+	 */
+	_isChunkVisible(chunkId) {
+		const chunk = this._chunks.get(chunkId);
+		if (!chunk) return false;
+		
+		// If no scene or camera, all chunks are visible
+		if (!this._scene || !this._scene.camera) return true;
+		
+		// Get the camera position
+		const cameraPos = this._scene.camera.position;
+		
+		// Calculate the chunk center position
+		const chunkCenter = new THREE.Vector3(
+			chunk.originCoordinate.x + CHUNK_SIZE/2,
+			chunk.originCoordinate.y + CHUNK_SIZE/2,
+			chunk.originCoordinate.z + CHUNK_SIZE/2
+		);
+		
+		// Calculate the distance from camera to chunk center
+		const distance = chunkCenter.distanceTo(cameraPos);
+		
+		// Get the view distance, which determines which chunks are visible
+		const viewDistance = this._viewDistance;
+		
+		// If view distance culling is disabled, all chunks are visible
+		if (!this._viewDistanceEnabled) return true;
+		
+		// Chunks are visible if they're within the view distance
+		return distance <= viewDistance;
 	}
 }
 

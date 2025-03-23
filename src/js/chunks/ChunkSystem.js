@@ -584,6 +584,57 @@ class ChunkSystem {
     // Process the render queue immediately to avoid waiting for the next frame
     this.processRenderQueue();
   }
+
+  /**
+   * Update the camera position and matrices for visibility culling
+   * @param {THREE.Camera} camera - The camera to use for culling
+   */
+  updateCamera(camera) {
+    if (!camera) {
+      console.warn("No camera provided for chunk system");
+      return;
+    }
+    
+    // Update camera matrices for accurate frustum culling
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+    
+    // Generate a new frustum object for visibility culling
+    const projScreenMatrix = new THREE.Matrix4();
+    projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const frustum = new THREE.Frustum();
+    frustum.setFromProjectionMatrix(projScreenMatrix);
+    
+    // Store the camera position and frustum for visibility checks
+    this._cameraPosition = camera.position.clone();
+    this._frustum = frustum;
+    
+    // Log camera update occasionally for debugging
+    if (Math.random() < 0.01) { 
+      console.log(`Updated camera position to ${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)}`);
+    }
+  }
+
+  /**
+   * Reset the chunk system - clear all chunks and prepare for new data
+   */
+  reset() {
+    console.log('Resetting chunk system');
+    
+    // Clear all existing chunks
+    this.clearChunks();
+    
+    // Reset the nonVisibleBlocks storage if it exists
+    if (this._nonVisibleBlocks) {
+      this._nonVisibleBlocks = {};
+    }
+    
+    // Reset any other state that needs to be cleared
+    this._chunkManager._renderChunkQueue = [];
+    this._chunkManager._pendingRenderChunks.clear();
+    
+    console.log('Chunk system reset complete');
+  }
 }
 
 export default ChunkSystem; 

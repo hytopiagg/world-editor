@@ -109,49 +109,24 @@ export const updateChunkSystemCamera = (camera) => {
 };
 
 /**
- * Process the chunk render queue
- * Should be called in the animation loop
+ * Process chunk render queue
+ * Priority is given to chunks closer to the camera
  */
 export const processChunkRenderQueue = () => {
 	if (!chunkSystem) {
-		console.error("Chunk system not available for render queue processing");
+		console.error("Chunk system not initialized, can't process render queue");
 		return;
 	}
-
-	// Ensure camera is correctly set
-	if (!chunkSystem._scene.camera) {
-		console.error("Camera not set in chunk system - cannot process render queue properly");
-		return;
-	}
-
-	// Check if texture queue needs processing (every ~5 seconds)
-	// This uses a simple random check to avoid doing it every frame
-	if (Math.random() < 0.01) {
-		// Get latest texture atlas and ensure materials are updated
-		const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
-		BlockMaterial.instance.setTextureAtlas(textureAtlas);
-	}
-
-	// Make sure camera matrices are up to date before processing
+	
+	// Update the camera position in the chunk system
 	if (chunkSystem._scene.camera) {
-		const camera = chunkSystem._scene.camera;
-		camera.updateMatrixWorld(true);
-		camera.updateProjectionMatrix();
-
-		// Generate a new frustum object for visibility culling
-		const projScreenMatrix = new THREE.Matrix4();
-		projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-		const frustum = new THREE.Frustum();
-		frustum.setFromProjectionMatrix(projScreenMatrix);
-
-		// Store the frustum in the chunk system for visibility checks
-		chunkSystem._frustum = frustum;
+		chunkSystem.updateCamera(chunkSystem._scene.camera);
 	} else {
 		console.warn("No camera set in chunk system for render queue processing");
 	}
 
-	// Process the render queue
-	chunkSystem.processRenderQueue();
+	// Process the render queue with priority for chunks closer to camera
+	chunkSystem.processRenderQueue(true);
 };
 
 /**
@@ -166,53 +141,45 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
 		return { totalBlocks: 0, visibleBlocks: 0 };
 	}
 
-	// Check if we need to filter for mesh creation
+	console.log(`Loading terrain data with ${Object.keys(terrainData).length} blocks (defer: ${onlyVisibleChunks})`);
+	
+	// Enable bulk loading mode during the initial load to prevent lag
 	if (onlyVisibleChunks && chunkSystem._scene.camera) {
-		console.log("Setting deferred mesh creation mode for distant chunks");
-		
-		// Set the chunk system to defer mesh creation for chunks far from camera
-		// This loads all data into memory but only creates meshes for visible chunks
-		const camera = chunkSystem._scene.camera;
 		const viewDistance = chunkSystem._viewDistance || 96; // Default 6 chunks
+		const priorityDistance = viewDistance * 0.5;
 		
-		// Enable bulk loading mode with near chunks getting immediate priority
-		// This uses less memory at start and speeds up initial display
-		chunkSystem.setBulkLoadingMode(true, viewDistance * 0.5);
-		
-		// Update the chunk system with all terrain data
-		chunkSystem.updateFromTerrainData(terrainData);
-		
-		// After a moment, process all chunks near the camera first
-		setTimeout(() => {
-			if (chunkSystem) {
-				console.log("Processing chunk render queue for nearby chunks...");
-				chunkSystem._chunkManager.processRenderQueue(true);
-			}
-		}, 100);
-		
-		// After some time, disable bulk loading mode to load the rest
-		// This ensures all chunks are eventually loaded
-		setTimeout(() => {
-			if (chunkSystem) {
-				console.log("Disabling deferred mesh creation, loading remaining chunks...");
-				chunkSystem.setBulkLoadingMode(false);
-				chunkSystem._chunkManager.processRenderQueue(false);
-			}
-		}, 5000);
-		
-		return {
-			totalBlocks: Object.keys(terrainData).length,
-			visibleBlocks: Object.keys(terrainData).length
-		};
+		console.log(`Setting bulk loading mode temporarily during initial load with priority distance ${priorityDistance}`);
+		chunkSystem.setBulkLoadingMode(true, priorityDistance);
 	} else {
-		// Load all chunks immediately
-		chunkSystem.updateFromTerrainData(terrainData);
-		
-		return {
-			totalBlocks: Object.keys(terrainData).length,
-			visibleBlocks: Object.keys(terrainData).length
-		};
+		// Ensure bulk loading is disabled if we're not doing optimized loading
+		chunkSystem.setBulkLoadingMode(false);
 	}
+	
+	// Load all blocks at once
+	chunkSystem.updateFromTerrainData(terrainData);
+	
+	// Process the render queue for chunks near the camera first
+	setTimeout(() => {
+		if (chunkSystem) {
+			console.log("Processing chunk render queue for nearby chunks...");
+			chunkSystem._chunkManager.processRenderQueue(true);
+			
+			// Schedule disabling bulk loading mode after a brief delay 
+			// to finish loading all chunks
+			setTimeout(() => {
+				console.log("Loading complete, disabling bulk loading mode");
+				chunkSystem.setBulkLoadingMode(false);
+				
+				// Process any remaining chunks
+				chunkSystem._chunkManager.processRenderQueue(true);
+			}, 2000);
+		}
+	}, 100);
+	
+	return {
+		totalBlocks: Object.keys(terrainData).length,
+		visibleBlocks: Object.keys(terrainData).length
+	};
 };
 
 /**
