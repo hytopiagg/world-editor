@@ -1,5 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon, FaCubes, FaPaintBrush } from "react-icons/fa";
+import {
+	FaPlus,
+	FaMinus,
+	FaLock,
+	FaLockOpen,
+	FaUndo,
+	FaRedo,
+	FaCircle,
+	FaPaintBrush,
+	FaDrawPolygon,
+	FaSquare,
+	FaCube,
+	FaBorderStyle,
+	FaMountain,
+	FaExpand,
+	FaTrash,
+	FaCubes,
+	FaDatabase,
+	FaBorderAll
+} from 'react-icons/fa';
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
 import "../../css/ToolBar.css";
@@ -508,8 +527,6 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								<FaPaintBrush />
 							</button>
 						</Tooltip>
-
-						<div className="control-divider-vertical"></div>
 						<Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. q cancels">
 							<button
 								onClick={() => {
@@ -518,6 +535,27 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								}}
 								className={`control-button ${activeTool === "wall" ? "selected" : ""}`}>
 								<FaDrawPolygon />
+							</button>
+						</Tooltip>
+						<Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.">
+							<button
+								onClick={() => {
+									handleToolToggle("ground");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "ground" ? "selected" : ""}`}>
+								<FaSquare />
+							</button>
+						</Tooltip>
+						
+						<Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.">
+							<button
+								onClick={() => {
+									handleToolToggle("pipe");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "pipe" ? "selected" : ""}`}>
+								<FaBorderAll />
 							</button>
 						</Tooltip>
 						

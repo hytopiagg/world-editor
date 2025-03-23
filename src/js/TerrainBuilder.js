@@ -14,13 +14,13 @@ import { loadingManager } from './LoadingManager';
 import { PERFORMANCE_SETTINGS, 
 	    meshesNeedsRefresh, toggleInstancing, getInstancingEnabled } from "./constants/performance";
 
-import {CHUNK_SIZE, GREEDY_MESHING_ENABLED, 
-		 getViewDistance, setViewDistance, MAX_SELECTION_DISTANCE,
+import {CHUNK_SIZE, 
+		 getViewDistance, MAX_SELECTION_DISTANCE,
 		THRESHOLD_FOR_PLACING, CHUNK_BLOCK_CAPACITY,
         getGreedyMeshingEnabled, setGreedyMeshingEnabled } from "./constants/terrain";
 
 // Import tools
-import { ToolManager, WallTool, BrushTool } from "./tools";
+import { ToolManager, WallTool, BrushTool, GroundTool, PipeTool } from "./tools";
 
 // Import chunk utility functions
 import { SpatialGridManager } from "./managers/SpatialGridManager";
@@ -1781,6 +1781,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Register the new BrushTool
 		const brushTool = new BrushTool(terrainBuilderProps);
 		toolManagerRef.current.registerTool("brush", brushTool);
+		
+		// Register the new GroundTool
+		const groundTool = new GroundTool(terrainBuilderProps);
+		toolManagerRef.current.registerTool("ground", groundTool);
+		
+		// Register the new PipeTool
+		const pipeTool = new PipeTool(terrainBuilderProps);
+		toolManagerRef.current.registerTool("pipe", pipeTool);
 		
 		initialize();
 
