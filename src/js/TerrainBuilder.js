@@ -2161,6 +2161,161 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					resolve(false);
 				}
 			});
+		},
+		// Add a new public method to force a complete rebuild of the spatial hash grid
+		// This method can be called by tools like BrushTool when they need to ensure
+		// the spatial hash is completely up to date after operation
+		forceRebuildSpatialHash: (options = {}) => {
+			console.log("TerrainBuilder: Forcing complete rebuild of spatial hash grid");
+
+			// Skip if spatial grid manager isn't available
+			if (!spatialGridManagerRef.current) {
+				console.warn("TerrainBuilder: Cannot rebuild spatial hash - spatial grid manager not available");
+				return Promise.resolve();
+			}
+
+			// Force disable any throttling or deferral
+			disableSpatialHashUpdatesRef.current = false;
+			deferSpatialHashUpdatesRef.current = false;
+
+			try {
+				// First, clear the spatial hash grid completely
+				spatialGridManagerRef.current.clear();
+
+				// Use getCurrentTerrainData instead of terrainRef.current directly
+				// This gets the full terrain data including any recent changes
+				const terrainData = getCurrentTerrainData();
+				
+				if (!terrainData || Object.keys(terrainData).length === 0) {
+					console.warn("TerrainBuilder: No terrain data available for spatial hash rebuild");
+					return Promise.resolve();
+				}
+				
+				const totalBlocks = Object.keys(terrainData).length;
+				console.log(`TerrainBuilder: Found ${totalBlocks} terrain blocks to process`);
+				
+				// Show loading screen if requested and there are many blocks
+				const showLoading = options.showLoadingScreen || (totalBlocks > 100000);
+				if (showLoading) {
+					loadingManager.showLoading('Rebuilding spatial hash grid...');
+				}
+				
+				// Organize blocks by chunks to process more efficiently
+				const blocksByChunk = {};
+				
+				// Process terrain data to organize blocks by chunk
+				for (const [posKey, blockId] of Object.entries(terrainData)) {
+					// Skip air blocks (id = 0) and invalid blocks
+					if (blockId === 0 || blockId === undefined || blockId === null) continue;
+
+					// Parse the position
+					const [x, y, z] = posKey.split(',').map(Number);
+					
+					// Get chunk key (we use chunk coordinates like x>>4,z>>4)
+					const chunkX = Math.floor(x / 16);
+					const chunkZ = Math.floor(z / 16);
+					const chunkKey = `${chunkX},${chunkZ}`;
+					
+					// Initialize chunk array if needed
+					if (!blocksByChunk[chunkKey]) {
+						blocksByChunk[chunkKey] = [];
+					}
+					
+					// Add to chunk's blocks array with proper format for spatial hash
+					blocksByChunk[chunkKey].push({
+						id: blockId,
+						position: [x, y, z]
+					});
+				}
+				
+				const chunkKeys = Object.keys(blocksByChunk);
+				console.log(`TerrainBuilder: Organized blocks into ${chunkKeys.length} chunks`);
+				
+				if (chunkKeys.length === 0) {
+					console.warn("TerrainBuilder: No valid chunks found for spatial hash rebuild");
+					if (showLoading) loadingManager.hideLoading();
+					return Promise.resolve();
+				}
+				
+				// Process chunks in batches to avoid UI freezes
+				const MAX_CHUNKS_PER_BATCH = 10;
+				const totalBatches = Math.ceil(chunkKeys.length / MAX_CHUNKS_PER_BATCH);
+				
+				// Function to process a batch of chunks
+				const processBatch = (batchIndex) => {
+					return new Promise((resolve) => {
+						// Get batch of chunk keys
+						const startIdx = batchIndex * MAX_CHUNKS_PER_BATCH;
+						const endIdx = Math.min(startIdx + MAX_CHUNKS_PER_BATCH, chunkKeys.length);
+						const batchChunks = chunkKeys.slice(startIdx, endIdx);
+						
+						// Collect all blocks from this batch
+						const batchBlocks = [];
+						batchChunks.forEach(chunkKey => {
+							batchBlocks.push(...blocksByChunk[chunkKey]);
+						});
+						
+						// Skip if no blocks in this batch
+						if (batchBlocks.length === 0) {
+							resolve();
+							return;
+						}
+						
+						// Update progress if showing loading screen
+						if (showLoading) {
+							const progress = Math.round((batchIndex / totalBatches) * 100);
+							loadingManager.updateProgress(progress, `Processing batch ${batchIndex + 1}/${totalBatches}`);
+						}
+						
+						// Update spatial hash with this batch of blocks
+						spatialGridManagerRef.current.updateBlocks(
+							batchBlocks, 
+							[], // No blocks to remove
+							{ 
+								force: true,
+								silent: false,
+								skipIfBusy: false
+							}
+						);
+						
+						// Use setTimeout to avoid UI freezes between batches
+						setTimeout(() => resolve(), 0);
+					});
+				};
+				
+				// Process all batches sequentially
+				return new Promise(async (resolve) => {
+					for (let i = 0; i < totalBatches; i++) {
+						await processBatch(i);
+					}
+					
+					console.log(`TerrainBuilder: Completed spatial hash rebuild with ${totalBlocks} blocks in ${totalBatches} batches`);
+					
+					// Force mesh updates only for affected chunks to avoid unnecessary work
+					if (typeof forceChunkUpdate === 'function' && chunkKeys.length > 0) {
+						console.log(`TerrainBuilder: Refreshing ${chunkKeys.length} chunks after spatial hash rebuild`);
+						forceChunkUpdate(chunkKeys, { skipNeighbors: true });
+					} 
+					// Fall back to refreshing all chunks if needed
+					else if (typeof forceRefreshAllChunks === 'function') {
+						console.log("TerrainBuilder: Forcing refresh of all chunks after spatial hash rebuild");
+						forceRefreshAllChunks();
+					}
+					
+					// Hide loading screen if it was shown
+					if (showLoading) {
+						loadingManager.hideLoading();
+					}
+					
+					resolve();
+				});
+			} catch (err) {
+				console.error("TerrainBuilder: Error rebuilding spatial hash grid", err);
+				if (options.showLoadingScreen) {
+					loadingManager.hideLoading();
+				}
+				return Promise.reject(err);
+			}
 		}
 	}));  // This is the correct syntax with just one closing parenthesis
 

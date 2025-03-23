@@ -498,35 +498,17 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 							</button>
 						</Tooltip>
 						<div className="control-divider-vertical"></div>
-						<Tooltip text="Cross pattern (5 blocks)">
+						<Tooltip text="Brush Tool - Click to place/erase blocks. Press 1/2 to adjust size. Press 3 to toggle shape (square/circle). Press 4 to toggle flat/3D mode. Hold Ctrl to erase.">
 							<button
-								onClick={() => setPlacementSize("cross")}
-								className={`control-button ${placementSize === "cross" ? "selected" : ""}`}>
-								<FaCircle style={{ width: "10px", height: "10px" }} />
+								onClick={() => {
+									handleToolToggle("brush");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "brush" ? "selected" : ""}`}>
+								<FaPaintBrush />
 							</button>
 						</Tooltip>
-						<Tooltip text="diamond pattern (13 blocks)">
-							<button
-								onClick={() => setPlacementSize("diamond")}
-								className={`control-button ${placementSize === "diamond" ? "selected" : ""}`}>
-								<FaCircle style={{ width: "20px", height: "20px" }} />
-							</button>
-						</Tooltip>
-						<div className="control-divider-vertical"></div>
-						<Tooltip text="Single block placement">
-							<button
-								onClick={() => setPlacementSize("square9")}
-								className={`control-button ${placementSize === "square9" ? "selected" : ""}`}>
-								<FaSquare style={{ width: "10px", height: "10px" }} />
-							</button>
-						</Tooltip>
-						<Tooltip text="Cross pattern (5 blocks)">
-							<button
-								onClick={() => setPlacementSize("square16")}
-								className={`control-button ${placementSize === "square16" ? "selected" : ""}`}>
-								<FaSquare style={{ width: "20px", height: "20px" }} />
-							</button>
-						</Tooltip>
+
 						<div className="control-divider-vertical"></div>
 						<Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. q cancels">
 							<button
@@ -538,16 +520,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								<FaDrawPolygon />
 							</button>
 						</Tooltip>
-						<Tooltip text="Brush Tool - Click to place/erase blocks. Use 1-9 to adjust size. Press 3 to toggle shape (square/circle). Hold Ctrl to erase.">
-							<button
-								onClick={() => {
-									handleToolToggle("brush");
-									setPlacementSize("single");
-								}}
-								className={`control-button ${activeTool === "brush" ? "selected" : ""}`}>
-								<FaPaintBrush />
-							</button>
-						</Tooltip>
+						
 					</div>
 					<div className="control-label">Placement Tools</div>
 					

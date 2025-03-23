@@ -1161,10 +1161,34 @@ class SpatialGridManager {
 	}
 	
 	/**
-	 * Clear all blocks from the grid
+	 * Clear the spatial hash grid completely
+	 * This will remove all blocks from the grid
 	 */
 	clear() {
-		this.spatialHashGrid.clear();
+		console.log("SpatialGridManager: Clearing spatial hash grid");
+		if (!this.spatialHashGrid) {
+			console.warn("SpatialGridManager: No spatial hash grid to clear");
+			return;
+		}
+		
+		// Clear the underlying grid using its clear method
+		if (typeof this.spatialHashGrid.clear === 'function') {
+			this.spatialHashGrid.clear();
+		} 
+		// If clear method doesn't exist, recreate the grid
+		else {
+			console.log("SpatialGridManager: Recreating spatial hash grid");
+			this.spatialHashGrid = new SpatialHashGrid({ chunkSize: CHUNK_SIZE });
+		}
+		
+		// Reset metrics
+		this.perfMetrics = {
+			lastUpdateTime: 0,
+			blockCount: 0,
+			updateCount: 0
+		};
+		
+		console.log("SpatialGridManager: Spatial hash grid cleared");
 	}
 	
 	/**

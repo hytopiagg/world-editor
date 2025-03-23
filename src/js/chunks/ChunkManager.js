@@ -27,6 +27,8 @@ class ChunkManager {
 		this._lastMeshBuildTime = null; // Added for rate limiting
 		this._meshBuildCount = 0;
 		this._meshBuildStartTime = null;
+		this._chunkLastMeshedTime = null;
+		this._chunkLastQueuedTime = null;
 	}
 
 	/**
@@ -571,6 +573,13 @@ class ChunkManager {
 					this._chunkRemeshOptions.delete(chunk.chunkId);
 				}
 			}
+			
+			// Update the last meshed time for this chunk for cooldown tracking
+			if (!this._chunkLastMeshedTime) {
+				this._chunkLastMeshedTime = new Map();
+			}
+			this._chunkLastMeshedTime.set(chunk.chunkId, performance.now());
+			
 		} catch (error) {
 			console.error(`Error initiating mesh building for chunk ${chunk.chunkId}:`, error);
 		}
@@ -943,7 +952,38 @@ class ChunkManager {
 		
 		// Skip if this chunk is already in the queue
 		if (this._pendingRenderChunks.has(chunk.chunkId)) {
-			console.log(`Chunk ${chunk.chunkId} already queued for render, skipping duplicate`);
+			// Only log occasionally to reduce console spam
+			if (Math.random() < 0.05) {
+				console.log(`Chunk ${chunk.chunkId} already queued for render, skipping duplicate`);
+			}
+			
+			// Even if the chunk is already queued, we might need to update its options
+			if (options && Object.keys(options).length > 0) {
+				const existingOptions = this._chunkRemeshOptions.get(chunk.chunkId) || {};
+				this._chunkRemeshOptions.set(chunk.chunkId, { ...existingOptions, ...options });
+			}
+			return;
+		}
+		
+		// Check if the chunk was recently meshed (implement a simple cooldown mechanism)
+		if (!this._chunkLastMeshedTime) {
+			this._chunkLastMeshedTime = new Map();
+		}
+		
+		const now = performance.now();
+		const lastMeshedTime = this._chunkLastMeshedTime.get(chunk.chunkId) || 0;
+		const timeSinceLastMesh = now - lastMeshedTime;
+		
+		// Shorter cooldown when placing blocks to ensure responsiveness
+		// Consider block additions and removals as high priority
+		const hasBlockChanges = options.added?.length > 0 || options.removed?.length > 0;
+		const isHighPriority = options.forceMesh || options.forceCompleteRebuild || hasBlockChanges;
+		
+		// Use a much shorter cooldown for block changes to maintain responsiveness
+		const minRebuildInterval = hasBlockChanges ? 20 : 100; // Only 20ms cooldown for block changes
+		
+		if (timeSinceLastMesh < minRebuildInterval && !isHighPriority) {
+			// Skip this chunk as it was just rebuilt
 			return;
 		}
 		
@@ -959,8 +999,17 @@ class ChunkManager {
 		}
 		
 		// Add to the render queue (just the chunkId, not the full object)
-		this._renderChunkQueue.push(chunk.chunkId);
+		// For block changes, add to the front of the queue for faster processing
+		if (hasBlockChanges) {
+			this._renderChunkQueue.unshift(chunk.chunkId);
+		} else {
+			this._renderChunkQueue.push(chunk.chunkId);
+		}
 		this._pendingRenderChunks.add(chunk.chunkId);
+		
+		// Record the time this chunk was queued (we'll update the meshed time when it's actually processed)
+		this._chunkLastQueuedTime = this._chunkLastQueuedTime || new Map();
+		this._chunkLastQueuedTime.set(chunk.chunkId, now);
 	}
 
 	/**

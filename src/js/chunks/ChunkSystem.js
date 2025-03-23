@@ -202,11 +202,9 @@ class ChunkSystem {
     
     console.time('ChunkSystem.updateBlocks');
     
-    // Organize blocks by chunk
-    const chunkMap = new Map();
-    
-    // Track chunks that need neighbor updates
-    const needsNeighborUpdate = new Set();
+    // Use a Set to track unique chunks that need updates, avoiding duplicates
+    const chunksToUpdate = new Set();
+    const chunkOptions = new Map();
     
     // First, handle removed blocks
     removedBlocks.forEach(block => {
@@ -219,18 +217,68 @@ class ChunkSystem {
       const originZ = Math.floor(z / CHUNK_SIZE) * CHUNK_SIZE;
       
       const chunkId = `${originX},${originY},${originZ}`;
+      const chunk = this._chunkManager._chunks.get(chunkId);
       
-      if (!chunkMap.has(chunkId)) {
-        chunkMap.set(chunkId, { added: [], removed: [] });
+      // If the chunk exists, update the block data
+      if (chunk) {
+        const localX = x - originX;
+        const localY = y - originY;
+        const localZ = z - originZ;
+        
+        // Set the block to air (0)
+        chunk.setLocalBlockId({
+          x: localX, y: localY, z: localZ
+        }, 0);
       }
       
-      chunkMap.get(chunkId).removed.push({
+      // Add this chunk to the set of chunks that need updates
+      chunksToUpdate.add(chunkId);
+      
+      // Store block info in the chunk's options
+      if (!chunkOptions.has(chunkId)) {
+        chunkOptions.set(chunkId, { added: [], removed: [], forceCompleteRebuild: true });
+      }
+      
+      chunkOptions.get(chunkId).removed.push({
         position: { x, y, z },
         id: block.id
       });
       
-      // Always check neighbors for removed blocks to ensure proper mesh updates
-      needsNeighborUpdate.add(chunkId);
+      // Track neighbor chunks that need updates due to boundary blocks
+      // Only if we're near a chunk boundary (within 1 block)
+      const isNearXBoundary = x % CHUNK_SIZE === 0 || x % CHUNK_SIZE === CHUNK_SIZE - 1;
+      const isNearYBoundary = y % CHUNK_SIZE === 0 || y % CHUNK_SIZE === CHUNK_SIZE - 1;
+      const isNearZBoundary = z % CHUNK_SIZE === 0 || z % CHUNK_SIZE === CHUNK_SIZE - 1;
+      
+      if (isNearXBoundary || isNearYBoundary || isNearZBoundary) {
+        // Get neighboring chunks - but only those that actually could be affected
+        for (let ox = -1; ox <= 1; ox++) {
+          for (let oy = -1; oy <= 1; oy++) {
+            for (let oz = -1; oz <= 1; oz++) {
+              // Skip the center (this is our current chunk)
+              if (ox === 0 && oy === 0 && oz === 0) continue;
+              
+              // Skip diagonals - we only care about faces
+              if (Math.abs(ox) + Math.abs(oy) + Math.abs(oz) > 1) continue;
+              
+              // Skip if the block is not near this particular boundary
+              if (ox !== 0 && !isNearXBoundary) continue;
+              if (oy !== 0 && !isNearYBoundary) continue;
+              if (oz !== 0 && !isNearZBoundary) continue;
+              
+              const neighborChunkId = `${originX + ox * CHUNK_SIZE},${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE}`;
+              
+              // Add to set of chunks to update
+              chunksToUpdate.add(neighborChunkId);
+              
+              // Initialize options for neighbor chunks
+              if (!chunkOptions.has(neighborChunkId)) {
+                chunkOptions.set(neighborChunkId, { added: [], removed: [], skipNeighbors: true });
+              }
+            }
+          }
+        }
+      }
     });
     
     // Then, handle added blocks
@@ -245,37 +293,12 @@ class ChunkSystem {
       
       const chunkId = `${originX},${originY},${originZ}`;
       
-      // Debug: Log info about creating new chunks when placing in empty space
-      const chunkExists = this._chunkManager._chunks.has(chunkId);
-      if (!chunkExists) {
-        console.log(`DEBUG: Creating new chunk for ${chunkId} to place block at ${x},${y},${z}`);
-      }
-      
-      if (!chunkMap.has(chunkId)) {
-        chunkMap.set(chunkId, { added: [], removed: [] });
-      }
-      
-      chunkMap.get(chunkId).added.push({
-        position: { x, y, z },
-        id: block.id
-      });
-      
-      // Check if the block is on chunk boundary for added blocks too
-      if (this._isOnChunkBoundary({ x, y, z }, originX, originY, originZ)) {
-        needsNeighborUpdate.add(chunkId);
-      }
-    });
-    
-    // Update chunks
-    for (const [chunkId, { added, removed }] of chunkMap.entries()) {
-      const [originX, originY, originZ] = chunkId.split(',').map(Number);
-      
       // Get or create the chunk
       let chunk = this._chunkManager._chunks.get(chunkId);
       
+      // Create a new chunk if it doesn't exist
       if (!chunk) {
-        // Create a new chunk if it doesn't exist
-        console.log(`DEBUG: Creating new chunk for ${chunkId}`);
+        console.log(`Creating new chunk for ${chunkId}`);
         // Create an empty blocks array for the new chunk
         const blocks = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
         
@@ -290,49 +313,85 @@ class ChunkSystem {
         
         if (!chunk) {
           console.error(`Failed to create chunk for ${chunkId}`);
-          continue;
+          return;
         }
       }
       
-      // Update blocks in the chunk
-      added.forEach(block => {
-        const localX = block.position.x - originX;
-        const localY = block.position.y - originY;
-        const localZ = block.position.z - originZ;
-        
-        chunk.setLocalBlockId({
-          x: localX,
-          y: localY,
-          z: localZ
-        }, block.id);
+      // Update the block in the chunk
+      const localX = x - originX;
+      const localY = y - originY;
+      const localZ = z - originZ;
+      
+      // Set the block value
+      chunk.setLocalBlockId({
+        x: localX, y: localY, z: localZ
+      }, block.id);
+      
+      // Add this chunk to the set of chunks that need updates
+      chunksToUpdate.add(chunkId);
+      
+      // Store block info in the chunk's options
+      if (!chunkOptions.has(chunkId)) {
+        chunkOptions.set(chunkId, { added: [], removed: [] });
+      }
+      
+      chunkOptions.get(chunkId).added.push({
+        position: { x, y, z },
+        id: block.id
       });
       
-      removed.forEach(block => {
-        const localX = block.position.x - originX;
-        const localY = block.position.y - originY;
-        const localZ = block.position.z - originZ;
-        
-        chunk.setLocalBlockId({
-          x: localX,
-          y: localY,
-          z: localZ
-        }, 0); // 0 is reserved for air/no-block
-      });
+      // Track neighbor chunks that need updates due to boundary blocks
+      // Only if we're near a chunk boundary (within 1 block)
+      const isNearXBoundary = x % CHUNK_SIZE === 0 || x % CHUNK_SIZE === CHUNK_SIZE - 1;
+      const isNearYBoundary = y % CHUNK_SIZE === 0 || y % CHUNK_SIZE === CHUNK_SIZE - 1;
+      const isNearZBoundary = z % CHUNK_SIZE === 0 || z % CHUNK_SIZE === CHUNK_SIZE - 1;
       
-      // Mark the chunk for remeshing
-      this._chunkManager.markChunkForRemesh(chunkId);
+      if (isNearXBoundary || isNearYBoundary || isNearZBoundary) {
+        // Get neighboring chunks - but only those that actually could be affected
+        for (let ox = -1; ox <= 1; ox++) {
+          for (let oy = -1; oy <= 1; oy++) {
+            for (let oz = -1; oz <= 1; oz++) {
+              // Skip the center (this is our current chunk)
+              if (ox === 0 && oy === 0 && oz === 0) continue;
+              
+              // Skip diagonals - we only care about faces
+              if (Math.abs(ox) + Math.abs(oy) + Math.abs(oz) > 1) continue;
+              
+              // Skip if the block is not near this particular boundary
+              if (ox !== 0 && !isNearXBoundary) continue;
+              if (oy !== 0 && !isNearYBoundary) continue;
+              if (oz !== 0 && !isNearZBoundary) continue;
+              
+              const neighborChunkId = `${originX + ox * CHUNK_SIZE},${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE}`;
+              
+              // Add to set of chunks to update
+              chunksToUpdate.add(neighborChunkId);
+              
+              // Initialize options for neighbor chunks
+              if (!chunkOptions.has(neighborChunkId)) {
+                chunkOptions.set(neighborChunkId, { added: [], removed: [], skipNeighbors: true });
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    // Process all the chunks that need updates
+    for (const chunkId of chunksToUpdate) {
+      const chunk = this._chunkManager._chunks.get(chunkId);
       
-      // Also mark neighboring chunks for remeshing if needed
-      if (needsNeighborUpdate.has(chunkId)) {
-        // For removed blocks, we need to update neighboring chunks more aggressively
-        const hasRemovedBlocks = removed.length > 0;
+      if (chunk) {
+        // Get the options for this chunk
+        const options = chunkOptions.get(chunkId) || {};
         
-        // Debug for block removal
-        if (hasRemovedBlocks) {
-          console.log(`Marking neighbors for remeshing because of block removal in chunk ${chunkId}`);
+        // For adding blocks, force a rebuild of the mesh
+        if (options.added && options.added.length > 0) {
+          options.forceCompleteRebuild = true;
         }
         
-        this._markNeighboringChunks(originX, originY, originZ);
+        // Mark chunk for update
+        this._chunkManager.queueChunkForRender(chunk, options);
       }
     }
     

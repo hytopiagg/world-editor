@@ -174,7 +174,23 @@ class Chunk {
    */
   async buildMeshes(chunkManager, options = {}) {
     const skipNeighbors = options && options.skipNeighbors === true;
+    const forceCompleteRebuild = options && options.forceCompleteRebuild === true;
+    const hasAddedBlocks = options && options.added && options.added.length > 0;
+    const hasRemovedBlocks = options && options.removed && options.removed.length > 0;
     const perfId = `buildMeshes-${this.chunkId}${skipNeighbors ? '-fast' : ''}`;
+    
+    // If the chunk hasn't changed and we're not forcing a rebuild, skip the mesh build
+    // Never skip if we have explicit added/removed blocks
+    if (!forceCompleteRebuild && !hasAddedBlocks && !hasRemovedBlocks && this._meshHashCode) {
+      const currentHashCode = this._calculateBlocksHashCode();
+      if (currentHashCode === this._meshHashCode) {
+        // Log only occasionally to reduce spam
+        if (Math.random() < 0.05) {
+          console.log(`Skipping mesh rebuild for unchanged chunk ${this.chunkId}`);
+        }
+        return;
+      }
+    }
     
     // Skip neighbors if specified
     if (skipNeighbors) {
@@ -486,12 +502,14 @@ class Chunk {
     this._updateMeshVisibility();
     //console.timeEnd(`${perfId}-createMeshes`);
     
-    // Add a safety check for the timer end
+    // Store the hash code for this chunks blocks to detect future changes
+    this._meshHashCode = this._calculateBlocksHashCode();
+    
+    // End the performance timer for this mesh build
     try {
       console.timeEnd(perfId);
     } catch (e) {
-      // If timer doesn't exist, just log a completion message
-      console.log(`Completed building meshes for chunk ${this.chunkId}`);
+      // Timer might not exist or might have been cleared already
     }
     
     // Add meshes to the scene
@@ -1391,6 +1409,32 @@ class Chunk {
    */
   _getIndex(localCoordinate) {
     return localCoordinate.x + CHUNK_SIZE * (localCoordinate.y + CHUNK_SIZE * localCoordinate.z);
+  }
+
+  /**
+   * Calculate a simple hash code for the blocks array to detect changes
+   * @private
+   * @returns {number} A hash code for the blocks array
+   */
+  _calculateBlocksHashCode() {
+    let hash = 0;
+    const { length } = this._blocks;
+    
+    // Process all blocks for a more accurate hash
+    // We need to be careful with this to not miss block changes
+    for (let i = 0; i < length; i++) {
+      // Only use non-zero blocks for the hash
+      if (this._blocks[i] !== 0) {
+        hash = ((hash << 5) - hash) + (i * 31 + this._blocks[i]);
+        hash = hash & hash; // Convert to 32bit integer
+      }
+    }
+    
+    // Include a timestamp component for placements
+    // This ensures we rebuild after recent changes
+    hash = (hash * 31) + Math.floor(performance.now() / 10000); // Changes every 10 seconds
+    
+    return hash;
   }
 }
 

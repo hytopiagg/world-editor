@@ -1,4 +1,3 @@
-
 /**
  * SpatialHashGrid.js
  * 
@@ -461,14 +460,24 @@ export class SpatialHashGrid {
 	}
 
 	/**
-	 * Clear the grid, removing all blocks
+	 * Clear all data from the grid
+	 * This completely resets the grid to an empty state
 	 */
 	clear() {
-		// Simply reset size and clear hash tables
+		console.log('SpatialHashGrid: Clearing all data');
+		
+		// Reset size
 		this.size = 0;
-		this.hashTable.fill(this.HASH_EMPTY);
-		this.collisionTable.fill(this.HASH_EMPTY);
-		console.log('SpatialHashGrid: Cleared all blocks');
+		
+		// Reset all arrays
+		if (this._blocks) this._blocks.fill(0);
+		if (this._coords) this._coords.fill(0);
+		
+		// Reset hash tables
+		if (this.hashTable) this.hashTable.fill(this.HASH_EMPTY);
+		if (this.collisionTable) this.collisionTable.fill(this.HASH_EMPTY);
+		
+		console.log('SpatialHashGrid: All data cleared');
 	}
 
 	/**
