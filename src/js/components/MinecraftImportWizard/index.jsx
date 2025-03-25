@@ -120,17 +120,23 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   }, [currentStep]);
   
   const handleComplete = useCallback(() => {
-    if (importResult && importResult.hytopiaMap) {
-      // Show loading screen with initial message
-      loadingManager.showLoading('Preparing to import Minecraft world...');
-      
-      // Close dialog right away to avoid UI freeze
+    if (importResult && importResult.success) {
+      // Do any final processing here
+      console.log("Import completed successfully!", importResult);
       onComplete && onComplete(importResult);
-      onClose();
       
-      // Reduce delay to make loading more responsive
+      // Make sure to refresh the block toolbar to show any custom blocks
+      if (typeof window.refreshBlockTools === 'function') {
+        window.refreshBlockTools();
+      } else {
+        window.dispatchEvent(new CustomEvent('refreshBlockTools'));
+      }
+      
+      // Also dispatch a custom-blocks-loaded event to ensure sidebars update
+      window.dispatchEvent(new CustomEvent('custom-blocks-loaded'));
+      
+      // Update the terrain with imported data - loading will be managed inside updateTerrainFromToolBar
       setTimeout(() => {
-        // Update the terrain with imported data - loading will be managed inside updateTerrainFromToolBar
         terrainBuilderRef.current?.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
       }, 50); // Reduced from 150ms for faster response
     } else {

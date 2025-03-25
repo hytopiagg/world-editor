@@ -465,12 +465,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			return;
 		}
 		
-		// Log current camera state only when needed
-		if (Date.now() % 5000 < 50) { // Only log every ~5 seconds
-			console.log("[Debug] Camera position:", camera.position.toArray().map(v => v.toFixed(2)));
-			console.log("[Debug] Camera rotation:", camera.rotation.toArray().map(v => v.toFixed(2)));
-		}
-		
 		// Ensure view distance settings are correct
 		const { getViewDistance } = require('./constants/terrain');
 		const currentViewDistance = getViewDistance();
@@ -686,6 +680,46 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		return 64; // Default view distance
 	};
 
+	
+	// Helper functions for testing custom textures from the console
+	const setupTestFunctions = (terrainBuilderInstance) => {
+		if (typeof window === 'undefined') return;
+
+		// Create a test texture and place it in the world
+		window.createAndPlaceTestBlock = async (blockId = 100, x = 0, y = 0, z = 0) => {
+			console.log(`Creating test block (ID: ${blockId}) at position (${x}, ${y}, ${z})...`);
+
+			try {
+				// First create the test texture if needed
+				if (window.testCustomTexture) {
+					await window.testCustomTexture(blockId);
+				} else if (window.BlockTypeRegistry) {
+					await window.BlockTypeRegistry.instance.registerTestCustomTexture(blockId);
+				} else {
+					console.error("BlockTypeRegistry not found in global scope");
+					return false;
+				}
+
+				// Then place the block
+				if (terrainBuilderInstance && terrainBuilderInstance.current) {
+					terrainBuilderInstance.current.placeBlockAt(x, y, z, blockId);
+					console.log(`Test block placed successfully at (${x}, ${y}, ${z})!`);
+					return true;
+				} else {
+					console.error("TerrainBuilder instance not available");
+					return false;
+				}
+			} catch (error) {
+				console.error("Error creating or placing test block:", error);
+				return false;
+			}
+		};
+
+		console.log("Test functions initialized. Use window.createAndPlaceTestBlock() to create and place a test block.");
+	};
+
+
+
 	// Ultra-optimized direct block update path for drag operations
 	const fastUpdateBlock = (position, blockId) => {
 		// Early validation
@@ -885,8 +919,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 				// Update terrain with new blocks
 				const preUpdateTime = performance.now();
-				console.log(`Performance: Block placement preparation took ${preUpdateTime - placeStartTime}ms`);
-				console.log(`Added ${Object.keys(addedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.added).length} for undo/redo`);
+				//console.log(`Performance: Block placement preparation took ${preUpdateTime - placeStartTime}ms`);
+		//		console.log(`Added ${Object.keys(addedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.added).length} for undo/redo`);
 				
 				importedUpdateTerrainBlocks(addedBlocks, {});
 				
@@ -906,7 +940,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				}
 				
 				const postUpdateTime = performance.now();
-				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
+				//console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
 
 				// Increment the placed block counter
 				placedBlockCountRef.current += Object.keys(addedBlocks).length;
@@ -936,8 +970,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				
 				// Update terrain with removed blocks
 				const preUpdateTime = performance.now();
-				console.log(`Performance: Block removal preparation took ${preUpdateTime - removeStartTime}ms`);
-				console.log(`Removed ${Object.keys(removedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.removed).length} for undo/redo`);
+				//console.log(`Performance: Block removal preparation took ${preUpdateTime - removeStartTime}ms`);
+				//console.log(`Removed ${Object.keys(removedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.removed).length} for undo/redo`);
 				
 				importedUpdateTerrainBlocks({}, removedBlocks);
 				
@@ -956,7 +990,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				}
 				
 				const postUpdateTime = performance.now();
-				console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
+				//console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
 
 				// Increment the placed block counter (even for removals)
 				placedBlockCountRef.current += Object.keys(removedBlocks).length;
@@ -967,7 +1001,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 		
 		const endTime = performance.now();
-		console.log(`Performance: handleBlockPlacement total time ${endTime - startTime}ms`);
+		//console.log(`Performance: handleBlockPlacement total time ${endTime - startTime}ms`);
 	};
 
 	/// Raycast and Grid Intersection Functions ///
@@ -1346,6 +1380,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		setTimeout(() => {
 			// Force a full visibility update after terrain is loaded
 			processChunkRenderQueue();
+			
 			// Hide loading screen
 			loadingManager.hideLoading();
 		}, 1000);
@@ -1897,6 +1932,49 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		placementSizeRef.current = placementSize;
 	}, [placementSize]);
 
+	// Add this effect to listen for texture atlas updates
+	useEffect(() => {
+		if (!scene || !gl) return;
+		
+		console.log("Setting up texture atlas update listener");
+		
+		const handleTextureAtlasUpdate = (event) => {
+			console.log("TerrainBuilder: Texture atlas update detected", event.detail);
+			
+			// Force update all materials
+			scene.traverse((object) => {
+				if (object.isMesh && object.material) {
+					if (Array.isArray(object.material)) {
+						object.material.forEach(mat => {
+							if (mat.map) mat.needsUpdate = true;
+						});
+					} else if (object.material.map) {
+						object.material.needsUpdate = true;
+					}
+				}
+			});
+			
+			// Force a render
+			gl.render(scene, threeCamera);
+			
+			// Update chunk visibility to force mesh updates
+			if (getChunkSystem()) {
+				console.log("Forcing chunk visibility update after texture change");
+				getChunkSystem().forceUpdateChunkVisibility(); // Changed from forceUpdateAllChunkVisibility
+				// Also force processing the render queue
+				getChunkSystem().processRenderQueue(true);
+			}
+		};
+		
+		// Add event listener
+		window.addEventListener('textureAtlasUpdated', handleTextureAtlasUpdate);
+		
+		// Cleanup function
+		return () => {
+			window.removeEventListener('textureAtlasUpdated', handleTextureAtlasUpdate);
+		};
+	}, [scene, gl, threeCamera]);
+
 	/// build update terrain when the terrain state changes
 	useEffect(() => {
 		buildUpdateTerrain();
@@ -2174,7 +2252,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// This method can be called by tools like BrushTool when they need to ensure
 		// the spatial hash is completely up to date after operation
 		forceRebuildSpatialHash: (options = {}) => {
-			console.log("TerrainBuilder: Forcing complete rebuild of spatial hash grid");
+			//console.log("TerrainBuilder: Forcing complete rebuild of spatial hash grid");
 
 			// Skip if spatial grid manager isn't available
 			if (!spatialGridManagerRef.current) {
@@ -2200,7 +2278,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				}
 				
 				const totalBlocks = Object.keys(terrainData).length;
-				console.log(`TerrainBuilder: Found ${totalBlocks} terrain blocks to process`);
+				//console.log(`TerrainBuilder: Found ${totalBlocks} terrain blocks to process`);
 				
 				// Show loading screen if requested and there are many blocks
 				const showLoading = options.showLoadingScreen || (totalBlocks > 100000);
@@ -2237,7 +2315,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				}
 				
 				const chunkKeys = Object.keys(blocksByChunk);
-				console.log(`TerrainBuilder: Organized blocks into ${chunkKeys.length} chunks`);
+				//console.log(`TerrainBuilder: Organized blocks into ${chunkKeys.length} chunks`);
 				
 				if (chunkKeys.length === 0) {
 					console.warn("TerrainBuilder: No valid chunks found for spatial hash rebuild");
@@ -2272,7 +2350,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						// Update progress if showing loading screen
 						if (showLoading) {
 							const progress = Math.round((batchIndex / totalBatches) * 100);
-							loadingManager.updateProgress(progress, `Processing batch ${batchIndex + 1}/${totalBatches}`);
+							loadingManager.updateLoading(`Processing batch ${batchIndex + 1}/${totalBatches}`, progress);
 						}
 						
 						// Update spatial hash with this batch of blocks
@@ -2297,7 +2375,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						await processBatch(i);
 					}
 					
-					console.log(`TerrainBuilder: Completed spatial hash rebuild with ${totalBlocks} blocks in ${totalBatches} batches`);
+					//console.log(`TerrainBuilder: Completed spatial hash rebuild with ${totalBlocks} blocks in ${totalBatches} batches`);
 					
 					// Force mesh updates only for affected chunks to avoid unnecessary work
 					if (typeof forceChunkUpdate === 'function' && chunkKeys.length > 0) {
@@ -2327,6 +2405,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 	}));  // This is the correct syntax with just one closing parenthesis
 
+	
 	// Add resize listener to update canvasRect
 	useEffect(() => {
 		const handleResize = () => {
@@ -3252,7 +3331,7 @@ const forceChunkUpdate = (chunkKeys, options = {}) => {
 		return;
 	}
 
-	console.log(`TerrainBuilder: Forcing update for ${chunkKeys.length} chunks${options.skipNeighbors ? ' (skipping neighbors)' : ''}`);
+	//console.log(`TerrainBuilder: Forcing update for ${chunkKeys.length} chunks${options.skipNeighbors ? ' (skipping neighbors)' : ''}`);
 
 	// Pass the chunk keys to the chunk system for direct update
 	chunkSystem.forceUpdateChunks(chunkKeys, options);
@@ -3421,55 +3500,3 @@ const loadAllChunks = async () => {
     console.log("Finished loading all chunks prioritized by camera distance");
     return true;
 };
-
-// Utility function to load terrain from the database into the system
-const refreshTerrainFromDB = async (terrainName, options = {}) => {
-    console.log("Loading terrain from DB:", terrainName);
-    
-    // Get the terrain blocks from storage
-    if (typeof DatabaseManager !== 'undefined' && DatabaseManager) {
-        try {
-            console.time('loadTerrain');
-            
-            // Load all terrain blocks at once
-            let terrainData = null;
-            try {
-                terrainData = await DatabaseManager.getData(STORES.TERRAIN, terrainName);
-                console.log(`Loaded ${Object.keys(terrainData).length} blocks from database`);
-            } catch (error) {
-                console.error("Error loading terrain from database:", error);
-                return;
-            }
-            
-            // If we have the terrain, update the editor with it
-            if (terrainData) {
-                console.time('buildTerrain');
-                
-                // Clear existing chunks completely
-                if (getChunkSystem()) {
-                    getChunkSystem().reset();
-                }
-                
-                // Add all blocks at once to chunk system
-                const chunkSystem = getChunkSystem();
-                if (chunkSystem) {
-                    console.log(`Adding ${Object.keys(terrainData).length} blocks to chunk system all at once`);
-                    chunkSystem.updateFromTerrainData(terrainData);
-                    
-                    // Process all chunks immediately instead of deferring
-                    console.log("Loading ALL chunks immediately...");
-                    await loadAllChunks();
-                }
-                
-                console.timeEnd('buildTerrain');
-            }
-            
-            console.timeEnd('loadTerrain');
-        } catch (error) {
-            console.error("Error refreshing terrain:", error);
-        }
-    } else {
-        console.warn("Database service not initialized");
-    }
-};
-

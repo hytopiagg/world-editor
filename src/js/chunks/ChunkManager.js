@@ -29,6 +29,9 @@ class ChunkManager {
 		this._meshBuildStartTime = null;
 		this._chunkLastMeshedTime = null;
 		this._chunkLastQueuedTime = null;
+		
+		// Set up event listener for block type changes
+		this._setupBlockTypeChangeListener();
 	}
 
 	/**
@@ -1045,6 +1048,65 @@ class ChunkManager {
 		
 		// Chunks are visible if they're within the view distance
 		return distance <= viewDistance;
+	}
+
+	/**
+	 * Set up event listener for block type changes
+	 * @private
+	 */
+	_setupBlockTypeChangeListener() {
+		// Listen for block type changes from BlockTypeRegistry
+		document.addEventListener('blockTypeChanged', (event) => {
+			const blockTypeId = event.detail?.blockTypeId;
+			if (blockTypeId) {
+				console.log(`ChunkManager: Received blockTypeChanged event for ID ${blockTypeId}`);
+				this._handleBlockTypeChanged(blockTypeId);
+			}
+		});
+	}
+	
+	/**
+	 * Handle changes to a block type, forcing updates to chunks that use it
+	 * @param {number} blockTypeId - The ID of the block type that changed
+	 * @private
+	 */
+	_handleBlockTypeChanged(blockTypeId) {
+		console.log(`ChunkManager: Handling block type change for ID ${blockTypeId}`);
+		
+		// Find all chunks that use this block type
+		const chunksToUpdate = new Set();
+		
+		// Iterate through all chunks
+		for (const [chunkKey, chunk] of this._chunks.entries()) {
+			// Check if the chunk contains the modified block type
+			if (chunk.containsBlockType(blockTypeId)) {
+				console.log(`ChunkManager: Chunk ${chunkKey} contains block type ${blockTypeId}, marking for remesh`);
+				chunksToUpdate.add(chunkKey);
+			}
+		}
+		
+		// If no chunks found with direct check, force update visible chunks
+		// This ensures new blocks can be placed with the updated texture
+		if (chunksToUpdate.size === 0) {
+			console.log(`ChunkManager: No chunks found with block type ${blockTypeId}, updating all visible chunks`);
+			
+			// Update only visible chunks to avoid unnecessary processing
+			for (const [chunkKey, chunk] of this._chunks.entries()) {
+				if (this._isChunkVisible(chunkKey)) {
+					chunksToUpdate.add(chunkKey);
+				}
+			}
+		}
+		
+		// Mark all affected chunks for remeshing
+		for (const chunkKey of chunksToUpdate) {
+			this.markChunkForRemesh(chunkKey, { forceNow: true });
+		}
+		
+		// Process the render queue to apply changes
+		this.processRenderQueue(true);
+		
+		console.log(`ChunkManager: Marked ${chunksToUpdate.size} chunks for remeshing due to block type change`);
 	}
 }
 

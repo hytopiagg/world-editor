@@ -28,6 +28,21 @@ class BlockTypeRegistry {
   static get instance() {
     if (!this._instance) {
       this._instance = new BlockTypeRegistry();
+      
+      // Expose to window for API access
+      if (typeof window !== 'undefined') {
+        window.BlockTypeRegistry = BlockTypeRegistry;
+        
+        // Expose essential functions for custom texture handling
+        window.createCustomBlock = (blockId, dataUri) => this._instance.createCustomBlock(blockId, dataUri);
+        window.generateTextureDataURI = (color) => this._instance.generateTextureDataURI(color);
+        window.createBlockAt = (blockId, x, y, z, color) => this._instance.createBlockAt(blockId, x, y, z, color);
+        window.fixCustomTextures = () => this._instance.fixCustomTextures();
+        
+        // Expose batch texture registration function for more efficient texture loading
+        window.batchRegisterCustomTextures = (textureEntries, options) => 
+          this._instance.batchRegisterCustomTextures(textureEntries, options);
+      }
     }
     return this._instance;
   }
@@ -166,6 +181,380 @@ class BlockTypeRegistry {
    */
   markBlockTypeAsEssential(id) {
     this._essentialBlockTypes.add(id);
+  }
+
+  /**
+   * Register a custom texture for a specific block ID
+   * @param {number} blockId - The block ID to associate with the custom texture
+   * @param {string} dataUri - The data URI of the texture
+   * @param {Object} [options] - Additional options
+   * @param {string} [options.name] - Optional name for the block type (default: "Custom Block {blockId}")
+   * @param {boolean} [options.isLiquid] - Whether the block is a liquid (default: false)
+   * @param {boolean} [options.updateMeshes] - Whether to update chunk meshes after registering (default: true)
+   * @param {boolean} [options.rebuildAtlas] - Whether to rebuild texture atlas (default: false)
+   * @returns {Promise<BlockType>} The created or updated BlockType
+   */
+  async registerCustomTextureForBlockId(blockId, dataUri, options = {}) {
+    if (!blockId || blockId <= 0) {
+      throw new Error('Invalid block ID. Must be a positive number.');
+    }
+
+    if (!dataUri || !dataUri.startsWith('data:image/')) {
+      throw new Error('Invalid data URI format for custom texture');
+    }
+    
+    // Check if this blockId is already registered
+    let blockType = this.getBlockType(blockId);
+    
+    // Determine if this is a new block being added
+    const isNewBlock = !blockType;
+    
+    // If not registered, create a new BlockType
+    if (isNewBlock) {
+      const name = options.name || `Custom Block ${blockId}`;
+      
+      // Create empty textureUris object - will be filled by applyCustomTextureDataUri
+      const textureUris = {};
+      
+      // Create the BlockType
+      blockType = new BlockType({
+        id: blockId,
+        name,
+        isLiquid: options.isLiquid || false,
+        textureUris
+      });
+      
+      // Register the new block type
+      this._blockTypes[blockId] = blockType;
+    }
+    
+    // Check if we need to rebuild the atlas
+    // Rebuild if:
+    // 1. It's explicitly requested in options
+    // 2. It's a new block being added (to ensure textures are properly loaded)
+    const shouldRebuildAtlas = options.rebuildAtlas === true || isNewBlock;
+    
+    // Apply the custom texture using the enhanced method for data URIs
+    const success = await blockType.applyCustomTextureDataUri(dataUri, shouldRebuildAtlas);
+    
+    if (!success) {
+      console.warn(`Failed to apply custom texture to block type ${blockId}`);
+    }
+    
+    // Ensure the block type is saved in _blockTypes
+    this._blockTypes[blockId] = blockType;
+    
+    // Verify block type is in registry after all operations
+    const verifyBlock = this.getBlockType(blockId);
+    if (!verifyBlock) {
+      console.error(`Block type ${blockId} is missing from registry after registration!`);
+      // Force add it again
+      this._blockTypes[blockId] = blockType;
+    }
+    
+    // Trigger mesh updates if needed
+    const shouldUpdateMeshes = options.updateMeshes !== false; // default to true
+    if (shouldUpdateMeshes) {
+      try {
+        // Using a custom event allows decoupling from direct ChunkManager dependency
+        const blockTypeChangedEvent = new CustomEvent('blockTypeChanged', {
+          detail: { blockTypeId: blockId }
+        });
+        window.dispatchEvent(blockTypeChangedEvent);
+      } catch (error) {
+        console.warn(`Failed to trigger chunk mesh updates: ${error.message}`);
+      }
+    }
+    
+    return blockType;
+  }
+
+  /**
+   * Register a test custom texture to verify texture loading
+   * This can be called from the console for testing
+   * @param {number} [blockId=100] - The block ID to use for the test (default: 100)
+   * @returns {Promise<BlockType>} The created block type
+   */
+  async registerTestCustomTexture(blockId = 100) {
+    console.log(`Registering test custom texture for block ID ${blockId}...`);
+    
+    // Create a simple colored texture as data URI
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw a gradient background
+    const gradient = ctx.createLinearGradient(0, 0, 16, 16);
+    gradient.addColorStop(0, 'red');
+    gradient.addColorStop(0.5, 'yellow');
+    gradient.addColorStop(1, 'green');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 16, 16);
+    
+    // Draw a border
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, 14, 14);
+    
+    // Add text
+    ctx.fillStyle = 'black';
+    ctx.font = '8px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(blockId.toString(), 8, 8);
+    
+    // Convert to data URI
+    const dataUri = canvas.toDataURL('image/png');
+    
+    // Register the texture
+    return this.registerCustomTextureForBlockId(blockId, dataUri, {
+      name: `Test Block ${blockId}`,
+      updateMeshes: true
+    });
+  }
+
+  /**
+   * Place a block in the world using one of the available TerrainBuilder methods
+   * @param {Object} terrainBuilder - The terrain builder instance
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate
+   * @param {number} z - Z coordinate
+   * @param {number} blockId - The block ID to place
+   * @returns {boolean} Success status
+   */
+  _placeBlockWithTerrainBuilder(terrainBuilder, x, y, z, blockId) {
+    if (!terrainBuilder) return false;
+    
+    // Try different methods for placing blocks
+    if (terrainBuilder.fastUpdateBlock) {
+      terrainBuilder.fastUpdateBlock({x, y, z}, blockId);
+      return true;
+    }
+    else if (terrainBuilder.updateTerrainBlocks) {
+      // Create block data in the format expected by the method
+      const position = `${x},${y},${z}`;
+      const blocks = {};
+      blocks[position] = blockId;
+      
+      terrainBuilder.updateTerrainBlocks(blocks, {}, {source: 'custom'});
+      return true;
+    }
+    else if (terrainBuilder.buildUpdateTerrain) {
+      // Create block data in the format expected by the method
+      const blockData = {};
+      blockData[`${x},${y},${z}`] = blockId;
+      
+      terrainBuilder.buildUpdateTerrain({blocks: blockData});
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
+  /**
+   * Create a custom block directly with data URI
+   * @param {number} blockId - The block ID (recommended to use IDs > 100)
+   * @param {string} dataUri - The data URI for the texture
+   * @returns {Promise<boolean>} - Success status
+   */
+  async createCustomBlock(blockId, dataUri) {
+    try {
+      if (!blockId || blockId < 1) {
+        console.error('Invalid block ID. Must be a positive number.');
+        return false;
+      }
+      
+      if (!dataUri || !dataUri.startsWith('data:image/')) {
+        console.error('Invalid data URI format for custom texture');
+        return false;
+      }
+      
+      // Register the block with custom texture
+      const blockType = await this.registerCustomTextureForBlockId(blockId, dataUri, {
+        name: `Custom Block ${blockId}`,
+        updateMeshes: true
+      });
+      
+      return !!blockType;
+    } catch (error) {
+      console.error('Error creating custom block:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Global function to generate a texture data URI with specific color
+   * @param {string} color - CSS color value
+   * @returns {string} - Data URI of the generated texture
+   */
+  generateTextureDataURI(color = '#FF00FF') {
+    try {
+      // Generate a simple colored square as a test texture using a canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 16;
+      const ctx = canvas.getContext('2d');
+      
+      // Draw the main color
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 16, 16);
+      
+      // Add a border
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, 0, 16, 16);
+      
+      // Convert to data URI
+      const dataUri = canvas.toDataURL('image/png');
+      return dataUri;
+    } catch (error) {
+      console.error('Error generating texture data URI:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a block at specific coordinates
+   * @param {number} blockId - ID for the block
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate
+   * @param {number} z - Z coordinate
+   * @param {string} color - Color for the block
+   * @returns {Promise<boolean>} Success status
+   */
+  async createBlockAt(blockId, x, y, z, color = '#FF00FF') {
+    try {
+      // Generate texture
+      const dataUri = this.generateTextureDataURI(color);
+      
+      // Register the block
+      const blockType = await this.registerCustomTextureForBlockId(blockId, dataUri, {
+        name: `Custom Block ${blockId}`,
+        updateMeshes: true  
+      });
+      
+      if (!blockType) {
+        console.error(`Failed to register block with ID ${blockId}`);
+        return false;
+      }
+      
+      // Try to place the block
+      if (window.terrainBuilderRef && window.terrainBuilderRef.current) {
+        const terrainBuilder = window.terrainBuilderRef.current;
+        return this._placeBlockWithTerrainBuilder(terrainBuilder, x, y, z, blockId);
+      } else {
+        console.error('terrainBuilderRef or terrainBuilderRef.current is not available');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error creating and placing block:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Fix custom textures that may not have loaded properly
+   * @returns {boolean} - Whether any textures were fixed
+   */
+  fixCustomTextures() {
+    try {
+      const customBlocks = Object.values(this._blockTypes)
+        .filter(block => block && block.id >= 100);
+      
+      if (customBlocks.length === 0) {
+        return false;
+      }
+      
+      let fixedCount = 0;
+      
+      // Check each custom block and fix if needed
+      customBlocks.forEach(block => {
+        if (block.textureLocation && !block.hasTextureLoaded) {
+          // Attempt to reload/fix the texture
+          if (block.textureURI && block.textureURI.startsWith('data:image/')) {
+            block.applyCustomTextureDataUri(block.textureURI);
+            fixedCount++;
+          }
+        }
+      });
+      
+      return fixedCount > 0;
+    } catch (err) {
+      console.error("Error fixing custom textures:", err);
+      return false;
+    }
+  }
+
+  /**
+   * Batch register multiple custom textures for block IDs 
+   * This is more efficient as it only rebuilds the texture atlas once after all textures are loaded
+   * 
+   * @param {Array<Object>} textureEntries - Array of objects with blockId and dataUri properties
+   * @param {Object} [options] - Additional options same as registerCustomTextureForBlockId
+   * @returns {Promise<Array<BlockType>>} The created or updated BlockTypes
+   */
+  async batchRegisterCustomTextures(textureEntries, options = {}) {
+    if (!Array.isArray(textureEntries) || textureEntries.length === 0) {
+      return [];
+    }
+    
+    const results = [];
+    const blockTypes = [];
+    
+    // First pass: register all block types without rebuilding atlas
+    for (const entry of textureEntries) {
+      const { blockId, dataUri } = entry;
+      
+      try {
+        // Use same registration logic but explicitly prevent atlas rebuilding
+        const entryOptions = { 
+          ...options,
+          rebuildAtlas: false, // Prevent individual rebuilds during batch operation
+          updateMeshes: false  // Defer mesh updates until end of batch
+        };
+        
+        const blockType = await this.registerCustomTextureForBlockId(
+          blockId, dataUri, entryOptions
+        );
+        
+        if (blockType) {
+          blockTypes.push(blockType);
+          results.push({ blockId, success: true, blockType });
+        } else {
+          results.push({ blockId, success: false, error: 'Failed to register block type' });
+        }
+      } catch (error) {
+        results.push({ blockId, success: false, error: error.message });
+      }
+    }
+    
+    // After all textures are loaded, rebuild the atlas once
+    if (blockTypes.length > 0) {
+      try {
+        // Force a single rebuild of the texture atlas
+        if (BlockTextureAtlas.instance) {
+          await BlockTextureAtlas.instance.rebuildTextureAtlas();
+        }
+        
+        // Trigger mesh updates if needed
+        if (options.updateMeshes !== false) {
+          // Broadcast a single event for all updated block types
+          const blockTypeChangedEvent = new CustomEvent('blockTypesChanged', {
+            detail: { 
+              blockTypeIds: blockTypes.map(type => type.id),
+              count: blockTypes.length
+            }
+          });
+          window.dispatchEvent(blockTypeChangedEvent);
+        }
+      } catch (error) {
+        console.error('Error during final atlas rebuild:', error);
+      }
+    }
+    
+    return results;
   }
 }
 

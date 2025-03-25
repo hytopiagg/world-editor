@@ -227,6 +227,12 @@ class BlockType {
       if (!textureUri) return;
       
       try {
+        // For data URIs, load directly without trying to append extensions
+        if (textureUri.startsWith('data:image/')) {
+          await BlockTextureAtlas.instance.loadTexture(textureUri);
+          return;
+        }
+        
         // If the texture URI doesn't have an extension, try to load multiple variants
         if (!textureUri.match(/\.(png|jpe?g)$/i)) {
           // Try to load the base texture with extension
@@ -251,33 +257,19 @@ class BlockType {
             try {
               await BlockTextureAtlas.instance.loadTexture(`${textureUri}/${faceMap[face]}`);
             } catch (error) {
-              // Ignore error, will try fallbacks
+              // Ignore error, will try the direct texture URI next
             }
           }
-          
-          // Try to load common fallback textures
-          const fallbacks = ['all.png', 'default.png'];
-          for (const fallback of fallbacks) {
-            try {
-              await BlockTextureAtlas.instance.loadTexture(`${textureUri}/${fallback}`);
-            } catch (error) {
-              // Ignore error, will try next fallback
-            }
-          }
-        } else {
-          // Load the texture directly if it has an extension
-          await BlockTextureAtlas.instance.loadTexture(textureUri);
         }
+        
+        // Finally, try to load the direct texture URI
+        await BlockTextureAtlas.instance.loadTexture(textureUri);
       } catch (error) {
-        console.warn(`Failed to preload texture uri ${textureUri} for face ${face}`, error);
+        console.warn(`Failed to preload texture for face ${face}: ${textureUri}`, error);
       }
     });
-
-    try {
-      await Promise.all(loadPromises);
-    } catch (error) {
-      console.warn('Failed to preload some textures', error);
-    }
+    
+    await Promise.all(loadPromises);
   }
 
   /**
@@ -340,6 +332,219 @@ class BlockType {
     
     // All textures are already loaded
     return false;
+  }
+
+  /**
+   * Set a custom texture for this block type from a data URI
+   * @param {string} dataUri - The data URI of the texture
+   * @param {string|null} customId - Optional custom ID for the texture
+   * @returns {Promise<void>}
+   */
+  async setCustomTexture(dataUri, customId = null) {
+    if (!dataUri) {
+      console.error('No data URI provided for custom texture');
+      return;
+    }
+
+    // Check if this is a valid data URI
+    if (!dataUri.startsWith('data:image/')) {
+      console.error('Invalid data URI format for custom texture');
+      return;
+    }
+
+    console.log(`Setting custom texture for block type ${this._id} (${this._name})...`);
+
+    // Use the data URI as the ID if no custom ID is provided
+    const textureId = customId || dataUri;
+
+    // For custom textures, we use the same texture for all faces
+    const textureUris = {};
+    const faceNames = Object.keys(BlockFaceAxes);
+    faceNames.forEach(face => {
+      textureUris[face] = dataUri;
+      console.log(`Set texture for face "${face}": ${dataUri.substring(0, 30)}...`);
+    });
+
+    // Set the new texture URIs - this just stores references but doesn't load textures
+    this._textureUris = textureUris;
+    
+    // Make sure BlockTextureAtlas is initialized
+    if (!BlockTextureAtlas.instance) {
+      console.error('BlockTextureAtlas is not initialized');
+      return;
+    }
+
+    // Try to load the texture immediately to make it available
+    try {
+      console.log(`Loading texture from data URI (length: ${dataUri.length})...`);
+      
+      // First try to load it directly
+      await BlockTextureAtlas.instance.loadTexture(dataUri);
+      
+      // Then force a rebuild of the texture atlas
+      console.log(`Rebuilding texture atlas after loading custom texture...`);
+      await BlockTextureAtlas.instance.rebuildTextureAtlas();
+      
+      // Verify that the texture metadata exists after loading
+      const metadata = BlockTextureAtlas.instance.getTextureMetadata(dataUri);
+      if (metadata) {
+        console.log(`Texture successfully loaded with metadata:`, 
+          {x: metadata.x, y: metadata.invertedY, width: metadata.width, height: metadata.height, isTransparent: metadata.isTransparent});
+      } else {
+        console.warn(`Texture was loaded but no metadata found for ${dataUri}!`);
+        console.log(`Attempting direct loading with loadTextureFromDataURI...`);
+        
+        // Try a more direct approach as fallback
+        await BlockTextureAtlas.instance.loadTextureFromDataURI(dataUri, dataUri);
+        
+        // Check again
+        const retryMetadata = BlockTextureAtlas.instance.getTextureMetadata(dataUri);
+        if (retryMetadata) {
+          console.log(`Direct loading successful! Metadata:`, 
+            {x: retryMetadata.x, y: retryMetadata.invertedY, width: retryMetadata.width, height: retryMetadata.height});
+        } else {
+          console.error(`Failed to load texture even with direct loading method`);
+        }
+      }
+      
+      // Make sure we force the renderer to update
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        console.log(`Dispatching texture update event...`);
+        const event = new CustomEvent('textureAtlasUpdated', {
+          detail: { textureId: dataUri, blockId: this._id }
+        });
+        window.dispatchEvent(event);
+      }
+    } catch (error) {
+      console.error('Failed to load custom texture:', error);
+    }
+  }
+
+  /**
+   * Get the texture file path for the specified block face
+   * @param {string} face - The face to get the texture for (front, back, left, right, top, bottom)
+   * @returns {string} - The texture file path
+   */
+  getTextureForFace(face) {
+    // If we have specific textures for each face, use those
+    if (this._textureUris && this._textureUris[face]) {
+      return this._textureUris[face];
+    }
+    
+    // If there's a general texture URI, use that
+    if (this._textureUri) {
+      // If the URI is a data URI, return it directly without modification
+      if (this._textureUri.startsWith('data:image/')) {
+        return this._textureUri;
+      }
+      
+      // For regular file paths, construct the path as before
+      return this._textureUri;
+    }
+    
+    // Fallback to default error texture
+    return './assets/blocks/error.png';
+  }
+  
+  /**
+   * Get the texture file path for the blocks of this type
+   * @param {string} face - The face of the block to get the texture for
+   * @returns {string} - The path to the texture file
+   */
+  getTexturePath(face) {
+    if (!face) face = 'front';
+    
+    if (this._textureUris && this._textureUris[face]) {
+      // For data URIs, return directly without modification
+      if (this._textureUris[face].startsWith('data:image/')) {
+        return this._textureUris[face];
+      }
+      
+      // Handle regular file paths
+      return this._textureUris[face];
+    } else if (this._textureUri) {
+      // For data URIs, return directly without modification
+      if (this._textureUri.startsWith('data:image/')) {
+        return this._textureUri;
+      }
+      
+      // For multi-texture blocks, compute the texture path based on the face
+      if (this._isMultiTexture) {
+        return `./assets/blocks/${this._textureUri}/${this.getFaceDirection(face)}.png`;
+      }
+      
+      // For single-texture blocks, just use the texture URI
+      return `./assets/blocks/${this._textureUri}`;
+    }
+    
+    // Fallback to default error texture
+    if (this._isMultiTexture) {
+      return `./assets/blocks/error/${this.getFaceDirection(face)}.png`;
+    }
+    
+    return './assets/blocks/error.png';
+  }
+
+  /**
+   * Get texture URIs for this block type
+   * @returns {Object} The texture URIs for each face
+   */
+  getTextureUris() {
+    return this._textureUris || {};
+  }
+  
+  /**
+   * Apply a custom texture from a data URI to this block type
+   * @param {string} dataUri - Data URI for the texture
+   * @param {boolean} rebuildAtlas - Whether to rebuild the texture atlas (default: false)
+   * @returns {Promise<boolean>} Success status
+   */
+  async applyCustomTextureDataUri(dataUri, rebuildAtlas = false) {
+    if (!dataUri || !dataUri.startsWith('data:image/')) {
+      console.error('Invalid data URI format for custom texture');
+      return false;
+    }
+    
+    try {
+      // Set the texture URI for all faces
+      const faces = ['top', 'bottom', 'left', 'right', 'front', 'back'];
+      faces.forEach(face => {
+        this._textureUris[face] = dataUri;
+      });
+      
+      // Make sure the texture is loaded in the texture atlas
+      if (BlockTextureAtlas.instance) {
+        await BlockTextureAtlas.instance.loadTexture(dataUri);
+        
+        // Verify the texture was loaded
+        const metadata = BlockTextureAtlas.instance.getTextureMetadata(dataUri);
+        if (metadata) {
+          // Only rebuild the texture atlas if specifically requested
+          if (rebuildAtlas) {
+            await BlockTextureAtlas.instance.rebuildTextureAtlas();
+          }
+          
+          // Always dispatch texture atlas updated event to notify components
+          if (typeof window !== 'undefined') {
+            const event = new CustomEvent('textureAtlasUpdated', {
+              detail: { textureId: dataUri, blockId: this._id }
+            });
+            window.dispatchEvent(event);
+          }
+          
+          return true;
+        } else {
+          console.warn('Failed to load data URI texture into atlas');
+          return false;
+        }
+      } else {
+        console.warn('BlockTextureAtlas not available');
+        return false;
+      }
+    } catch (error) {
+      console.error('Failed to apply custom texture:', error);
+      return false;
+    }
   }
 }
 

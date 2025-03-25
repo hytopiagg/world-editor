@@ -107,21 +107,22 @@ class BlockTextureAtlas {
   }
 
   /**
-   * Get the singleton instance
-   * @returns {BlockTextureAtlas} The singleton instance
+   * Get singleton instance
+   * @returns {BlockTextureAtlas}
    */
   static get instance() {
-    if (!this._instance) {
-      this._instance = new BlockTextureAtlas();
+    if (!BlockTextureAtlas._instance) {
+      BlockTextureAtlas._instance = new BlockTextureAtlas();
+      console.log("Created BlockTextureAtlas singleton instance");
       
-      // Initialize the texture atlas
-      setTimeout(() => {
-        this._instance.initialize().catch(error => {
-          console.error("Failed to initialize BlockTextureAtlas:", error);
-        });
-      }, 100);
+      // Expose to window for debugging
+      if (typeof window !== 'undefined') {
+        window.BlockTextureAtlas = BlockTextureAtlas;
+        window.showTextureAtlas = () => BlockTextureAtlas._instance.showTextureAtlasVisualizer();
+        console.log("Exposed BlockTextureAtlas to window for debugging");
+      }
     }
-    return this._instance;
+    return BlockTextureAtlas._instance;
   }
 
   /**
@@ -143,7 +144,7 @@ class BlockTextureAtlas {
 
   /**
    * Get UV coordinates for a texture
-   * @param {string} textureUri - The texture URI
+   * @param {string} textureUri - The texture URI or ID (can be a data URI)
    * @param {Array} uvOffset - The UV offset [u, v]
    * @returns {Promise<Array>} The UV coordinates [u, v]
    */
@@ -220,232 +221,189 @@ class BlockTextureAtlas {
 
   /**
    * Get UV coordinates for a texture (synchronous version)
-   * @param {string} textureUri - The texture URI
+   * @param {string} textureUri - The texture URI or ID (can be a data URI)
    * @param {Array} uvOffset - The UV offset [u, v]
    * @returns {Array} The UV coordinates [u, v]
    */
   getTextureUVCoordinateSync(textureUri, uvOffset) {
-    // Handle multi-sided textures by attempting to extract block type and face
-    if (textureUri) {
-      // Try to extract block type from the path
-      const blockTypeMatch = textureUri.match(/\/blocks\/([^\/]+)(?:\/|$)/);
-      
-      if (blockTypeMatch) {
-        const blockType = blockTypeMatch[1];
-        let face = null;
-        
-        // Check for face indicators in the path
-        if (textureUri.includes('+y') || textureUri.includes('top')) {
-          face = 'top';
-        } else if (textureUri.includes('-y') || textureUri.includes('bottom')) {
-          face = 'bottom';
-        } else if (textureUri.includes('+x') || textureUri.includes('right')) {
-          face = 'right';
-        } else if (textureUri.includes('-x') || textureUri.includes('left')) {
-          face = 'left';
-        } else if (textureUri.includes('+z') || textureUri.includes('front')) {
-          face = 'front';
-        } else if (textureUri.includes('-z') || textureUri.includes('back')) {
-          face = 'back';
-        }
-        
-        // If we've identified both block type and face, use the multi-sided texture handler
-        if (face) {
-    //      console.log(`🧊 Using multi-sided texture handler for ${blockType} ${face}`);
-          return this.getMultiSidedTextureUV(blockType, face, uvOffset);
-        }
+    // Skip invalid texture URIs
+    if (!textureUri) {
+      const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+      if (errorMetadata) {
+        return this._calculateUVCoordinates(errorMetadata, uvOffset);
       }
-    }
-    
-    // Original handling for single texture blocks or unrecognized patterns
-    // CRITICAL FIX FOR GRASS TEXTURES - Retained for backward compatibility
-    if (textureUri ) {
-      let exactPath = null;
-      
-      // If we identified an exact path, use it directly
-      if (exactPath) {
-        const exactMetadata = this._textureAtlasMetadata.get(exactPath);
-        if (exactMetadata) {
-          console.log(`⭐ Direct texture lookup for ${exactPath}`);
-          const result = this._calculateUVCoordinates(exactMetadata, uvOffset);
-          // Don't cache this result to ensure it's always fresh
-          return result;
-        }
-      }
+      return [0, 0]; // Fallback UV if error texture not found
     }
     
     // Create a cache key from the texture URI and UV offset
     const cacheKey = `${textureUri}-${uvOffset[0]}-${uvOffset[1]}`;
-    
     
     // Check if we have a cached result
     if (this._textureUVCache.has(cacheKey)) {
       return this._textureUVCache.get(cacheKey);
     }
     
-    // Handle undefined texture URI
-    if (!textureUri) {
-      // Try to use the error texture
-      const errorUri = './assets/blocks/error.png';
-      const errorMetadata = this._textureAtlasMetadata.get(errorUri);
+    // Handle data URIs specially
+    if (textureUri.startsWith('data:image/')) {
+      // Check if the data URI texture is already in the atlas
+      const metadata = this._textureAtlasMetadata.get(textureUri);
       
-      if (errorMetadata) {
-        const result = this._calculateUVCoordinates(errorMetadata, uvOffset);
+      if (metadata) {
+        // It's loaded, calculate UVs
+        const result = this._calculateUVCoordinates(metadata, uvOffset);
+        this._textureUVCache.set(cacheKey, result);
+        return result;
+      } else {
+        // Not loaded yet, queue it and use error texture for now
+        this.queueTextureForLoading(textureUri);
+        const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+        if (errorMetadata) {
+          return this._calculateUVCoordinates(errorMetadata, uvOffset);
+        }
+        return [0, 0]; // Fallback UV if error texture not found
+      }
+    }
+    
+    // Define mappings between coordinate faces and descriptive names
+    const faceNameToCoordMap = {
+      'top': '+y',
+      'bottom': '-y',
+      'left': '-x',
+      'right': '+x',
+      'front': '+z',
+      'back': '-z'
+    };
+    
+    const coordToFaceNameMap = {
+      '+y': 'top',
+      '-y': 'bottom',
+      '-x': 'left',
+      '+x': 'right',
+      '+z': 'front',
+      '-z': 'back'
+    };
+    
+    // First, check for an exact match in the metadata
+    let metadata = this._textureAtlasMetadata.get(textureUri);
+        
+        if (metadata) {
+      // Direct hit, use this metadata
+          const result = this._calculateUVCoordinates(metadata, uvOffset);
+          this._textureUVCache.set(cacheKey, result);
+          return result;
+    }
+    
+    // Try with ./assets/ prefix if not already present
+    if (!textureUri.startsWith('./assets/')) {
+      const withAssetsPrefix = `./assets/${textureUri}`;
+      metadata = this._textureAtlasMetadata.get(withAssetsPrefix);
+        
+        if (metadata) {
+          const result = this._calculateUVCoordinates(metadata, uvOffset);
+          this._textureUVCache.set(cacheKey, result);
+          return result;
+        }
+    }
+    
+    // Try without ./assets/ prefix if it's present
+    if (textureUri.startsWith('./assets/')) {
+      const withoutAssetsPrefix = textureUri.slice(9);
+      metadata = this._textureAtlasMetadata.get(withoutAssetsPrefix);
+      
+      if (metadata) {
+        const result = this._calculateUVCoordinates(metadata, uvOffset);
         this._textureUVCache.set(cacheKey, result);
         return result;
       }
-      
-      // If error texture not loaded, return default UV coordinates
-      const defaultResult = [0, 0];
-      this._textureUVCache.set(cacheKey, defaultResult);
-      return defaultResult;
     }
     
-    // Check if the texture is already in the atlas
-    let metadata = this._textureAtlasMetadata.get(textureUri);
+    // Handle multi-sided block textures by extracting block type and face
+    const blockFacePattern = /blocks\/([^\/]+)(?:\/([^\/]+))?$/;
+    const blockFaceMatch = textureUri.match(blockFacePattern);
     
-    // If not found, try to find appropriate texture based on URI structure
-    if (!metadata) {
-     
-      // First, try the exact path with common extensions if it doesn't have one
-      if (!textureUri.match(/\.(png|jpe?g)$/i)) {
-        const withExtension = `${textureUri}.png`;
-        metadata = this._textureAtlasMetadata.get(withExtension);
-        
-        if (metadata) {
-          const result = this._calculateUVCoordinates(metadata, uvOffset);
-          this._textureUVCache.set(cacheKey, result);
-          return result;
-        }
-      }
+    if (blockFaceMatch) {
+      const [, blockType, facePart] = blockFaceMatch;
       
-      // For multi-sided textures, extract face information if available
-      const facePattern = /([\+\-][xyz])(\.png)?$/;
-      const faceMatch = textureUri.match(facePattern);
-      
-      if (faceMatch) {
-        const face = faceMatch[1]; // e.g., +y, -x
-        
-        // Try to use the matched face with .png extension
-        const facePathWithExt = textureUri.endsWith('.png') ? textureUri : `${textureUri}.png`;
-        metadata = this._textureAtlasMetadata.get(facePathWithExt);
-        
-        if (metadata) {
-          const result = this._calculateUVCoordinates(metadata, uvOffset);
-          this._textureUVCache.set(cacheKey, result);
-          return result;
-        }
-        
-        // If face path doesn't exist in atlas, extract base path
-        const basePath = textureUri.replace(facePattern, '');
-        
-        // Try checking if there are any textures with this base path
-      const possibleFacePaths = [
-          `${basePath}${face}.png`,   // Try with face
-          `${basePath}/all.png`,      // Try all-faces texture
-          `${basePath}/default.png`,  // Try default texture
-          `${basePath}.png`           // Try direct base path
+      // No face specified, try to use the base block texture
+      if (!facePart) {
+        // Try the base block references
+        const basePaths = [
+          `./assets/blocks/${blockType}`,
+          `blocks/${blockType}`,
+          `./assets/blocks/${blockType}.png`,
+          `blocks/${blockType}.png`
         ];
         
-      for (const path of possibleFacePaths) {
-        const pathMetadata = this._textureAtlasMetadata.get(path);
-        if (pathMetadata) {
-          metadata = pathMetadata;
-          break;
-        }
-      }
-      } else if (!textureUri.match(/\.(png|jpe?g)$/i)) {
-        // This is a base path for a multi-sided texture (e.g., "blocks/grass")
-        // Determine if we're looking for specific faces based on the context
-        
-        // Look for common path patterns for multi-sided blocks
-        const possibleFacePaths = [
-          `${textureUri}/+y.png`,     // Try top face
-          `${textureUri}/-y.png`,     // Try bottom face
-          `${textureUri}/+x.png`,     // Try right face
-          `${textureUri}/-x.png`,     // Try left face
-          `${textureUri}/+z.png`,     // Try front face
-          `${textureUri}/-z.png`,     // Try back face
-          `${textureUri}.png`         // Try base path with extension
-        ];
-        
-        // Try each possible path
-        for (const path of possibleFacePaths) {
-          const pathMetadata = this._textureAtlasMetadata.get(path);
-          if (pathMetadata) {
-            metadata = pathMetadata;
-            break;
+        for (const path of basePaths) {
+          metadata = this._textureAtlasMetadata.get(path);
+          if (metadata) {
+            const result = this._calculateUVCoordinates(metadata, uvOffset);
+            this._textureUVCache.set(cacheKey, result);
+            return result;
           }
         }
-      }
-    }
-    
-    // If still no metadata, use error texture
-    if (!metadata) {
-      
-      const errorUri = './assets/blocks/error.png';
-      metadata = this._textureAtlasMetadata.get(errorUri);
-      
-      // If error texture not loaded, return default UV coordinates
-      if (!metadata) {
-        // Only log this once per texture to avoid spamming the console
-        if (!this._missingTextureWarnings.has(textureUri)) {
-          console.warn(`Texture not found in atlas: ${textureUri}`);
-          this._missingTextureWarnings.add(textureUri);
-          
-          // Queue this texture for loading
-          this.queueTextureForLoading(textureUri);
+      } 
+      else {
+        // Face part specified - could be a face name or coordinate
+        let face = facePart;
+        
+        // Strip extension if present
+        if (face.endsWith('.png') || face.endsWith('.jpg') || face.endsWith('.jpeg')) {
+          face = face.replace(/\.(png|jpe?g)$/, '');
         }
         
-        const defaultResult = [0, 0];
-        this._textureUVCache.set(cacheKey, defaultResult);
-        return defaultResult;
+        // Try to use our multi-sided texture handling with the extracted face
+        if (faceNameToCoordMap[face] || coordToFaceNameMap[face]) {
+          // This is a valid face name or coordinate, use getMultiSidedTextureUV
+          const result = this.getMultiSidedTextureUV(blockType, face, uvOffset);
+    this._textureUVCache.set(cacheKey, result);
+    return result;
+        }
       }
     }
     
-    const result = this._calculateUVCoordinates(metadata, uvOffset);
-    this._textureUVCache.set(cacheKey, result);
-    return result;
-  }
-  
-  /**
-   * Calculate UV coordinates from metadata
-   * @param {Object} metadata - The texture metadata
-   * @param {Array} uvOffset - The UV offset [u, v]
-   * @returns {Array} The UV coordinates [u, v]
-   * @private
-   */
-  _calculateUVCoordinates(metadata, uvOffset) {
-    const atlasWidth = this._textureAtlasCanvas.width;
-    const atlasHeight = this._textureAtlasCanvas.height;
-
-    const imageX = metadata.x + TEXTURE_IMAGE_PADDING;
-    const imageInvertedY = metadata.invertedY + TEXTURE_IMAGE_PADDING;
-    const tileWidth = metadata.width - TEXTURE_IMAGE_PADDING * 2;
-    const tileHeight = metadata.height - TEXTURE_IMAGE_PADDING * 2;
-
-    // Calculate UV coordinates within atlas, taking into account texture position and size
-    // Flip the V coordinate by using (1 - uvOffset[1]) to invert the texture vertically due to our
-    // atlas having Y coordinates inverted from being a canvas.
-    const u = (imageX + (uvOffset[0] * tileWidth)) / atlasWidth;
-    const v = (atlasHeight - imageInvertedY - ((1 - uvOffset[1]) * tileHeight)) / atlasHeight;
-
-    return [u, v];
+    // If we get here, we couldn't find a direct match. Try loading the texture.
+    this.queueTextureForLoading(textureUri);
+    
+    // Use error texture as fallback
+    const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+    if (errorMetadata) {
+      return this._calculateUVCoordinates(errorMetadata, uvOffset);
+    }
+    
+    // If all else fails
+    return [0, 0];
   }
 
   /**
    * Load a texture into the atlas
-   * @param {string} textureUri - The texture URI
+   * @param {string} textureUri - The texture URI (file path or data URI)
    * @returns {Promise<void>}
    */
   async loadTexture(textureUri) {
+    // Early return for empty texture URIs
+    if (!textureUri) {
+      return;
+    }
+    
+    // Check if this is a data URI
+    const isDataUri = textureUri && textureUri.startsWith('data:image/');
+    
+    if (isDataUri) {
+      // For data URIs, we use the entire URI as the ID
+      await this.loadTextureFromDataURI(textureUri, textureUri);
+      return;
+    }
+
     // Don't reload if texture is already loaded, checking both with and without ./assets prefix
     const normalizedPath = textureUri.startsWith('./assets') ? textureUri : `./assets/${textureUri}`;
     const alternativePath = textureUri.startsWith('./assets') ? textureUri.slice(9) : textureUri;
     
-    if (this._textureAtlasMetadata.has(textureUri) || 
-        this._textureAtlasMetadata.has(normalizedPath) || 
-        this._textureAtlasMetadata.has(alternativePath)) {
+    if (this._textureAtlasMetadata.has(textureUri)) {
+      return;
+    } else if (this._textureAtlasMetadata.has(normalizedPath)) {
+      return;
+    } else if (this._textureAtlasMetadata.has(alternativePath)) {
       return;
     }
     
@@ -454,273 +412,32 @@ class BlockTextureAtlas {
       const isSingleTextureFile = textureUri.match(/\/blocks\/([^\/]+\.(png|jpe?g))$/);
       const multiSidedBlockMatch = textureUri.match(/\/blocks\/([^\/]+)(?:\/|$)/);
       
-      // Check if this is a single-file texture without extension indicator
       if (isSingleTextureFile) {
-        const textureFile = isSingleTextureFile[1];
-        
-        await this.preloadMultiSidedTextures(textureFile);
-        return;
-      }
-      // Check if this is a multi-sided block directory
-      else if (multiSidedBlockMatch && !textureUri.match(/[\+\-][xyz]\.png$/)) {
-        const blockType = multiSidedBlockMatch[1];
-        
-        // First, check if a single texture file exists with this name
-        // Try common image formats: png, jpg, jpeg
-        const possibleExtensions = ['png', 'jpg', 'jpeg'];
-        let singleTextureExists = false;
-        
-        for (const ext of possibleExtensions) {
-          const singleTextureUri = `./assets/blocks/${blockType}.${ext}`;
-          
-          try {
-            // Use fetch to check if the single texture file exists
-            const response = await fetch(singleTextureUri, { method: 'HEAD' });
-            if (response.ok) {
-              // The single texture file exists, load it instead of treating as multi-sided
-              await this.preloadMultiSidedTextures(`${blockType}.${ext}`);
-              singleTextureExists = true;
-              break;
-            }
-          } catch (error) {
-            // Ignore errors, will try next extension or fall back to multi-sided loading
-          }
-        }
-        
-        // If we found a single texture file, return early
-        if (singleTextureExists) {
-          return;
-        }
-        
-        // If we get here, proceed with multi-sided texture loading
-        await this.preloadMultiSidedTextures(blockType);
-        return;
-      }
-    }
-    
-    // Check if texture is already loading
-    if (this._textureLoadLocks[textureUri]) {
-      await this._textureLoadLocks[textureUri];
-      return;
-    }
-
-    // Check if texture previously failed to load
-    if (this._textureLoadFailures.has(textureUri)) {
-      return;
-    }
-
-    // Create a promise to load the texture
-    const loadPromise = new Promise((resolve, reject) => {
-      // Initialize texture loader
-      const textureLoader = new THREE.TextureLoader();
-      
-      // Check if this looks like a multi-sided texture (no file extension)
-      const isMultiSided = !textureUri.match(/\.(png|jpe?g)$/i);
-      
-      // Check if this is a specific face of a multi-sided texture
-      const facePattern = /^(.*?)[\\/]([\+\-][xyz])\.png$/;
-      const faceMatch = textureUri.match(facePattern);
-      
-      // For direct face loading (e.g., blocks/grass/+y.png)
-      if (faceMatch) {
-        const [, basePath, face] = faceMatch;
-        // Load this specific face texture
-        textureLoader.load(
-          textureUri,
-          texture => {
-            if (texture.image) {
-           
-              // Add to atlas
-              this._textureAtlasMetadata.set(textureUri, this._drawTextureToAtlas(texture, textureUri, false)); // Don't update yet
-              
-              // Update the texture atlas - defer update to the end
-              this._updateTextureAtlas();
-              
-              // Update materials with new atlas
-              BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
-              
-              resolve();
-            } else {
-              console.error(`❌ Failed to load texture image for face: ${textureUri}`);
-              reject(new Error(`Failed to load texture image for face: ${textureUri}`));
-            }
-          },
-          undefined,
-          error => {
-            // Try to use error texture as fallback
-            const errorTexture = this._textureAtlasMetadata.get('./assets/blocks/error.png');
-            if (errorTexture) {
-              // Use the error texture as fallback and don't log the error
-              this._textureAtlasMetadata.set(textureUri, errorTexture);
-              resolve();
-            } else {
-              // Only add to failures if no fallback is available
-              this._textureLoadFailures.add(textureUri);
-              reject(error);
-            }
-          }
-        );
+        // Single texture file, load it directly
+        await this._loadTextureDirectly(textureUri);
       } 
-      // For multi-sided texture base paths (e.g., blocks/grass)
-      else if (isMultiSided) {
-        
-        // For multi-sided textures, load all face textures individually
-        const faceTextures = [
-          `${textureUri}/+y.png`, // top
-          `${textureUri}/-y.png`, // bottom
-          `${textureUri}/+x.png`, // right
-          `${textureUri}/-x.png`, // left
-          `${textureUri}/+z.png`, // front
-          `${textureUri}/-z.png`, // back
-        ];
-        
-        // Track successfully loaded faces
-        let successfulFaces = 0;
-        
-        // Create promises for each face texture
-        const faceLoads = faceTextures.map(facePath => {
-          return new Promise(faceResolve => {
-            textureLoader.load(
-              facePath,
-              texture => {
-                if (texture.image) {
-                  
-                  // Add to atlas
-                  this._textureAtlasMetadata.set(facePath, this._drawTextureToAtlas(texture, facePath, false)); // Don't update yet
-                  
-                  // Mark as successful
-                  successfulFaces++;
-                }
-                faceResolve();
-              },
-              undefined,
-              error => {
-                
-                faceResolve(); // Resolve anyway to continue with other faces
-              }
-            );
-          });
-        });
-
-        // Wait for all face load attempts
-        Promise.all(faceLoads)
-          .then(() => {
-            // Only log for non-common textures
-            
-            // Successful if at least one face loaded
-            if (successfulFaces > 0) {
-              // Update the texture atlas once after all faces are loaded
-              this._updateTextureAtlas();
-              
-              // Also set the base texture URI to refer to the loaded faces
-              this._textureAtlasMetadata.set(textureUri, this._textureAtlasMetadata.get(faceTextures[0]));
-              
-              // Update materials with new atlas
-              BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
-              resolve();
-            } else {
+      else if (multiSidedBlockMatch && !textureUri.match(/[\+\-][xyz]\.png$/)) {
+        // Multi-sided block texture, try to preload all faces
+        const blockType = multiSidedBlockMatch[1];
+        await this.preloadMultiSidedTextures(blockType);
+      } 
+      else {
+        // Try common image formats only for non-data URIs
+        if (!textureUri.match(/\.(png|jpe?g)$/i) && !isDataUri) {
               // Try with simple .png extension as fallback
               const fallbackPath = `${textureUri}.png`;
               
-              // Try to silently load the fallback texture
-              textureLoader.load(
-                fallbackPath,
-                texture => {
-                  if (texture.image) {
-                    // Add to atlas
-                    this._textureAtlasMetadata.set(fallbackPath, this._drawTextureToAtlas(texture, fallbackPath, false)); // Don't update yet
-                    this._textureAtlasMetadata.set(textureUri, this._textureAtlasMetadata.get(fallbackPath));
-                    
-                    // Update the texture atlas
-                    this._updateTextureAtlas();
-                    
-                    // Update materials with new atlas
-                    BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
-                    resolve();
-                  } else {
-                    // Try error texture as a last resort
-                    const errorTexture = this._textureAtlasMetadata.get('./assets/blocks/error.png');
-                    if (errorTexture) {
-                      // Use the error texture as fallback
-                      this._textureAtlasMetadata.set(textureUri, errorTexture);
-                      resolve();
-                    } else {
-                      // No error texture available either, mark as failed
-                      this._textureLoadFailures.add(textureUri);
-                      reject(new Error(`Failed to load any textures for ${textureUri}`));
-                    }
-                  }
-                },
-                undefined,
-                error => {
-                  // Try error texture as a last resort
-                  const errorTexture = this._textureAtlasMetadata.get('./assets/blocks/error.png');
-                  if (errorTexture) {
-                    // Use the error texture as fallback
-                    this._textureAtlasMetadata.set(textureUri, errorTexture);
-                    resolve();
-                  } else {
-                    // Still log the error but don't show it in console
-                    this._textureLoadFailures.add(textureUri);
-                    reject(new Error(`Failed to load any textures for ${textureUri}`));
-                  }
-                }
-              );
-            }
-          })
-          .catch(error => {
-            console.error(`❌ Error processing faces for ${textureUri}`, error.message);
-            reject(error);
-          });
-      } else {
-        // Regular single texture loading
-        // Only log for non-common textures
-       
-      textureLoader.load(
-        textureUri,
-        texture => {
-          if (!texture.image) {
-            reject(new Error(`Failed to load texture image for URI: ${textureUri}`));
+          try {
+            await this._loadTextureDirectly(fallbackPath);
             return;
+          } catch (error) {
+            // Failed to load with .png extension, continue to try without
           }
-            
-          
-          // Draw texture to atlas and store metadata
-            this._textureAtlasMetadata.set(textureUri, this._drawTextureToAtlas(texture, textureUri, false)); // Don't update yet
-            
-            // Update the texture atlas
-            this._updateTextureAtlas();
-          
-          // Update materials with new atlas
-          BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
-          
-          resolve();
-        },
-        undefined,
-        error => {
-            // Try to use error texture as fallback
-            const errorTexture = this._textureAtlasMetadata.get('./assets/blocks/error.png');
-            if (errorTexture) {
-              // Use the error texture as fallback
-              this._textureAtlasMetadata.set(textureUri, errorTexture);
-              resolve();
-            } else {
-          // Prevent retries on textures that failed to load
-          this._textureLoadFailures.add(textureUri);
-          reject(error);
-            }
         }
-      );
+        
+        // Try to load directly without extension
+        await this._loadTextureDirectly(textureUri);
       }
-    });
-
-    // Store the promise to prevent duplicate loads
-    this._textureLoadLocks[textureUri] = loadPromise;
-
-    try {
-      await loadPromise;
-    } finally {
-      this._textureLoadLocks[textureUri] = undefined;
     }
   }
 
@@ -977,22 +694,47 @@ class BlockTextureAtlas {
 
   /**
    * Check if a texture has transparency
-   * @param {THREE.Texture} texture - The texture to check
+   * @param {THREE.Texture|HTMLCanvasElement} input - The texture or canvas to check
    * @returns {boolean} True if the texture has transparency
    * @private
    */
-  _textureIsTransparent(texture) {
+  _textureIsTransparent(input) {
+    let canvas;
+    let width, height;
+    
+    // Handle different input types
+    if (input instanceof HTMLCanvasElement) {
+      // Input is already a canvas
+      canvas = input;
+      width = canvas.width;
+      height = canvas.height;
+    } else if (input && input.image) {
+      // Input is a texture with an image property
     // Create a temporary canvas to analyze the texture
-    const canvas = document.createElement('canvas');
+      canvas = document.createElement('canvas');
+      width = input.image.width;
+      height = input.image.height;
+      
+      // Set canvas dimensions
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Draw the image to the canvas
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Failed to create temporary context');
-
-    canvas.width = texture.image.width;
-    canvas.height = texture.image.height;
-    context.drawImage(texture.image, 0, 0);
+      context.drawImage(input.image, 0, 0);
+    } else {
+      // Invalid input
+      console.warn('Invalid input to _textureIsTransparent, returning false');
+      return false;
+    }
 
     // Get image data and check alpha values
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Failed to get context from canvas');
+    
+    try {
+      const imageData = context.getImageData(0, 0, width, height);
     const data = imageData.data;
 
     // Check each pixel's alpha value, if it's less than 255 then the texture has transparency
@@ -1000,6 +742,10 @@ class BlockTextureAtlas {
       if (data[i] < 255) {
         return true;
       }
+      }
+    } catch (error) {
+      console.warn('Error checking texture transparency:', error);
+      return false;
     }
 
     return false; // No transparent pixels found
@@ -1014,253 +760,42 @@ class BlockTextureAtlas {
   }
   
   /**
-   * Clear the texture UV cache
+   * Clear the texture UV coordinate cache
+   * This forces recalculation of all UV coordinates
    */
   clearTextureUVCache() {
+    console.log("Clearing texture UV coordinate cache");
     this._textureUVCache.clear();
   }
   
   /**
-   * Rebuild the texture atlas from scratch
-   * This will clear the current atlas and reload all textures
+   * Rebuild the texture atlas completely
+   * This forces a complete refresh of the atlas texture
    * @returns {Promise<void>}
    */
   async rebuildTextureAtlas() {
-    console.log('Rebuilding texture atlas from scratch...');
-      
-    // Save a copy of the currently loaded textures
-    const loadedTextures = Array.from(this._textureAtlasMetadata.keys());
-      
-    // Recreate the canvas and context
-    this._textureAtlasCanvas.width = 512;
-    this._textureAtlasCanvas.height = 512;
-      this._textureAtlasContext.clearRect(0, 0, this._textureAtlasCanvas.width, this._textureAtlasCanvas.height);
-      
-    // Clear metadata and caches
-    this._textureAtlasMetadata.clear();
-    this._textureUVCache.clear();
-    this._textureLoadFailures.clear();
+    console.log("Rebuilding texture atlas...");
     
-    // Dispose of the old texture
-    if (this._textureAtlas) {
-      this._textureAtlas.dispose();
-    }
+    // Force need update on the texture
+    this._textureAtlas.needsUpdate = true;
     
-    // Create a new texture atlas
-    this._textureAtlas = new THREE.CanvasTexture(this._textureAtlasCanvas);
-    this._textureAtlas.minFilter = THREE.NearestFilter;
-    this._textureAtlas.magFilter = THREE.NearestFilter;
-    this._textureAtlas.colorSpace = THREE.SRGBColorSpace;
-    
-    // Load all essential textures first
-      for (const textureUri of this._essentialTextures) {
-        try {
-          await this.loadTexture(textureUri);
-        } catch (error) {
-        console.warn(`Failed to load essential texture: ${textureUri}`, error);
-      }
-    }
-    
-    console.log(`Reloading ${loadedTextures.length} previously loaded textures...`);
-    
-    // Group textures by type to optimize loading
-    const singleFileTextures = loadedTextures.filter(uri => uri.match(/\/blocks\/[^\/]+\.(png|jpe?g)$/i));
-    const faceTextures = loadedTextures.filter(uri => uri.match(/\/blocks\/[^\/]+\/[\+\-][xyz]\.png$/i));
-    
-    // For other textures, first check if they might be block types without extensions
-    const blockTypeRegex = /\/blocks\/([^\/\.]+)$/;
-    const possibleBlockTypes = new Set();
-    
-    // Extract potential block types from paths without extensions
-    const otherTextures = loadedTextures.filter(uri => {
-      if (!singleFileTextures.includes(uri) && !faceTextures.includes(uri)) {
-        const match = uri.match(blockTypeRegex);
-        if (match) {
-          // This looks like a block type reference (e.g., blocks/stone)
-          possibleBlockTypes.add(match[1]);
-        }
-      return true;
-      }
-      return false;
-    });
-    
-    // Extract block types from face textures
-    const blockTypesSet = new Set();
-    for (const faceTexture of faceTextures) {
-      const match = faceTexture.match(/\/blocks\/([^\/]+)\//);
-      if (match) {
-        blockTypesSet.add(match[1]);
-      }
-    }
-    
-    // Combine block types from both sources
-    for (const blockType of possibleBlockTypes) {
-      blockTypesSet.add(blockType);
-    }
-    
-    const blockTypes = Array.from(blockTypesSet);
-    
-    // Load textures in batches - starting with single file textures
-    const uniqueSingleFiles = [...new Set(singleFileTextures.map(uri => {
-      const match = uri.match(/\/blocks\/([^\/]+\.(png|jpe?g))$/i);
-      return match ? match[1] : null;
-    }))].filter(Boolean);
-    
-    // First, try loading single file textures with the .png extension
-    let singleTextureLoadCount = 0;
-    for (const textureFile of uniqueSingleFiles) {
-      try {
-        // Use a simplified version of preloadMultiSidedTextures for rebuilding
-        const path = `./assets/blocks/${textureFile}`;
-        const textureLoader = new THREE.TextureLoader();
-        await new Promise((resolve) => {
-          textureLoader.load(
-            path,
-            texture => {
-              if (texture.image) {
-                // Draw to atlas without updating
-                const metadata = this._drawTextureToAtlas(texture, path, false);
-                this._textureAtlasMetadata.set(path, metadata);
-                singleTextureLoadCount++;
-                
-                // For single textures, also create references for base name
-                const blockName = textureFile.replace(/\.(png|jpe?g)$/, '');
-                this._textureAtlasMetadata.set(`blocks/${blockName}`, metadata);
-                this._textureAtlasMetadata.set(`./assets/blocks/${blockName}`, metadata);
-              }
-              resolve();
-            },
-            undefined,
-            () => {
-              // Silently fail and continue
-              resolve();
-            }
-          );
-        });
-      } catch (error) {
-        // Continue with other textures
-      }
-    }
-    
-    // Then load block types with their face textures
-    let blockTypeLoadCount = 0;
-    for (const blockType of blockTypes) {
-      try {
-        // First check if a single file version exists (blockType.png)
-        let loaded = false;
-        const possibleExtensions = ['png', 'jpg', 'jpeg'];
-        
-        for (const ext of possibleExtensions) {
-          if (loaded) break;
-          
-          const singlePath = `./assets/blocks/${blockType}.${ext}`;
-          try {
-            // Skip if we already loaded this as a single file texture
-            if (this._textureAtlasMetadata.has(singlePath)) {
-              loaded = true;
-              blockTypeLoadCount++;
-              break;
-            }
-            
-            // Try to load as a single file
-            await new Promise((resolve) => {
-              const textureLoader = new THREE.TextureLoader();
-              textureLoader.load(
-                singlePath,
-                texture => {
-                  if (texture.image) {
-                    // Draw to atlas without updating
-                    const metadata = this._drawTextureToAtlas(texture, singlePath, false);
-                    this._textureAtlasMetadata.set(singlePath, metadata);
-                    this._textureAtlasMetadata.set(`blocks/${blockType}`, metadata);
-                    this._textureAtlasMetadata.set(`./assets/blocks/${blockType}`, metadata);
-                    loaded = true;
-                    blockTypeLoadCount++;
-                  }
-                  resolve();
-                },
-                undefined,
-                () => {
-                  // Silently fail and continue to next extension
-                  resolve();
-                }
-              );
-            });
-          } catch (error) {
-            // Continue with next extension
-          }
-        }
-        
-        // If no single file version, try multi-sided loading (only if not loaded already)
-        if (!loaded) {
-          // Try to load face textures
-          const faceMap = {
-            'top': `./assets/blocks/${blockType}/+y.png`,
-            'bottom': `./assets/blocks/${blockType}/-y.png`,
-            'left': `./assets/blocks/${blockType}/-x.png`,
-            'right': `./assets/blocks/${blockType}/+x.png`,
-            'front': `./assets/blocks/${blockType}/+z.png`,
-            'back': `./assets/blocks/${blockType}/-z.png`
-          };
-          
-          let loadedFaces = 0;
-          let firstFaceMetadata = null;
-          
-          // Load each face
-          for (const [faceName, facePath] of Object.entries(faceMap)) {
-            try {
-              await new Promise((resolve) => {
-                const textureLoader = new THREE.TextureLoader();
-                textureLoader.load(
-                  facePath,
-                  texture => {
-                    if (texture.image) {
-                      // Draw to atlas without updating
-                      const metadata = this._drawTextureToAtlas(texture, facePath, false);
-                      this._textureAtlasMetadata.set(facePath, metadata);
-                      loadedFaces++;
-                      
-                      // Store first face metadata for base references
-                      if (!firstFaceMetadata) {
-                        firstFaceMetadata = metadata;
-                      }
-                    }
-                    resolve();
-                  },
-                  undefined,
-                  () => {
-                    // Silently fail and continue
-                    resolve();
-                  }
-                );
-              });
-            } catch (error) {
-              // Continue with other faces
-            }
-          }
-          
-          // If we loaded at least one face, consider this block type loaded
-          if (loadedFaces > 0 && firstFaceMetadata) {
-            // Set base references
-            this._textureAtlasMetadata.set(`blocks/${blockType}`, firstFaceMetadata);
-            this._textureAtlasMetadata.set(`./assets/blocks/${blockType}`, firstFaceMetadata);
-            blockTypeLoadCount++;
-          }
-        }
-      } catch (error) {
-        // Silently continue to next block type
-      }
-    }
-    
-    console.log(`Loaded ${singleTextureLoadCount} single textures and ${blockTypeLoadCount} block types during atlas rebuild`);
-    
-    // Update texture atlas once after all textures are loaded
-    this._updateTextureAtlas();
-    
-    // Update materials with new atlas
+    // Update all materials using this atlas
     BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
     
-    console.log('Texture atlas rebuild complete');
+    // Just to be extra sure, force a THREE.js render update
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      // Create and dispatch a custom event that your renderer can listen for
+      const event = new CustomEvent('textureAtlasUpdated', {
+        detail: { atlasTexture: this._textureAtlas }
+      });
+      window.dispatchEvent(event);
+      console.log("Dispatched textureAtlasUpdated event");
+    }
+    
+    // Clear any cached UV coordinates
+    this.clearTextureUVCache();
+    
+    console.log("Texture atlas rebuilt successfully");
   }
 
   /**
@@ -1332,6 +867,25 @@ class BlockTextureAtlas {
     // Track loading success
     let loadedTextures = 0;
     
+    // Define mappings between coordinate faces and descriptive names
+    const faceNameToCoordMap = {
+      'top': '+y',
+      'bottom': '-y',
+      'left': '-x',
+      'right': '+x',
+      'front': '+z',
+      'back': '-z'
+    };
+    
+    const coordToFaceNameMap = {
+      '+y': 'top',
+      '-y': 'bottom',
+      '-x': 'left',
+      '+x': 'right',
+      '+z': 'front',
+      '-z': 'back'
+    };
+    
     // Load textures sequentially to ensure proper order
     for (const path of texturePaths) {
       try {
@@ -1350,39 +904,58 @@ class BlockTextureAtlas {
                 // If this is a single texture, add it for all faces
                 if (isSingleTexture) {
                   // Add references for all faces using this same texture
-                  const faceReferences = {
-                    'top': '+y.png',
-                    'bottom': '-y.png',
-                    'left': '-x.png',
-                    'right': '+x.png',
-                    'front': '+z.png',
-                    'back': '-z.png'
-                  };
+                  const blockName = blockType.replace(/\.(png|jpe?g)$/, '');
                   
-                  // Create aliases for all faces without logging
-                  Object.entries(faceReferences).forEach(([faceName, faceFile]) => {
-                    const baseName = blockType.replace(/\.(png|jpe?g)$/, '');
-                    const facePath = `./assets/blocks/${baseName}/${faceFile}`;
-                    this._textureAtlasMetadata.set(facePath, metadata);
+                  // Create descriptive and coordinate-based face paths
+                  Object.entries(faceNameToCoordMap).forEach(([faceName, faceCoord]) => {
+                    // With ./assets/ prefix
+                    const coordPath = `./assets/blocks/${blockName}/${faceCoord}.png`;
+                    const descriptivePath = `./assets/blocks/${blockName}/${faceName}.png`;
+                    this._textureAtlasMetadata.set(coordPath, metadata);
+                    this._textureAtlasMetadata.set(descriptivePath, metadata);
+                    
+                    // Without ./assets/ prefix (normalized)
+                    const normalizedCoordPath = `blocks/${blockName}/${faceCoord}.png`;
+                    const normalizedDescriptivePath = `blocks/${blockName}/${faceName}.png`;
+                    this._textureAtlasMetadata.set(normalizedCoordPath, metadata);
+                    this._textureAtlasMetadata.set(normalizedDescriptivePath, metadata);
                   });
                   
                   // Also set base paths
-                  const blockName = blockType.replace(/\.(png|jpe?g)$/, '');
                   this._textureAtlasMetadata.set(`blocks/${blockName}`, metadata);
                   this._textureAtlasMetadata.set(`./assets/blocks/${blockName}`, metadata);
                 }
-                // For multi-sided textures, add aliases based on faces - no need to log for common textures
-                else if (path.includes('+y.png')) {
-                  // Add aliases for top texture
-                  this._textureAtlasMetadata.set(`./assets/blocks/${blockType}/top.png`, metadata);
-                  this._textureAtlasMetadata.set(`blocks/${blockType}/top`, metadata);
-                  this._textureAtlasMetadata.set(`blocks/${blockType}/top.png`, metadata);
-                } 
-                else if (path.includes('-y.png') ) {
-                  // Add aliases for bottom texture
-                  this._textureAtlasMetadata.set(`./assets/blocks/${blockType}/bottom.png`, metadata);
-                  this._textureAtlasMetadata.set(`blocks/${blockType}/bottom`, metadata);
-                  this._textureAtlasMetadata.set(`blocks/${blockType}/bottom.png`, metadata);
+                // For multi-sided textures, add aliases based on faces
+                else {
+                  // Extract face information from path
+                  const facePattern = /\/([\+\-][xyz])\.png$/;
+                  const faceMatch = path.match(facePattern);
+                  
+                  if (faceMatch) {
+                    const [, faceCoord] = faceMatch;
+                    const faceName = coordToFaceNameMap[faceCoord];
+                    
+                    if (faceName) {
+                      // Set descriptive face paths
+                      const descriptiveFacePath = `./assets/blocks/${blockType}/${faceName}.png`;
+                      this._textureAtlasMetadata.set(descriptiveFacePath, metadata);
+                      
+                      // Set normalized paths (without ./assets/)
+                      const normalizedCoordPath = `blocks/${blockType}/${faceCoord}.png`;
+                      const normalizedDescriptivePath = `blocks/${blockType}/${faceName}.png`;
+                      this._textureAtlasMetadata.set(normalizedCoordPath, metadata);
+                      this._textureAtlasMetadata.set(normalizedDescriptivePath, metadata);
+                      
+                      // Also set simple face references
+                      this._textureAtlasMetadata.set(`blocks/${blockType}/${faceName}`, metadata);
+                    }
+                    
+                    // Store a reference to the block type for the top face (or first loaded)
+                    if (faceCoord === '+y' || loadedTextures === 1) {
+                      this._textureAtlasMetadata.set(`./assets/blocks/${blockType}`, metadata);
+                      this._textureAtlasMetadata.set(`blocks/${blockType}`, metadata);
+                    }
+                  }
                 }
                 
                 resolve();
@@ -1396,6 +969,7 @@ class BlockTextureAtlas {
               if (isSingleTexture) {
                 reject(error);
               } else {
+                console.warn(`Failed to load texture ${path}: ${error.message}`);
                 // For multi-sided textures, we can continue with other faces
                 resolve(); // Continue loading other textures
               }
@@ -1404,6 +978,7 @@ class BlockTextureAtlas {
         });
       } catch (error) {
         // Continue with other textures even if one fails
+        console.warn(`Failed to load texture ${path}: ${error.message}`);
       }
     }
     
@@ -1414,32 +989,6 @@ class BlockTextureAtlas {
     
     // Update materials with new atlas
     BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
-    
-    // For single textures or directory-based textures, set up base paths
-    if (loadedTextures > 0) {
-      let baseMetadata;
-      
-      if (isSingleTexture) {
-        // For single textures, use the one texture we loaded
-        baseMetadata = this._textureAtlasMetadata.get(baseTexturePath);
-        const blockName = blockType.replace(/\.(png|jpe?g)$/, '');
-        
-        // Set standard base paths
-        if (baseMetadata) {
-          this._textureAtlasMetadata.set(`blocks/${blockName}`, baseMetadata);
-          this._textureAtlasMetadata.set(`./assets/blocks/${blockName}`, baseMetadata);
-        }
-      } else {
-        // For multi-sided textures, prefer the top texture
-        const topPath = `./assets/blocks/${blockType}/+y.png`;
-        baseMetadata = this._textureAtlasMetadata.get(topPath);
-        
-        if (baseMetadata) {
-          this._textureAtlasMetadata.set(`blocks/${blockType}`, baseMetadata);
-          this._textureAtlasMetadata.set(`./assets/blocks/${blockType}`, baseMetadata);
-        }
-      }
-    }
     
     return loadedTextures > 0;
   }
@@ -1463,105 +1012,110 @@ class BlockTextureAtlas {
    */
   getMultiSidedTextureUV(blockType, blockFace, uvOffset) {
     
+    // Ensure we have valid blockType and blockFace
+    if (!blockType || !blockFace) {
+      console.warn(`Invalid block type or face: ${blockType}, ${blockFace}`);
+      const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+      if (errorMetadata) {
+        return this._calculateUVCoordinates(errorMetadata, uvOffset);
+      }
+      return [0, 0]; // Return default coordinates for invalid parameters
+    }
+    
+    // Define mappings between coordinate faces and descriptive names
+    const faceNameToCoordMap = {
+      'top': '+y',
+      'bottom': '-y',
+      'left': '-x',
+      'right': '+x',
+      'front': '+z',
+      'back': '-z'
+    };
+    
+    const coordToFaceNameMap = {
+      '+y': 'top',
+      '-y': 'bottom',
+      '-x': 'left',
+      '+x': 'right',
+      '+z': 'front',
+      '-z': 'back'
+    };
+    
     // Check if this is a single-texture file based on the extension
     const isSingleTexture = blockType.endsWith('.png') || 
                            blockType.endsWith('.jpg') || 
                            blockType.endsWith('.jpeg');
     
-    let exactPath;
+    // Strip extension from block type if it has one
+    const blockTypeName = isSingleTexture ? 
+      blockType.replace(/\.(png|jpe?g)$/, '') : 
+      blockType;
     
-    if (isSingleTexture) {
-      // For single textures, use the main texture file for all faces
-      exactPath = `./assets/blocks/${blockType}`;
-    } else {
-      // First check if a single texture version of this block exists
-      // Try common image formats: png, jpg, jpeg
-      const possibleExtensions = ['png', 'jpg', 'jpeg'];
-      let singleTextureMetadata = null;
+    // Try all possible path combinations in a prioritized order
+    const possiblePaths = [];
+    
+    // 1. Try exact paths based on the provided face (most specific first)
+    if (faceNameToCoordMap[blockFace]) {
+      // If blockFace is a descriptive name (top, bottom, etc.)
+      const coordFace = faceNameToCoordMap[blockFace];
       
-      for (const ext of possibleExtensions) {
-        const singleTexturePath = `./assets/blocks/${blockType}.${ext}`;
-        const metadata = this._textureAtlasMetadata.get(singleTexturePath);
-        
-        if (metadata) {
-          singleTextureMetadata = metadata;
-          break;
-        }
-      }
+      // With ./assets/ prefix
+      possiblePaths.push(`./assets/blocks/${blockTypeName}/${coordFace}.png`);
+      possiblePaths.push(`./assets/blocks/${blockTypeName}/${blockFace}.png`);
       
-      if (singleTextureMetadata) {
-        // If the single texture exists, use it for all faces
-        return this._calculateUVCoordinates(singleTextureMetadata, uvOffset);
-      }
+      // Without ./assets/ prefix
+      possiblePaths.push(`blocks/${blockTypeName}/${coordFace}.png`);
+      possiblePaths.push(`blocks/${blockTypeName}/${blockFace}.png`);
+    } else if (coordToFaceNameMap[blockFace]) {
+      // If blockFace is a coordinate face (+y, -x, etc.)
+      const descriptiveFace = coordToFaceNameMap[blockFace];
       
-      // Define the face mapping for multi-sided blocks
-      const faceMap = {
-        'top': '+y.png',
-        'bottom': '-y.png',
-        'left': '-x.png',
-        'right': '+x.png',
-        'front': '+z.png',
-        'back': '-z.png'
-      };
+      // With ./assets/ prefix
+      possiblePaths.push(`./assets/blocks/${blockTypeName}/${blockFace}.png`);
+      possiblePaths.push(`./assets/blocks/${blockTypeName}/${descriptiveFace}.png`);
       
-      // Get the exact path for this face
-      if (!faceMap[blockFace]) {
-        //console.error(`❌ Invalid block face: ${blockFace}`);
-        return [0, 0]; // Return default coordinates for invalid face
-      }
-      
-      // Construct the path for this block type and face
-      exactPath = `./assets/blocks/${blockType}/${faceMap[blockFace]}`;
+      // Without ./assets/ prefix
+      possiblePaths.push(`blocks/${blockTypeName}/${blockFace}.png`);
+      possiblePaths.push(`blocks/${blockTypeName}/${descriptiveFace}.png`);
     }
     
-    // Get metadata for this exact path
-    const metadata = this._textureAtlasMetadata.get(exactPath);
-    if (!metadata) {
-      // Only log errors for non-common textures to reduce console spam
-    
-      // Check if any textures of this type are loaded
-      const blockTextures = Array.from(this._textureAtlasMetadata.keys())
-        .filter(key => key.includes(blockType));
-      
-      if (blockTextures.length > 0) {
-        // Try to use any available texture as fallback
-        const fallbackMetadata = this._textureAtlasMetadata.get(blockTextures[0]);
-        if (fallbackMetadata) {
-          return this._calculateUVCoordinates(fallbackMetadata, uvOffset);
-        }
-      }
-      
-      // If we still don't have metadata, try using the base path with different extensions
-      if (!isSingleTexture) {
-        const possibleExtensions = ['png', 'jpg', 'jpeg'];
-        for (const ext of possibleExtensions) {
-          const blockBasePath = `./assets/blocks/${blockType}.${ext}`;
-          const baseMetadata = this._textureAtlasMetadata.get(blockBasePath);
-          
-          if (baseMetadata) {
-            return this._calculateUVCoordinates(baseMetadata, uvOffset);
-          }
-        }
-      } else {
-        // For single textures, try without extension
-        const blockName = blockType.replace(/\.(png|jpe?g)$/, '');
-        const basePath = `./assets/blocks/${blockName}`;
-        const baseMetadata = this._textureAtlasMetadata.get(basePath);
-        
-        if (baseMetadata) {
-          return this._calculateUVCoordinates(baseMetadata, uvOffset);
-        }
-      }
-      
-      // If all else fails, try loading the texture on demand
-      this.queueTextureForLoading(exactPath);
-      
-      return [0, 0]; // Return default coordinates while texture loads
+    // 2. Try with just the face name (no extension)
+    if (faceNameToCoordMap[blockFace]) {
+      possiblePaths.push(`blocks/${blockTypeName}/${blockFace}`);
     }
     
-    // Calculate UV coordinates
-    const result = this._calculateUVCoordinates(metadata, uvOffset);
-    return result;
+    // 3. Try single-texture versions (if face lookup fails)
+    possiblePaths.push(`./assets/blocks/${blockTypeName}.png`);
+    possiblePaths.push(`blocks/${blockTypeName}.png`);
+    
+    // 4. Try generic block type paths (for defaults)
+    possiblePaths.push(`./assets/blocks/${blockTypeName}`);
+    possiblePaths.push(`blocks/${blockTypeName}`);
+    
+    // Try each path in order until we find a match
+    for (const path of possiblePaths) {
+      const metadata = this._textureAtlasMetadata.get(path);
+      if (metadata) {
+        // We found a matching texture, use it
+        return this._calculateUVCoordinates(metadata, uvOffset);
+      }
+    }
+    
+    // If we got here, we couldn't find any texture for this block/face combination
+    // Queue for loading and log a warning
+    console.warn(`No texture found for ${blockType}, face ${blockFace}. Queuing for loading.`);
+    
+    // Try to queue the preferred path for loading
+    const preferredPath = `./assets/blocks/${blockTypeName}/${faceNameToCoordMap[blockFace] || blockFace}.png`;
+    this.queueTextureForLoading(preferredPath);
+    
+    // Try to use error texture as fallback
+    const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+    if (errorMetadata) {
+      return this._calculateUVCoordinates(errorMetadata, uvOffset);
+    }
+    
+    return [0, 0]; // Return default coordinates if all else fails
   }
   
   /**
@@ -1573,6 +1127,454 @@ class BlockTextureAtlas {
   getGrassTextureUV(blockFace, uvOffset) {
     // For backward compatibility, redirect to the generic method
     return this.getMultiSidedTextureUV('grass', blockFace, uvOffset);
+  }
+
+  /**
+   * Load a texture from a data URI directly
+   * @param {string} dataUri - The data URI of the texture
+   * @param {string} textureId - The ID to use for the texture in the atlas
+   * @param {boolean} dispatchUpdateEvent - Whether to dispatch an update event (default: false)
+   * @returns {Promise<void>}
+   */
+  async loadTextureFromDataURI(dataUri, textureId, dispatchUpdateEvent = false) {
+    //console.log(`Loading texture from data URI to atlas (ID: ${textureId})...`);
+    
+    // Prevent reloading if already loaded
+    if (this._textureAtlasMetadata.has(textureId)) {
+      //console.log(`Texture ${textureId} already loaded, skipping.`);
+      return;
+    }
+
+    // Check if texture is already loading
+    if (this._textureLoadLocks[textureId]) {
+      //console.log(`Texture ${textureId} is already loading, waiting...`);
+      await this._textureLoadLocks[textureId];
+      return;
+    }
+
+    // Check if texture previously failed
+    if (this._textureLoadFailures.has(textureId)) {
+      console.warn(`Texture ${textureId} previously failed to load, skipping.`);
+      return;
+    }
+    
+    // Create a lock for this texture
+    this._textureLoadLocks[textureId] = new Promise((resolve, reject) => {
+      const img = new Image();
+      
+      img.onload = () => {
+        try {
+          // Create a temporary canvas to hold the image
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = img.width;
+          tempCanvas.height = img.height;
+          
+          const ctx = tempCanvas.getContext('2d');
+          if (!ctx) {
+            throw new Error('Failed to create temporary canvas context');
+          }
+          
+          // Draw the image to the canvas
+          ctx.drawImage(img, 0, 0);
+          
+          // Check if the texture has transparent pixels
+          const isTransparent = this._textureIsTransparent(tempCanvas);
+          
+          // Create a THREE.js texture from the canvas
+          const texture = new THREE.CanvasTexture(tempCanvas);
+          texture.magFilter = THREE.NearestFilter;
+          texture.minFilter = THREE.NearestFilter;
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.needsUpdate = true;
+          texture.flipY = false;
+          
+          // Draw to atlas and store metadata
+          const metadata = this._drawTextureToAtlas(texture, textureId, false);
+          this._textureAtlasMetadata.set(textureId, metadata);
+          
+          // Update texture atlas
+          this._textureAtlas.needsUpdate = true;
+          
+          // Also store the texture with alternative IDs to make it easier to find
+          this._textureAtlasMetadata.set(`custom:${textureId}`, metadata);
+          
+          // Update BlockMaterial with the new atlas without rebuilding
+          BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
+          
+          // Only dispatch update event if explicitly requested
+          // This prevents unnecessary rebuilds during batch operations
+          if (dispatchUpdateEvent && typeof window !== 'undefined' && window.dispatchEvent) {
+            const event = new CustomEvent('textureAtlasUpdated', {
+              detail: { textureId, atlasTexture: this._textureAtlas }
+            });
+            window.dispatchEvent(event);
+          }
+          
+          delete this._textureLoadLocks[textureId];
+          resolve();
+        } catch (error) {
+          console.error(`Error processing loaded image for ${textureId}:`, error);
+          this._textureLoadFailures.add(textureId);
+          delete this._textureLoadLocks[textureId];
+          reject(error);
+        }
+      };
+      
+      img.onerror = (error) => {
+        console.error(`Failed to load image from data URI for ${textureId}:`, error);
+        this._textureLoadFailures.add(textureId);
+        
+        // Fallback to error texture
+        const errorTexture = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+        if (errorTexture) {
+          console.warn(`Using error texture as fallback for ${textureId}`);
+          this._textureAtlasMetadata.set(textureId, errorTexture);
+          delete this._textureLoadLocks[textureId];
+          resolve();
+        } else {
+          delete this._textureLoadLocks[textureId];
+          reject(new Error(`No fallback error texture available for ${textureId}`));
+        }
+      };
+      
+      // Set the source to the data URI
+      img.src = dataUri;
+    });
+    
+    return this._textureLoadLocks[textureId];
+  }
+
+  /**
+   * Calculate UV coordinates from metadata
+   * @param {Object} metadata - The texture metadata
+   * @param {Array} uvOffset - The UV offset [u, v]
+   * @returns {Array} The UV coordinates [u, v]
+   * @private
+   */
+  _calculateUVCoordinates(metadata, uvOffset) {
+    const atlasWidth = this._textureAtlasCanvas.width;
+    const atlasHeight = this._textureAtlasCanvas.height;
+
+    const imageX = metadata.x + TEXTURE_IMAGE_PADDING;
+    const imageInvertedY = metadata.invertedY + TEXTURE_IMAGE_PADDING;
+    const tileWidth = metadata.width - TEXTURE_IMAGE_PADDING * 2;
+    const tileHeight = metadata.height - TEXTURE_IMAGE_PADDING * 2;
+
+    // Calculate UV coordinates within atlas, taking into account texture position and size
+    // Flip the V coordinate by using (1 - uvOffset[1]) to invert the texture vertically due to our
+    // atlas having Y coordinates inverted from being a canvas.
+    const u = (imageX + (uvOffset[0] * tileWidth)) / atlasWidth;
+    const v = (atlasHeight - imageInvertedY - ((1 - uvOffset[1]) * tileHeight)) / atlasHeight;
+
+    return [u, v];
+  }
+
+  /**
+   * Display the texture atlas in a popup DOM element for debugging
+   */
+  showTextureAtlasVisualizer() {
+    try {
+      if (!this._textureAtlasCanvas) {
+        console.error('Texture atlas canvas not available');
+        return;
+      }
+      
+      const existingVisualizer = document.getElementById('texture-atlas-visualizer');
+      if (existingVisualizer) {
+        document.body.removeChild(existingVisualizer);
+      }
+      
+      // Create container
+      const container = document.createElement('div');
+      container.id = 'texture-atlas-visualizer';
+      container.style.position = 'fixed';
+      container.style.top = '10px';
+      container.style.right = '10px';
+      container.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+      container.style.border = '1px solid #444';
+      container.style.borderRadius = '5px';
+      container.style.padding = '10px';
+      container.style.zIndex = '1000';
+      container.style.maxHeight = '80vh';
+      container.style.overflowY = 'auto';
+      container.style.color = 'white';
+      container.style.fontFamily = 'monospace';
+      container.style.fontSize = '12px';
+      
+      // Create header
+      const header = document.createElement('div');
+      header.style.marginBottom = '10px';
+      header.style.display = 'flex';
+      header.style.justifyContent = 'space-between';
+      header.style.alignItems = 'center';
+      
+      const title = document.createElement('h3');
+      title.innerText = 'Texture Atlas Visualizer';
+      title.style.margin = '0';
+      header.appendChild(title);
+      
+      const closeBtn = document.createElement('button');
+      closeBtn.innerText = 'X';
+      closeBtn.style.backgroundColor = '#f44336';
+      closeBtn.style.border = 'none';
+      closeBtn.style.borderRadius = '3px';
+      closeBtn.style.color = 'white';
+      closeBtn.style.cursor = 'pointer';
+      closeBtn.style.padding = '5px 10px';
+      closeBtn.onclick = () => document.body.removeChild(container);
+      header.appendChild(closeBtn);
+      
+      container.appendChild(header);
+      
+      // Add texture count info
+      const texInfo = document.createElement('div');
+      texInfo.innerText = `Total textures: ${this._textureAtlasMetadata.size}`;
+      texInfo.style.marginBottom = '10px';
+      container.appendChild(texInfo);
+      
+      // Canvas clone
+      const canvasClone = document.createElement('canvas');
+      canvasClone.width = this._textureAtlasCanvas.width / 2; // Show at half size
+      canvasClone.height = this._textureAtlasCanvas.height / 2;
+      const ctx = canvasClone.getContext('2d');
+      ctx.drawImage(this._textureAtlasCanvas, 0, 0, canvasClone.width, canvasClone.height);
+      canvasClone.style.border = '1px solid #666';
+      canvasClone.style.marginBottom = '10px';
+      container.appendChild(canvasClone);
+      
+      // Add texture list with coordinates
+      const texList = document.createElement('div');
+      texList.style.maxHeight = '300px';
+      texList.style.overflowY = 'auto';
+      texList.style.border = '1px solid #555';
+      texList.style.padding = '5px';
+      
+      // Table for texture metadata
+      const table = document.createElement('table');
+      table.style.width = '100%';
+      table.style.borderCollapse = 'collapse';
+      
+      // Table header
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      ['Texture ID', 'Position', 'Size', 'Type'].forEach(text => {
+        const th = document.createElement('th');
+        th.innerText = text;
+        th.style.textAlign = 'left';
+        th.style.padding = '3px';
+        th.style.borderBottom = '1px solid #555';
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      
+      // Table body
+      const tbody = document.createElement('tbody');
+      this._textureAtlasMetadata.forEach((metadata, id) => {
+        const row = document.createElement('tr');
+        row.style.backgroundColor = id.startsWith('data:') ? 'rgba(50, 50, 50, 0.5)' : 'transparent';
+        
+        // ID cell - truncate data URIs
+        const idCell = document.createElement('td');
+        idCell.style.padding = '3px';
+        idCell.title = id; // Full ID on hover
+        idCell.innerText = id.startsWith('data:') 
+          ? id.substring(0, 20) + '...' 
+          : id;
+        row.appendChild(idCell);
+        
+        // Position cell
+        const posCell = document.createElement('td');
+        posCell.style.padding = '3px';
+        posCell.innerText = `(${metadata.x}, ${metadata.invertedY})`;
+        row.appendChild(posCell);
+        
+        // Size cell
+        const sizeCell = document.createElement('td');
+        sizeCell.style.padding = '3px';
+        sizeCell.innerText = `${metadata.width}x${metadata.height}`;
+        row.appendChild(sizeCell);
+        
+        // Type cell
+        const typeCell = document.createElement('td');
+        typeCell.style.padding = '3px';
+        typeCell.innerText = id.startsWith('data:') ? 'Data URI' : 'File';
+        row.appendChild(typeCell);
+        
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      texList.appendChild(table);
+      
+      container.appendChild(texList);
+      
+      // Add to document
+      document.body.appendChild(container);
+      
+      return 'Texture atlas visualizer opened';
+    } catch (error) {
+      console.error('Failed to show texture atlas visualizer:', error);
+      return 'Error: ' + error.message;
+    }
+  }
+
+  /**
+   * Load a texture directly using THREE.TextureLoader
+   * @param {string} textureUri - The texture URI to load
+   * @returns {Promise<void>} - A promise that resolves when the texture is loaded
+   * @private
+   */
+  async _loadTextureDirectly(textureUri) {
+    // Check if texture is already loading
+    if (this._textureLoadLocks[textureUri]) {
+      await this._textureLoadLocks[textureUri];
+      return;
+    }
+
+    // Check if texture previously failed to load
+    if (this._textureLoadFailures.has(textureUri)) {
+      throw new Error(`Texture previously failed to load: ${textureUri}`);
+    }
+
+    // Define mappings between coordinate faces and descriptive names for consistent use
+    const faceNameToCoordMap = {
+      'top': '+y',
+      'bottom': '-y',
+      'left': '-x',
+      'right': '+x',
+      'front': '+z',
+      'back': '-z'
+    };
+    
+    const coordToFaceNameMap = {
+      '+y': 'top',
+      '-y': 'bottom',
+      '-x': 'left',
+      '+x': 'right',
+      '+z': 'front',
+      '-z': 'back'
+    };
+
+    // Create a promise to load the texture
+    const loadPromise = new Promise((resolve, reject) => {
+      // Initialize texture loader
+      const textureLoader = new THREE.TextureLoader();
+      
+      textureLoader.load(
+        textureUri,
+        texture => {
+          if (!texture.image) {
+            reject(new Error(`Failed to load texture image for URI: ${textureUri}`));
+            return;
+          }
+            
+          // Draw texture to atlas and store metadata
+          const metadata = this._drawTextureToAtlas(texture, textureUri, false); // Don't update yet
+          this._textureAtlasMetadata.set(textureUri, metadata);
+          
+          // Create a normalized version of the path (without ./assets/ prefix)
+          const normalizedUri = textureUri.startsWith('./assets/') ? textureUri.slice(9) : textureUri;
+          if (normalizedUri !== textureUri) {
+            this._textureAtlasMetadata.set(normalizedUri, metadata);
+          }
+          
+          // For face textures, also create multi-face mappings to ensure they can be found
+          const facePattern = /^(.*?)[\\/]([\+\-][xyz])\.png$/;
+          const faceMatch = textureUri.match(facePattern);
+          
+          if (faceMatch) {
+            const [, basePath, faceCoord] = faceMatch;
+            const faceName = coordToFaceNameMap[faceCoord];
+            
+            if (faceName) {
+              // Store base path for block type reference
+              const blockTypeMatch = basePath.match(/^\.\/assets\/blocks\/([^\/]+)$/);
+              if (blockTypeMatch) {
+                const blockType = blockTypeMatch[1];
+                // Create block type base references
+                this._textureAtlasMetadata.set(`./assets/blocks/${blockType}`, metadata);
+                this._textureAtlasMetadata.set(`blocks/${blockType}`, metadata);
+                
+                // Create descriptive face paths
+                const descriptivePath = `${basePath}/${faceName}.png`;
+                this._textureAtlasMetadata.set(descriptivePath, metadata);
+                
+                // Create normalized paths (without ./assets/)
+                if (basePath.startsWith('./assets/')) {
+                  const normalizedBasePath = basePath.slice(9);
+                  this._textureAtlasMetadata.set(`${normalizedBasePath}/${faceCoord}.png`, metadata);
+                  this._textureAtlasMetadata.set(`${normalizedBasePath}/${faceName}.png`, metadata);
+                  this._textureAtlasMetadata.set(`${normalizedBasePath}/${faceName}`, metadata);
+                }
+              }
+            }
+          } else {
+            // For non-face textures (plain texture files), create additional aliases
+            const plainTextureMatch = textureUri.match(/^\.\/assets\/blocks\/([^\/]+\.(png|jpe?g))$/);
+            if (plainTextureMatch) {
+              const [, fileName] = plainTextureMatch;
+              const baseName = fileName.replace(/\.(png|jpe?g)$/, '');
+              
+              // Store under normalized path (without ./assets/)
+              this._textureAtlasMetadata.set(`blocks/${fileName}`, metadata);
+              this._textureAtlasMetadata.set(`blocks/${baseName}`, metadata);
+              
+              // For block types using a single texture for all faces, create face references
+              // Create descriptive and coordinate-based face paths
+              Object.entries(faceNameToCoordMap).forEach(([faceName, faceCoord]) => {
+                // With ./assets/ prefix
+                const coordPath = `./assets/blocks/${baseName}/${faceCoord}.png`;
+                const descriptivePath = `./assets/blocks/${baseName}/${faceName}.png`;
+                this._textureAtlasMetadata.set(coordPath, metadata);
+                this._textureAtlasMetadata.set(descriptivePath, metadata);
+                
+                // Without ./assets/ prefix (normalized)
+                const normalizedCoordPath = `blocks/${baseName}/${faceCoord}.png`;
+                const normalizedDescriptivePath = `blocks/${baseName}/${faceName}.png`;
+                this._textureAtlasMetadata.set(normalizedCoordPath, metadata);
+                this._textureAtlasMetadata.set(normalizedDescriptivePath, metadata);
+                
+                // Also set with just the face name
+                this._textureAtlasMetadata.set(`blocks/${baseName}/${faceName}`, metadata);
+              });
+            }
+          }
+            
+          // Update the texture atlas
+          this._updateTextureAtlas();
+          
+          // Update materials with new atlas
+          BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
+          
+          resolve(texture);
+        },
+        undefined,
+        error => {
+          console.error(`Failed to load texture: ${textureUri}`, error);
+          
+          // Try to use error texture as fallback
+          const errorTexture = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+          if (errorTexture) {
+            // Use the error texture as fallback
+            this._textureAtlasMetadata.set(textureUri, errorTexture);
+            resolve();
+          } else {
+            // Prevent retries on textures that failed to load
+            this._textureLoadFailures.add(textureUri);
+            reject(error);
+          }
+        }
+      );
+    });
+
+    // Store the promise to prevent duplicate loads
+    this._textureLoadLocks[textureUri] = loadPromise;
+
+    try {
+      return await loadPromise;
+    } finally {
+      delete this._textureLoadLocks[textureUri];
+    }
   }
 }
 

@@ -318,141 +318,58 @@ class Chunk {
               meshNormals.push(...dir);
 
               // Calculate UV coords for face texture
-              let actualTextureUri = textureUri;
+              // Determine texture path based on block face - this correctly handles data URIs
+              const actualTextureUri = blockType.getTexturePath(blockFace);
               
-              // Handle undefined texture URI
-              if (!actualTextureUri) {
-                // Try to find a texture for this face from other faces
-                const availableFaces = Object.keys(blockType.textureUris).filter(
-                  face => blockType.textureUris[face]
-                );
-                
-                if (availableFaces.length > 0) {
-                  // Use the first available texture
-                  actualTextureUri = blockType.textureUris[availableFaces[0]];
-                } else {
-                  // Use error texture as last resort
-                  actualTextureUri = './assets/blocks/error.png';
-                }
+              // DEBUG - Log texture request info for multi-sided blocks
+              if (blockType.isMultiSided && blockType.id < 10) {
+                console.log(`🧊 Multi-sided texture request:
+                  - Block: ${blockType.name} (ID: ${blockType.id})
+                  - Face: ${blockFace}
+                  - Path: ${actualTextureUri}
+                  - textureUris: ${JSON.stringify(blockType.textureUris)}
+                `);
               }
               
-              // Detect multi-sided blocks based on the texture path or block metadata
-              const isMultiSided = blockType.isMultiSided || 
-                                 (blockType.textureUris && Object.keys(blockType.textureUris).length > 1) ||
-                                 (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i));
+              // Get the block type ID from the blockType object
+              const blockTypeId = blockType.id;
               
+              // Get the block name for texture lookups
               const blockName = blockType.name || '';
                                  
-              // Handle multi-sided blocks generically
-              if (isMultiSided) {
-                // Get the block type name from textureUri or block metadata
-                let blockTypeName = '';
-                
-                if (blockType.name) {
-                  blockTypeName = blockType.name;
-                } else if (actualTextureUri) {
-                  // Try to extract block type from the texture URI
-                  const match = actualTextureUri.match(/\/blocks\/([^\/]+)(?:\/|$)/);
-                  if (match) {
-                    blockTypeName = match[1];
-                  }
-                }
-                
-                if (blockTypeName) {
-                  // Comment out excessive logging
-                  // console.log(`🧊 Processing multi-sided block (${blockTypeName}) at (${globalX},${globalY},${globalZ}) - face: ${blockFace}`);
-                  
-                  // Force correct texture selection based on face
-                  const faceMap = {
-                    'top': '+y.png',
-                    'bottom': '-y.png',
-                    'left': '-x.png',
-                    'right': '+x.png',
-                    'front': '+z.png',
-                    'back': '-z.png'
-                  };
-                  
-                  if (faceMap[blockFace]) {
-                    const specificFaceTexture = `./assets/blocks/${blockTypeName}/${faceMap[blockFace]}`;
-                    actualTextureUri = specificFaceTexture;
-                    
-                    // Uncomment for debugging specific issues only
-                    /*
-                    if (blockFace === 'top' || blockFace === 'bottom') {
-                      console.log(`🧊 Using ${blockFace} texture for ${blockTypeName}: ${actualTextureUri}`);
-                    }
-                    */
-                  }
-                }
-              }
-              // Original multi-sided texture handling for backwards compatibility
-              else if (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i)) {
-                // Map the blockFace to the corresponding face-specific texture
-                const faceMap = {
-                  'top': '+y.png',
-                  'bottom': '-y.png',
-                  'left': '-x.png',
-                  'right': '+x.png',
-                  'front': '+z.png',
-                  'back': '-z.png'
-                };
-                
-                // Create a specific face texture path
-                if (faceMap[blockFace]) {
-                  const specificFaceTexture = `${actualTextureUri}/${faceMap[blockFace]}`;
-                  actualTextureUri = specificFaceTexture;
-                  
-                  // Uncomment for debugging specific issues only
-                  /*
-                  if (blockFace === 'top' || blockFace === 'bottom') {
-                    console.log(`Using ${blockFace} texture: ${actualTextureUri}`);
-                  }
-                  */
-                } else {
-                  // If no specific face mapping, try to use a default texture
-                  const allTexture = `${actualTextureUri}/all.png`;
-                  const defaultTexture = `${actualTextureUri}/default.png`;
-                  
-                  // Let the texture atlas handle fallbacks
-                  actualTextureUri = allTexture;
-                }
-              }
-              
-              // Get UV coordinates for this texture (may be cached)
+              // Variable to store texture coordinates
               let texCoords;
-              
+          
+              // If not handled by special case, continue with normal handling
+              if (!texCoords) {
+                // Special handling for liquid blocks 
+                if (blockType.isLiquid) {
+                  const liquidTexturePath = blockType.getTextureUris().top || './assets/blocks/water-still.png';
+                  texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(liquidTexturePath, uv);
+                }
+                // Handle data URIs directly
+                else if (actualTextureUri && actualTextureUri.startsWith('data:image/')) {
+                  texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+                }
               // Special handling for multi-sided blocks
-              if (isMultiSided && blockType.name) {
-                // Use our specialized method for multi-sided textures
+                else if (blockType.isMultiSided) {
+                  // First try using getMultiSidedTextureUV which handles multi-sided textures specially
                 texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
-                // Comment out excessive logging
-                // console.log(`🧊 Using multi-sided UV for ${blockType.name} ${blockFace} at ${globalX},${globalY},${globalZ}: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
-              } 
-              // Backward compatibility for grass blocks
-              else if (blockName.includes('grass')) {
-                // Use grass-specific method for backward compatibility
-                texCoords = BlockTextureAtlas.instance.getGrassTextureUV(blockFace, uv);
-              }
-              else {
+                  
+                  // If that didn't work, try the direct path from getTexturePath
+                  if (!texCoords || (texCoords[0] === 0 && texCoords[1] === 0)) {
+                    texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+                  }
+                }
                 // Normal texture handling for regular blocks
+                else {
                 texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
               }
-              
-              // Debug logging for multi-sided blocks - only enable when needed
-              /*
-              if (isMultiSided) {
-                console.log(`🧊 ${blockFace} texture at ${globalX},${globalY},${globalZ}: ${actualTextureUri} → UV: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
               }
-              */
               
-              // If the coordinates are [0,0], it means the texture wasn't found
-              // Queue it for loading so it will be available on next render
+              // Queue textures for loading if they're missing
               if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
-                if (BlockTextureAtlas.instance.queueTextureForLoading) {
                   BlockTextureAtlas.instance.queueTextureForLoading(actualTextureUri);
-                  // Also ensure error texture is loaded
-                  BlockTextureAtlas.instance.queueTextureForLoading('./assets/blocks/error.png');
-                }
               }
               
               meshUvs.push(...texCoords);
@@ -714,6 +631,7 @@ class Chunk {
           const ndx = meshPositions.length / 3;
           const textureUri = blockType.textureUris[blockFace];
 
+          // Process vertices for this face
           for (const { pos, uv, ao } of vertices) {
             const vertexX = globalX + pos[0] - 0.5;
             const vertexY = globalY + pos[1] - 0.5;
@@ -723,141 +641,72 @@ class Chunk {
             meshNormals.push(...dir);
 
             // Calculate UV coords for face texture
-            let actualTextureUri = textureUri;
+            // Determine texture path based on block face - this correctly handles data URIs
+            const actualTextureUri = blockType.getTexturePath(blockFace);
             
-            // Handle undefined texture URI
-            if (!actualTextureUri) {
-              // Try to find a texture for this face from other faces
-              const availableFaces = Object.keys(blockType.textureUris).filter(
-                face => blockType.textureUris[face]
-              );
-              
-              if (availableFaces.length > 0) {
-                // Use the first available texture
-                actualTextureUri = blockType.textureUris[availableFaces[0]];
-              } else {
-                // Use error texture as last resort
-                actualTextureUri = './assets/blocks/error.png';
-              }
+            // DEBUG - Log texture request info for multi-sided blocks
+            if (blockType.isMultiSided && blockType.id < 10) {
+              console.log(`🧊 Multi-sided texture request:
+                - Block: ${blockType.name} (ID: ${blockType.id})
+                - Face: ${blockFace}
+                - Path: ${actualTextureUri}
+                - textureUris: ${JSON.stringify(blockType.textureUris)}
+              `);
             }
             
-            // Detect multi-sided blocks based on the texture path or block metadata
-            const isMultiSided = blockType.isMultiSided || 
-                               (blockType.textureUris && Object.keys(blockType.textureUris).length > 1) ||
-                               (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i));
+            // Get the block type ID from the blockType object
+            const blockTypeId = blockType.id;
             
+            // Get the block name for texture lookups
             const blockName = blockType.name || '';
                                
-            // Handle multi-sided blocks generically
-            if (isMultiSided) {
-              // Get the block type name from textureUri or block metadata
-              let blockTypeName = '';
-              
-              if (blockType.name) {
-                blockTypeName = blockType.name;
-              } else if (actualTextureUri) {
-                // Try to extract block type from the texture URI
-                const match = actualTextureUri.match(/\/blocks\/([^\/]+)(?:\/|$)/);
-                if (match) {
-                  blockTypeName = match[1];
-                }
-              }
-              
-              if (blockTypeName) {
-                // Comment out excessive logging
-                // console.log(`🧊 Processing multi-sided block (${blockTypeName}) at (${globalX},${globalY},${globalZ}) - face: ${blockFace}`);
-                
-                // Force correct texture selection based on face
-                const faceMap = {
-                  'top': '+y.png',
-                  'bottom': '-y.png',
-                  'left': '-x.png',
-                  'right': '+x.png',
-                  'front': '+z.png',
-                  'back': '-z.png'
-                };
-                
-                if (faceMap[blockFace]) {
-                  const specificFaceTexture = `./assets/blocks/${blockTypeName}/${faceMap[blockFace]}`;
-                  actualTextureUri = specificFaceTexture;
-                  
-                  // Uncomment for debugging specific issues only
-                  /*
-                  if (blockFace === 'top' || blockFace === 'bottom') {
-                    console.log(`🧊 Using ${blockFace} texture for ${blockTypeName}: ${actualTextureUri}`);
-                  }
-                  */
-                }
-              }
-            }
-            // Original multi-sided texture handling for backwards compatibility
-            else if (actualTextureUri && !actualTextureUri.match(/\.(png|jpe?g)$/i)) {
-              // Map the blockFace to the corresponding face-specific texture
-              const faceMap = {
-                'top': '+y.png',
-                'bottom': '-y.png',
-                'left': '-x.png',
-                'right': '+x.png',
-                'front': '+z.png',
-                'back': '-z.png'
-              };
-              
-              // Create a specific face texture path
-              if (faceMap[blockFace]) {
-                const specificFaceTexture = `${actualTextureUri}/${faceMap[blockFace]}`;
-                actualTextureUri = specificFaceTexture;
-                
-                // Uncomment for debugging specific issues only
-                /*
-                if (blockFace === 'top' || blockFace === 'bottom') {
-                  console.log(`Using ${blockFace} texture: ${actualTextureUri}`);
-                }
-                */
-              } else {
-                // If no specific face mapping, try to use a default texture
-                const allTexture = `${actualTextureUri}/all.png`;
-                const defaultTexture = `${actualTextureUri}/default.png`;
-                
-                // Let the texture atlas handle fallbacks
-                actualTextureUri = allTexture;
-              }
-            }
-            
-            // Get UV coordinates for this texture (may be cached)
+            // Variable to store texture coordinates
             let texCoords;
             
-            // Special handling for multi-sided blocks
-            if (isMultiSided && blockType.name) {
-              // Use our specialized method for multi-sided textures
-              texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
-              // Comment out excessive logging
-              // console.log(`🧊 Using multi-sided UV for ${blockType.name} ${blockFace} at ${globalX},${globalY},${globalZ}: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
-            } 
-            // Backward compatibility for grass blocks
-            else if (blockName.includes('grass')) {
-              // Use grass-specific method for backward compatibility
-              texCoords = BlockTextureAtlas.instance.getGrassTextureUV(blockFace, uv);
+            // Special handling for grass blocks (special case for grass side textures)
+            if (blockTypeId === 2 && (blockFace === 'front' || blockFace === 'back' || blockFace === 'left' || blockFace === 'right')) {
+              // Check if this block is above another block (for grass blocks)
+              const isAbove = chunkManager.getGlobalBlockType({
+                x: globalX, 
+                y: globalY - 1, 
+                z: globalZ
+              }) !== null;
+              
+              if (!isAbove) {
+                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync('./assets/blocks/grass-side.png', uv);
+              }
             }
-            else {
+            
+            // If not handled by special case, continue with normal handling
+            if (!texCoords) {
+              // Special handling for liquid blocks 
+              if (blockType.isLiquid) {
+                const liquidTexturePath = blockType.getTextureUris().top || './assets/blocks/water-still.png';
+                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(liquidTexturePath, uv);
+              }
+              // Handle data URIs directly
+              else if (actualTextureUri && actualTextureUri.startsWith('data:image/')) {
+                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+              }
+            // Special handling for multi-sided blocks
+              else if (blockType.isMultiSided) {
+                // First try using getMultiSidedTextureUV which handles multi-sided textures specially
+              texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
+                
+                // If that didn't work, try the direct path from getTexturePath
+                if (!texCoords || (texCoords[0] === 0 && texCoords[1] === 0)) {
+                  texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+                }
+              }
               // Normal texture handling for regular blocks
+              else {
               texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
             }
-            
-            // Debug logging for multi-sided blocks - only enable when needed
-            /*
-            if (isMultiSided) {
-              console.log(`🧊 ${blockFace} texture at ${globalX},${globalY},${globalZ}: ${actualTextureUri} → UV: [${texCoords[0].toFixed(4)}, ${texCoords[1].toFixed(4)}]`);
             }
-            */
             
-            // If the coordinates are [0,0], it means the texture wasn't found
-            // Queue it for loading so it will be available on next render
+            // Queue textures for loading if they're missing
             if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
-              if (BlockTextureAtlas.instance.queueTextureForLoading) {
                 BlockTextureAtlas.instance.queueTextureForLoading(actualTextureUri);
-                // Also ensure error texture is loaded
-                BlockTextureAtlas.instance.queueTextureForLoading('./assets/blocks/error.png');
-              }
             }
             
             meshUvs.push(...texCoords);
@@ -1102,32 +951,12 @@ class Chunk {
             
             // Get the chunk and clean up its meshes too 
             const adjacentChunk = chunkManager._chunks.get(adjacentChunkId);
-            if (adjacentChunk._solidMesh) {
-              chunkManager.chunkMeshManager.removeSolidMesh(adjacentChunk);
-              adjacentChunk._solidMesh = undefined;
-            }
             
-            if (adjacentChunk._liquidMesh) {
-              chunkManager.chunkMeshManager.removeLiquidMesh(adjacentChunk);
-              adjacentChunk._liquidMesh = undefined;
-            }
-            
+            // Force remesh adjacent chunks
             chunkManager.markChunkForRemesh(adjacentChunkId, { forceCompleteRebuild: true });
           }
         }
       }
-      
-      if (shouldLogPerf) {
-        console.timeEnd(`setBlock-${this.chunkId}`);
-      }
-      return;
-    }
-    
-    // For air to block or block to different block transitions, use the normal face updating logic
-    this._updateBlockFaces(localCoordinate, oldBlockTypeId, blockTypeId, chunkManager);
-
-    if (shouldLogPerf) {
-      console.timeEnd(`setBlock-${this.chunkId}`);
     }
   }
 
@@ -1154,180 +983,37 @@ class Chunk {
       const oldBlockType = oldBlockTypeId ? BlockTypeRegistry.instance.getBlockType(oldBlockTypeId) : null;
       const newBlockType = newBlockTypeId ? BlockTypeRegistry.instance.getBlockType(newBlockTypeId) : null;
 
-      // Start with the modified block itself
-      const affectedBlocks = [{ ...localCoordinate }];
-      const affectedSet = new Set([`${localCoordinate.x},${localCoordinate.y},${localCoordinate.z}`]);
-
-      // Get the neighboring blocks - only check the 6 adjacent faces first
-      const { x, y, z } = localCoordinate;
-      const neighbors = [
-        { dir: [1, 0, 0], face: 'right', oppositeFace: 'left', coord: { x: x + 1, y, z } },
-        { dir: [-1, 0, 0], face: 'left', oppositeFace: 'right', coord: { x: x - 1, y, z } },
-        { dir: [0, 1, 0], face: 'top', oppositeFace: 'bottom', coord: { x, y: y + 1, z } },
-        { dir: [0, -1, 0], face: 'bottom', oppositeFace: 'top', coord: { x, y: y - 1, z } },
-        { dir: [0, 0, 1], face: 'front', oppositeFace: 'back', coord: { x, y, z: z + 1 } },
-        { dir: [0, 0, -1], face: 'back', oppositeFace: 'front', coord: { x, y, z: z - 1 } }
-      ];
-
-      // Whether we're adding or removing a block
-      const isAirToBlock = oldBlockTypeId === 0 && newBlockTypeId !== 0;
-      const isBlockToAir = oldBlockTypeId !== 0 && newBlockTypeId === 0;
-      const isBlockTypeChange = oldBlockTypeId !== 0 && newBlockTypeId !== 0 && oldBlockTypeId !== newBlockTypeId;
-      
-      // Special case for block removal - we need to make sure all neighboring solid blocks 
-      // update their faces that were previously hidden by this block
-      if (isBlockToAir) {
-        // For block removal, we definitely need to update all direct neighbors
-        // to ensure they show the previously hidden faces
-        for (const { coord, face } of neighbors) {
-          // Skip neighbors outside chunk boundaries
-          if (coord.x < 0 || coord.x > CHUNK_INDEX_RANGE || 
-              coord.y < 0 || coord.y > CHUNK_INDEX_RANGE || 
-              coord.z < 0 || coord.z > CHUNK_INDEX_RANGE) {
-            // For neighbors outside our chunk, we need to notify those chunks to update
-            // Get the global coordinate
-            const globalCoord = this._getGlobalCoordinate(localCoordinate);
-            
-            // Calculate the adjacent block's global coordinate
-            const neighborGlobal = {
-              x: globalCoord.x + (coord.x - localCoordinate.x),
-              y: globalCoord.y + (coord.y - localCoordinate.y),
-              z: globalCoord.z + (coord.z - localCoordinate.z)
-            };
-            
-            // Get the chunk for this neighbor
-            const neighborChunkOrigin = Chunk.globalCoordinateToOriginCoordinate(neighborGlobal);
-            const neighborChunkId = Chunk.getChunkId(neighborChunkOrigin);
-            
-            // If it's a different chunk, mark it for remeshing
-            if (neighborChunkId !== this.chunkId && chunkManager._chunks.has(neighborChunkId)) {
-              chunkManager.markChunkForRemesh(neighborChunkId);
-            }
-            
-            continue;
-          }
-          
-          // Always add adjacent blocks when removing a block, even if they're air
-          // This ensures proper face visibility calculations during the mesh rebuild
-          const coordKey = `${coord.x},${coord.y},${coord.z}`;
-          if (!affectedSet.has(coordKey)) {
-            affectedSet.add(coordKey);
-            affectedBlocks.push({ ...coord });
-          }
-        }
-      }
-      // For normal cases, include direct face neighbors
-      else {
-        for (const { coord } of neighbors) {
-          // Skip neighbors outside chunk boundaries
-          if (coord.x < 0 || coord.x > CHUNK_INDEX_RANGE || 
-              coord.y < 0 || coord.y > CHUNK_INDEX_RANGE || 
-              coord.z < 0 || coord.z > CHUNK_INDEX_RANGE) {
-            continue;
-          }
-          
-          // Always include direct neighbors in the update
-          const coordKey = `${coord.x},${coord.y},${coord.z}`;
-          if (!affectedSet.has(coordKey)) {
-            affectedSet.add(coordKey);
-            affectedBlocks.push({ ...coord });
-          }
-        }
-      }
-
-      // For visual consistency, always include a wider radius of blocks
-      // This ensures proper ambient occlusion and seamless transitions
-      const blocksToProcess = [...affectedBlocks];
-      for (const block of blocksToProcess) {
-        // Include diagonal/corner neighbors within a radius
-        // This creates a more reliable updating pattern
-        for (let dx = -1; dx <= 1; dx++) {
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dz = -1; dz <= 1; dz++) {
-              // Skip already processed blocks and center block
-              if (dx === 0 && dy === 0 && dz === 0) continue;
-              
-              const nx = block.x + dx;
-              const ny = block.y + dy;
-              const nz = block.z + dz;
-              
-              // Skip if out of bounds
-              if (nx < 0 || nx > CHUNK_INDEX_RANGE || 
-                  ny < 0 || ny > CHUNK_INDEX_RANGE || 
-                  nz < 0 || nz > CHUNK_INDEX_RANGE) {
-                continue;
-              }
-              
-              const coordKey = `${nx},${ny},${nz}`;
-              if (!affectedSet.has(coordKey)) {
-                affectedSet.add(coordKey);
-                affectedBlocks.push({ x: nx, y: ny, z: nz });
-              }
-            }
-          }
-        }
-      }
-
-      // If we're placing a special block type (transparent/etc.) or if we're removing a block,
-      // we need to update an even wider area for proper visual appearance
-      if ((isAirToBlock && newBlockType?.transparent) || 
-          isBlockToAir || 
-          (isBlockTypeChange && (newBlockType?.transparent || oldBlockType?.transparent))) {
-        
-        // For special cases, do a second pass with extended radius
-        // For block removal, use a larger radius to ensure all previously hidden faces update properly
-        const additionalRadius = isBlockToAir ? 3 : 1; 
-        const additionalBlocks = [...affectedBlocks]; // Start with current blocks
-        
-        for (const block of additionalBlocks) {
-          for (let dx = -additionalRadius; dx <= additionalRadius; dx++) {
-            for (let dy = -additionalRadius; dy <= additionalRadius; dy++) {
-              for (let dz = -additionalRadius; dz <= additionalRadius; dz++) {
-                // Skip center which would be original block
-                if (dx === 0 && dy === 0 && dz === 0) continue;
-                
-                const nx = block.x + dx;
-                const ny = block.y + dy;
-                const nz = block.z + dz;
-                
-                // Skip if out of bounds
-                if (nx < 0 || nx > CHUNK_INDEX_RANGE || 
-                    ny < 0 || ny > CHUNK_INDEX_RANGE || 
-                    nz < 0 || nz > CHUNK_INDEX_RANGE) {
-                  continue;
-                }
-                
-                const coordKey = `${nx},${ny},${nz}`;
-                if (!affectedSet.has(coordKey)) {
-                  affectedSet.add(coordKey);
-                  affectedBlocks.push({ x: nx, y: ny, z: nz });
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // For block removal, make sure to log status for debugging
-      if (isBlockToAir) {
-        console.log(`Block removal at ${x},${y},${z} affected ${affectedBlocks.length} blocks in chunk ${this.chunkId}`);
-        
-        // For block removal, it's safer to just do a full chunk rebuild
-        // This ensures there are no visual artifacts
-        if (affectedBlocks.length > 5) {
-          console.log(`Block removal triggered full rebuild of chunk ${this.chunkId}`);
-          chunkManager.markChunkForRemesh(this.chunkId);
-          return;
-        }
-      } else {
-        console.log(`Block update affected ${affectedBlocks.length} blocks in chunk ${this.chunkId}`);
-      }
-      
       // Mark the chunk for remeshing with the affected blocks
-      chunkManager.markChunkForRemesh(this.chunkId, { blockCoordinates: affectedBlocks });
+      chunkManager.markChunkForRemesh(this.chunkId, { blockCoordinates: [localCoordinate] });
     } finally {
       console.timeEnd(timerId);
     }
+  }
+
+  /**
+   * Calculate a simple hash code for the blocks array to detect changes
+   * @private
+   * @returns {number} A hash code for the blocks array
+   */
+  _calculateBlocksHashCode() {
+    let hash = 0;
+    const { length } = this._blocks;
+    
+    // Process all blocks for a more accurate hash
+    // We need to be careful with this to not miss block changes
+    for (let i = 0; i < length; i++) {
+      // Only use non-zero blocks for the hash
+      if (this._blocks[i] !== 0) {
+        hash = ((hash << 5) - hash) + (i * 31 + this._blocks[i]);
+        hash = hash & hash; // Convert to 32bit integer
+      }
+    }
+    
+    // Include a timestamp component for placements
+    // This ensures we rebuild after recent changes
+    hash = (hash * 31) + Math.floor(performance.now() / 10000); // Changes every 10 seconds
+    
+    return hash;
   }
 
   /**
@@ -1409,32 +1095,6 @@ class Chunk {
    */
   _getIndex(localCoordinate) {
     return localCoordinate.x + CHUNK_SIZE * (localCoordinate.y + CHUNK_SIZE * localCoordinate.z);
-  }
-
-  /**
-   * Calculate a simple hash code for the blocks array to detect changes
-   * @private
-   * @returns {number} A hash code for the blocks array
-   */
-  _calculateBlocksHashCode() {
-    let hash = 0;
-    const { length } = this._blocks;
-    
-    // Process all blocks for a more accurate hash
-    // We need to be careful with this to not miss block changes
-    for (let i = 0; i < length; i++) {
-      // Only use non-zero blocks for the hash
-      if (this._blocks[i] !== 0) {
-        hash = ((hash << 5) - hash) + (i * 31 + this._blocks[i]);
-        hash = hash & hash; // Convert to 32bit integer
-      }
-    }
-    
-    // Include a timestamp component for placements
-    // This ensures we rebuild after recent changes
-    hash = (hash * 31) + Math.floor(performance.now() / 10000); // Changes every 10 seconds
-    
-    return hash;
   }
 }
 

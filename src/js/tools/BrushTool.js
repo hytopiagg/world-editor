@@ -578,7 +578,7 @@ class BrushTool extends BaseTool {
 		// Log the outcome of the operation
 		const addedCount = this.addedPositions.size;
 		const removedCount = this.removedPositions.size;
-		console.log(`BrushTool: Completed operation - Added: ${addedCount} blocks, Removed: ${removedCount} blocks`);
+		//console.log(`BrushTool: Completed operation - Added: ${addedCount} blocks, Removed: ${removedCount} blocks`);
 
 		// Only proceed with spatial hash update if blocks were added or removed
 		if ((addedCount > 0 || removedCount > 0) && this.terrainBuilderRef && this.terrainBuilderRef.current) {

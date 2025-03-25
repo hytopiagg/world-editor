@@ -26,13 +26,13 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
               
             // Process any custom blocks first
             if (importData.blockTypes && importData.blockTypes.length > 0) {
-              console.log(`Processing ${importData.blockTypes.length} block types from import`);
+              //console.log(`Processing ${importData.blockTypes.length} block types from import`);
               
               // Process each block type, ensuring custom blocks are properly handled
               for (const blockType of importData.blockTypes) {
                 // Only process blocks that are custom or have IDs in the custom range (100-199)
                 if (blockType.isCustom || (blockType.id >= 100 && blockType.id < 200)) {
-                  console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
+                //  console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
                   
                   // Make sure the block has all required properties
                   const processedBlock = {

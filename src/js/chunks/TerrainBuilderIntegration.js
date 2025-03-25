@@ -158,6 +158,41 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
 	// Load all blocks at once
 	chunkSystem.updateFromTerrainData(terrainData);
 	
+	// Update the spatial hash grid for raycasting - but only once
+	// Use a static flag to prevent multiple updates
+	if (!updateTerrainChunks.spatialHashUpdating) {
+		updateTerrainChunks.spatialHashUpdating = true;
+		
+		try {
+			// Import the SpatialGridManager dynamically to avoid circular dependencies
+			import('../managers/SpatialGridManager').then(({ SpatialGridManager }) => {
+				const spatialGridManager = new SpatialGridManager();
+				console.log("Updating spatial hash grid from terrain data");
+				
+				// Force update from terrain data with loading screen
+				spatialGridManager.updateFromTerrain(terrainData, {
+					force: true,
+					showLoadingScreen: false,
+					message: "Building spatial index for raycasting..."
+				}).then(() => {
+					console.log("Spatial hash grid updated successfully with worker");
+					updateTerrainChunks.spatialHashUpdating = false;
+				}).catch(error => {
+					console.error("Error updating spatial hash grid:", error);
+					updateTerrainChunks.spatialHashUpdating = false;
+				});
+			}).catch(error => {
+				console.error("Failed to import SpatialGridManager:", error);
+				updateTerrainChunks.spatialHashUpdating = false;
+			});
+		} catch (error) {
+			console.error("Error updating spatial hash grid:", error);
+			updateTerrainChunks.spatialHashUpdating = false;
+		}
+	} else {
+		console.log("Spatial hash grid update already in progress, skipping duplicate update");
+	}
+	
 	// Process the render queue for chunks near the camera first
 	setTimeout(() => {
 		if (chunkSystem) {
@@ -199,20 +234,20 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
 	}
 
 	console.time('TerrainBuilderIntegration.updateTerrainBlocks');
-	console.log(`TerrainBuilderIntegration.updateTerrainBlocks: Processing ${Object.keys(addedBlocks).length} added blocks and ${Object.keys(removedBlocks).length} removed blocks`);
+	//console.log(`TerrainBuilderIntegration.updateTerrainBlocks: Processing ${Object.keys(addedBlocks).length} added blocks and ${Object.keys(removedBlocks).length} removed blocks`);
 
 	// DEBUGGING: Check if we're adding blocks to empty space
 	if (Object.keys(addedBlocks).length > 0) {
 		const firstBlockKey = Object.keys(addedBlocks)[0];
 		const [x, y, z] = firstBlockKey.split(',').map(Number);
 		const chunkKey = Math.floor(x / 16) * 16 + ',' + Math.floor(y / 16) * 16 + ',' + Math.floor(z / 16) * 16;
-		console.log(`DEBUG: Adding block at position ${firstBlockKey}, chunk key: ${chunkKey}`);
-		console.log(`DEBUG: Chunk system initialized: ${chunkSystem._initialized}`);
-		console.log(`DEBUG: Chunk exists: ${chunkSystem._chunkManager._chunks.has(chunkKey)}`);
+		//console.log(`DEBUG: Adding block at position ${firstBlockKey}, chunk key: ${chunkKey}`);
+		//console.log(`DEBUG: Chunk system initialized: ${chunkSystem._initialized}`);
+		//console.log(`DEBUG: Chunk exists: ${chunkSystem._chunkManager._chunks.has(chunkKey)}`);
 	}
 
 	// Convert added blocks to the format expected by ChunkSystem
-	console.time('TerrainBuilderIntegration.updateTerrainBlocks-conversion');
+	//console.time('TerrainBuilderIntegration.updateTerrainBlocks-conversion');
 	const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
 		const [x, y, z] = posKey.split(',').map(Number);
 		return {
@@ -289,12 +324,12 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
 			position: [x, y, z]
 		};
 	});
-	console.timeEnd('TerrainBuilderIntegration.updateTerrainBlocks-conversion');
+	//console.timeEnd('TerrainBuilderIntegration.updateTerrainBlocks-conversion');
 
 	// Update the chunk system
-	console.time('TerrainBuilderIntegration.updateTerrainBlocks-chunkSystemUpdate');
+	//console.time('TerrainBuilderIntegration.updateTerrainBlocks-chunkSystemUpdate');
 	chunkSystem.updateBlocks(addedBlocksArray, removedBlocksArray);
-	console.timeEnd('TerrainBuilderIntegration.updateTerrainBlocks-chunkSystemUpdate');
+	//console.timeEnd('TerrainBuilderIntegration.updateTerrainBlocks-chunkSystemUpdate');
 
 	console.timeEnd('TerrainBuilderIntegration.updateTerrainBlocks');
 };
