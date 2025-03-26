@@ -126,6 +126,28 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Log undoRedoManager initialization and updates
+  useEffect(() => {
+    console.log("App: undoRedoManagerRef initialized");
+    
+    return () => {
+      console.log("App: component unmounting, undoRedoManagerRef:", undoRedoManagerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (undoRedoManagerRef.current) {
+      console.log("App: undoRedoManagerRef.current updated:", 
+        {
+          exists: !!undoRedoManagerRef.current,
+          hasCurrentProp: undoRedoManagerRef.current && 'current' in undoRedoManagerRef.current,
+          hasSaveUndo: undoRedoManagerRef.current && typeof undoRedoManagerRef.current.saveUndo === 'function',
+          saveUndoType: undoRedoManagerRef.current && typeof undoRedoManagerRef.current.saveUndo
+        }
+      );
+    }
+  }, [undoRedoManagerRef.current]);
+
   const LoadingScreen = () => (
     <div className="loading-screen">
       <img src={hytopiaLogo} alt="Hytopia Logo" className="loading-logo" />
@@ -154,6 +176,12 @@ function App() {
       </div>
 
       <QuickTips />
+
+      <UndoRedoManager
+        ref={undoRedoManagerRef}
+        terrainBuilderRef={terrainBuilderRef}
+        environmentBuilderRef={environmentBuilderRef}
+      />
 
       <BlockToolsSidebar
         terrainBuilderRef={terrainBuilderRef}
@@ -223,7 +251,7 @@ function App() {
           gridSize={gridSize}
           environmentBuilderRef={environmentBuilderRef}
           previewPositionToAppJS={setCurrentPreviewPosition}
-          undoRedoManager={undoRedoManagerRef.current}
+          undoRedoManager={undoRedoManagerRef}
         />
         <EnvironmentBuilder
           ref={environmentBuilderRef}
@@ -234,7 +262,7 @@ function App() {
           placementSize={placementSize}
           previewPositionFromAppJS={currentPreviewPosition}
           placementSettings={placementSettings}
-          undoRedoManager={undoRedoManagerRef.current}
+          undoRedoManager={undoRedoManagerRef}
         />
       </Canvas>
 
@@ -255,14 +283,8 @@ function App() {
         placementSize={placementSize}
         setPlacementSize={setPlacementSize}
         setGridSize={setGridSize}
-        undoRedoManager={undoRedoManagerRef.current}
+        undoRedoManager={undoRedoManagerRef}
         currentBlockType={currentBlockType}
-      />
-
-      <UndoRedoManager
-        ref={undoRedoManagerRef}
-        terrainBuilderRef={terrainBuilderRef}
-        environmentBuilderRef={environmentBuilderRef}
       />
 
       <div className="camera-controls-wrapper">

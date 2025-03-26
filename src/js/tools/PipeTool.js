@@ -36,6 +36,12 @@ class PipeTool extends BaseTool {
 			// Add undoRedoManager reference
 			this.undoRedoManager = terrainBuilderProps.undoRedoManager;
 			console.log('PipeTool: Got undoRedoManager reference:', !!this.undoRedoManager);
+			console.log('PipeTool: undoRedoManager is ref:', this.undoRedoManager && 'current' in this.undoRedoManager);
+			console.log('PipeTool: undoRedoManager.current exists:', this.undoRedoManager && !!this.undoRedoManager.current);
+			console.log('PipeTool: undoRedoManager.current has saveUndo:', 
+				this.undoRedoManager && 
+				this.undoRedoManager.current && 
+				typeof this.undoRedoManager.current.saveUndo === 'function');
 
 			// Add direct references to placement tracking
 			this.placementChangesRef = terrainBuilderProps.placementChangesRef;
@@ -172,14 +178,14 @@ class PipeTool extends BaseTool {
 						
 					if (hasChanges) {
 						// Try using direct undoRedoManager reference first
-						if (this.undoRedoManager) {
-							console.log('PipeTool: Calling saveUndo with direct undoRedoManager reference');
-							this.undoRedoManager.saveUndo(changes);
+						if (this.undoRedoManager?.current?.saveUndo) {
+							console.log('PipeTool: Calling saveUndo with undoRedoManager.current');
+							this.undoRedoManager.current.saveUndo(changes);
 						}
 						// Fall back to terrainBuilder reference if available
-						else if (this.terrainBuilderRef.current.undoRedoManager) {
-							console.log('PipeTool: Calling saveUndo via terrainBuilderRef');
-							this.terrainBuilderRef.current.undoRedoManager.saveUndo(changes);
+						else if (this.terrainBuilderRef?.current?.undoRedoManager?.current?.saveUndo) {
+							console.log('PipeTool: Calling saveUndo with terrainBuilderRef fallback');
+							this.terrainBuilderRef.current.undoRedoManager.current.saveUndo(changes);
 						}
 						else {
 							console.warn('PipeTool: No undoRedoManager available, changes won\'t be tracked for undo/redo');

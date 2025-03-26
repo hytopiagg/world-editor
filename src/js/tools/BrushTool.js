@@ -67,7 +67,13 @@ class BrushTool extends BaseTool {
 			this.scene = terrainBuilderProps.scene;
 			this.toolManagerRef = terrainBuilderProps.toolManagerRef;
 			this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
+			
+			// Add undoRedoManager reference
 			this.undoRedoManager = terrainBuilderProps.undoRedoManager;
+		
+			// Direct access to saveUndo function
+			this.saveUndoFunction = terrainBuilderProps.saveUndoFunction;
+		
 			this.placementChangesRef = terrainBuilderProps.placementChangesRef;
 			this.isPlacingRef = terrainBuilderProps.isPlacingRef;
 			this.previewPositionRef = terrainBuilderProps.previewPositionRef;
@@ -102,14 +108,7 @@ class BrushTool extends BaseTool {
 
 		// Log activation details for debugging
 		console.log('BrushTool activated');
-		console.log('terrainRef exists:', !!this.terrainRef);
-		console.log('terrainRef.current exists:', this.terrainRef && !!this.terrainRef.current);
-		console.log('currentBlockTypeRef exists:', !!this.currentBlockTypeRef);
-		console.log('currentBlockTypeRef.current exists:', this.currentBlockTypeRef && !!this.currentBlockTypeRef.current);
-		console.log('undoRedoManager exists:', !!this.undoRedoManager);
-		console.log('placementChangesRef exists:', !!this.placementChangesRef);
-		console.log('isPlacingRef exists:', !!this.isPlacingRef);
-
+	
 		// Initialize empty objects if needed
 		if (this.terrainRef && !this.terrainRef.current) {
 			console.log('Initializing empty terrainRef.current in onActivate');
@@ -249,7 +248,6 @@ class BrushTool extends BaseTool {
 		
 		// Get the number of chunks to update
 		const chunkCount = this.chunkUpdateQueue.size;
-		console.log(`BrushTool: Processing ${chunkCount} chunk updates`);
 		
 		// Limit the number of chunks processed at once to prevent lag
 		const MAX_CHUNKS_PER_UPDATE = 5;
@@ -264,7 +262,6 @@ class BrushTool extends BaseTool {
 			// Remaining chunks to process
 			const remainingChunks = chunkKeysArray.slice(MAX_CHUNKS_PER_UPDATE);
 			
-			console.log(`BrushTool: Processing ${firstBatch.length} chunks now, ${remainingChunks.length} chunks deferred`);
 			
 			// Process first batch immediately
 			this.updateChunkBatch(firstBatch);
@@ -355,7 +352,6 @@ class BrushTool extends BaseTool {
 			return;
 		}
 		
-		console.log(`BrushTool: Processing pending batch - added: ${Object.keys(this.pendingBatch.added).length}, removed: ${Object.keys(this.pendingBatch.removed).length}`);
 		
 		// Use imported fast update method for better performance
 		if (this.importedUpdateTerrainBlocks) {
@@ -392,14 +388,6 @@ class BrushTool extends BaseTool {
 			return;
 		}
 
-		console.log('BrushTool: handleMouseDown', {
-			position,
-			button,
-			brushSize: this.brushSize,
-			isCircular: this.isCircular,
-			isEraseMode: this.isEraseMode
-		});
-
 		// Make sure the terrain reference is valid before placing
 		if (!this.terrainRef || !this.terrainRef.current) {
 			console.error('BrushTool: terrainRef is undefined or empty when attempting to place blocks');
@@ -408,13 +396,11 @@ class BrushTool extends BaseTool {
 
 		// Start placement tracking for undo/redo
 		if (this.isPlacingRef) {
-			console.log('BrushTool: Setting isPlacingRef to true');
 			this.isPlacingRef.current = true;
 		}
 		
 		// Make sure placement changes are initialized
 		if (this.placementChangesRef) {
-			console.log('BrushTool: Ensuring placementChangesRef is initialized');
 			this.placementChangesRef.current = { 
 				terrain: { added: {}, removed: {} }, 
 				environment: { added: [], removed: [] } 
@@ -498,7 +484,6 @@ class BrushTool extends BaseTool {
 			if (this.isPlacing && this.lastPosition) {
 				// Check if left mouse button is still pressed (as a safety measure)
 				if (event.buttons !== undefined && (event.buttons & 1) === 0) {
-					console.log('BrushTool: Left mouse button no longer pressed during move, stopping placement');
 					this.isPlacing = false;
 					this.handleMouseUp(event, cursorPosition, 0);
 					return;
@@ -582,63 +567,44 @@ class BrushTool extends BaseTool {
 
 		// Only proceed with spatial hash update if blocks were added or removed
 		if ((addedCount > 0 || removedCount > 0) && this.terrainBuilderRef && this.terrainBuilderRef.current) {
-			console.log(`BrushTool: Incrementally updating spatial hash for ${addedCount + removedCount} blocks`);
 			
-			try {
-				// Prepare optimized data structures for spatial hash update
-				const addedBlocks = addedCount > 0 ? Array.from(this.addedPositions).map(posKey => {
-					const [x, y, z] = posKey.split(',').map(Number);
-					const blockId = this.terrainRef.current[posKey];
-					return { id: blockId, position: [x, y, z] };
-				}) : [];
-				
-				const removedBlocks = removedCount > 0 ? Array.from(this.removedPositions).map(posKey => {
-					const [x, y, z] = posKey.split(',').map(Number);
-					return { id: 0, position: [x, y, z] };
-				}) : [];
-				
-				// Define options for spatial hash update
-				const updateOptions = { 
-					force: true,
-					skipIfBusy: false, // Ensure this update happens even if another update is in progress
-					silent: false      // Log the update for debugging
-				};
-				
-				// Use the most efficient update method available
-				if (typeof this.terrainBuilderRef.current.updateSpatialHashForBlocks === 'function') {
-					console.log('BrushTool: Using updateSpatialHashForBlocks for incremental update');
-					this.terrainBuilderRef.current.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
-				}
-				// Fallback to local reference if available
-				else if (typeof this.updateSpatialHashForBlocks === 'function') {
-					console.log('BrushTool: Using this.updateSpatialHashForBlocks for incremental update');
-					this.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
-				}
-				// Last resort - use full rebuild if incremental update not available
-				else if (typeof this.terrainBuilderRef.current.forceRebuildSpatialHash === 'function') {
-					console.log('BrushTool: Falling back to forceRebuildSpatialHash - may cause lag');
-					this.terrainBuilderRef.current.forceRebuildSpatialHash({
-						showLoadingScreen: false,
-						force: true
-					});
-				} else {
-					console.warn('BrushTool: No spatial hash update method found');
-				}
-			} catch (err) {
-				console.error('BrushTool: Error in spatial hash update:', err);
-				// Try fallback method if first method fails
-				try {
-					if (typeof this.terrainBuilderRef.current.forceRebuildSpatialHash === 'function') {
-						console.log('BrushTool: Falling back to forceRebuildSpatialHash after error');
-						this.terrainBuilderRef.current.forceRebuildSpatialHash({
-							showLoadingScreen: false,
-							force: true
-						});
-					}
-				} catch (fallbackErr) {
-					console.error('BrushTool: Fallback spatial hash update also failed:', fallbackErr);
-				}
+			// Prepare optimized data structures for spatial hash update
+			const addedBlocks = addedCount > 0 ? Array.from(this.addedPositions).map(posKey => {
+				const [x, y, z] = posKey.split(',').map(Number);
+				const blockId = this.terrainRef.current[posKey];
+				return { id: blockId, position: [x, y, z] };
+			}) : [];
+			
+			const removedBlocks = removedCount > 0 ? Array.from(this.removedPositions).map(posKey => {
+				const [x, y, z] = posKey.split(',').map(Number);
+				return { id: 0, position: [x, y, z] };
+			}) : [];
+			
+			// Define options for spatial hash update
+			const updateOptions = { 
+				force: true,
+				skipIfBusy: false, // Ensure this update happens even if another update is in progress
+				silent: false      // Log the update for debugging
+			};
+			
+			// Use the most efficient update method available
+			if (typeof this.terrainBuilderRef.current.updateSpatialHashForBlocks === 'function') {
+				this.terrainBuilderRef.current.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
 			}
+			// Fallback to local reference if available
+			else if (typeof this.updateSpatialHashForBlocks === 'function') {
+				this.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
+			}
+			// Last resort - use full rebuild if incremental update not available
+			else if (typeof this.terrainBuilderRef.current.forceRebuildSpatialHash === 'function') {
+				this.terrainBuilderRef.current.forceRebuildSpatialHash({
+					showLoadingScreen: false,
+					force: true
+				});
+			} else {
+				console.warn('BrushTool: No spatial hash update method found');
+			}
+	
 		}
 
 		// Process any pending chunk updates with a small delay to reduce lag
@@ -651,6 +617,40 @@ class BrushTool extends BaseTool {
 		// Finish placement and notify the undo/redo manager
 		if (this.isPlacingRef) {
 			this.isPlacingRef.current = false;
+		}
+
+		// Save changes to undo stack if there are any changes
+		if (this.placementChangesRef?.current) {
+			const changes = this.placementChangesRef.current;
+			
+			// Check if we have changes to save
+			const hasChanges = 
+				Object.keys(changes.terrain.added || {}).length > 0 || 
+				Object.keys(changes.terrain.removed || {}).length > 0 ||
+				(changes.environment.added || []).length > 0 ||
+				(changes.environment.removed || []).length > 0;
+				
+			if (hasChanges) {
+				
+				// Try using direct undoRedoManager reference
+				if (this.undoRedoManager?.current?.saveUndo) {
+					this.undoRedoManager.current.saveUndo(changes);
+				}
+				else if (this.terrainBuilderRef?.current?.undoRedoManager?.current?.saveUndo) {
+					this.terrainBuilderRef.current.undoRedoManager.current.saveUndo(changes);
+				}
+				else {
+					console.warn('BrushTool: No undoRedoManager available, changes won\'t be tracked for undo/redo');
+				}
+				
+				// Reset placement changes after saving
+				this.placementChangesRef.current = { 
+					terrain: { added: {}, removed: {} }, 
+					environment: { added: [], removed: [] } 
+				};
+			} else {
+				console.warn('BrushTool: No changes to save');
+			}
 		}
 
 		// Clear tracking variables

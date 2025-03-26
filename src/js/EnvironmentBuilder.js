@@ -67,6 +67,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     /// state for total environment objects
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
 
+    
     // Convert class methods to functions
     const loadModel = async (modelToLoadUrl) => {
         if (!modelToLoadUrl) {
@@ -705,7 +706,11 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             terrain: { added: {}, removed: {} }, // no terrain changes
             environment: { added: addedObjects, removed: [] },
         };
-        undoRedoManager.saveUndo(changes);
+        if (undoRedoManager?.current?.saveUndo) {
+            undoRedoManager.current.saveUndo(changes);
+        } else {
+            console.warn("EnvironmentBuilder: No undoRedoManager available, changes won't be tracked for undo/redo");
+        }
 
         // Save to DB, update UI counts
         updateLocalStorage();
@@ -903,7 +908,11 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [removedObject] },
             };
-            undoRedoManager.saveUndo(changes);
+            if (undoRedoManager?.current?.saveUndo) {
+                undoRedoManager.current.saveUndo(changes);
+            } else {
+                console.warn("EnvironmentBuilder: No undoRedoManager available, removal won't be tracked for undo/redo");
+            }
         }
 
         // Always update storage

@@ -65,12 +65,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Spatial hash tracking
 	const spatialHashUpdateQueuedRef = useRef(false);
-	const spatialHashUpdateThrottleRef = useRef(0);
 	const spatialHashLastUpdateRef = useRef(0);
 	const disableSpatialHashUpdatesRef = useRef(false); // Flag to completely disable spatial hash updates
 	const deferSpatialHashUpdatesRef = useRef(false); // Flag to defer spatial hash updates during loading
 	const pendingSpatialHashUpdatesRef = useRef({ added: [], removed: [] }); // Store deferred updates
-	const scheduleSpatialHashUpdateRef = useRef(false); // Flag to schedule a spatial hash update
 	const firstLoadCompletedRef = useRef(false); // Flag to track if the first load is complete
 	
 	// Camera ref for frustum culling
@@ -83,7 +81,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const pendingSaveRef = useRef(false);
 	const lastSaveTimeRef = useRef(Date.now()); // Initialize with current time to prevent immediate save on load
 	const saveThrottleTime = 2000; // Min 2 seconds between saves
-	const pendingChangesRef = useRef({ added: {}, removed: {} });
+	const pendingChangesRef = useRef({
+		terrain: {
+			added: {},
+			removed: {}
+		},
+		environment: {
+			added: [],
+			removed: []
+		}
+	});
 	const initialSaveCompleteRef = useRef(false);
 	const autoSaveIntervalRef = useRef(null);
 	const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
@@ -134,10 +141,26 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const currentUrl = window.location.href;
 		
 		const handleBeforeUnload = (event) => {
-			// If we have pending changes, save immediately and show warning
-			if (Object.keys(pendingChangesRef.current.added).length > 0 || 
-				Object.keys(pendingChangesRef.current.removed).length > 0) {
+			// Skip save if database is being cleared
+			if (window.IS_DATABASE_CLEARING) {
+				console.log("Database is being cleared, skipping unsaved changes check");
+				return;
+			}
 
+			// Skip if pendingChangesRef or its current property is null/undefined
+			if (!pendingChangesRef || !pendingChangesRef.current) {
+				console.log("No pending changes ref available");
+				return;
+			}
+			
+			// Ensure we have properly structured changes before checking
+			const hasTerrainChanges = pendingChangesRef.current.terrain && (
+				Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0 || 
+				Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0
+			);
+			
+			// If we have pending changes, save immediately and show warning
+			if (hasTerrainChanges) {
 				localStorage.setItem('reload_attempted', 'true');
 				
 				// Standard way to show a confirmation dialog when closing the page
@@ -205,124 +228,106 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Track changes for incremental saves
 	const trackTerrainChanges = (added = {}, removed = {}) => {
-		Object.entries(added).forEach(([key, value]) => {
-			pendingChangesRef.current.added[key] = value;
+		// Skip if the database is being cleared
+		if (window.IS_DATABASE_CLEARING) {
+			console.log("Database is being cleared, skipping tracking changes");
+			return;
+		}
+
+		// Initialize the changes object if it doesn't exist
+		if (!pendingChangesRef.current) {
+			pendingChangesRef.current = {
+				terrain: {
+					added: {},
+						removed: {}
+				},
+				environment: {
+					added: [],
+					removed: []
+				}
+			};
+		}
+
+		// Ensure terrain object exists
+		if (!pendingChangesRef.current.terrain) {
+			pendingChangesRef.current.terrain = {
+				added: {},
+				removed: {}
+			};
+		}
+
+		// Ensure environment object exists
+		if (!pendingChangesRef.current.environment) {
+			pendingChangesRef.current.environment = {
+				added: [],
+				removed: []
+			};
+		}
+
+		// Safely handle potentially null or undefined values
+		const safeAdded = added || {};
+		const safeRemoved = removed || {};
+
+		// Track added blocks
+		Object.entries(safeAdded).forEach(([key, value]) => {
+			if (pendingChangesRef.current?.terrain?.added) {
+				pendingChangesRef.current.terrain.added[key] = value;
+			}
 			// If this position was previously in the removed list, remove it
-			if (pendingChangesRef.current.removed[key]) {
-				delete pendingChangesRef.current.removed[key];
+			if (pendingChangesRef.current?.terrain?.removed && 
+				pendingChangesRef.current.terrain.removed[key]) {
+				delete pendingChangesRef.current.terrain.removed[key];
 			}
 		});
 		
-		Object.entries(removed).forEach(([key, value]) => {
+		// Track removed blocks
+		Object.entries(safeRemoved).forEach(([key, value]) => {
 			// If this position was previously in the added list, just remove it
-			if (pendingChangesRef.current.added[key]) {
-				delete pendingChangesRef.current.added[key];
-			} else {
+			if (pendingChangesRef.current?.terrain?.added && 
+				pendingChangesRef.current.terrain.added[key]) {
+				delete pendingChangesRef.current.terrain.added[key];
+			} else if (pendingChangesRef.current?.terrain?.removed) {
 				// Otherwise track it as removed
-				pendingChangesRef.current.removed[key] = value;
+				pendingChangesRef.current.terrain.removed[key] = value;
 			}
 		});
 	};
 	
+	// Helper function to properly reset pendingChangesRef
+	const resetPendingChanges = () => {
+		pendingChangesRef.current = {
+			terrain: {
+				added: {},
+				removed: {}
+			},
+			environment: {
+				added: [],
+				removed: []
+			}
+		};
+	};
+
 	// Function to efficiently save terrain data
 	const efficientTerrainSave = () => {
-		// Skip if saving is already in progress
-		if (isSaving) {
-			console.log("Save already in progress, skipping new save request");
-			return Promise.resolve();
+		// Skip if database is being cleared
+		if (window.IS_DATABASE_CLEARING) {
+			console.log("Database is being cleared, skipping terrain save");
+			return;
 		}
-		
-		// Skip if we just loaded the terrain or if auto-save is disabled
-		if (isLoadingRef.current) {
-			console.log("Skipping save during loading");
-			return Promise.resolve();
+
+		// Skip if no changes to save
+		if (!pendingChangesRef.current || 
+			!pendingChangesRef.current.terrain ||
+			(Object.keys(pendingChangesRef.current.terrain.added || {}).length === 0 && 
+			 Object.keys(pendingChangesRef.current.terrain.removed || {}).length === 0)) {
+			return;
 		}
-		
-		// Skip if we're in the middle of a bulk operation
-		if (isBulkLoadingRef.current) {
-			console.log("Skipping save during bulk operation");
-			return Promise.resolve();
-		}
-		
-		// Skip if no changes or throttled
-		const now = Date.now();
-		const timeSinceLastSave = now - lastSaveTimeRef.current;
-		const hasChanges = Object.keys(pendingChangesRef.current.added).length > 0 || 
-						   Object.keys(pendingChangesRef.current.removed).length > 0;
-		
-		if (!hasChanges) {
-			console.log("No changes to save");
-			return Promise.resolve();
-		}
-		
-		// Throttle saves to avoid frequent database operations
-		if (timeSinceLastSave < saveThrottleTime && !isForceRef.current) {
-			console.log(`Save throttled (${timeSinceLastSave}ms < ${saveThrottleTime}ms)`);
-			
-			// If we haven't queued a save yet, queue one
-			if (!pendingSaveRef.current) {
-				const delayTime = saveThrottleTime - timeSinceLastSave + 100; // Add 100ms buffer
-				console.log(`Queueing save in ${delayTime}ms`);
-				
-				pendingSaveRef.current = true;
-				setTimeout(() => {
-					pendingSaveRef.current = false;
-					efficientTerrainSave();
-				}, delayTime);
-			}
-			
-			return Promise.resolve();
-		}
-		
-		// Set saving flag
-		setIsSaving(true);
-		console.log("Saving terrain data...");
-		
-		// Merge changes
-		const addedBlocksCount = Object.keys(pendingChangesRef.current.added).length;
-		const removedBlocksCount = Object.keys(pendingChangesRef.current.removed).length;
-		
-		// Update lastSaveTime immediately to prevent rapid subsequent calls
-		lastSaveTimeRef.current = now;
-		
-		// Clear the force flag
-		isForceRef.current = false;
-		
-		// Create a copy of the pending changes before clearing them
-		const changesSnapshot = {
-			added: { ...pendingChangesRef.current.added },
-			removed: { ...pendingChangesRef.current.removed }
-		};
-		
-		// Clear pending changes so new ones can be tracked while we save
-		pendingChangesRef.current = { added: {}, removed: {} };
-		
-		// Execute the save operation
-		return DatabaseManager.saveData(STORES.TERRAIN, "current", terrainRef.current)
-			.then(() => {
-				console.log(`Terrain saved successfully (added: ${addedBlocksCount}, removed: ${removedBlocksCount})`);
-				setIsSaving(false);
-				
-				// Mark initial save as complete
-				initialSaveCompleteRef.current = true;
-				
-				return { success: true, added: addedBlocksCount, removed: removedBlocksCount };
-			})
-			.catch((error) => {
-				console.error("Error saving terrain:", error);
-				
-				// Restore the changes that failed to save
-				for (const [key, value] of Object.entries(changesSnapshot.added)) {
-					pendingChangesRef.current.added[key] = value;
-				}
-				
-				for (const [key, value] of Object.entries(changesSnapshot.removed)) {
-					pendingChangesRef.current.removed[key] = value;
-				}
-				
-				setIsSaving(false);
-				return { success: false, error: error.message };
-			});
+
+		// Save changes to database
+		saveTerrainManually();
+
+		// Reset pending changes with proper structure
+		resetPendingChanges();
 	};
 	
 	// Initialize the incremental terrain save system
@@ -1239,6 +1244,41 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					// Update spatial grid with just these blocks
 					spatialGridManagerRef.current.updateBlocks(addedBlocks, []);
 				}
+
+				// Save changes to undo stack if there are any changes
+				if (placementChangesRef.current && 
+					(Object.keys(placementChangesRef.current.terrain.added || {}).length > 0 || 
+					 Object.keys(placementChangesRef.current.terrain.removed || {}).length > 0 ||
+					 (placementChangesRef.current.environment.added || []).length > 0 ||
+					 (placementChangesRef.current.environment.removed || []).length > 0)) {
+					console.log("Saving changes to undo stack:", placementChangesRef.current);
+					
+					// Debug undoRedoManager state in this context
+					console.log("handleMouseUp: undoRedoManager available:", !!undoRedoManager);
+					console.log("handleMouseUp: undoRedoManager is ref:", undoRedoManager && 'current' in undoRedoManager);
+					console.log("handleMouseUp: undoRedoManager.current exists:", undoRedoManager && !!undoRedoManager.current);
+					console.log("handleMouseUp: undoRedoManager.current has .saveUndo:", 
+					   undoRedoManager && undoRedoManager.current && typeof undoRedoManager.current.saveUndo === 'function');
+					
+					// Try direct undoRedoManager.current access
+					if (undoRedoManager?.current?.saveUndo) {
+						console.log("Using direct undoRedoManager.current.saveUndo");
+						undoRedoManager.current.saveUndo(placementChangesRef.current);
+					} 
+					// Final fallback - check if we can access it another way
+					else {
+						console.warn("No direct access to saveUndo function, trying fallbacks");
+						// Try to use any available reference as last resort
+						const tempRef = ref?.current;
+						if (tempRef && tempRef.undoRedoManager && tempRef.undoRedoManager.current && 
+							tempRef.undoRedoManager.current.saveUndo) {
+							console.log("Using ref.current.undoRedoManager fallback");
+							tempRef.undoRedoManager.current.saveUndo(placementChangesRef.current);
+						} else {
+							console.error("Could not find a way to save undo state, changes won't be tracked for undo/redo");
+						}
+					}
+				}
 				
 				// Reset the block counter
 				placedBlockCountRef.current = 0;
@@ -1485,6 +1525,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		efficientTerrainSave();
 		
 		console.log("Map cleared successfully");
+		resetPendingChanges();
 	};
 
 	// Function to initialize spatial hash once after map is loaded
@@ -1797,7 +1838,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			currentBlockTypeRef: currentBlockTypeRef,
 			previewPositionRef: previewPositionRef,
 			terrainBuilderRef: ref, // Add a reference to this component
-			undoRedoManager: undoRedoManager, // Pass the undoRedoManager to the tools
+			undoRedoManager: undoRedoManager, // Pass undoRedoManager directly without wrapping
 			placementChangesRef: placementChangesRef, // Add placement changes ref for tracking undo/redo
 			isPlacingRef: isPlacingRef, // Add placing state ref
 			modeRef, // Add mode reference for add/remove functionality
@@ -1871,17 +1912,28 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Add effect to update tools with undoRedoManager when it becomes available - at the top level of the component
 	useEffect(() => {
-		if (undoRedoManager && toolManagerRef.current) {
-			//console.log('TerrainBuilder: UndoRedoManager is now available, updating tools');
-
-			// Update WallTool with the undoRedoManager
-			const wallTool = toolManagerRef.current.tools["wall"];
-			if (wallTool) {
-			//	console.log('TerrainBuilder: Updating WallTool with undoRedoManager');
-				wallTool.undoRedoManager = undoRedoManager;
+		if (undoRedoManager?.current && toolManagerRef.current) {
+	
+			try {
+				Object.values(toolManagerRef.current.tools).forEach(tool => {
+					if (tool) {
+						// Pass the undoRedoManager ref to each tool
+						tool.undoRedoManager = undoRedoManager;
+						const toolGotManager = tool.undoRedoManager === undoRedoManager;
+					}
+				});
+			} catch (error) {
+				console.error('TerrainBuilder: Error updating tools with undoRedoManager:', error);
+			}
+		} else {
+			if (!undoRedoManager?.current) {
+				console.warn('TerrainBuilder: undoRedoManager.current is not available yet');
+			}
+			if (!toolManagerRef.current) {
+				console.warn('TerrainBuilder: toolManagerRef.current is not available yet');
 			}
 		}
-	}, [undoRedoManager]);
+	}, [undoRedoManager?.current]);
 
 	// Cleanup effect that cleans up meshes when component unmounts
 	useEffect(() => {
@@ -1939,8 +1991,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		console.log("Setting up texture atlas update listener");
 		
 		const handleTextureAtlasUpdate = (event) => {
-			console.log("TerrainBuilder: Texture atlas update detected", event.detail);
-			
 			// Force update all materials
 			scene.traverse((object) => {
 				if (object.isMesh && object.material) {
@@ -2040,6 +2090,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			terrainRef.current = {};
 			console.log("Terrain cleared");
 		}
+		resetPendingChanges();
 	};
 
 	// Helper function to get block key from coordinates
@@ -2379,12 +2430,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					
 					// Force mesh updates only for affected chunks to avoid unnecessary work
 					if (typeof forceChunkUpdate === 'function' && chunkKeys.length > 0) {
-						console.log(`TerrainBuilder: Refreshing ${chunkKeys.length} chunks after spatial hash rebuild`);
 						forceChunkUpdate(chunkKeys, { skipNeighbors: true });
 					} 
 					// Fall back to refreshing all chunks if needed
 					else if (typeof forceRefreshAllChunks === 'function') {
-						console.log("TerrainBuilder: Forcing refresh of all chunks after spatial hash rebuild");
 						forceRefreshAllChunks();
 					}
 					
@@ -2486,6 +2535,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 		// Track changes for undo/redo
 		trackTerrainChanges(addedBlocks, removedBlocks);
+
+		// Save changes to undo stack immediately
+		if (pendingChangesRef.current && 
+			(Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0 || 
+			 Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0)) {
+			console.log("Saving changes to undo stack:", pendingChangesRef.current);
+			if (undoRedoManager?.current?.saveUndo) {
+				undoRedoManager.current.saveUndo(pendingChangesRef.current);
+			}
+		}
 
 		// Update the terrain data structure
 		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {

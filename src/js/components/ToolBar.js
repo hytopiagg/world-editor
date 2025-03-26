@@ -390,7 +390,8 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 					const wallTool = terrainBuilderRef.current?.toolManagerRef?.current?.tools?.["wall"];
 					if (wallTool) {
 						wallTool.undoRedoManager = undoRedoManager;
-						console.log("ToolBar: Updated WallTool undoRedoManager reference");
+						console.log("ToolBar: Updated WallTool undoRedoManager reference",
+							undoRedoManager && 'current' in undoRedoManager ? "(is ref)" : "(is direct)");
 					}
 				}
 			}
@@ -494,7 +495,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 						
 						<Tooltip text="Undo (Ctrl+Z)">
 							<button
-								onClick={() => undoRedoManager.handleUndo()}
+								onClick={() => undoRedoManager?.current?.handleUndo()}
 								className={`control-button ${!canUndo ? 'disabled' : ''}`}
 								disabled={!canUndo}>
 								<FaUndo />
@@ -502,7 +503,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 						</Tooltip>
 						<Tooltip text="Redo (Ctrl+Y)">
 							<button
-								onClick={() => undoRedoManager.handleRedo()}
+								onClick={() => undoRedoManager?.current?.handleRedo()}
 								className={`control-button ${!canRedo ? 'disabled' : ''}`}
 								disabled={!canRedo}>
 								<FaRedo />

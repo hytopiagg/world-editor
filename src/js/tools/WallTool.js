@@ -35,6 +35,16 @@ class WallTool extends BaseTool {
 			// Add undoRedoManager reference
 			this.undoRedoManager = terrainBuilderProps.undoRedoManager;
 			console.log('WallTool: Got undoRedoManager reference:', !!this.undoRedoManager);
+			console.log('WallTool: undoRedoManager is ref:', this.undoRedoManager && 'current' in this.undoRedoManager);
+			console.log('WallTool: undoRedoManager.current exists:', this.undoRedoManager && !!this.undoRedoManager.current);
+			console.log('WallTool: undoRedoManager.current has saveUndo:', 
+				this.undoRedoManager && 
+				this.undoRedoManager.current && 
+				typeof this.undoRedoManager.current.saveUndo === 'function');
+
+			// Direct access to saveUndo function
+			this.saveUndoFunction = terrainBuilderProps.saveUndoFunction;
+			console.log('WallTool: Got saveUndoFunction:', !!this.saveUndoFunction);
 
 			// Add direct references to placement tracking
 			this.placementChangesRef = terrainBuilderProps.placementChangesRef;
@@ -161,72 +171,54 @@ class WallTool extends BaseTool {
 					return;
 				}
 
-				// Save undo state directly
-				console.log('WallTool: Saving undo state directly');
-				if (this.placementChangesRef) {
-					const changes = this.placementChangesRef.current;
-					
-					// Check if we have undoRedoManager and changes to save
-					const hasChanges = 
-						Object.keys(changes.terrain.added).length > 0 || 
-						Object.keys(changes.terrain.removed).length > 0;
-						
-					if (hasChanges) {
-						// Try using direct undoRedoManager reference first
-						if (this.undoRedoManager) {
-							console.log('WallTool: Calling saveUndo with direct undoRedoManager reference');
-							this.undoRedoManager.saveUndo(changes);
-						}
-						// Fall back to terrainBuilder reference if available
-						else if (this.terrainBuilderRef.current.undoRedoManager) {
-							console.log('WallTool: Calling saveUndo via terrainBuilderRef');
-							this.terrainBuilderRef.current.undoRedoManager.saveUndo(changes);
-						}
-						else {
-							console.warn('WallTool: No undoRedoManager available, changes won\'t be tracked for undo/redo');
-						}
-						
-						// Reset placement changes after saving
-						this.placementChangesRef.current = { 
-							terrain: { added: {}, removed: {} }, 
-							environment: { added: [], removed: [] } 
-						};
-					} else {
-						console.warn('WallTool: No changes to save');
-					}
-				} else {
-					console.warn('WallTool: placementChangesRef not available, changes won\'t be tracked for undo/redo');
-				}
-
-				// Reset the start position for a new wall
+				// Reset wall state
 				this.wallStartPosition = null;
 				this.removeWallPreview();
-				
-				// Disable placing
-				if (this.isPlacingRef) {
-					console.log('WallTool: Setting isPlacingRef to false (directly)');
-					this.isPlacingRef.current = false;
-				}
 			} else {
-				// Set start position for a new wall
-				console.log('Setting wall start position:', position);
-				this.wallStartPosition = position.clone();
+				// Set starting point
+				this.wallStartPosition = position;
+				this.updateWallPreview(this.wallStartPosition, position);
+			}
+		}
+	}
+
+	handleMouseUp(event, position, button) {
+		// Only process if we were actually placing blocks
+		if (this.isPlacingRef?.current) {
+			// Stop placing blocks
+			this.isPlacingRef.current = false;
+			
+			// Save changes to undo stack if there are any changes
+			if (this.placementChangesRef?.current) {
+				const changes = this.placementChangesRef.current;
 				
-				// Start tracking changes for undo/redo
-				if (this.placementChangesRef) {
-					console.log('WallTool: Initializing placementChangesRef for new wall (directly)');
+				// Check if we have undoRedoManager and changes to save
+				if (changes && 
+					(Object.keys(changes.terrain.added || {}).length > 0 || 
+					Object.keys(changes.terrain.removed || {}).length > 0)) {
+					
+					console.log('WallTool: Saving changes to undo stack:', changes);
+					
+					// Try using undoRedoManager reference
+					if (this.undoRedoManager?.current?.saveUndo) {
+						console.log('WallTool: Calling saveUndo with undoRedoManager.current');
+						this.undoRedoManager.current.saveUndo(changes);
+					}
+					else if (this.terrainBuilderRef?.current?.undoRedoManager?.current?.saveUndo) {
+						console.log('WallTool: Calling saveUndo with terrainBuilderRef fallback');
+						this.terrainBuilderRef.current.undoRedoManager.current.saveUndo(changes);
+					}
+					else {
+						console.warn('WallTool: No undoRedoManager available, changes won\'t be tracked for undo/redo');
+					}
+					
+					// Reset placement changes after saving
 					this.placementChangesRef.current = { 
 						terrain: { added: {}, removed: {} }, 
 						environment: { added: [], removed: [] } 
 					};
-					
-					// Start placement
-					if (this.isPlacingRef) {
-						console.log('WallTool: Setting isPlacingRef to true for new wall (directly)');
-						this.isPlacingRef.current = true;
-					}
 				} else {
-					console.warn('WallTool: placementChangesRef not available at wall start');
+					console.warn('WallTool: No changes to save');
 				}
 			}
 		}

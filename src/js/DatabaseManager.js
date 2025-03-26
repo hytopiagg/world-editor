@@ -71,15 +71,32 @@ export class DatabaseManager {
   }
 
   static async getData(storeName, key) {
-    const db = await this.getConnection();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(storeName, 'readonly');
-      const store = transaction.objectStore(storeName);
-      const request = store.get(key);
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-    });
+    try {
+      const db = await this.getConnection();
+      return new Promise((resolve, reject) => {
+        try {
+          const transaction = db.transaction(storeName, 'readonly');
+          const store = transaction.objectStore(storeName);
+          const request = store.get(key);
+          
+          request.onerror = (event) => {
+            console.error(`Error retrieving data from ${storeName} with key ${key}:`, event.target.error);
+            resolve(null); // Return null instead of rejecting
+          };
+          
+          request.onsuccess = () => {
+            // Always return a valid value even if result is undefined
+            resolve(request.result !== undefined ? request.result : null);
+          };
+        } catch (innerError) {
+          console.error(`Exception during read transaction for ${storeName}:`, innerError);
+          resolve(null); // Return null instead of rejecting
+        }
+      });
+    } catch (error) {
+      console.error(`Error accessing store ${storeName} for reading:`, error);
+      return null; // Return null instead of throwing
+    }
   }
 
   static async deleteData(storeName, key) {
@@ -105,15 +122,38 @@ export class DatabaseManager {
       }
 
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(storeName, 'readwrite');
-        const store = transaction.objectStore(storeName);
-        const request = store.clear();
-        
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
+        try {
+          const transaction = db.transaction(storeName, 'readwrite');
+          const store = transaction.objectStore(storeName);
+          const request = store.clear();
+          
+          request.onerror = (event) => {
+            console.error(`Error clearing store ${storeName}:`, event.target.error);
+            // Resolve anyway to continue with other stores
+            resolve();
+          };
+          
+          request.onsuccess = () => {
+            console.log(`Successfully cleared store: ${storeName}`);
+            resolve();
+          };
+          
+          // Add transaction error handler
+          transaction.onerror = (event) => {
+            console.error(`Transaction error clearing store ${storeName}:`, event.target.error);
+            // Resolve anyway to continue with other stores
+            resolve();
+          };
+        } catch (innerError) {
+          console.error(`Exception during transaction setup for ${storeName}:`, innerError);
+          // Resolve anyway to continue with other stores
+          resolve();
+        }
       });
     } catch (error) {
-      console.warn(`Error clearing store ${storeName}:`, error);
+      console.error(`Error accessing store ${storeName}:`, error);
+      // Return resolved promise to continue with other stores
+      return Promise.resolve();
     }
   }
 
@@ -125,16 +165,47 @@ export class DatabaseManager {
       return; // User cancelled the operation
     }
 
-    try {      
+    try {
+      console.log("Starting database clearing process...");
+      
+      // Set a global flag to indicate database clearing in progress
+      // This can be checked by beforeUnload handlers to avoid accessing cleared data
+      window.IS_DATABASE_CLEARING = true;
+      
+      let clearedStores = 0;
+      
       // Clear all stores sequentially
       for (const storeName of Object.values(STORES)) {
-        await this.clearStore(storeName);
+        try {
+          await this.clearStore(storeName);
+          clearedStores++;
+          console.log(`Cleared store ${storeName} (${clearedStores}/${Object.values(STORES).length})`);
+        } catch (storeError) {
+          console.error(`Failed to clear store ${storeName}, continuing with others:`, storeError);
+          // Continue with other stores regardless of individual failures
+        }
       }
-      // Only reload after all stores are cleared
-      window.location.reload();
+      
+      console.log(`Database clearing complete. Cleared ${clearedStores}/${Object.values(STORES).length} stores.`);
+      
+      // Remove any beforeunload handlers temporarily to prevent them from running
+      const existingBeforeUnloadHandler = window.onbeforeunload;
+      window.onbeforeunload = null;
+      
+      // Wait a short delay before reloading to ensure any pending operations complete
+      setTimeout(() => {
+        try {
+          // Reload the page to start fresh
+          window.location.href = window.location.href;
+        } catch (reloadError) {
+          console.error('Error during reload:', reloadError);
+          alert('Database cleared, but there was an error refreshing the page. Please refresh manually.');
+        }
+      }, 100);
     } catch (error) {
-      console.error('Error clearing database:', error);
-      throw error;
+      window.IS_DATABASE_CLEARING = false; // Reset the flag
+      console.error('Unhandled error during database clearing:', error);
+      alert('There was an error clearing the database. Please check the console for details.');
     }
   }
 }
