@@ -3,7 +3,6 @@
 
 import * as THREE from 'three';
 import BlockTypeRegistry from '../blocks/BlockTypeRegistry';
-import BlockTextureAtlas from '../blocks/BlockTextureAtlas';
 import ChunkManager from './ChunkManager';
 import { CHUNK_SIZE } from './ChunkConstants';
 

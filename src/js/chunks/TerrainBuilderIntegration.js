@@ -240,7 +240,6 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
 	if (Object.keys(addedBlocks).length > 0) {
 		const firstBlockKey = Object.keys(addedBlocks)[0];
 		const [x, y, z] = firstBlockKey.split(',').map(Number);
-		const chunkKey = Math.floor(x / 16) * 16 + ',' + Math.floor(y / 16) * 16 + ',' + Math.floor(z / 16) * 16;
 		//console.log(`DEBUG: Adding block at position ${firstBlockKey}, chunk key: ${chunkKey}`);
 		//console.log(`DEBUG: Chunk system initialized: ${chunkSystem._initialized}`);
 		//console.log(`DEBUG: Chunk exists: ${chunkSystem._chunkManager._chunks.has(chunkKey)}`);
@@ -424,7 +423,6 @@ export const clearChunks = () => {
 export const isChunkVisible = (chunkKey) => {
 	if (!chunkSystem) return false;
 
-	const [x, y, z] = chunkKey.split(',').map(Number);
 	const chunk = chunkSystem._chunkManager._chunks.get(chunkKey);
 
 	return chunk ? chunk.visible : false;

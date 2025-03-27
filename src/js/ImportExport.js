@@ -2,7 +2,6 @@ import { DatabaseManager, STORES } from "./DatabaseManager";
 import { getBlockTypes, processCustomBlock } from "./TerrainBuilder";
 import { environmentModels } from "./EnvironmentBuilder";
 import * as THREE from "three";
-import JSZip from "jszip";
 import { version } from "./Constants";
 
 

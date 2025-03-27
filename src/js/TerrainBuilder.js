@@ -7,29 +7,26 @@ import { cameraManager } from "./Camera";
 import { DatabaseManager, STORES } from "./DatabaseManager";
 // Replace old texture atlas and chunk imports with new ones
 import { initChunkSystem, updateTerrainChunks, updateTerrainBlocks as importedUpdateTerrainBlocks, 
-         processChunkRenderQueue, getChunkSystem, setChunkViewDistance, 
-         setChunkViewDistanceEnabled, getBlockId, hasBlock, clearChunks, isChunkVisible,
+         processChunkRenderQueue, getChunkSystem, 
+         setChunkViewDistanceEnabled, clearChunks,
          updateChunkSystemCamera, rebuildTextureAtlas } from "./chunks/TerrainBuilderIntegration";
 import { loadingManager } from './LoadingManager';
-import { PERFORMANCE_SETTINGS, 
-	    meshesNeedsRefresh, toggleInstancing, getInstancingEnabled } from "./constants/performance";
+import {meshesNeedsRefresh } from "./constants/performance";
+import BlockTextureAtlas from './blocks/BlockTextureAtlas';
 
 import {CHUNK_SIZE, 
 		 getViewDistance, MAX_SELECTION_DISTANCE,
-		THRESHOLD_FOR_PLACING, CHUNK_BLOCK_CAPACITY,
-        getGreedyMeshingEnabled, setGreedyMeshingEnabled } from "./constants/terrain";
+		THRESHOLD_FOR_PLACING } from "./constants/terrain";
 
 // Import tools
 import { ToolManager, WallTool, BrushTool, GroundTool, PipeTool } from "./tools";
 
 // Import chunk utility functions
 import { SpatialGridManager } from "./managers/SpatialGridManager";
-import { blockTypes, processCustomBlock, removeCustomBlock, getBlockTypes, getCustomBlocks } from "./managers/BlockTypesManager";
-import BlockTextureAtlas from './blocks/BlockTextureAtlas';
+import { processCustomBlock } from "./managers/BlockTypesManager";
 import BlockTypeRegistry from './blocks/BlockTypeRegistry';
-// At the top of the file, add this import
-import { SpatialHashGrid } from './chunks/SpatialHashGrid';
 
+import { Vector3, Box3, Sphere, Raycaster, Matrix4, Quaternion, Euler, MeshBasicMaterial, Color } from 'three';
 
 // Function to optimize rendering performance
 const optimizeRenderer = (gl) => {
@@ -56,12 +53,6 @@ const optimizeRenderer = (gl) => {
 };
 
 function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType, undoRedoManager, mode, setDebugInfo, sendTotalBlocks, axisLockEnabled, gridSize, cameraReset, cameraAngle, placementSize, setPageIsLoaded, customBlocks, environmentBuilderRef}, ref) {
-	// Initialize refs, state, and other variables
-	const [isSaving, setIsSaving] = useState(false);
-	
-	// Add loading state tracking
-	const isLoadingRef = useRef(false);
-	const isForceRef = useRef(false);
 	
 	// Spatial hash tracking
 	const spatialHashUpdateQueuedRef = useRef(false);
@@ -75,12 +66,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const cameraRef = useRef(null);
 	
 	// Define chunk size constant for spatial calculations
-	const CHUNK_SIZE = 16; // Size of each chunk in blocks
-	
-	// Efficient database save mechanism
-	const pendingSaveRef = useRef(false);
 	const lastSaveTimeRef = useRef(Date.now()); // Initialize with current time to prevent immediate save on load
-	const saveThrottleTime = 2000; // Min 2 seconds between saves
 	const pendingChangesRef = useRef({
 		terrain: {
 			added: {},
@@ -368,12 +354,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const spatialGridManagerRef = useRef(new SpatialGridManager(loadingManager));
 	const orbitControlsRef = useRef(null);
 	const frustumRef = useRef(new THREE.Frustum());
-	const frustumMatrixRef = useRef(new THREE.Matrix4());
 	const meshesInitializedRef = useRef(false);
 	const cameraMoving = useRef(false);
 	const useSpatialHashRef = useRef(true);
 	const totalBlocksRef = useRef(0);
-	const cameraMovementTimeoutRef = useRef(null);
 
 	// Scene setup
 	const { scene, camera: threeCamera, raycaster: threeRaycaster, pointer, gl } = useThree();
@@ -410,19 +394,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		camera.updateMatrixWorld(true);
 		camera.updateProjectionMatrix();
 
-		// Check if the camera is actually set in the chunk system
-		const cameraWasSet = !!chunkSystem._scene.camera;
-		
 		// Update the camera in the chunk system
 		updateChunkSystemCamera(camera);
   
-		if (shouldLog) {
-			console.log("[updateChunkSystemWithCamera] Camera updated:",
-				"Was set:", cameraWasSet,
-				"New camera:", camera.position.toArray().map(v => v.toFixed(2)),
-				"Chunk system camera:", chunkSystem._scene.camera?.position?.toArray().map(v => v.toFixed(2)) || "null");
-		}
-		
 		// Make sure view distance settings are correct
 		const { getViewDistance } = require('./constants/terrain');
 		const currentViewDistance = getViewDistance();
@@ -513,24 +487,19 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// Animation tracking
 	const mouseMoveAnimationRef = useRef(null);
-	const cameraAnimationRef = useRef(null);
 
 	// Refs needed for real-time updates that functions depend on
 	const isPlacingRef = useRef(false);
 	const currentPlacingYRef = useRef(0);
 	const previewPositionRef = useRef(new THREE.Vector3());
 	const lockedAxisRef = useRef(null);
-	const blockCountsRef = useRef({});
-	const previewMeshRef = useRef(null);
 	const selectionDistanceRef = useRef(MAX_SELECTION_DISTANCE/2);
 	const axisLockEnabledRef = useRef(axisLockEnabled);
 	const currentBlockTypeRef = useRef(currentBlockType);
 	const isFirstBlockRef = useRef(true);
 	const modeRef = useRef(mode);
-	const lastPreviewPositionRef = useRef(new THREE.Vector3());
 	const placementSizeRef = useRef(placementSize);
 	const previewIsGroundPlaneRef = useRef(false);
-	const isBulkLoadingRef = useRef(false);
 	const placedBlockCountRef = useRef(0); // Track number of blocks placed during a mouse down/up cycle
 
 	// state for preview position to force re-render of preview cube when it changes
@@ -674,56 +643,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 	};
 	
-	// Helper function to get view distance in case import isn't working
-	const getViewDistanceLocal = () => {
-		// Try to use the imported function first
-		if (typeof getViewDistance === 'function') {
-			return getViewDistance();
-		}
-		
-		// Fallback to a default value
-		return 64; // Default view distance
-	};
-
-	
-	// Helper functions for testing custom textures from the console
-	const setupTestFunctions = (terrainBuilderInstance) => {
-		if (typeof window === 'undefined') return;
-
-		// Create a test texture and place it in the world
-		window.createAndPlaceTestBlock = async (blockId = 100, x = 0, y = 0, z = 0) => {
-			console.log(`Creating test block (ID: ${blockId}) at position (${x}, ${y}, ${z})...`);
-
-			try {
-				// First create the test texture if needed
-				if (window.testCustomTexture) {
-					await window.testCustomTexture(blockId);
-				} else if (window.BlockTypeRegistry) {
-					await window.BlockTypeRegistry.instance.registerTestCustomTexture(blockId);
-				} else {
-					console.error("BlockTypeRegistry not found in global scope");
-					return false;
-				}
-
-				// Then place the block
-				if (terrainBuilderInstance && terrainBuilderInstance.current) {
-					terrainBuilderInstance.current.placeBlockAt(x, y, z, blockId);
-					console.log(`Test block placed successfully at (${x}, ${y}, ${z})!`);
-					return true;
-				} else {
-					console.error("TerrainBuilder instance not available");
-					return false;
-				}
-			} catch (error) {
-				console.error("Error creating or placing test block:", error);
-				return false;
-			}
-		};
-
-		console.log("Test functions initialized. Use window.createAndPlaceTestBlock() to create and place a test block.");
-	};
-
-
 
 	// Ultra-optimized direct block update path for drag operations
 	const fastUpdateBlock = (position, blockId) => {
@@ -859,7 +778,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	};
 
 	const handleBlockPlacement = () => {
-		const startTime = performance.now();
 		
 		// Safety check: Don't do anything if a tool is active - this avoids interfering with tool functionality
 		if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
@@ -896,8 +814,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		} else {
 			// Standard block placement
 			if (modeRef.current === "add") {
-				// Addition logic
-				const placeStartTime = performance.now();
 				
 				// Get all positions to place blocks at based on placement size
 				const positions = getPlacementPositions(previewPositionRef.current, placementSizeRef.current);
@@ -922,13 +838,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}
 				});
 
-				// Update terrain with new blocks
-				const preUpdateTime = performance.now();
-				//console.log(`Performance: Block placement preparation took ${preUpdateTime - placeStartTime}ms`);
-		//		console.log(`Added ${Object.keys(addedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.added).length} for undo/redo`);
-				
 				importedUpdateTerrainBlocks(addedBlocks, {});
-				
 				
 				// Explicitly update the spatial hash for collisions with force option
 				const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
@@ -944,14 +854,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					updateSpatialHashForBlocks(addedBlocksArray, [], { force: true });
 				}
 				
-				const postUpdateTime = performance.now();
-				//console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
-
 				// Increment the placed block counter
 				placedBlockCountRef.current += Object.keys(addedBlocks).length;
 			} else if (modeRef.current === "remove") {
 				// Removal logic
-				const removeStartTime = performance.now();
 				
 				// Get all positions to remove blocks at based on placement size
 				const positions = getPlacementPositions(previewPositionRef.current, placementSizeRef.current);
@@ -973,11 +879,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}
 				});
 				
-				// Update terrain with removed blocks
-				const preUpdateTime = performance.now();
-				//console.log(`Performance: Block removal preparation took ${preUpdateTime - removeStartTime}ms`);
-				//console.log(`Removed ${Object.keys(removedBlocks).length} blocks, tracked ${Object.keys(placementChangesRef.current.terrain.removed).length} for undo/redo`);
-				
 				importedUpdateTerrainBlocks({}, removedBlocks);
 				
 				// Explicitly update the spatial hash for collisions with force option
@@ -993,10 +894,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				if (removedBlocksArray.length > 0) {
 					updateSpatialHashForBlocks([], removedBlocksArray, { force: true });
 				}
-				
-				const postUpdateTime = performance.now();
-				//console.log(`Performance: updateTerrainBlocks took ${postUpdateTime - preUpdateTime}ms`);
-
+			
 				// Increment the placed block counter (even for removals)
 				placedBlockCountRef.current += Object.keys(removedBlocks).length;
 			}
@@ -1004,9 +902,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Set flag to avoid placing at the same position again
 			isFirstBlockRef.current = false;
 		}
-		
-		const endTime = performance.now();
-		//console.log(`Performance: handleBlockPlacement total time ${endTime - startTime}ms`);
 	};
 
 	/// Raycast and Grid Intersection Functions ///
@@ -1077,9 +972,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		if (!canvasRectRef.current) {
 			canvasRectRef.current = gl.domElement.getBoundingClientRect();
 		}
-
-		const rect = canvasRectRef.current;
-		
+	
 		// Get intersection for preview
 		const blockIntersection = getRaycastIntersection();
 		
@@ -1253,16 +1146,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					 (placementChangesRef.current.environment.removed || []).length > 0)) {
 					console.log("Saving changes to undo stack:", placementChangesRef.current);
 					
-					// Debug undoRedoManager state in this context
-					console.log("handleMouseUp: undoRedoManager available:", !!undoRedoManager);
-					console.log("handleMouseUp: undoRedoManager is ref:", undoRedoManager && 'current' in undoRedoManager);
-					console.log("handleMouseUp: undoRedoManager.current exists:", undoRedoManager && !!undoRedoManager.current);
-					console.log("handleMouseUp: undoRedoManager.current has .saveUndo:", 
-					   undoRedoManager && undoRedoManager.current && typeof undoRedoManager.current.saveUndo === 'function');
-					
 					// Try direct undoRedoManager.current access
 					if (undoRedoManager?.current?.saveUndo) {
-						console.log("Using direct undoRedoManager.current.saveUndo");
 						undoRedoManager.current.saveUndo(placementChangesRef.current);
 					} 
 					// Final fallback - check if we can access it another way
@@ -1272,7 +1157,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						const tempRef = ref?.current;
 						if (tempRef && tempRef.undoRedoManager && tempRef.undoRedoManager.current && 
 							tempRef.undoRedoManager.current.saveUndo) {
-							console.log("Using ref.current.undoRedoManager fallback");
 							tempRef.undoRedoManager.current.saveUndo(placementChangesRef.current);
 						} else {
 							console.error("Could not find a way to save undo state, changes won't be tracked for undo/redo");
@@ -1306,60 +1190,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			case "single":
 				break;
 
-			case "cross":
-				positions.push({ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z }, { x: centerPos.x - 1, y: centerPos.y, z: centerPos.z }, { x: centerPos.x, y: centerPos.y, z: centerPos.z + 1 }, { x: centerPos.x, y: centerPos.y, z: centerPos.z - 1 });
-				break;
-
-			case "diamond":
-				// 13-block diamond pattern
-				positions.push(
-					// Inner cardinal positions (4 blocks)
-					{ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x - 1, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z + 1 },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z - 1 },
-					// Middle diagonal positions (4 blocks)
-					{ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z + 1 },
-					{ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z - 1 },
-					{ x: centerPos.x - 1, y: centerPos.y, z: centerPos.z + 1 },
-					{ x: centerPos.x - 1, y: centerPos.y, z: centerPos.z - 1 },
-					// Outer cardinal positions (4 blocks)
-					{ x: centerPos.x + 2, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x - 2, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z + 2 },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z - 2 }
-				);
-				break;
-
-			case "square9":
-				for (let x = -1; x <= 1; x++) {
-					for (let z = -1; z <= 1; z++) {
-						if (x !== 0 || z !== 0) {
-							// Skip center as it's already added
-							positions.push({
-								x: centerPos.x + x,
-								y: centerPos.y,
-								z: centerPos.z + z,
-							});
-						}
-					}
-				}
-				break;
-
-			case "square16":
-				for (let x = -2; x <= 1; x++) {
-					for (let z = -2; z <= 1; z++) {
-						if (x !== 0 || z !== 0) {
-							// Skip center as it's already added
-							positions.push({
-								x: centerPos.x + x,
-								y: centerPos.y,
-								z: centerPos.z + z,
-							});
-						}
-					}
-				}
-				break;
 		}
 
 		return positions;
@@ -2574,42 +2404,81 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	
 	// update the terrain blocks for added and removed blocks
 	const updateTerrainBlocks = (addedBlocks, removedBlocks, options = {}) => {
-		if (!addedBlocks && !removedBlocks) {
-			return;
-		}
-
+		if (!addedBlocks && !removedBlocks) return;
+		
 		// Validate input
-		if (typeof addedBlocks !== 'object') addedBlocks = {};
-		if (typeof removedBlocks !== 'object') removedBlocks = {};
+		addedBlocks = addedBlocks || {};
+		removedBlocks = removedBlocks || {};
 
 		// Skip if no blocks to update
-		if (Object.keys(addedBlocks).length === 0 && Object.keys(removedBlocks).length === 0) {
-			return;
-		}
+		if (Object.keys(addedBlocks).length === 0 && Object.keys(removedBlocks).length === 0) return;
 
 		console.time('updateTerrainBlocks');
-		console.log(`Updating terrain with ${Object.keys(addedBlocks).length} added blocks and ${Object.keys(removedBlocks).length} removed blocks`);
 
 		// Track changes for undo/redo
 		trackTerrainChanges(addedBlocks, removedBlocks);
+
+		// Handle custom blocks with data URIs - check all blocks, not just those with 'custom' source
+		// This makes sure any block that might be custom is handled properly
+		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
+		  // Check if this is a custom block ID (numeric)
+		  if (!isNaN(parseInt(blockId))) {
+			// Search strategy 1: Check customBlocks prop for texture data
+			let dataUri = null;
+			
+			if (customBlocks && customBlocks[blockId]) {
+			  dataUri = customBlocks[blockId].dataUri;
+			}
+			
+			// Search strategy 2: Check localStorage even if not in customBlocks
+			if (!dataUri && typeof localStorage !== 'undefined') {
+			  // Try multiple localStorage keys to find any stored texture
+			  const storageKeys = [
+				`block-texture-${blockId}`,
+				`custom-block-${blockId}`,
+				`datauri-${blockId}`
+			  ];
+			  
+			  for (const key of storageKeys) {
+				const storedUri = localStorage.getItem(key);
+				if (storedUri && storedUri.startsWith('data:image/')) {
+				  dataUri = storedUri;
+				  break;
+				}
+			  }
+			}
+			
+			// If we found a data URI from any source, apply it
+			if (dataUri && dataUri.startsWith('data:image/')) {
+			  // Ensure it's stored in localStorage for persistence
+			  localStorage.setItem(`block-texture-${blockId}`, dataUri);
+			  
+			  // Use the imported BlockTextureAtlas directly
+			  if (BlockTextureAtlas && BlockTextureAtlas.instance) {
+				BlockTextureAtlas.instance.applyDataUriToAllFaces(blockId, dataUri)
+				  .catch(err => console.error(`Error applying data URI to block ${blockId}:`, err));
+			  }
+			}
+		  }
+		});
 
 		// Save changes to undo stack immediately
 		if (pendingChangesRef.current && 
 			(Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0 || 
 			 Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0)) {
-			console.log("Saving changes to undo stack:", pendingChangesRef.current);
-			if (undoRedoManager?.current?.saveUndo) {
-				undoRedoManager.current.saveUndo(pendingChangesRef.current);
-			}
+		  console.log("Saving changes to undo stack:", pendingChangesRef.current);
+		  if (undoRedoManager?.current?.saveUndo) {
+			undoRedoManager.current.saveUndo(pendingChangesRef.current);
+		  }
 		}
 
 		// Update the terrain data structure
 		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-			terrainRef.current[posKey] = blockId;
+		  terrainRef.current[posKey] = blockId;
 		});
 			
 		Object.entries(removedBlocks).forEach(([posKey]) => {
-			delete terrainRef.current[posKey];
+		  delete terrainRef.current[posKey];
 		});
 			
 		// Update total block count
@@ -2617,40 +2486,36 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Send total blocks count back to parent component
 		if (sendTotalBlocks) {
-			sendTotalBlocks(totalBlocksRef.current);
+		  sendTotalBlocks(totalBlocksRef.current);
 		}
 		
 		// Update debug info
 		updateDebugInfo();
 
-		// Delegate to the optimized imported function for chunk and spatial hash updates
+		// Delegate to the optimized imported function for chunk updates
 		importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
 		
 		// Only update spatial hash if not explicitly skipped
-		// This allows BrushTool to skip spatial hash updates during dragging
 		if (!options.skipSpatialHash) {
-			// Convert blocks to the format expected by updateSpatialHashForBlocks
-			const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				return {
-					id: blockId,
-					position: [x, y, z]
-				};
-			});
+		  // Convert blocks to the format expected by updateSpatialHashForBlocks
+		  const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+			  id: blockId,
+			  position: [x, y, z]
+			};
+		  });
 
-			const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				return {
-					id: 0, // Use 0 for removed blocks
-					position: [x, y, z]
-				};
-			});
-			
-			// Explicitly update the spatial hash for collisions with force option
-			// This ensures that the spatial hash is updated immediately, not deferred
-			updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, { force: true });
-		} else {
-			console.log('Skipping spatial hash update as requested');
+		  const removedBlocksArray = Object.entries(removedBlocks).map(([posKey]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+			  id: 0, // Use 0 for removed blocks
+			  position: [x, y, z]
+			};
+		  });
+		  
+		  // Update the spatial hash for collisions with force option
+		  updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, { force: true });
 		}
 		
 		console.timeEnd('updateTerrainBlocks');
@@ -2661,28 +2526,66 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const updateTerrainForUndoRedo = (addedBlocks, removedBlocks, source = "undo/redo") => {
 		console.time(`updateTerrainForUndoRedo-${source}`);
 		
-		// Skip if no blocks to update
-		if ((!addedBlocks || Object.keys(addedBlocks).length === 0) && 
-			(!removedBlocks || Object.keys(removedBlocks).length === 0)) {
-			console.log(`No blocks to update for ${source}`);
-			console.timeEnd(`updateTerrainForUndoRedo-${source}`);
-			return;
-		}
-		
-		// Log operation
-		console.log(`${source} operation: Adding ${Object.keys(addedBlocks || {}).length} blocks, removing ${Object.keys(removedBlocks || {}).length} blocks`);
-		
 		// Validate input
 		addedBlocks = addedBlocks || {};
 		removedBlocks = removedBlocks || {};
+		
+		// Skip if no blocks to update
+		if (Object.keys(addedBlocks).length === 0 && Object.keys(removedBlocks).length === 0) {
+		  console.timeEnd(`updateTerrainForUndoRedo-${source}`);
+		  return;
+		}
+
+		// Handle custom blocks with data URIs - check all blocks
+		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
+		  // Check if this is a custom block ID (numeric)
+		  if (!isNaN(parseInt(blockId))) {
+			// Search strategy 1: Check customBlocks prop for texture data
+			let dataUri = null;
+			
+			if (customBlocks && customBlocks[blockId]) {
+			  dataUri = customBlocks[blockId].dataUri;
+			}
+			
+			// Search strategy 2: Check localStorage even if not in customBlocks
+			if (!dataUri && typeof localStorage !== 'undefined') {
+			  // Try multiple localStorage keys to find any stored texture
+			  const storageKeys = [
+				`block-texture-${blockId}`,
+				`custom-block-${blockId}`,
+				`datauri-${blockId}`
+			  ];
+			  
+			  for (const key of storageKeys) {
+				const storedUri = localStorage.getItem(key);
+				if (storedUri && storedUri.startsWith('data:image/')) {
+				  dataUri = storedUri;
+				  break;
+				}
+			  }
+			}
+			
+			// If we found a data URI from any source, apply it
+			if (dataUri && dataUri.startsWith('data:image/')) {
+			  // Ensure it's stored in localStorage for persistence
+			  localStorage.setItem(`block-texture-${blockId}`, dataUri);
+			  
+			  // Use the imported BlockTextureAtlas directly
+			  if (BlockTextureAtlas && BlockTextureAtlas.instance) {
+				BlockTextureAtlas.instance.applyDataUriToAllFaces(blockId, dataUri)
+				  .catch(err => console.error(`Error applying data URI to block ${blockId}:`, err));
+			  }
+			}
+		  }
+		});
 
 		// Update the terrain data structure
 		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-			terrainRef.current[posKey] = blockId;
+		  terrainRef.current[posKey] = blockId;
 		});
 			
 		Object.entries(removedBlocks).forEach(([posKey]) => {
-			delete terrainRef.current[posKey];
+		  delete terrainRef.current[posKey];
 		});
 			
 		// Update total block count
@@ -2690,33 +2593,33 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Send updated total blocks count back to parent component
 		if (sendTotalBlocks) {
-			sendTotalBlocks(totalBlocksRef.current);
+		  sendTotalBlocks(totalBlocksRef.current);
 		}
 		
 		// Update debug info
 		updateDebugInfo();
 		
-		// Delegate to the optimized imported function for chunk and spatial hash updates
+		// Delegate to the optimized imported function for chunk updates
 		importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
 		
-		// Convert blocks to the format expected by updateSpatialHashForBlocks
+		// Update spatial hash
 		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
-			const [x, y, z] = posKey.split(',').map(Number);
-			return {
-				id: blockId,
-				position: [x, y, z]
-			};
+		  const [x, y, z] = posKey.split(',').map(Number);
+		  return {
+			id: blockId,
+			position: [x, y, z]
+		  };
 		});
 
-		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
-			const [x, y, z] = posKey.split(',').map(Number);
-			return {
-				id: 0, // Use 0 for removed blocks
-				position: [x, y, z]
-			};
+		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey]) => {
+		  const [x, y, z] = posKey.split(',').map(Number);
+		  return {
+			id: 0, // Use 0 for removed blocks
+			position: [x, y, z]
+		  };
 		});
 		
-		// Explicitly update the spatial hash for collisions with force option
+		// Update the spatial hash for collisions with force option
 		updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, { force: true });
 		
 		console.timeEnd(`updateTerrainForUndoRedo-${source}`);

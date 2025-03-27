@@ -505,9 +505,6 @@ class ChunkManager {
 			}
 		}
 
-		const perfId = `renderChunk-${chunk.chunkId}`;
-		//console.time(perfId);
-
 		// Get any specific options for this chunk
 		const options = this._chunkRemeshOptions ? this._chunkRemeshOptions.get(chunk.chunkId) || {} : {};
 		const hasBlockCoords = !!(options.blockCoordinates && options.blockCoordinates.length > 0);
@@ -635,7 +632,6 @@ class ChunkManager {
 	 * @param {Object} blockData.globalCoordinate - The global coordinate
 	 */
 	updateBlock(blockData) {
-		const perfId = `updateBlock-${blockData.globalCoordinate.x},${blockData.globalCoordinate.y},${blockData.globalCoordinate.z}`;
 		//console.time(perfId);
 
 		const { id, globalCoordinate } = blockData;
@@ -1051,9 +1047,9 @@ class ChunkManager {
 		const chunksToUpdate = new Set();
 		
 		// Iterate through all chunks
-		for (const [chunkKey, chunk] of this._chunks.entries()) {
+		for (const chunkKey of this._chunks.keys()) {
 			// Check if the chunk contains the modified block type
-			if (chunk.containsBlockType(blockTypeId)) {
+			if (this._chunks.get(chunkKey).containsBlockType(blockTypeId)) {
 				chunksToUpdate.add(chunkKey);
 			}
 		}
@@ -1063,7 +1059,7 @@ class ChunkManager {
 		if (chunksToUpdate.size === 0) {
 			
 			// Update only visible chunks to avoid unnecessary processing
-			for (const [chunkKey, chunk] of this._chunks.entries()) {
+			for (const chunkKey of this._chunks.keys()) {
 				if (this._isChunkVisible(chunkKey)) {
 					chunksToUpdate.add(chunkKey);
 				}

@@ -5,7 +5,7 @@ import BlockMaterial from './BlockMaterial';
 const TEXTURE_IMAGE_PADDING = 2;
 
 // Face mapping constants
-const FACE_NAME_TO_COORD_MAP = {
+export const FACE_NAME_TO_COORD_MAP = {
 	'top': '+y',
 	'bottom': '-y',
 	'left': '-x',
@@ -14,7 +14,7 @@ const FACE_NAME_TO_COORD_MAP = {
 	'back': '-z'
 };
 
-const COORD_TO_FACE_NAME_MAP = {
+export const COORD_TO_FACE_NAME_MAP = {
 	'+y': 'top',
 	'-y': 'bottom',
 	'-x': 'left',
@@ -556,154 +556,46 @@ class BlockTextureAtlas {
 	 */
 	getMultiSidedTextureUV(blockType, blockFace, uvOffset) {
 		if (!blockType || !blockFace) {
-			console.warn(`Invalid block type or face: ${blockType}, ${blockFace}`);
+			// Silently use error texture
 			const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
 			return errorMetadata ? this._calculateUVCoordinates(errorMetadata, uvOffset) : [0, 0];
 		}
-		// DEBUGGING: Let's see what textures we have in the metadata
-		if (blockType === 'test_block' || (!isNaN(parseInt(blockType)) && parseInt(blockType) > 50)) {
-			let foundTextures = [];
-			for (const [key, metadata] of this._textureAtlasMetadata.entries()) {
-				if (key.includes(blockType) || 
-					(key.startsWith('data:image/') && 
-						(this._textureAtlasMetadata.has(`${blockType}`) || 
-						this._textureAtlasMetadata.has(`custom:${blockType}`)))) {
-					foundTextures.push(key);
-				}
-			}
-			
-			// If we don't have any textures for this block yet, let's check localStorage
-			if (foundTextures.length === 0 && typeof window !== 'undefined' && window.localStorage) {
-				const storageKey = `block-texture-${blockType}`;
-				const storedDataUri = window.localStorage.getItem(storageKey);
-				if (storedDataUri && storedDataUri.startsWith('data:image/')) {
-					
-					// Let's load it asynchronously
-					this.loadTextureFromDataURI(storedDataUri, storedDataUri).then(() => {
-						// Now let's map it to all the places we need
-						const metadata = this._textureAtlasMetadata.get(storedDataUri);
-						if (metadata) {
-							this._textureAtlasMetadata.set(blockType, metadata);
-							this._textureAtlasMetadata.set(`custom:${blockType}`, metadata);
-							this._textureAtlasMetadata.set(`blocks/${blockType}`, metadata);
-							this._scheduleAtlasUpdate();
-						}
-					});
-				}
-			}
-		}
-
-		// For custom block types, check these patterns first
-		// 1. Check for data URI stored as blockType directly (for custom blocks)
+		
+		// Convert face name to coordinate system if needed
+		const faceCoord = FACE_NAME_TO_COORD_MAP[blockFace] || blockFace;
+		
+		
+		// Handle data URIs directly
 		if (blockType.startsWith('data:image/')) {
 			const metadata = this._textureAtlasMetadata.get(blockType);
-			if (metadata) return this._calculateUVCoordinates(metadata, uvOffset);
-		}
-
-		// 2. Check for all possible patterns for custom block textures
-		const possibleKeys = [
-			blockType,
-			`custom:${blockType}`,
-			`blocks/${blockType}`,
-			`${blockType}`,
-			...Array.from(this._textureAtlasMetadata.keys()).filter(key => 
-				key.startsWith('data:image/') && 
-				this._textureAtlasMetadata.has(key)
-			)
-		];
-		
-		// Try all possible keys
-		for (const key of possibleKeys) {
-			const metadata = this._textureAtlasMetadata.get(key);
 			if (metadata) {
 				return this._calculateUVCoordinates(metadata, uvOffset);
 			}
 		}
 		
-		// 3. Check for numeric blockType (custom blocks usually have numeric IDs)
-		const isCustomBlock = !isNaN(parseInt(blockType));
-		
-		// For numeric block types, check common custom texture patterns
-		if (isCustomBlock) {
-			// For custom blocks with numeric IDs, check all common patterns
-			const customKeys = [
-				blockType,
-				`custom:${blockType}`,
-				`blocks/${blockType}`,
-				// Also check data URIs that might be stored with the block type ID
-				...Array.from(this._textureAtlasMetadata.keys()).filter(key => 
-					key.startsWith('data:image/') && 
-					this._textureAtlasMetadata.get(key)
-				)
-			];
-			
-			// Try all custom key patterns
-			for (const key of customKeys) {
-				const metadata = this._textureAtlasMetadata.get(key);
-				if (metadata) {
-					return this._calculateUVCoordinates(metadata, uvOffset);
-				}
-			}
-			
-			// If we don't find anything, but this is a custom block, 
-			// apply the error texture to all paths for this block
-			// to prevent constant re-checking
-			const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
-			if (errorMetadata) {
-				console.log(`No texture found for custom block ${blockType}, using error texture`);
-				this._textureAtlasMetadata.set(blockType, errorMetadata);
-				this._textureAtlasMetadata.set(`custom:${blockType}`, errorMetadata);
-				this._textureAtlasMetadata.set(`blocks/${blockType}`, errorMetadata);
-				Object.values(FACE_NAME_TO_COORD_MAP).forEach(coord => {
-					this._textureAtlasMetadata.set(`blocks/${blockType}/${coord}.png`, errorMetadata);
-				});
-			}
-			
-			return errorMetadata ? this._calculateUVCoordinates(errorMetadata, uvOffset) : [0, 0];
-		}
-
-		// 4. Special handling for "test_block" which seems to be a problem case
-		if (blockType === 'test_block' || blockType === 'test-block') {
-			// Check for any existing metadata for this block
-			for (const [key, metadata] of this._textureAtlasMetadata.entries()) {
-				if (key.includes('test_block') || key.includes('test-block')) {
-					console.log(`Found texture for test_block with key: ${key}`);
-					return this._calculateUVCoordinates(metadata, uvOffset);
-				}
-			}
-			
-			// For test_block, we know this is a custom block - don't try PNG files
-			const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
-			return errorMetadata ? this._calculateUVCoordinates(errorMetadata, uvOffset) : [0, 0];
-		}
-		
-		// Standard path for regular blocks
-		const faceCoord = FACE_NAME_TO_COORD_MAP[blockFace] || blockFace;
+		// Try face-specific path for current face
 		const facePath = `blocks/${blockType}/${faceCoord}.png`;
+		const faceMetadata = this._textureAtlasMetadata.get(facePath);
+		if (faceMetadata) {
+			return this._calculateUVCoordinates(faceMetadata, uvOffset);
+		}
 		
-		// Try several fallbacks in order:
-		const metadata = 
-			// 1. Try face-specific texture
-			this._textureAtlasMetadata.get(facePath) || 
-			// 2. Try blockType as a key (without face)
-			this._textureAtlasMetadata.get(`blocks/${blockType}`) ||
-			// 3. Try data URI format
-			this._textureAtlasMetadata.get(`data:image/${blockType}`) ||
-			// 4. Try custom block format
-			this._textureAtlasMetadata.get(`custom:${blockType}`);
-
-		if (metadata) return this._calculateUVCoordinates(metadata, uvOffset);
-
+		// Fallback to general paths
+		
+		// Try blockType as a key (without face)
+		const blockTypePath = `blocks/${blockType}`;
+		const blockTypeMetadata = this._textureAtlasMetadata.get(blockTypePath);
+		if (blockTypeMetadata) {
+			return this._calculateUVCoordinates(blockTypeMetadata, uvOffset);
+		}
+		
 		// If texture wasn't found, limit warning spam by using a set
 		const warningKey = `${blockType}-${blockFace}`;
 		if (!this._missingTextureWarnings.has(warningKey)) {
 			console.warn(`No texture found for ${blockType}, face ${blockFace}. Queuing for loading.`);
 			this._missingTextureWarnings.add(warningKey);
-		}
 
-		// For non-custom blocks, try to load the textures
-		if (!isCustomBlock && blockType !== 'test_block' && blockType !== 'test-block') {
-			// Try both face-specific and single texture paths for standard blocks
+			// For non-custom blocks, queue the textures for loading
 			this.queueTextureForLoading(`./assets/blocks/${blockType}/${faceCoord}.png`);
 			this.queueTextureForLoading(`./assets/blocks/${blockType}.png`);
 		}
@@ -859,6 +751,21 @@ class BlockTextureAtlas {
 		if (this._textureLoadLocks[textureUri]) return await this._textureLoadLocks[textureUri];
 		if (this._textureLoadFailures.has(textureUri)) throw new Error(`Texture previously failed to load: ${textureUri}`);
 
+		// Skip attempting to load paths with "Untitled" or other common custom block identifiers
+		// These will always fail and just spam errors
+		if (textureUri.includes('/Untitled/') || 
+		    textureUri.includes('/Untitled.') || 
+		    textureUri.includes('/test_block/') || 
+		    textureUri.includes('/test-block/')) {
+			// Use error texture instead of trying to load
+			const errorMetadata = this._textureAtlasMetadata.get('./assets/blocks/error.png');
+			if (errorMetadata) {
+				this._textureAtlasMetadata.set(textureUri, errorMetadata);
+				return;
+			}
+			throw new Error(`Cannot load texture for custom block path: ${textureUri}`);
+		}
+
 		const loadPromise = new Promise((resolve, reject) => {
 			const textureLoader = new THREE.TextureLoader();
 			textureLoader.load(
@@ -954,10 +861,18 @@ class BlockTextureAtlas {
 				this._textureAtlasMetadata.set(`blocks/${blockType}/${coord}.png`, metadata);
 			});
 			
-			// For special cases like "test_block", add explicit mappings
-			if (blockType === 'test_block' || blockType === 'test-block') {
+			// For special cases like "test_block", add explicit mappings for both formats
+			if (blockType === 'test_block' || blockType === 'test-block' || blockType === 'Untitled') {
 				this._textureAtlasMetadata.set('test_block', metadata);
 				this._textureAtlasMetadata.set('test-block', metadata);
+				this._textureAtlasMetadata.set('Untitled', metadata);
+				
+				// Also map all faces for these special blocks explicitly
+				Object.values(FACE_NAME_TO_COORD_MAP).forEach(coord => {
+					this._textureAtlasMetadata.set(`blocks/test_block/${coord}.png`, metadata);
+					this._textureAtlasMetadata.set(`blocks/test-block/${coord}.png`, metadata);
+					this._textureAtlasMetadata.set(`blocks/Untitled/${coord}.png`, metadata);
+				});
 			}
 			
 			// Create direct ID-to-texture mappings
@@ -992,6 +907,21 @@ class BlockTextureAtlas {
 			// Store with the exact ID format
 			this._textureAtlasMetadata.set(blockId, metadata);
 			
+			// Special case for common custom block names
+			if (blockId === 'test_block' || blockId === 'test-block' || blockId === 'Untitled') {
+				// Map to both formats of test_block
+				this._textureAtlasMetadata.set('test_block', metadata);
+				this._textureAtlasMetadata.set('test-block', metadata);
+				this._textureAtlasMetadata.set('Untitled', metadata);
+				
+				// Map all face-specific paths 
+				Object.values(FACE_NAME_TO_COORD_MAP).forEach(coord => {
+					this._textureAtlasMetadata.set(`blocks/test_block/${coord}.png`, metadata);
+					this._textureAtlasMetadata.set(`blocks/test-block/${coord}.png`, metadata);
+					this._textureAtlasMetadata.set(`blocks/Untitled/${coord}.png`, metadata);
+				});
+			}
+			
 			// If it's numeric, also store as string
 			if (typeof blockId === 'number' || !isNaN(parseInt(blockId))) {
 				// Store as string
@@ -1000,16 +930,28 @@ class BlockTextureAtlas {
 				this._textureAtlasMetadata.set(`custom:${blockId}`, metadata);
 				// Store in various block formats
 				this._textureAtlasMetadata.set(`blocks/${blockId}`, metadata);
+				// Store in all face-specific paths
+				Object.values(FACE_NAME_TO_COORD_MAP).forEach(coord => {
+					this._textureAtlasMetadata.set(`blocks/${blockId}/${coord}.png`, metadata);
+				});
 			}
 			
 			// Associate the block ID with this data URI for future reference
-			const key = `block-texture-${blockId}`;
+			const storageKeys = [
+				`block-texture-${blockId}`,
+				`custom-block-${blockId}`,
+				`datauri-${blockId}`
+			];
+			
 			if (typeof window !== 'undefined' && window.localStorage) {
 				try {
-					// Store in localStorage for persistence
-					window.localStorage.setItem(key, dataUri);
+					// Store in multiple localStorage keys for robustness
+					storageKeys.forEach(key => {
+						window.localStorage.setItem(key, dataUri);
+					});
 				} catch (e) {
 					// Ignore localStorage errors
+					console.warn("Failed to store texture in localStorage:", e);
 				}
 			}
 			

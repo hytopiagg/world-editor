@@ -1,7 +1,7 @@
 // BlockType.js
 // Represents a block type in the world
 
-import BlockTextureAtlas from './BlockTextureAtlas';
+import BlockTextureAtlas, { FACE_NAME_TO_COORD_MAP } from './BlockTextureAtlas';
 import {
   BlockFaces,
   DEFAULT_BLOCK_AO_INTENSITY,
@@ -142,6 +142,44 @@ class BlockType {
     
     return false;
   }
+  
+  /**
+   * Check if this block type has multiple textures (different from isMultiSided)
+   * @returns {boolean} True if the block has multiple textures
+   */
+  get _isMultiTexture() {
+    // For compatibility, we'll use the same implementation as isMultiSided
+    // This ensures that getTexturePath works correctly
+    return this.isMultiSided;
+  }
+  
+  /**
+   * Get the base texture URI for this block
+   * @returns {string|undefined} The base texture URI
+   */
+  get _textureUri() {
+    // Extract from _textureUris if it exists
+    if (this._textureUris) {
+      // Try to get the common name for multi-sided blocks
+      const uniqueTextureUris = new Set(Object.values(this._textureUris).filter(Boolean));
+      
+      if (uniqueTextureUris.size > 0) {
+        const uri = Array.from(uniqueTextureUris)[0];
+        // If there's a path with slashes, get the base folder
+        const parts = uri.split('/');
+        if (parts.length > 1) {
+          // Return the part before the last slash (the directory name)
+          return parts.slice(0, -1).join('/');
+        }
+        
+        // For single texture blocks, just return the uri
+        return uri;
+      }
+    }
+    
+    // Fallback to undefined if no texture URIs exist
+    return undefined;
+  }
 
   /**
    * Convert a single texture URI to a map of face texture URIs
@@ -149,12 +187,32 @@ class BlockType {
    * @returns {Object} The face texture URIs
    */
   static textureUriToTextureUris(textureUri) {
+    // If null or undefined, return empty object
+    if (!textureUri) return {};
+    
+    // For data URIs, use the same URI for all faces
+    if (textureUri.startsWith('data:image/')) {
+      return Object.keys(BlockFaceAxes).reduce((textureUris, face) => {
+        textureUris[face] = textureUri;
+        return textureUris;
+      }, {});
+    }
+    
     const uriParts = textureUri.split('/');
-    const isSingleTexture = uriParts[uriParts.length - 1].includes('.');
+    const isSingleTexture = uriParts[uriParts.length - 1].includes('.'); // Has file extension
+    
+    // Create the base URI (either the full path or the directory path)
     const baseUri = textureUri;
-
-    return Object.entries(BlockFaceAxes).reduce((textureUris, [face, axis]) => {
-      textureUris[face] = isSingleTexture ? baseUri : `${baseUri}/${axis}.png`;
+    
+    // For each face, create the appropriate texture URI
+    return Object.entries(FACE_NAME_TO_COORD_MAP).reduce((textureUris, [face, coord]) => {
+      if (isSingleTexture) {
+        // Single texture - use same texture for all faces
+        textureUris[face] = baseUri;
+      } else {
+        // Multi-sided texture - create face-specific paths
+        textureUris[face] = `${baseUri}/${coord}.png`;
+      }
       return textureUris;
     }, {});
   }
@@ -354,9 +412,6 @@ class BlockType {
 
     console.log(`Setting custom texture for block type ${this._id} (${this._name})...`);
 
-    // Use the data URI as the ID if no custom ID is provided
-    const textureId = customId || dataUri;
-
     // For custom textures, we use the same texture for all faces
     const textureUris = {};
     const faceNames = Object.keys(BlockFaceAxes);
@@ -454,34 +509,94 @@ class BlockType {
   getTexturePath(face) {
     if (!face) face = 'front';
     
+    // For custom blocks (numeric IDs), check localStorage directly first
+    const isCustomBlock = !isNaN(parseInt(this._id)) || this._name === 'Untitled' || this._name === 'test_block';
+    if (isCustomBlock) {
+      // Try to find a custom texture in localStorage first
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const storageKeys = [
+          `block-texture-${this._id}`,
+          `custom-block-${this._id}`,
+          `datauri-${this._id}`
+        ];
+        
+        for (const key of storageKeys) {
+          const storedUri = window.localStorage.getItem(key);
+          if (storedUri && storedUri.startsWith('data:image/')) {
+            // Found a data URI, use it directly
+            return storedUri;
+          }
+        }
+      }
+      
+      // For custom blocks with specific face textures, return them
+      if (this._textureUris && this._textureUris[face]) {
+        const texturePath = this._textureUris[face];
+        // Only use it if it's a data URI, not a file path that will fail
+        if (texturePath && texturePath.startsWith('data:image/')) {
+          return texturePath;
+        }
+      }
+      
+      // If we didn't find a texture in localStorage, use error texture
+      // instead of trying to load from file system which will fail
+      return './assets/blocks/error.png';
+    }
+    
+    // First check if we have face-specific textures
     if (this._textureUris && this._textureUris[face]) {
+      const texturePath = this._textureUris[face];
+      
       // For data URIs, return directly without modification
-      if (this._textureUris[face].startsWith('data:image/')) {
-        return this._textureUris[face];
+      if (texturePath.startsWith('data:image/')) {
+        return texturePath;
       }
       
       // Handle regular file paths
-      return this._textureUris[face];
-    } else if (this._textureUri) {
-      // For data URIs, return directly without modification
-      if (this._textureUri.startsWith('data:image/')) {
-        return this._textureUri;
-      }
+      return texturePath;
+    }
+    
+    // If no specific texture for this face, use the base texture folder for multi-sided blocks
+    if (this.isMultiSided || this._isMultiTexture) {
+      // Get base folder from first texture URI or _textureUri
+      const baseFolder = this._textureUri || 
+                        (this._textureUris && Object.values(this._textureUris)[0]);
       
-      // For multi-texture blocks, compute the texture path based on the face
-      if (this._isMultiTexture) {
-        return `./assets/blocks/${this._textureUri}/${this.getFaceDirection(face)}.png`;
+      if (baseFolder) {
+        // Handle data URIs directly
+        if (baseFolder.startsWith('data:image/')) {
+          return baseFolder;
+        }
+        
+        // For paths that already have a file extension, return as is
+        if (baseFolder.match(/\.(png|jpe?g)$/i)) {
+          return baseFolder;
+        }
+        
+        // Special handling for paths that already include 'blocks/'
+        const basePath = baseFolder.includes('blocks/') 
+          ? baseFolder 
+          : `./assets/blocks/${baseFolder}`;
+        
+        // Get the face direction
+        const faceDir = this.getFaceDirection(face);
+        
+        // Construct the full path for multi-sided blocks
+        const finalPath = `${basePath}/${faceDir}.png`;
+        return finalPath;
       }
-      
-      // For single-texture blocks, just use the texture URI
-      return `./assets/blocks/${this._textureUri}`;
+    }
+    
+    // For single texture (non-multi-sided) blocks, just use the first texture URI
+    if (this._textureUris) {
+      const firstUri = Object.values(this._textureUris)[0];
+      if (firstUri) {
+        return firstUri;
+      }
     }
     
     // Fallback to default error texture
-    if (this._isMultiTexture) {
-      return `./assets/blocks/error/${this.getFaceDirection(face)}.png`;
-    }
-    
+    console.warn(`No texture found for block ${this._id} (${this._name}), face: ${face}`);
     return './assets/blocks/error.png';
   }
 
@@ -570,6 +685,16 @@ class BlockType {
       console.error('Failed to apply custom texture:', error);
       return false;
     }
+  }
+
+  /**
+   * Get the direction string for a face to use in texture paths
+   * @param {string} face - The face of the block (e.g., 'top', 'bottom', etc.)
+   * @returns {string} - The direction string for the face (e.g., '+y', '-y', etc.)
+   */
+  getFaceDirection(face) {
+    // Use the imported constant from BlockTextureAtlas
+    return FACE_NAME_TO_COORD_MAP[face] || face;
   }
 }
 

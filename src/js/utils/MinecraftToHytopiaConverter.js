@@ -49,8 +49,8 @@ export class MinecraftToHytopiaConverter {
     const editorMap = {};
     
     // Track progress
-    let processedBlocks = 0;
-    const totalBlocks = this.calculateTotalPotentialBlocks();
+    //let processedBlocks = 0;
+    //const totalBlocks = this.calculateTotalPotentialBlocks();
     let lastProgressUpdate = Date.now();
     
     // Function to process blocks in batches with throttling to prevent UI freezes
@@ -84,7 +84,7 @@ export class MinecraftToHytopiaConverter {
           if (this.isInFinalRegion(finalX, finalY, finalZ, regionWidth, regionHeight, regionDepth)) {
             // Process this block - same as original
             this.processBlock(editorMap, mcBlockType, finalX, finalY, finalZ);
-            processedBlocks++;
+            //processedBlocks++;
           }
         }
       } else {
@@ -139,7 +139,7 @@ export class MinecraftToHytopiaConverter {
                   
                   // Process this block
                   this.processBlock(editorMap, blockData.type, finalX, finalY, finalZ);
-                  processedBlocks++;
+                  //processedBlocks++;
                 }
               }
             }
@@ -157,7 +157,7 @@ export class MinecraftToHytopiaConverter {
             if (this.isInFinalRegion(finalX, finalY, finalZ, regionWidth, regionHeight, regionDepth)) {
               // Process this block
               this.processBlock(editorMap, blockData.type, finalX, finalY, finalZ);
-              processedBlocks++;
+              //processedBlocks++;
             }
           }
         }
@@ -338,7 +338,6 @@ export class MinecraftToHytopiaConverter {
   createEditorData(editorMap, worldBounds) {
     // Initialize result counters
     let processedBlocks = 0;
-    let skippedBlocks = 0;
     const processedBlockTypes = new Set();
     
     // Create HYTOPIA map structure
@@ -409,7 +408,6 @@ export class MinecraftToHytopiaConverter {
         error: "No blocks were imported. Check your block mappings.",
         stats: {
           processedBlocks: 0,
-          skippedBlocks: 0,
           uniqueBlockTypes: [],
           originalCenter: { 
             x: this.selectedRegion.minX + Math.floor((this.selectedRegion.maxX - this.selectedRegion.minX) / 2),
@@ -433,7 +431,6 @@ export class MinecraftToHytopiaConverter {
       hytopiaMap,
       stats: {
         processedBlocks,
-        skippedBlocks,
         uniqueBlockTypes: Array.from(processedBlockTypes),
         originalCenter: { x: offsetX, y: offsetY + Math.floor(regionHeight / 2), z: offsetZ },
         worldBounds
