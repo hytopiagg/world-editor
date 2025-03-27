@@ -791,21 +791,28 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Call the environment builder to place the object
 				if (environmentBuilderRef.current && typeof environmentBuilderRef.current.placeEnvironmentModel === 'function') {
 					try {
-						const addedEnvironmentObjects = environmentBuilderRef.current.placeEnvironmentModel();
-						if (addedEnvironmentObjects && addedEnvironmentObjects.length > 0) {
-							console.log('Environment objects placed:', addedEnvironmentObjects.length);
+						// Pass the current mode to placeEnvironmentModel
+						const result = environmentBuilderRef.current.placeEnvironmentModel(modeRef.current);
+						
+						// In remove mode, handle removed objects
+						if (modeRef.current === "remove" && result?.length > 0) {
+							console.log(`Removed ${result.length} environment objects`);
+							// No need to track these in placementChangesRef as the environment builder
+							// already handles undo/redo for environment objects
+						} 
+						// In add mode, handle added objects
+						else if (modeRef.current === "add" && result?.length > 0) {
+							console.log('Environment objects placed:', result.length);
 							// Track added environment objects in the placementChangesRef for undo/redo support
 							if (placementChangesRef.current) {
 								placementChangesRef.current.environment.added = [
 									...placementChangesRef.current.environment.added,
-									...addedEnvironmentObjects
+									...result
 								];
 							}
-						} else {
-							console.warn('No environment objects were placed or returned');
 						}
 					} catch (error) {
-						console.error('Error placing environment object:', error);
+						console.error('Error handling environment object:', error);
 					}
 				} else {
 					console.error('Environment builder reference or placeEnvironmentModel function not available');
@@ -1372,6 +1379,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			// Reset the firstLoadCompleted flag to ensure it gets initialized for the next terrain
 			firstLoadCompletedRef.current = false;
+		}
+		
+		// Also clear environment objects if available
+		if (environmentBuilderRef?.current?.clearEnvironments) {
+			console.log("Clearing environment objects...");
+			environmentBuilderRef.current.clearEnvironments();
 		}
 		
 		// Reset placement state

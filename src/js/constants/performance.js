@@ -3,12 +3,8 @@ export const PERFORMANCE_SETTINGS = {
   maxChunksPerFrame: 5,
   objectPooling: true,
   batchedGeometry: true,
-  instancingEnabled: true,
   shadowDistance: 96,
 };
-
-// Environment instance meshing constant
-export const ENVIRONMENT_INSTANCED_MESH_CAPACITY = 50000;
 
 // Texture Atlas settings
 export const TEXTURE_ATLAS_SETTINGS = {
@@ -36,15 +32,6 @@ Object.defineProperty(meshesNeedsRefresh, 'value', {
   get: function() { return _meshesNeedRefresh; },
   set: function(val) { _meshesNeedRefresh = Boolean(val); }
 });
-
-// Toggle instancing
-export const toggleInstancing = (enabled) => {
-  PERFORMANCE_SETTINGS.instancingEnabled = enabled;
-  console.log(`Instancing set to ${enabled}`);
-  return true;
-};
-
-export const getInstancingEnabled = () => PERFORMANCE_SETTINGS.instancingEnabled;
 
 // Texture atlas settings getters/setters
 export const getTextureAtlasSettings = () => TEXTURE_ATLAS_SETTINGS;

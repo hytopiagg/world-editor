@@ -2,108 +2,74 @@ import React, { useState, useEffect, useRef } from 'react';
 import '../../css/DebugInfo.css';
 
 const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBuilderRef }) => {
-  const [instancingEnabled, setInstancingEnabled] = useState(true);
-  const [greedyMeshingEnabled, setGreedyMeshingEnabled] = useState(true);
-  const [selectionDistance, setSelectionDistance] = useState(128); // Default to 64
-  const [viewDistance, setViewDistance] = useState(64); // Default to 64
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true); // Default to true
   const [fps, setFps] = useState(0);
   const [frameTime, setFrameTime] = useState(0);
   const [maxFrameTime, setMaxFrameTime] = useState(0);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
-  const framesRef = useRef(0);
-  const lastTimeRef = useRef(performance.now());
-  const previousFrameTimeRef = useRef(performance.now());
+  const [selectionDistance, setSelectionDistance] = useState(128);
+  const [viewDistance, setViewDistance] = useState(64);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   
-  // Initialize state from TerrainBuilder on mount
+  const frameTimesRef = useRef([]);
+  const lastTimeRef = useRef(performance.now());
+  const frameRef = useRef(null);
+  
   useEffect(() => {
+    // Initialize values from TerrainBuilder on mount
     if (terrainBuilderRef && terrainBuilderRef.current) {
-      setInstancingEnabled(terrainBuilderRef.current.getInstancingEnabled());
-      
-      if (terrainBuilderRef.current.getGreedyMeshingEnabled) {
-        setGreedyMeshingEnabled(terrainBuilderRef.current.getGreedyMeshingEnabled());
-      }
-      
-      // Initialize selection distance if available
-      if (terrainBuilderRef.current.getSelectionDistance) {
-        setSelectionDistance(terrainBuilderRef.current.getSelectionDistance());
-      }
-      
-      // Initialize view distance if available
       if (terrainBuilderRef.current.getViewDistance) {
         setViewDistance(terrainBuilderRef.current.getViewDistance());
       }
       
-      // Initialize auto-save status if available
+      if (terrainBuilderRef.current.getSelectionDistance) {
+        setSelectionDistance(terrainBuilderRef.current.getSelectionDistance());
+      }
+      
       if (terrainBuilderRef.current.isAutoSaveEnabled) {
         setAutoSaveEnabled(terrainBuilderRef.current.isAutoSaveEnabled());
       }
     }
-  }, [terrainBuilderRef]);
-  
-  // FPS and frame time counter
-  useEffect(() => {
-    let frameId;
     
-    const measureFps = () => {
-      const now = performance.now();
-      
-      // Calculate frame time (time since last frame)
-      const currentFrameTime = now - previousFrameTimeRef.current;
-      previousFrameTimeRef.current = now;
-      
-      // Update frame time display (smoothed)
-      setFrameTime(prev => 0.9 * prev + 0.1 * currentFrameTime);
-      
-      // Update max frame time (for spike detection)
-      if (currentFrameTime > maxFrameTime && currentFrameTime < 1000) { // Ignore > 1s spikes (probably tab switching)
-        setMaxFrameTime(currentFrameTime);
-      }
-      
-      // Update FPS counter
-      framesRef.current++;
-      const elapsed = now - lastTimeRef.current;
-      
-      if (elapsed >= 1000) {
-        // Update FPS every second
-        setFps(Math.round((framesRef.current * 1000) / elapsed));
-        framesRef.current = 0;
-        lastTimeRef.current = now;
-      }
-      
-      frameId = requestAnimationFrame(measureFps);
-    };
-    
-    frameId = requestAnimationFrame(measureFps);
-    
-    // Set up a timer to reset max frame time every 5 seconds
-    const maxTimeResetInterval = setInterval(() => {
-      setMaxFrameTime(0);
-    }, 5000);
+    // Start measuring FPS
+    frameRef.current = requestAnimationFrame(measureFps);
     
     return () => {
-      cancelAnimationFrame(frameId);
-      clearInterval(maxTimeResetInterval);
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
     };
-  }, [maxFrameTime]);
-
-  const handleInstancingToggle = (e) => {
-    const newValue = e.target.checked;
-    setInstancingEnabled(newValue);
-    
-    if (terrainBuilderRef && terrainBuilderRef.current) {
-      terrainBuilderRef.current.toggleInstancing(newValue);
-    }
-  };
-
-  const handleGreedyMeshingToggle = (e) => {
-    const newValue = e.target.checked;
-    setGreedyMeshingEnabled(newValue);
-    
-    if (terrainBuilderRef && terrainBuilderRef.current) {
-      terrainBuilderRef.current.toggleGreedyMeshing(newValue);
-    }
-  };
+  }, [terrainBuilderRef]);
+  
+    const measureFps = () => {
+      const now = performance.now();
+      const delta = now - lastTimeRef.current;
+      lastTimeRef.current = now;
+      
+      // Skip very large deltas (e.g., when tab is inactive)
+      if (delta < 1000) {
+        frameTimesRef.current.push(delta);
+        
+        // Keep last 60 frames for averaging
+        if (frameTimesRef.current.length > 60) {
+          frameTimesRef.current.shift();
+        }
+        
+        // Calculate average frame time
+        const avg = frameTimesRef.current.reduce((sum, time) => sum + time, 0) / frameTimesRef.current.length;
+        const currentFps = Math.round(1000 / avg);
+        const currentFrameTime = avg;
+        
+        // Update max frame time
+        if (currentFrameTime > maxFrameTime) {
+          setMaxFrameTime(currentFrameTime);
+        }
+        
+        setFps(currentFps);
+        setFrameTime(currentFrameTime);
+      }
+      
+      frameRef.current = requestAnimationFrame(measureFps);
+    };
   
   const handleSelectionDistanceChange = (e) => {
     const newValue = parseInt(e.target.value);
@@ -221,23 +187,6 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
         
         {showPerformanceDetails && (
           <div className="debug-value performance-toggles">
-            <label className="toggle-label">
-              <input 
-                type="checkbox" 
-                checked={instancingEnabled} 
-                onChange={handleInstancingToggle}
-              />
-              Instanced Rendering
-            </label>
-            <label className="toggle-label">
-              <input 
-                type="checkbox" 
-                checked={greedyMeshingEnabled} 
-                onChange={handleGreedyMeshingToggle}
-              />
-              Greedy Meshing
-            </label>
-            
             <label className="toggle-label">
               <input 
                 type="checkbox" 
