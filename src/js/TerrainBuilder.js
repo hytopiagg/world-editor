@@ -26,7 +26,6 @@ import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { processCustomBlock } from "./managers/BlockTypesManager";
 import BlockTypeRegistry from './blocks/BlockTypeRegistry';
 
-import { Vector3, Box3, Sphere, Raycaster, Matrix4, Quaternion, Euler, MeshBasicMaterial, Color } from 'three';
 
 // Function to optimize rendering performance
 const optimizeRenderer = (gl) => {
@@ -421,10 +420,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		frustum.setFromProjectionMatrix(projScreenMatrix);
 		frustumRef.current = frustum;
 		
-		if (shouldLog) {
-			console.log("[updateChunkSystemWithCamera] Render queue processed and frustum updated");
-		}
-		
+	
 		return true;
 	};
 	
@@ -966,20 +962,20 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		return intersection;
 	};
 
-	// Throttle mouse move updates
+	// Throttle mouse move updates using requestAnimationFrame
 	const updatePreviewPosition = () => {
-		// Skip update if we updated too recently
-		const now = performance.now();
-		if (now - updatePreviewPosition.lastUpdate < 10) { // ~60fps
+		// Skip if already being processed in this animation frame
+		if (updatePreviewPosition.isProcessing) {
 			return;
 		}
-		updatePreviewPosition.lastUpdate = now;
+		
+		updatePreviewPosition.isProcessing = true;
 
 		// Cache the canvas rect calculation
 		if (!canvasRectRef.current) {
 			canvasRectRef.current = gl.domElement.getBoundingClientRect();
 		}
-	
+
 		// Get intersection for preview
 		const blockIntersection = getRaycastIntersection();
 		
@@ -1100,9 +1096,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				handleBlockPlacement();
 			}
 		}
+		
+		// Reset processing flag at the end of the frame
+		updatePreviewPosition.isProcessing = false;
 	};
 
-	updatePreviewPosition.lastUpdate = 0;
+	// Initialize the flag
+	updatePreviewPosition.isProcessing = false;
 
 	// Move undo state saving to handlePointerUp
 	const handleMouseUp = (e) => {
