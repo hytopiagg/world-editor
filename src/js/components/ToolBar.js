@@ -314,12 +314,19 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 
 	const applyNewGridSize = async (newGridSize) => {
 		if (newGridSize > 10) {
+			// Update App.js state with new grid size
 			setGridSize(newGridSize);
 
-			// save grid size to local storage
-			// this has to be done here, because terrainbuilder
-			// gets the grid size from local storage
-			localStorage.setItem("gridSize", newGridSize);
+			// Use TerrainBuilder's updateGridSize method to ensure consistent behavior
+			// This will also update localStorage internally
+			if (terrainBuilderRef.current && terrainBuilderRef.current.updateGridSize) {
+				console.log(`ToolBar: Updating grid size to ${newGridSize} via terrainBuilderRef`);
+				terrainBuilderRef.current.updateGridSize(newGridSize);
+			} else {
+				// Fallback if the method is not available
+				console.warn("TerrainBuilder updateGridSize method not available, using fallback");
+				localStorage.setItem("gridSize", newGridSize.toString());
+			}
 
 			setShowGridSizeModal(false);
 		} else {

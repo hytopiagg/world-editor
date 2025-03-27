@@ -1,9 +1,8 @@
 // Chunk.js
 // Represents a chunk in the world
 
-import * as THREE from 'three';
 import BlockTypeRegistry from '../blocks/BlockTypeRegistry';
-import { CHUNK_SIZE, CHUNK_INDEX_RANGE, CHUNK_VOLUME } from './ChunkConstants';
+import { CHUNK_SIZE, CHUNK_INDEX_RANGE } from './ChunkConstants';
 import BlockTextureAtlas from '../blocks/BlockTextureAtlas';
 
 /**
@@ -121,21 +120,13 @@ class Chunk {
    * @param {boolean} isVisible - Whether the chunk is visible
    */
   set visible(isVisible) {
-    // Store the previous state for comparison
-    const wasVisible = this._visible;
     
     // Always set the visibility regardless of whether it changed
     this._visible = isVisible;
     
     // Always update mesh visibility to ensure THREE.js registers it
     this._updateMeshVisibility();
-    
-	/*
-    // Log visibility changes (but only occasionally to reduce spam)
-    if (wasVisible !== isVisible || (Date.now() % 10000 < 100)) {
-      console.log(`Chunk ${this.chunkId} visibility set to ${isVisible} (was ${wasVisible})`);
-    }
-	  */
+   	
   }
 
   /**
@@ -166,6 +157,38 @@ class Chunk {
   }
 
   /**
+   * Precompute block types for this chunk and its neighbors
+   * @param {ChunkManager} chunkManager - The chunk manager
+   * @returns {Array} A 3D array of block types
+   * @private
+   */
+  _getExtendedBlockTypes(chunkManager) {
+    const extendedSize = CHUNK_SIZE + 2;
+    const blockTypes = new Array(extendedSize);
+    for (let i = 0; i < extendedSize; i++) {
+      blockTypes[i] = new Array(extendedSize);
+      for (let j = 0; j < extendedSize; j++) {
+        blockTypes[i][j] = new Array(extendedSize);
+      }
+    }
+
+    const { x: originX, y: originY, z: originZ } = this.originCoordinate;
+
+    for (let ex = 0; ex < extendedSize; ex++) {
+      for (let ey = 0; ey < extendedSize; ey++) {
+        for (let ez = 0; ez < extendedSize; ez++) {
+          const globalX = originX + ex - 1;
+          const globalY = originY + ey - 1;
+          const globalZ = originZ + ez - 1;
+          blockTypes[ex][ey][ez] = chunkManager.getGlobalBlockType({ x: globalX, y: globalY, z: globalZ });
+        }
+      }
+    }
+
+    return blockTypes;
+  }
+
+  /**
    * Build meshes for this chunk
    * @param {ChunkManager} chunkManager - The chunk manager
    * @param {Object} options - Additional options
@@ -184,17 +207,8 @@ class Chunk {
     if (!forceCompleteRebuild && !hasAddedBlocks && !hasRemovedBlocks && this._meshHashCode) {
       const currentHashCode = this._calculateBlocksHashCode();
       if (currentHashCode === this._meshHashCode) {
-        // Log only occasionally to reduce spam
-        if (Math.random() < 0.05) {
-          console.log(`Skipping mesh rebuild for unchanged chunk ${this.chunkId}`);
-        }
         return;
       }
-    }
-    
-    // Skip neighbors if specified
-    if (skipNeighbors) {
-      console.log(`Building meshes for chunk ${this.chunkId} with skipNeighbors option`);
     }
     
     // Add a safety check for existing timers
@@ -223,45 +237,27 @@ class Chunk {
       chunkManager._scene.updateMatrixWorld(true);
     }
     
-    // Instead of clearing the entire cache for every block, just clear once for the chunk
-    //console.log(`Clearing block type cache for chunk ${this.chunkId}`);
+    // Initialize mesh geometry arrays
+    const solidMeshPositions = [];
+    const solidMeshNormals = [];
+    const solidMeshUvs = [];
+    const solidMeshIndices = [];
+    const solidMeshColors = [];
+    
+    const liquidMeshPositions = [];
+    const liquidMeshNormals = [];
+    const liquidMeshUvs = [];
+    const liquidMeshIndices = [];
+    const liquidMeshColors = [];
+    
     const { x: originX, y: originY, z: originZ } = this.originCoordinate;
     
-    // Clear cache for the chunk corners to ensure the whole chunk is refreshed
-    // This reduces the number of cache clearing operations significantly
-    const corners = [
-      {x: originX, y: originY, z: originZ},
-      {x: originX + CHUNK_SIZE - 1, y: originY, z: originZ},
-      {x: originX, y: originY + CHUNK_SIZE - 1, z: originZ},
-      {x: originX, y: originY, z: originZ + CHUNK_SIZE - 1},
-      {x: originX + CHUNK_SIZE - 1, y: originY + CHUNK_SIZE - 1, z: originZ},
-      {x: originX + CHUNK_SIZE - 1, y: originY, z: originZ + CHUNK_SIZE - 1},
-      {x: originX, y: originY + CHUNK_SIZE - 1, z: originZ + CHUNK_SIZE - 1},
-      {x: originX + CHUNK_SIZE - 1, y: originY + CHUNK_SIZE - 1, z: originZ + CHUNK_SIZE - 1}
-    ];
-    
-    // Clear cache for each corner with a larger radius
-    for (const corner of corners) {
-      chunkManager.clearBlockTypeCache(corner, 2);
-    }
-    
-    const liquidMeshColors = [];
-    const liquidMeshIndices = [];
-    const liquidMeshNormals = [];
-    const liquidMeshPositions = [];
-    const liquidMeshUvs = [];
-
-    const solidMeshColors = [];
-    const solidMeshIndices = [];
-    const solidMeshNormals = [];
-    const solidMeshPositions = [];
-    const solidMeshUvs = [];
-    
-    // Debug logging: Track all air blocks and their neighbors for debugging
-    const debugBlocks = [];
-    let visibleFacesGenerated = 0;
+    // Precompute extended block types
+    this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
 
     let verticesProcessed = 0;
+    //let visibleFacesGenerated = 0;
+    
     for (let y = 0; y < CHUNK_SIZE; y++) {
       const globalY = originY + y;
       for (let z = 0; z < CHUNK_SIZE; z++) {
@@ -278,14 +274,12 @@ class Chunk {
           // Process each face of this block
           for (const blockFace of blockType.faces) {
             const { normal: dir, vertices } = blockType.faceGeometries[blockFace];
-            const neighborGlobalCoordinate = {
-              x: globalX + dir[0],
-              y: globalY + dir[1],
-              z: globalZ + dir[2],
-            };
             
-            // Get neighbor block type - we don't need to clear cache for every check
-            const neighborBlockType = chunkManager.getGlobalBlockType(neighborGlobalCoordinate);
+            // Use extended block types array instead of getGlobalBlockType
+            const ex = x + 1 + dir[0];
+            const ey = y + 1 + dir[1];
+            const ez = z + 1 + dir[2];
+            const neighborBlockType = this._extendedBlockTypes[ex][ey][ez];
 
             // Detailed debug logging for face culling decisions (reduced frequency)
             const shouldCullFace = neighborBlockType &&
@@ -296,7 +290,7 @@ class Chunk {
               continue; // cull face
             }
             
-            visibleFacesGenerated++;
+            //visibleFacesGenerated++;
 
             const meshColors = blockType.isLiquid ? liquidMeshColors : solidMeshColors;
             const meshIndices = blockType.isLiquid ? liquidMeshIndices : solidMeshIndices;
@@ -320,59 +314,59 @@ class Chunk {
               // Calculate UV coords for face texture
               // Determine texture path based on block face - this correctly handles data URIs
               const actualTextureUri = blockType.getTexturePath(blockFace);
-              
-              // DEBUG - Log texture request info for multi-sided blocks
-              if (blockType.isMultiSided && blockType.id < 10) {
-                console.log(`🧊 Multi-sided texture request:
-                  - Block: ${blockType.name} (ID: ${blockType.id})
-                  - Face: ${blockFace}
-                  - Path: ${actualTextureUri}
-                  - textureUris: ${JSON.stringify(blockType.textureUris)}
-                `);
-              }
-              
-              // Get the block type ID from the blockType object
-              const blockTypeId = blockType.id;
-              
-              // Get the block name for texture lookups
-              const blockName = blockType.name || '';
                                  
               // Variable to store texture coordinates
               let texCoords;
           
               // If not handled by special case, continue with normal handling
               if (!texCoords) {
-                // Special handling for liquid blocks 
+                // Special debug for multi-sided blocks
+                if (blockType.isMultiSided) {
+                  console.debug(`Multi-sided block at (${globalX},${globalY},${globalZ}): ${blockType.name}, face: ${blockFace}`);
+                }
+                
+                // Special handling for liquid blocks
                 if (blockType.isLiquid) {
                   const liquidTexturePath = blockType.getTextureUris().top || './assets/blocks/water-still.png';
                   texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(liquidTexturePath, uv);
                 }
-                // Handle data URIs directly
-                else if (actualTextureUri && actualTextureUri.startsWith('data:image/')) {
-                  texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
-                }
-              // Special handling for multi-sided blocks
+                // Special handling for multi-sided blocks
                 else if (blockType.isMultiSided) {
                   // First try using getMultiSidedTextureUV which handles multi-sided textures specially
-                texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
+                  texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
                   
                   // If that didn't work, try the direct path from getTexturePath
                   if (!texCoords || (texCoords[0] === 0 && texCoords[1] === 0)) {
                     texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
                   }
+                } else {
+                  // The normal case - get texture UV coordinates from the atlas
+                  texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
                 }
-                // Normal texture handling for regular blocks
-                else {
-                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
-              }
-              }
-              
-              // Queue textures for loading if they're missing
-              if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
+                
+                if (!texCoords && actualTextureUri) {
+                  // If not in atlas yet, synchronously get coordinates, ensuring it's added
+                  texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+                }
+                
+                if (!texCoords) {
+                  // Still no coordinates? Use error texture
+                  texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync('./assets/blocks/error.png', uv);
+                  
+                  if (!texCoords) {
+                    // Last resort - use default UV coordinates
+                    texCoords = [0, 0, 1, 1];
+                  }
+                }
+                
+                // Queue textures for loading if they're missing
+                if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
                   BlockTextureAtlas.instance.queueTextureForLoading(actualTextureUri);
+                }
               }
               
-              meshUvs.push(...texCoords);
+              // Push the UV coordinates
+              meshUvs.push(texCoords[0], texCoords[1]);
 
               // Calculate vertex colors (Ambient occlusion)
               meshColors.push(...this._calculateVertexColor(
@@ -422,6 +416,9 @@ class Chunk {
     // Store the hash code for this chunks blocks to detect future changes
     this._meshHashCode = this._calculateBlocksHashCode();
     
+    // Clean up extended block types array
+    delete this._extendedBlockTypes;
+    
     // End the performance timer for this mesh build
     try {
       console.timeEnd(perfId);
@@ -463,129 +460,89 @@ class Chunk {
       console.timeEnd(perfId);
       return this.buildMeshes(chunkManager);
     }
-
+    
     try {
-      // Always check all coordinates to see if any are air blocks
-      // This is crucial for proper handling of removed blocks
-      let containsAirBlocks = false;
+      // Handle the block coordinates correctly - they could be either global or local
+      // We need to convert them to local coordinates for processing
+      const localCoordinates = [];
       
-      // First check the directly specified coordinates
-      for (const blockCoord of blockCoordinates) {
-        if (!this.getLocalBlockType(blockCoord)) {  // This means air
-          containsAirBlocks = true;
-          console.log(`Air block detected at (${blockCoord.x},${blockCoord.y},${blockCoord.z}) - using full rebuild`);
-          break;
-        }
-      }
-      
-      // If no air blocks found yet, check the surrounding blocks too
-      if (!containsAirBlocks) {
-        // Create a set to check a wider range
-        const blockSet = new Set();
-        for (const blockCoord of blockCoordinates) {
-          blockSet.add(`${blockCoord.x},${blockCoord.y},${blockCoord.z}`);
-          
-          // Check surrounding blocks
-          for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dz = -1; dz <= 1; dz++) {
-                if (dx === 0 && dy === 0 && dz === 0) continue;
-                
-                const nx = blockCoord.x + dx;
-                const ny = blockCoord.y + dy;
-                const nz = blockCoord.z + dz;
-                
-                // Skip if out of bounds
-                if (nx < 0 || nx > CHUNK_INDEX_RANGE || 
-                    ny < 0 || ny > CHUNK_INDEX_RANGE || 
-                    nz < 0 || nz > CHUNK_INDEX_RANGE) {
-                  continue;
-                }
-                
-                const key = `${nx},${ny},${nz}`;
-                if (!blockSet.has(key)) {
-                  blockSet.add(key);
-                  
-                  // Check if this is an air block
-                  if (!this.getLocalBlockType({x: nx, y: ny, z: nz})) {
-                    containsAirBlocks = true;
-                    console.log(`Air block detected in surrounding area at (${nx},${ny},${nz}) - using full rebuild`);
-                    break;
-                  }
-                }
-              }
-              if (containsAirBlocks) break;
-            }
-            if (containsAirBlocks) break;
+      for (const coord of blockCoordinates) {
+        // If coord is already a local coordinate within this chunk
+        if (coord.x >= 0 && coord.x < CHUNK_SIZE && 
+            coord.y >= 0 && coord.y < CHUNK_SIZE && 
+            coord.z >= 0 && coord.z < CHUNK_SIZE) {
+          localCoordinates.push(coord);
+        } 
+        // If coord is a global coordinate
+        else {
+          // Check if this global coordinate belongs to this chunk
+          const originCoord = Chunk.globalCoordinateToOriginCoordinate(coord);
+          if (originCoord.x === this.originCoordinate.x && 
+              originCoord.y === this.originCoordinate.y && 
+              originCoord.z === this.originCoordinate.z) {
+            // Convert to local
+            localCoordinates.push(Chunk.globalCoordinateToLocalCoordinate(coord));
           }
-          if (containsAirBlocks) break;
         }
       }
       
-      // For operations involving air blocks, or if many blocks are affected, 
-      // always do a full rebuild for safety
-      if (containsAirBlocks || blockCoordinates.length > 3) {
-        console.log(`Using full rebuild for chunk ${this.chunkId} instead of partial update - ${containsAirBlocks ? 'contains air blocks' : 'too many blocks'}`);
+      if (localCoordinates.length === 0) {
+        console.log(`No valid local coordinates for this chunk - skipping partial mesh update`);
         console.timeEnd(perfId);
-        return this.buildMeshes(chunkManager);
+        return { liquidMesh: this._liquidMesh, solidMesh: this._solidMesh };
       }
 
-      // Set up meshes
+      // Expand the range to include neighboring blocks
+      const effectiveRange = new Set();
+      const processedBlocks = new Set();
+      
+      for (const coord of localCoordinates) {
+        // Skip if out of bounds
+        if (!Chunk.isValidLocalCoordinate(coord)) {
+          continue;
+        }
+        
+        // Add this block
+        effectiveRange.add(`${coord.x},${coord.y},${coord.z}`);
+        
+        // Add neighbors (consider diagonals too for AO)
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dz = -1; dz <= 1; dz++) {
+              const nx = coord.x + dx;
+              const ny = coord.y + dy;
+              const nz = coord.z + dz;
+              
+              // Skip if this would be out of bounds
+              if (nx < 0 || nx >= CHUNK_SIZE ||
+                  ny < 0 || ny >= CHUNK_SIZE ||
+                  nz < 0 || nz >= CHUNK_SIZE) {
+                continue;
+              }
+              
+              effectiveRange.add(`${nx},${ny},${nz}`);
+            }
+          }
+        }
+      }
+      
+      // Prepare mesh arrays
+      const solidMeshPositions = [];
+      const solidMeshNormals = [];
+      const solidMeshUvs = [];
+      const solidMeshIndices = [];
+      const solidMeshColors = [];
+      
+      const liquidMeshPositions = [];
+      const liquidMeshNormals = [];
+      const liquidMeshUvs = [];
+      const liquidMeshIndices = [];
+      const liquidMeshColors = [];
+      
       const { x: originX, y: originY, z: originZ } = this.originCoordinate;
 
-      // Create buffers for the new mesh data
-      const liquidMeshColors = [];
-      const liquidMeshIndices = [];
-      const liquidMeshNormals = [];
-      const liquidMeshPositions = [];
-      const liquidMeshUvs = [];
-
-      const solidMeshColors = [];
-      const solidMeshIndices = [];
-      const solidMeshNormals = [];
-      const solidMeshPositions = [];
-      const solidMeshUvs = [];
-
-      // Track which blocks we've already processed to avoid duplicates
-      const processedBlocks = new Set();
-
-      // Create a set for effective range - include blocks and their neighbors
-      const effectiveRange = new Set();
-      
-      // Add all affected blocks to the effective range
-      for (const blockCoord of blockCoordinates) {
-        const key = `${blockCoord.x},${blockCoord.y},${blockCoord.z}`;
-        effectiveRange.add(key);
-      }
-      
-      // Add a wider range of neighbors to ensure clean seams
-      // This is crucial to prevent visual artifacts
-      const blocksToProcess = [...effectiveRange];
-      for (const blockKey of blocksToProcess) {
-        const [x, y, z] = blockKey.split(',').map(Number);
-        
-        // Add all neighbors (including diagonals) within a distance of 2
-        // This larger radius ensures proper ambient occlusion and face connectivity
-        for (let dx = -2; dx <= 2; dx++) {
-          for (let dy = -2; dy <= 2; dy++) {
-            for (let dz = -2; dz <= 2; dz++) {
-              // Skip the block itself
-              if (dx === 0 && dy === 0 && dz === 0) continue;
-              
-              const nx = x + dx;
-              const ny = y + dy;
-              const nz = z + dz;
-              
-              // Ensure we're inside chunk bounds
-              if (nx >= 0 && nx < CHUNK_SIZE && 
-                  ny >= 0 && ny < CHUNK_SIZE && 
-                  nz >= 0 && nz < CHUNK_SIZE) {
-                effectiveRange.add(`${nx},${ny},${nz}`);
-              }
-            }
-          }
-        }
-      }
+      // Precompute extended block types
+      this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
 
       // Generate meshes for all blocks in the effective range
       for (const blockKey of effectiveRange) {
@@ -606,13 +563,12 @@ class Chunk {
 
         for (const blockFace of blockType.faces) {
           const { normal: dir, vertices } = blockType.faceGeometries[blockFace];
-          const neighborGlobalCoordinate = {
-            x: globalX + dir[0],
-            y: globalY + dir[1],
-            z: globalZ + dir[2],
-          };
-
-          const neighborBlockType = chunkManager.getGlobalBlockType(neighborGlobalCoordinate);
+          
+          // Use extended block types array instead of getGlobalBlockType
+          const ex = x + 1 + dir[0];
+          const ey = y + 1 + dir[1];
+          const ez = z + 1 + dir[2];
+          const neighborBlockType = this._extendedBlockTypes[ex][ey][ez];
 
           if (
             neighborBlockType &&
@@ -630,86 +586,65 @@ class Chunk {
 
           const ndx = meshPositions.length / 3;
           const textureUri = blockType.textureUris[blockFace];
-
+          
           // Process vertices for this face
           for (const { pos, uv, ao } of vertices) {
             const vertexX = globalX + pos[0] - 0.5;
             const vertexY = globalY + pos[1] - 0.5;
             const vertexZ = globalZ + pos[2] - 0.5;
-
+            
             meshPositions.push(vertexX, vertexY, vertexZ);
             meshNormals.push(...dir);
-
-            // Calculate UV coords for face texture
-            // Determine texture path based on block face - this correctly handles data URIs
+            
+            // Calculate UV coordinates
             const actualTextureUri = blockType.getTexturePath(blockFace);
-            
-            // DEBUG - Log texture request info for multi-sided blocks
-            if (blockType.isMultiSided && blockType.id < 10) {
-              console.log(`🧊 Multi-sided texture request:
-                - Block: ${blockType.name} (ID: ${blockType.id})
-                - Face: ${blockFace}
-                - Path: ${actualTextureUri}
-                - textureUris: ${JSON.stringify(blockType.textureUris)}
-              `);
-            }
-            
-            // Get the block type ID from the blockType object
-            const blockTypeId = blockType.id;
-            
-            // Get the block name for texture lookups
-            const blockName = blockType.name || '';
-                               
-            // Variable to store texture coordinates
             let texCoords;
             
-            // Special handling for grass blocks (special case for grass side textures)
-            if (blockTypeId === 2 && (blockFace === 'front' || blockFace === 'back' || blockFace === 'left' || blockFace === 'right')) {
-              // Check if this block is above another block (for grass blocks)
-              const isAbove = chunkManager.getGlobalBlockType({
-                x: globalX, 
-                y: globalY - 1, 
-                z: globalZ
-              }) !== null;
-              
-              if (!isAbove) {
-                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync('./assets/blocks/grass-side.png', uv);
-              }
+            // Special debug for multi-sided blocks
+            if (blockType.isMultiSided) {
+              console.debug(`Multi-sided block at (${globalX},${globalY},${globalZ}): ${blockType.name}, face: ${blockFace}`);
             }
-            
-            // If not handled by special case, continue with normal handling
+              
             if (!texCoords) {
-              // Special handling for liquid blocks 
+              // Special handling for liquid blocks
               if (blockType.isLiquid) {
                 const liquidTexturePath = blockType.getTextureUris().top || './assets/blocks/water-still.png';
                 texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(liquidTexturePath, uv);
               }
-              // Handle data URIs directly
-              else if (actualTextureUri && actualTextureUri.startsWith('data:image/')) {
-                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
-              }
-            // Special handling for multi-sided blocks
+              // Special handling for multi-sided blocks
               else if (blockType.isMultiSided) {
                 // First try using getMultiSidedTextureUV which handles multi-sided textures specially
-              texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
+                texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(blockType.name, blockFace, uv);
                 
                 // If that didn't work, try the direct path from getTexturePath
                 if (!texCoords || (texCoords[0] === 0 && texCoords[1] === 0)) {
                   texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
                 }
+              } else {
+                // Get texture coordinates
+                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
               }
-              // Normal texture handling for regular blocks
-              else {
-              texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
-            }
-            }
-            
-            // Queue textures for loading if they're missing
-            if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
+              
+              if (!texCoords && actualTextureUri) {
+                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(actualTextureUri, uv);
+              }
+              
+              if (!texCoords) {
+                texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync('./assets/blocks/error.png', uv);
+                
+                if (!texCoords) {
+                  texCoords = [0, 0, 1, 1];
+                }
+              }
+              
+              // Queue textures for loading if they're missing
+              if (texCoords[0] === 0 && texCoords[1] === 0 && actualTextureUri !== './assets/blocks/error.png') {
                 BlockTextureAtlas.instance.queueTextureForLoading(actualTextureUri);
+              }
             }
             
-            meshUvs.push(...texCoords);
+            // Push the UV coordinates
+            meshUvs.push(texCoords[0], texCoords[1]);
 
             // Calculate vertex color with ambient occlusion
             const vertexCoordinate = {
@@ -771,6 +706,9 @@ class Chunk {
 
       // Update visibility for both meshes
       this._updateMeshVisibility();
+
+      // Clean up extended block types array
+      delete this._extendedBlockTypes;
 
       console.log(`Successfully built partial mesh for chunk ${this.chunkId} with ${blockCoordinates.length} affected blocks (expanded to ${effectiveRange.size} blocks)`);
       console.timeEnd(perfId);
@@ -1046,13 +984,25 @@ class Chunk {
     // Calculate AO
     for (const aoSide of Object.values(blockFaceAO)) {
       const [ dx, dy, dz ] = aoSide;
-      const neighborGlobalCoordinate = {
-        x: Math.floor(vertexCoordinate.x + dx),
-        y: Math.floor(vertexCoordinate.y + dy),
-        z: Math.floor(vertexCoordinate.z + dz),
-      };
+      let neighborBlockType;
 
-      const neighborBlockType = chunkManager.getGlobalBlockType(neighborGlobalCoordinate);
+      if (this._extendedBlockTypes) {
+        const ex = Math.floor(vertexCoordinate.x + dx) - (this.originCoordinate.x - 1);
+        const ey = Math.floor(vertexCoordinate.y + dy) - (this.originCoordinate.y - 1);
+        const ez = Math.floor(vertexCoordinate.z + dz) - (this.originCoordinate.z - 1);
+        if (ex >= 0 && ex <= CHUNK_SIZE + 1 && ey >= 0 && ey <= CHUNK_SIZE + 1 && ez >= 0 && ez <= CHUNK_SIZE + 1) {
+          neighborBlockType = this._extendedBlockTypes[ex][ey][ez];
+        }
+      }
+
+      if (!neighborBlockType) {
+        const neighborGlobalCoordinate = {
+          x: Math.floor(vertexCoordinate.x + dx),
+          y: Math.floor(vertexCoordinate.y + dy),
+          z: Math.floor(vertexCoordinate.z + dz),
+        };
+        neighborBlockType = chunkManager.getGlobalBlockType(neighborGlobalCoordinate);
+      }
 
       if (neighborBlockType && !neighborBlockType.isLiquid) {
         aoIntensityLevel++;

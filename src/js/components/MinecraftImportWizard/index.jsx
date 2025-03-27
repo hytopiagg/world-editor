@@ -137,7 +137,11 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
       
       // Update the terrain with imported data - loading will be managed inside updateTerrainFromToolBar
       setTimeout(() => {
-        terrainBuilderRef.current?.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
+        if (terrainBuilderRef.current?.updateTerrainFromToolBar) {
+          console.log("Updating terrain with imported Minecraft data");
+          // This method will directly update the terrain without double processing
+          terrainBuilderRef.current.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
+        }
       }, 50); // Reduced from 150ms for faster response
     } else {
       // If no import result, just close normally

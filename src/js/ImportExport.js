@@ -63,6 +63,41 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
               return acc;
             }, {});
             
+            // Calculate map size from terrain data to update grid size
+            if (Object.keys(terrainData).length > 0 && terrainBuilderRef && terrainBuilderRef.current) {
+              console.log("Calculating map dimensions to update grid size...");
+              
+              // Find the min/max coordinates
+              let minX = Infinity, minZ = Infinity;
+              let maxX = -Infinity, maxZ = -Infinity;
+              
+              Object.keys(terrainData).forEach(key => {
+                const [x, y, z] = key.split(',').map(Number);
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minZ = Math.min(minZ, z);
+                maxZ = Math.max(maxZ, z);
+              });
+              
+              // Calculate width and length (adding a small margin)
+              const width = maxX - minX + 10;
+              const length = maxZ - minZ + 10;
+              
+              // Use the larger dimension for the grid size (rounded up to nearest multiple of 16)
+              const gridSize = Math.ceil(Math.max(width, length) / 16) * 16;
+              
+              console.log(`Map dimensions: ${width}x${length}, setting grid size to ${gridSize}`);
+              
+              // Update the grid size before loading the terrain
+              if (terrainBuilderRef.current.updateGridSize) {
+                console.log(`Calling updateGridSize with gridSize=${gridSize}`);
+                terrainBuilderRef.current.updateGridSize(gridSize);
+                console.log(`Grid size update completed, should now be ${gridSize}`);
+              } else {
+                console.warn("updateGridSize method not found on terrainBuilderRef");
+              }
+            }
+            
             // Convert entities to environment format
             if (importData.entities) {
               environmentData = Object.entries(importData.entities)
@@ -115,18 +150,11 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
           
           // Refresh terrain and environment builders
           if (terrainBuilderRef && terrainBuilderRef.current) {
-            console.log("Refreshing terrain from DB after import with FORCED spatial hash rebuild");
+            console.log("Refreshing terrain from DB after import");
             await terrainBuilderRef.current.refreshTerrainFromDB();
             
-            // Force a complete rebuild of the spatial hash grid
-            if (terrainBuilderRef.current.spatialGridManager) {
-              console.log("Forcing complete spatial hash rebuild after import");
-              await terrainBuilderRef.current.spatialGridManager.updateFromTerrain(terrainData, {
-                showLoadingScreen: true,
-                force: true,
-                message: "Rebuilding spatial index after import..."
-              });
-            }
+            // The spatial hash is already rebuilt during refreshTerrainFromDB,
+            // so we don't need to do it again here
           }
           
           if (environmentBuilderRef && environmentBuilderRef.current) {

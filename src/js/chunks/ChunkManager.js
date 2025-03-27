@@ -547,10 +547,6 @@ class ChunkManager {
 			// Force a complete rebuild if specifically requested (for block removal operations)
 			// or for first blocks and chunks with no existing meshes
 			if (forceCompleteRebuild || isFirstBlockInChunk || !hasExistingMeshes || !hasBlockCoords) {
-				// If this is a forced rebuild for block removal, log it
-				if (forceCompleteRebuild) {
-					console.log(`Performing forced complete rebuild for chunk ${chunk.chunkId}`);
-				}
 				
 				// Full rebuild
 				chunk.buildMeshes(this);
@@ -601,10 +597,7 @@ class ChunkManager {
 		// Reduce log spam - only log if radius is larger than 1 or if sampling
 		const shouldLog = false;//radius > 1 && Math.random() < 0.01; // Only log 1% of clearing operations
 		
-		if (shouldLog) {
-			console.log(`Clearing block type cache around (${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z}) with radius ${radius}`);
-		}
-
+		
 		// For radius 0, just clear this exact coordinate without logging
 		if (radius === 0) {
 			const exactKey = `${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z}`;
@@ -670,10 +663,7 @@ class ChunkManager {
 		// For block removal, clear caches for immediate neighbors only
 		if (isBlockRemoval) {
 			// Only log once in a while to prevent console spam
-			if (Math.random() < 0.1) {
-				console.log(`Block removal at (${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z})`);
-			}
-			
+		
 			// Check for chunk boundaries 
 			const isOnChunkBoundaryX = localCoordinate.x === 0 || localCoordinate.x === CHUNK_INDEX_RANGE;
 			const isOnChunkBoundaryY = localCoordinate.y === 0 || localCoordinate.y === CHUNK_INDEX_RANGE;
@@ -852,11 +842,6 @@ class ChunkManager {
 		// During bulk loading, we'll use a smaller view distance to optimize performance
 		const effectiveViewDistance = isBulkLoading ? Math.min(32, this._viewDistance / 2) : this._viewDistance;
 
-		if (isBulkLoading) {
-			//console.log(`Force updating chunk visibility during BULK LOADING with reduced view distance ${effectiveViewDistance}`);
-		} else {
-			//console.log(`Force updating chunk visibility with camera at ${cameraPos.x.toFixed(1)},${cameraPos.y.toFixed(1)},${cameraPos.z.toFixed(1)}`);
-		}
 
 		this._chunks.forEach((chunk) => {
 			const coord = chunk.originCoordinate;
@@ -913,12 +898,7 @@ class ChunkManager {
 			}
 		});
 
-		if (isBulkLoading) {
-			//console.log(`Bulk loading visibility update: ${visibleCount} visible, ${hiddenCount} hidden, ${visibilityChangedCount} changed, ${forcedToggleCount} force-toggled`);
-		} else {
-			//console.log(`Visibility update: ${visibleCount} visible, ${hiddenCount} hidden, ${visibilityChangedCount} changed, ${forcedToggleCount} force-toggled`);
-		}
-
+	
 		// Return stats for debugging
 		return {
 			total: this._chunks.size,
@@ -955,11 +935,7 @@ class ChunkManager {
 		
 		// Skip if this chunk is already in the queue
 		if (this._pendingRenderChunks.has(chunk.chunkId)) {
-			// Only log occasionally to reduce console spam
-			if (Math.random() < 0.05) {
-				console.log(`Chunk ${chunk.chunkId} already queued for render, skipping duplicate`);
-			}
-			
+		
 			// Even if the chunk is already queued, we might need to update its options
 			if (options && Object.keys(options).length > 0) {
 				const existingOptions = this._chunkRemeshOptions.get(chunk.chunkId) || {};
@@ -1059,7 +1035,6 @@ class ChunkManager {
 		document.addEventListener('blockTypeChanged', (event) => {
 			const blockTypeId = event.detail?.blockTypeId;
 			if (blockTypeId) {
-				console.log(`ChunkManager: Received blockTypeChanged event for ID ${blockTypeId}`);
 				this._handleBlockTypeChanged(blockTypeId);
 			}
 		});
@@ -1071,7 +1046,6 @@ class ChunkManager {
 	 * @private
 	 */
 	_handleBlockTypeChanged(blockTypeId) {
-		console.log(`ChunkManager: Handling block type change for ID ${blockTypeId}`);
 		
 		// Find all chunks that use this block type
 		const chunksToUpdate = new Set();
@@ -1080,7 +1054,6 @@ class ChunkManager {
 		for (const [chunkKey, chunk] of this._chunks.entries()) {
 			// Check if the chunk contains the modified block type
 			if (chunk.containsBlockType(blockTypeId)) {
-				console.log(`ChunkManager: Chunk ${chunkKey} contains block type ${blockTypeId}, marking for remesh`);
 				chunksToUpdate.add(chunkKey);
 			}
 		}
@@ -1088,7 +1061,6 @@ class ChunkManager {
 		// If no chunks found with direct check, force update visible chunks
 		// This ensures new blocks can be placed with the updated texture
 		if (chunksToUpdate.size === 0) {
-			console.log(`ChunkManager: No chunks found with block type ${blockTypeId}, updating all visible chunks`);
 			
 			// Update only visible chunks to avoid unnecessary processing
 			for (const [chunkKey, chunk] of this._chunks.entries()) {
@@ -1106,7 +1078,6 @@ class ChunkManager {
 		// Process the render queue to apply changes
 		this.processRenderQueue(true);
 		
-		console.log(`ChunkManager: Marked ${chunksToUpdate.size} chunks for remeshing due to block type change`);
 	}
 }
 

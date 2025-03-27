@@ -16,8 +16,7 @@ class BlockTypeRegistry {
     // Expanded list of essential block types to preload - include more common blocks
     // This ensures more textures are loaded immediately on startup
     this._essentialBlockTypes = new Set([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
-      11, 12, 13, 14, 15  // Add more common block IDs
+        // Add more common block IDs
     ]); 
   }
 

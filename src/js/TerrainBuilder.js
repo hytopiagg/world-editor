@@ -111,8 +111,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				console.log(`Auto-save enabled with interval: ${AUTO_SAVE_INTERVAL/1000} seconds`);
 				autoSaveIntervalRef.current = setInterval(() => {
 					// Only save if there are pending changes
-					if (Object.keys(pendingChangesRef.current.added).length > 0 || 
-						Object.keys(pendingChangesRef.current.removed).length > 0) {
+					if (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
+						Object.keys(pendingChangesRef.current.terrain.removed).length > 0) {
 						console.log("Auto-saving terrain...");
 						efficientTerrainSave();
 					}
@@ -1391,34 +1391,78 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	const updateTerrainFromToolBar = (terrainData) => {
 		// Show initial loading screen
-		loadingManager.showLoading('Preparing to import Minecraft world...');
+		loadingManager.showLoading('Preparing to import map...');
 		
 		// Set terrain data immediately
 		terrainRef.current = terrainData;
 		
-		// For Minecraft imports, we'll save to database immediately and not mark as unsaved
+		// Calculate grid size from terrain dimensions
+		if (terrainData && Object.keys(terrainData).length > 0) {
+			console.log("Calculating grid size based on map dimensions...");
+			
+			// Find the min/max coordinates
+			let minX = Infinity, minZ = Infinity;
+			let maxX = -Infinity, maxZ = -Infinity;
+			
+			Object.keys(terrainData).forEach(key => {
+				const [x, y, z] = key.split(',').map(Number);
+				minX = Math.min(minX, x);
+				maxX = Math.max(maxX, x);
+				minZ = Math.min(minZ, z);
+				maxZ = Math.max(maxZ, z);
+			});
+			
+			// Calculate width and length (adding a small margin)
+			const width = maxX - minX + 10;
+			const length = maxZ - minZ + 10;
+			
+			// Use the larger dimension for the grid size (rounded up to nearest multiple of 16)
+			const gridSize = Math.ceil(Math.max(width, length) / 16) * 16;
+			
+			console.log(`Map dimensions: ${width}x${length}, updating grid size to ${gridSize}`);
+			
+			// Update the grid size
+			updateGridSize(gridSize);
+		}
+		
+		// For imports, we'll save to database immediately and not mark as unsaved
 		if (terrainData) {
-			console.log("Importing Minecraft map and saving to database");
+			console.log("Importing map and saving to database");
 			
 			// First save to database
 			DatabaseManager.saveData(STORES.TERRAIN, "current", terrainData)
 				.then(() => {
-					console.log("Minecraft imported terrain saved to database successfully");
+					console.log("Imported terrain saved to database successfully");
 					// Clear any pending changes to prevent unsaved changes warning
-					pendingChangesRef.current = { added: {}, removed: {} };
+					pendingChangesRef.current = { terrain: { added: {}, removed: {} }, environment: { added: [], removed: [] } };
 				})
 				.catch(error => {
-					console.error("Error saving Minecraft imported terrain:", error);
+					console.error("Error saving imported terrain:", error);
 				});
 		}
 		
 		// Start terrain update immediately for faster response
-		// The buildUpdateTerrain function doesn't return a Promise, so we can't use .then()
-		buildUpdateTerrain();
+		// Configure for bulk loading for better performance
+		configureChunkLoading({ 
+			deferMeshBuilding: true,
+			priorityDistance: 48,
+			deferredBuildDelay: 5000
+		});
 		
-		// Process render queue after a short delay to ensure terrain is updated
-		setTimeout(() => {
-			// Force a full visibility update after terrain is loaded
+		// Set bulk loading mode to optimize for large terrain loads
+		if (getChunkSystem()) {
+			getChunkSystem().setBulkLoadingMode(true, 48);
+		}
+		
+		// Build the terrain with the provided blocks
+		buildUpdateTerrain({ blocks: terrainData, deferMeshBuilding: true });
+		
+		// Initialize spatial hash grid
+		setTimeout(async () => {
+			// Initialize spatial hash (all blocks, not just visible ones)
+			await initializeSpatialHash(true, false);
+			
+			// Process render queue to update visible chunks
 			processChunkRenderQueue();
 			
 			// Hide loading screen
@@ -1429,24 +1473,35 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Update
 	const updateGridSize = (newGridSize) => {
 		if (gridRef.current) {
-			// Get grid size from localStorage or use default value
-			const savedGridSize = parseInt(localStorage.getItem("gridSize"), 10) || newGridSize;
+			// If newGridSize is provided, use it and update localStorage
+			// Otherwise, get grid size from localStorage
+			let gridSizeToUse;
+			
+			if (newGridSize) {
+				gridSizeToUse = newGridSize;
+				// Update localStorage with the new value
+				localStorage.setItem("gridSize", gridSizeToUse.toString());
+			} else {
+				gridSizeToUse = parseInt(localStorage.getItem("gridSize"), 10) || 64; // Default to 64
+			}
 			
 			// Update the gridSizeRef to maintain current grid size value
-			gridSizeRef.current = savedGridSize;
+			gridSizeRef.current = gridSizeToUse;
 
 			if (gridRef.current.geometry) {
 				gridRef.current.geometry.dispose();
-				gridRef.current.geometry = new THREE.GridHelper(savedGridSize, savedGridSize, 0x5c5c5c, 0xeafaea).geometry;
+				gridRef.current.geometry = new THREE.GridHelper(gridSizeToUse, gridSizeToUse, 0x5c5c5c, 0xeafaea).geometry;
 				gridRef.current.material.opacity = 0.1;
 				gridRef.current.position.set(0.5, -0.5, 0.5);
 			}
 
 			if (shadowPlaneRef.current.geometry) {
 				shadowPlaneRef.current.geometry.dispose();
-				shadowPlaneRef.current.geometry = new THREE.PlaneGeometry(savedGridSize, savedGridSize);
+				shadowPlaneRef.current.geometry = new THREE.PlaneGeometry(gridSizeToUse, gridSizeToUse);
 				shadowPlaneRef.current.position.set(0.5, -0.5, 0.5);
 			}
+			
+			console.log(`Grid size updated to: ${gridSizeToUse}x${gridSizeToUse}`);
 		}
 	};
 
@@ -2062,8 +2117,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			autoSaveIntervalRef.current = setInterval(() => {
 				// Only save if there are pending changes and not in the middle of an operation
 				if (!isPlacingRef.current && 
-				    (Object.keys(pendingChangesRef.current.added).length > 0 || 
-				    Object.keys(pendingChangesRef.current.removed).length > 0)) {
+				    (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
+				    Object.keys(pendingChangesRef.current.terrain.removed).length > 0)) {
 					console.log("Auto-saving terrain...");
 					efficientTerrainSave();
 				}
@@ -2071,8 +2126,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			// Save immediately if there are pending changes and not in the middle of an operation
 			if (!isPlacingRef.current && 
-			    (Object.keys(pendingChangesRef.current.added).length > 0 || 
-			    Object.keys(pendingChangesRef.current.removed).length > 0)) {
+			    (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
+			    Object.keys(pendingChangesRef.current.terrain.removed).length > 0)) {
 				console.log("Immediate save after enabling auto-save...");
 				efficientTerrainSave();
 			}
@@ -2115,6 +2170,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		updateDebugInfo, // Expose debug info updates for tools
 		forceChunkUpdate, // Direct chunk updating for tools like BrushTool
 		forceRefreshAllChunks, // Force refresh of all chunks
+		updateGridSize, // Expose for updating grid size when importing maps
 		
 		// Tool management
 		activateTool: (toolName) => {
@@ -2211,9 +2267,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				autoSaveIntervalRef.current = setInterval(() => {
 					// Only save if there are pending changes and not in the middle of an operation
 					if (!isPlacingRef.current && 
-					    (Object.keys(pendingChangesRef.current.added).length > 0 || 
-					    Object.keys(pendingChangesRef.current.removed).length > 0)) {
+					    (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
+					    Object.keys(pendingChangesRef.current.terrain.removed).length > 0)) {
 						console.log(`Auto-saving terrain (interval: ${intervalMs}ms)...`);
+						
 						efficientTerrainSave();
 					}
 				}, intervalMs);

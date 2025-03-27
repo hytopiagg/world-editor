@@ -88,40 +88,7 @@ class BlockMaterial {
             vWorldPos = worldPos.xyz;
             vViewVector = normalize(cameraPosition - worldPos.xyz);
             
-            // Wave animation calculations
-            vec3 pos = position;
-            float slowTime = time * 0.5;
-            
-            // Optimize face checks by combining conditions
-            float yOffset = -0.1;
-            float normalY = normal.y;
-            float absNormalX = abs(normal.x);
-            float absNormalZ = abs(normal.z);
-            
-            // Apply vertical offset to all faces that need it
-            if (normalY > 0.5 || absNormalX > 0.5 || absNormalZ > 0.5) {
-              pos.y += yOffset;
-            }
-            
-            // Minimal outward push for side faces
-            if (absNormalX > 0.5) pos.x += sign(normal.x) * 0.001;
-            if (absNormalZ > 0.5) pos.z += sign(normal.z) * 0.001;
-            
-            // Simplified wave calculation
-            vec2 corner = floor(worldPos.xz + 0.5);
-            float wave = sin(dot(corner, vec2(0.5)) + slowTime) * cos(dot(corner, vec2(0.5)) + slowTime) * 0.04 +
-                         sin(dot(corner, vec2(0.8)) + slowTime * 1.2) * cos(dot(corner, vec2(0.8)) + slowTime * 0.8) * 0.02;
-            
-            // Only apply negative waves
-            wave = min(0.0, wave);
-            pos.y += wave;
-            
-            // Apply inward depression
-            float depression = abs(wave) * 0.05;
-            if (absNormalX > 0.5) pos.x -= sign(normal.x) * depression;
-            if (absNormalZ > 0.5) pos.z -= sign(normal.z) * depression;
-            
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+          
           }
         `,
         fragmentShader: `
@@ -166,22 +133,18 @@ class BlockMaterial {
                         vec3(0.08, 0.12, 0.15) * fresnel +
                         vec3(0.03, 0.05, 0.08) * waveLighting;
             }
-            
-            gl_FragColor = vec4(color, 0.8);
+            texColor.a = 0.8;
+            gl_FragColor = texColor;
           }
         `,
         transparent: true,
-        depthWrite: false
+        depthWrite: false,
+		blendSrcAlpha: THREE.SrcAlphaFactor,
+		blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+		opacity: 0.8,
       });
 
-      // Animate the water
-      const animate = () => {
-        if (this._liquidMaterial) {
-          this._liquidMaterial.uniforms.time.value += 0.0075;
-        }
-        requestAnimationFrame(animate);
-      };
-      animate();
+      
     }
     return this._liquidMaterial;
   }
