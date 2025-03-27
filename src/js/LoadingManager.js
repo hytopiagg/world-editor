@@ -13,14 +13,34 @@ class LoadingManager {
     // Clear any pending timers first to avoid conflicts
     this.clearTimers();
     
+    // Force the loading screen to be visible
     this.isLoading = true;
     this.message = message;
     this.progress = progress;
+    
+    // Make sure we notify all listeners immediately
     this.notifyListeners();
+    
+    // For better visibility, add a small delay between rapid loading state changes
+    const timerId = setTimeout(() => {
+      // Reaffirm the loading state to handle any race conditions
+      if (this.message === message) {
+        this.isLoading = true;
+        this.notifyListeners();
+      }
+    }, 100);
+    
+    // Track this timer
+    this.loadingTimers.add(timerId);
   }
 
   // Update the loading screen with new message or progress
   updateLoading(message = null, progress = null) {
+    // If not currently loading, force it to show
+    if (!this.isLoading) {
+      this.isLoading = true;
+    }
+    
     if (message !== null) {
       this.message = message;
     }

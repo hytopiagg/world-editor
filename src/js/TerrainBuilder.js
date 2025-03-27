@@ -1227,15 +1227,17 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 
 	const updateTerrainFromToolBar = (terrainData) => {
-		// Show initial loading screen
-		loadingManager.showLoading('Preparing to import map...');
+		// Show initial loading screen with clear message
+		loadingManager.showLoading('Starting Minecraft map import...', 0);
 		
 		// Set terrain data immediately
 		terrainRef.current = terrainData;
 		
 		// Calculate grid size from terrain dimensions
 		if (terrainData && Object.keys(terrainData).length > 0) {
-			console.log("Calculating grid size based on map dimensions...");
+			const totalBlocks = Object.keys(terrainData).length;
+			console.log(`Importing Minecraft map with ${totalBlocks.toLocaleString()} blocks...`);
+			loadingManager.updateLoading(`Processing ${totalBlocks.toLocaleString()} blocks...`, 5);
 			
 			// Find the min/max coordinates
 			let minX = Infinity, minZ = Infinity;
@@ -1262,6 +1264,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			updateGridSize(gridSize);
 		}
 		
+		// Update loading screen to show database saving progress
+		loadingManager.updateLoading('Saving imported terrain to database...', 15);
+		
 		// For imports, we'll save to database immediately and not mark as unsaved
 		if (terrainData) {
 			console.log("Importing map and saving to database");
@@ -1272,39 +1277,72 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					console.log("Imported terrain saved to database successfully");
 					// Clear any pending changes to prevent unsaved changes warning
 					pendingChangesRef.current = { terrain: { added: {}, removed: {} }, environment: { added: [], removed: [] } };
+					
+					// Update loading screen after database save is complete
+					loadingManager.updateLoading('Building terrain from imported blocks...', 30);
+					
+					// Configure for bulk loading for better performance
+					configureChunkLoading({ 
+						deferMeshBuilding: true,
+						priorityDistance: 48,
+						deferredBuildDelay: 5000
+					});
+					
+					// Set bulk loading mode to optimize for large terrain loads
+					if (getChunkSystem()) {
+						getChunkSystem().setBulkLoadingMode(true, 48);
+					}
+					
+					// Build the terrain with the provided blocks
+					buildUpdateTerrain({ blocks: terrainData, deferMeshBuilding: true });
+					
+					// Update loading screen to show spatial hash initialization
+					loadingManager.updateLoading('Initializing spatial hash grid...', 60);
+					
+					// Create a sequence of operations with proper loading screen updates
+					setTimeout(async () => {
+						try {
+							// Initialize spatial hash (all blocks, not just visible ones)
+							loadingManager.updateLoading('Building spatial hash index...', 70);
+							await initializeSpatialHash(true, false);
+							
+							// Update total block count
+							totalBlocksRef.current = Object.keys(terrainRef.current).length;
+							if (sendTotalBlocks) {
+								sendTotalBlocks(totalBlocksRef.current);
+							}
+							
+							// Update loading screen for final rendering
+							loadingManager.updateLoading('Building terrain meshes...', 85);
+							
+							// Process render queue to update visible chunks
+							processChunkRenderQueue();
+							
+							// Final update before hiding
+							loadingManager.updateLoading('Map import complete, preparing view...', 95);
+							
+							// Add a small delay to ensure the UI updates before hiding the loading screen
+							setTimeout(() => {
+								// Hide loading screen
+								loadingManager.hideLoading();
+								// Update debug info
+								updateDebugInfo();
+								console.log('Minecraft map import complete!');
+							}, 500);
+						} catch (error) {
+							console.error('Error during map import:', error);
+							loadingManager.hideLoading();
+						}
+					}, 500);
 				})
 				.catch(error => {
 					console.error("Error saving imported terrain:", error);
+					loadingManager.hideLoading();
 				});
-		}
-		
-		// Start terrain update immediately for faster response
-		// Configure for bulk loading for better performance
-		configureChunkLoading({ 
-			deferMeshBuilding: true,
-			priorityDistance: 48,
-			deferredBuildDelay: 5000
-		});
-		
-		// Set bulk loading mode to optimize for large terrain loads
-		if (getChunkSystem()) {
-			getChunkSystem().setBulkLoadingMode(true, 48);
-		}
-		
-		// Build the terrain with the provided blocks
-		buildUpdateTerrain({ blocks: terrainData, deferMeshBuilding: true });
-		
-		// Initialize spatial hash grid
-		setTimeout(async () => {
-			// Initialize spatial hash (all blocks, not just visible ones)
-			await initializeSpatialHash(true, false);
-			
-			// Process render queue to update visible chunks
-			processChunkRenderQueue();
-			
-			// Hide loading screen
+		} else {
+			// No terrain data provided, just hide loading screen
 			loadingManager.hideLoading();
-		}, 1000);
+		}
 	};
 
 	// Update
@@ -1743,6 +1781,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			getPlacementPositions, // Share position calculation utility
 			importedUpdateTerrainBlocks, // Direct access to optimized terrain update function
 			updateSpatialHashForBlocks, // Direct access to spatial hash update function
+			totalBlocksRef, // Provide access to the total block count ref
+			sendTotalBlocks, // Provide the function to update the total block count in the UI
 			// Add any other properties tools might need
 		};
 		
@@ -1886,7 +1926,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	useEffect(() => {
 		if (!scene || !gl) return;
 		
-		console.log("Setting up texture atlas update listener");
 		
 		const handleTextureAtlasUpdate = (event) => {
 			// Force update all materials
@@ -1907,11 +1946,19 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			// Update chunk visibility to force mesh updates
 			if (getChunkSystem()) {
-				console.log("Forcing chunk visibility update after texture change");
 				getChunkSystem().forceUpdateChunkVisibility(); // Changed from forceUpdateAllChunkVisibility
 				// Also force processing the render queue
 				getChunkSystem().processRenderQueue(true);
 			}
+			
+			// Make sure total block count is updated in the performance metrics
+			totalBlocksRef.current = Object.keys(terrainRef.current).length;
+			if (sendTotalBlocks) {
+				sendTotalBlocks(totalBlocksRef.current);
+			}
+			
+			// Update debug info
+			updateDebugInfo();
 		};
 		
 		// Add event listener
@@ -1981,7 +2028,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		return enabled;
 	};
 
-
+	/*
 	// Helper function to clear all terrain data
 	const clearTerrain = () => {
 		if (terrainRef.current && Object.keys(terrainRef.current).length > 0) {
@@ -1997,6 +2044,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		return `${coord.x},${coord.y},${coord.z}`;
 	};
 
+	*/
 
 	// Expose buildUpdateTerrain and clearMap via ref
 	useImperativeHandle(ref, () => ({
@@ -2081,6 +2129,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			return getViewDistance();
 		},
 		
+		/*
 		// Toggle view distance culling
 		toggleViewDistanceCulling: (enabled) => {
 			console.log(`${enabled ? 'Enabling' : 'Disabling'} view distance culling`);
@@ -2096,6 +2145,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			return false;
 		},
+		*/
 		
 		// Configure the auto-save interval (in milliseconds)
 		setAutoSaveInterval: (intervalMs) => {
@@ -2147,9 +2197,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		 */
 		async refreshTerrainFromDB() {
 			console.log("=== REFRESHING TERRAIN FROM DATABASE ===");
-			
-			// Show a single loading screen from start to finish
-			loadingManager.showLoading('Loading terrain from database...');
 			
 			return new Promise(async resolve => {
 				try {
@@ -2475,8 +2522,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		  }
 		});
 
-		// Save changes to undo stack immediately
-		if (pendingChangesRef.current && 
+		// Save changes to undo stack immediately, unless explicitly skipped
+		if (!options.skipUndoSave && pendingChangesRef.current && 
 			(Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0 || 
 			 Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0)) {
 		  console.log("Saving changes to undo stack:", pendingChangesRef.current);

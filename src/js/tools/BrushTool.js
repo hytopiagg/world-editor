@@ -55,10 +55,18 @@ class BrushTool extends BaseTool {
 		this.pendingBatch = { added: {}, removed: {} }; // Blocks waiting to be processed
 		this.lastBatchTime = 0; // Last time a batch was processed
 
+		// Performance tuning for large maps
+		this.batchInterval = 300; // Increased from 200ms to reduce update frequency for large maps 
+		this.chunkUpdateDelay = 100; // Increased from 50ms to reduce update frequency for large maps
+		this.processedPositionsThreshold = 10000; // Clear processed positions map when it gets too large
+		
+		// Detect if we're on a large map
+		this.isLargeMap = false;
+		// Will be set to true if terrain has more than this many blocks
+		this.largeMapThreshold = 50000;
+		
 		// Initialize default values
 		this.lastPosition = new THREE.Vector3(-999, -999, -999);
-		this.batchInterval = 200; // ms between batches
-		this.chunkUpdateDelay = 50; // ms delay between chunk updates
 		
 		// Get references from terrainBuilder
 		if (terrainBuilderProps) {
@@ -81,6 +89,14 @@ class BrushTool extends BaseTool {
 			this.importedUpdateTerrainBlocks = terrainBuilderProps.importedUpdateTerrainBlocks;
 			this.getPlacementPositions = terrainBuilderProps.getPlacementPositions;
 			this.updateSpatialHashForBlocks = terrainBuilderProps.updateSpatialHashForBlocks;
+			
+			// Get references for total block count updates
+			if (terrainBuilderProps.totalBlocksRef) {
+				this.totalBlocksRef = terrainBuilderProps.totalBlocksRef;
+			}
+			if (terrainBuilderProps.sendTotalBlocks) {
+				this.sendTotalBlocks = terrainBuilderProps.sendTotalBlocks;
+			}
 			
 			// Store reference to method that rebuilds chunk meshes
 			if (this.terrainBuilderRef && this.terrainBuilderRef.current) {
@@ -138,6 +154,26 @@ class BrushTool extends BaseTool {
 		
 		// Initialize reusable preview objects
 		this.initializePreviewObjects();
+		
+		// Detect if we're on a large map and adjust settings accordingly
+		if (this.terrainRef && this.terrainRef.current) {
+			const blockCount = Object.keys(this.terrainRef.current).length;
+			this.isLargeMap = blockCount > this.largeMapThreshold;
+			
+			if (this.isLargeMap) {
+				console.log(`BrushTool: Detected large map with ${blockCount} blocks, optimizing performance settings`);
+				// Increase batch interval for large maps
+				this.batchInterval = 500; // Increase batch interval
+				this.chunkUpdateDelay = 200; // Increase delay between chunk updates
+				// Reduce frequency of position tracking for large maps
+				this.placementThreshold = Math.max(this.brushSize * 0.4, 0.5);
+			} else {
+				// Regular settings for normal-sized maps
+				this.batchInterval = 300;
+				this.chunkUpdateDelay = 100;
+				this.placementThreshold = Math.max(this.brushSize * 0.15, 0.2);
+			}
+		}
 	}
 	
 	/**
@@ -250,18 +286,73 @@ class BrushTool extends BaseTool {
 		const chunkCount = this.chunkUpdateQueue.size;
 		
 		// Limit the number of chunks processed at once to prevent lag
-		const MAX_CHUNKS_PER_UPDATE = 5;
+		const MAX_CHUNKS_PER_UPDATE = this.isLargeMap ? 3 : 5;
 		
 		// If we have too many chunks, process them in batches
 		if (chunkCount > MAX_CHUNKS_PER_UPDATE && typeof setTimeout === 'function') {
 			const chunkKeysArray = Array.from(this.chunkUpdateQueue);
 			
-			// Process first batch immediately
+			// On large maps, prioritize chunks near the camera
+			if (this.isLargeMap && this.terrainBuilderRef?.current?.threeCamera) {
+				const camera = this.terrainBuilderRef.current.threeCamera;
+				const cameraPos = camera.position;
+				
+				// Calculate distances from camera to each chunk
+				const chunksWithDistances = chunkKeysArray.map(chunkKey => {
+					const [x, y, z] = chunkKey.split(',').map(Number);
+					// Convert to chunk center coordinates
+					const centerX = x * 16 + 8;
+					const centerY = y * 16 + 8;
+					const centerZ = z * 16 + 8;
+					// Calculate squared distance (faster than using Math.sqrt)
+					const distSq = (centerX - cameraPos.x) ** 2 + 
+								  (centerY - cameraPos.y) ** 2 + 
+								  (centerZ - cameraPos.z) ** 2;
+					return { chunkKey, distSq };
+				});
+				
+				// Sort chunks by distance to camera (closest first)
+				chunksWithDistances.sort((a, b) => a.distSq - b.distSq);
+				
+				// Extract sorted chunk keys
+				const sortedChunkKeys = chunksWithDistances.map(c => c.chunkKey);
+				
+				// Process closest chunks first
+				const firstBatch = sortedChunkKeys.slice(0, MAX_CHUNKS_PER_UPDATE);
+				const remainingChunks = sortedChunkKeys.slice(MAX_CHUNKS_PER_UPDATE);
+				
+				// Process first batch immediately
+				this.updateChunkBatch(firstBatch);
+				
+				// Store remaining chunks for later
+				const remainingChunksSet = new Set(remainingChunks);
+				
+				// Clear the queue immediately to prevent double processing
+				this.chunkUpdateQueue.clear();
+				
+				// Process remaining chunks after a delay
+				if (remainingChunks.length > 0) {
+					setTimeout(() => {
+						// On large maps, limit the number of deferred chunks to process
+						if (this.isLargeMap && remainingChunks.length > 10) {
+							console.log(`BrushTool: Limiting deferred chunks from ${remainingChunks.length} to 10 for performance reasons`);
+							// Just process the 10 closest chunks
+							const closestChunks = new Set(Array.from(remainingChunksSet).slice(0, 10));
+							this.chunkUpdateQueue = closestChunks;
+						} else {
+							this.chunkUpdateQueue = remainingChunksSet;
+						}
+						
+						this.processChunkUpdates();
+					}, this.isLargeMap ? 100 : 50); // Longer delay for large maps
+				}
+				
+				return;
+			}
+			
+			// Standard processing for normal maps or when camera isn't available
 			const firstBatch = chunkKeysArray.slice(0, MAX_CHUNKS_PER_UPDATE);
-			
-			// Remaining chunks to process
 			const remainingChunks = chunkKeysArray.slice(MAX_CHUNKS_PER_UPDATE);
-			
 			
 			// Process first batch immediately
 			this.updateChunkBatch(firstBatch);
@@ -273,11 +364,13 @@ class BrushTool extends BaseTool {
 			this.chunkUpdateQueue.clear();
 			
 			// Process remaining chunks in the next frame
-			setTimeout(() => {
-				console.log(`BrushTool: Processing ${remainingChunks.length} deferred chunks`);
-				this.chunkUpdateQueue = remainingChunksSet;
-				this.processChunkUpdates();
-			}, 50); // Small delay to allow frame to render
+			if (remainingChunks.length > 0) {
+				setTimeout(() => {
+					console.log(`BrushTool: Processing ${remainingChunks.length} deferred chunks`);
+					this.chunkUpdateQueue = remainingChunksSet;
+					this.processChunkUpdates();
+				}, this.isLargeMap ? 100 : 50); // Longer delay for large maps
+			}
 			
 			return;
 		}
@@ -299,13 +392,49 @@ class BrushTool extends BaseTool {
 			return;
 		}
 		
+		// For very large maps, limit the number of chunks updated at once
+		if (this.isLargeMap && chunkKeys.length > 20) {
+			console.log(`BrushTool: Limiting chunk update from ${chunkKeys.length} to 20 chunks to improve performance`);
+			// Sort by distance to camera if possible
+			if (this.terrainBuilderRef?.current?.threeCamera) {
+				const camera = this.terrainBuilderRef.current.threeCamera;
+				const cameraPos = camera.position;
+				
+				// Calculate chunk centers and distances to camera
+				const chunksWithDistances = chunkKeys.map(chunkKey => {
+					const [x, y, z] = chunkKey.split(',').map(Number);
+					// Calculate chunk center (assuming 16×16×16 chunks)
+					const centerX = x * 16 + 8;
+					const centerY = y * 16 + 8;
+					const centerZ = z * 16 + 8;
+					
+					// Calculate distance to camera
+					const distSq = (centerX - cameraPos.x) ** 2 + 
+								   (centerY - cameraPos.y) ** 2 + 
+								   (centerZ - cameraPos.z) ** 2;
+					
+					return { chunkKey, distSq };
+				});
+				
+				// Sort by distance (closest first)
+				chunksWithDistances.sort((a, b) => a.distSq - b.distSq);
+				
+				// Take the closest 20 chunks
+				chunkKeys = chunksWithDistances.slice(0, 20).map(c => c.chunkKey);
+			} else {
+				// If we can't sort by distance, just take the first 20
+				chunkKeys = chunkKeys.slice(0, 20);
+			}
+		}
+		
 		// Use the directly imported forceChunkUpdate instead of trying to access it through TerrainBuilder
 		if (this.terrainBuilderRef && this.terrainBuilderRef.current) {
 			// Check if the method exists on the terrainBuilderRef object
 			if (this.terrainBuilderRef.current.forceChunkUpdate) {
 				this.terrainBuilderRef.current.forceChunkUpdate(chunkKeys, { 
 					skipNeighbors: true, // Skip neighbors for better performance
-					frustumCulled: true  // Only update chunks in view
+					frustumCulled: true,  // Only update chunks in view
+					deferMeshBuilding: this.isLargeMap // Defer mesh building for large maps
 				});
 			} else {
 				console.warn('BrushTool: terrainBuilderRef.current.forceChunkUpdate is not available, falling back to forceRefreshAllChunks');
@@ -352,20 +481,28 @@ class BrushTool extends BaseTool {
 			return;
 		}
 		
+		// Don't update the total block count or send updates for each small batch
+		// This will be done in handleMouseUp instead to reduce overhead
 		
 		// Use imported fast update method for better performance
 		if (this.importedUpdateTerrainBlocks) {
 			this.importedUpdateTerrainBlocks(
 				this.pendingBatch.added, 
 				this.pendingBatch.removed, 
-				{ skipSpatialHash: true }
+				{ 
+					skipSpatialHash: true,  // Always skip spatial hash during painting for performance
+					skipUndoSave: true      // Skip saving to undo during painting, will be done once at the end
+				}
 			);
 		} else if (this.terrainBuilderRef && this.terrainBuilderRef.current) {
 			// Fallback to standard update method
 			this.terrainBuilderRef.current.updateTerrainBlocks(
 				this.pendingBatch.added, 
 				this.pendingBatch.removed, 
-				{ skipSpatialHash: true }
+				{ 
+					skipSpatialHash: true,  // Always skip spatial hash during painting for performance
+					skipUndoSave: true      // Skip saving to undo during painting, will be done once at the end
+				}
 			);
 		}
 		
@@ -468,8 +605,10 @@ class BrushTool extends BaseTool {
 			// Use the previewPositionRef position which matches the green cursor exactly
 			const cursorPosition = this.previewPositionRef.current;
 			
-			// Update the brush preview based on the cursor position
-			this.updateBrushPreview(cursorPosition);
+			// Only update the brush preview if it's not too expensive
+			if (!this.isLargeMap || !this.isPlacing) {
+				this.updateBrushPreview(cursorPosition);
+			}
 
 			// Process any pending updates to keep the UI responsive
 			// This ensures we don't wait too long between updates during fast movements
@@ -499,14 +638,14 @@ class BrushTool extends BaseTool {
 				
 				// Calculate distance moved and compare to a threshold based on brush size
 				// Smaller brush = smaller steps needed for good coverage
+				// This threshold is now set in onActivate based on map size
 				const distanceMoved = positionVector.distanceTo(this.lastPosition);
-				const placementThreshold = Math.max(this.brushSize * 0.15, 0.2); 
 				
 				if (
 					// Either position has changed in integer coordinates
 					!this.lastPosition.equals(positionVector) && 
 					// And we've moved far enough for a new placement
-					distanceMoved >= placementThreshold
+					distanceMoved >= this.placementThreshold
 				) {
 					// Place or erase blocks based on current mode
 					if (this.isEraseMode) {
@@ -517,6 +656,12 @@ class BrushTool extends BaseTool {
 					
 					// Update last position
 					this.lastPosition.copy(positionVector);
+					
+					// On large maps, periodically clear the processed positions map to prevent memory issues
+					if (this.isLargeMap && this.processedPositionsMap.size > this.processedPositionsThreshold) {
+						console.log(`BrushTool: Clearing processed positions map (size: ${this.processedPositionsMap.size})`);
+						this.processedPositionsMap.clear();
+					}
 				}
 			}
 		} else {
@@ -563,55 +708,93 @@ class BrushTool extends BaseTool {
 		// Log the outcome of the operation
 		const addedCount = this.addedPositions.size;
 		const removedCount = this.removedPositions.size;
-		//console.log(`BrushTool: Completed operation - Added: ${addedCount} blocks, Removed: ${removedCount} blocks`);
+		
+		if (addedCount > 0 || removedCount > 0) {
+			console.log(`BrushTool: Completed operation - Added: ${addedCount} blocks, Removed: ${removedCount} blocks`);
+		}
+
+		// Update total block count at the end of the operation
+		if (this.totalBlocksRef) {
+			this.totalBlocksRef.current = Object.keys(this.terrainRef.current).length;
+			
+			// Send total blocks count back to parent component
+			if (this.sendTotalBlocks) {
+				this.sendTotalBlocks(this.totalBlocksRef.current);
+			}
+		}
+		// Fallback to terrainBuilderRef if direct references aren't available
+		else if (this.terrainBuilderRef?.current?.totalBlocksRef) {
+			this.terrainBuilderRef.current.totalBlocksRef.current = Object.keys(this.terrainRef.current).length;
+			
+			// Send total blocks count back to parent component
+			if (this.terrainBuilderRef.current.sendTotalBlocks) {
+				this.terrainBuilderRef.current.sendTotalBlocks(this.terrainBuilderRef.current.totalBlocksRef.current);
+			}
+		}
 
 		// Only proceed with spatial hash update if blocks were added or removed
 		if ((addedCount > 0 || removedCount > 0) && this.terrainBuilderRef && this.terrainBuilderRef.current) {
-			
-			// Prepare optimized data structures for spatial hash update
-			const addedBlocks = addedCount > 0 ? Array.from(this.addedPositions).map(posKey => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				const blockId = this.terrainRef.current[posKey];
-				return { id: blockId, position: [x, y, z] };
-			}) : [];
-			
-			const removedBlocks = removedCount > 0 ? Array.from(this.removedPositions).map(posKey => {
-				const [x, y, z] = posKey.split(',').map(Number);
-				return { id: 0, position: [x, y, z] };
-			}) : [];
-			
-			// Define options for spatial hash update
-			const updateOptions = { 
-				force: true,
-				skipIfBusy: false, // Ensure this update happens even if another update is in progress
-				silent: false      // Log the update for debugging
-			};
-			
-			// Use the most efficient update method available
-			if (typeof this.terrainBuilderRef.current.updateSpatialHashForBlocks === 'function') {
-				this.terrainBuilderRef.current.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
-			}
-			// Fallback to local reference if available
-			else if (typeof this.updateSpatialHashForBlocks === 'function') {
-				this.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
-			}
-			// Last resort - use full rebuild if incremental update not available
-			else if (typeof this.terrainBuilderRef.current.forceRebuildSpatialHash === 'function') {
-				this.terrainBuilderRef.current.forceRebuildSpatialHash({
-					showLoadingScreen: false,
-					force: true
-				});
+			// For large maps, we need to be more careful with spatial hash updates
+			if (this.isLargeMap && (addedCount + removedCount) > 1000) {
+				console.log(`BrushTool: Large update detected (${addedCount + removedCount} blocks), optimizing spatial hash update`);
+				
+				// For very large operations, just do a full rebuild which can be more efficient
+				if (typeof this.terrainBuilderRef.current.forceRebuildSpatialHash === 'function') {
+					this.terrainBuilderRef.current.forceRebuildSpatialHash({
+						showLoadingScreen: false,
+						force: true,
+						visibleOnly: true // Only update visible blocks for large maps
+					});
+				}
 			} else {
-				console.warn('BrushTool: No spatial hash update method found');
+				// For smaller operations, use the incremental update
+				// Prepare optimized data structures for spatial hash update
+				const addedBlocks = addedCount > 0 ? Array.from(this.addedPositions).map(posKey => {
+					const [x, y, z] = posKey.split(',').map(Number);
+					const blockId = this.terrainRef.current[posKey];
+					return { id: blockId, position: [x, y, z] };
+				}) : [];
+				
+				const removedBlocks = removedCount > 0 ? Array.from(this.removedPositions).map(posKey => {
+					const [x, y, z] = posKey.split(',').map(Number);
+					return { id: 0, position: [x, y, z] };
+				}) : [];
+				
+				// Define options for spatial hash update
+				const updateOptions = { 
+					force: true,
+					skipIfBusy: false, // Ensure this update happens even if another update is in progress
+					silent: this.isLargeMap, // Only log if not a large map
+					batchSize: this.isLargeMap ? 1000 : 100 // Use larger batch size for large maps
+				};
+				
+				// Use the most efficient update method available
+				if (typeof this.terrainBuilderRef.current.updateSpatialHashForBlocks === 'function') {
+					this.terrainBuilderRef.current.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
+				}
+				// Fallback to local reference if available
+				else if (typeof this.updateSpatialHashForBlocks === 'function') {
+					this.updateSpatialHashForBlocks(addedBlocks, removedBlocks, updateOptions);
+				}
+				// Last resort - use full rebuild if incremental update not available
+				else if (typeof this.terrainBuilderRef.current.forceRebuildSpatialHash === 'function') {
+					this.terrainBuilderRef.current.forceRebuildSpatialHash({
+						showLoadingScreen: false,
+						force: true
+					});
+				} else {
+					console.warn('BrushTool: No spatial hash update method found');
+				}
 			}
-	
 		}
 
 		// Process any pending chunk updates with a small delay to reduce lag
+		// For large maps, use a bigger delay to prevent UI freezing
 		if (this.chunkUpdateQueue && this.chunkUpdateQueue.size > 0) {
+			const delay = this.isLargeMap ? this.chunkUpdateDelay * 2 : this.chunkUpdateDelay;
 			setTimeout(() => {
 				this.processChunkUpdates();
-			}, this.chunkUpdateDelay);
+			}, delay);
 		}
 
 		// Finish placement and notify the undo/redo manager
@@ -631,6 +814,7 @@ class BrushTool extends BaseTool {
 				(changes.environment.removed || []).length > 0;
 				
 			if (hasChanges) {
+				console.log("Saving changes to undo stack");
 				
 				// Try using direct undoRedoManager reference
 				if (this.undoRedoManager?.current?.saveUndo) {
@@ -648,8 +832,6 @@ class BrushTool extends BaseTool {
 					terrain: { added: {}, removed: {} }, 
 					environment: { added: [], removed: [] } 
 				};
-			} else {
-				console.warn('BrushTool: No changes to save');
 			}
 		}
 

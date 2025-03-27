@@ -121,9 +121,14 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   
   const handleComplete = useCallback(() => {
     if (importResult && importResult.success) {
+      // Show loading screen before starting terrain update
+      loadingManager.showLoading('Preparing imported map...', 0);
+      
       // Do any final processing here
       console.log("Import completed successfully!", importResult);
-      onComplete && onComplete(importResult);
+      
+      // Close the import wizard to immediately show the loading screen beneath it
+      onClose();
       
       // Make sure to refresh the block toolbar to show any custom blocks
       if (typeof window.refreshBlockTools === 'function') {
@@ -142,7 +147,10 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
           // This method will directly update the terrain without double processing
           terrainBuilderRef.current.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
         }
-      }, 50); // Reduced from 150ms for faster response
+        
+        // Call onComplete callback after starting the terrain update
+        onComplete && onComplete(importResult);
+      }, 100); // Reduced delay for faster response
     } else {
       // If no import result, just close normally
       onComplete && onComplete(importResult);
