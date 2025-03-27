@@ -445,8 +445,6 @@ export class SpatialHashGrid {
 				// Decrement size
 				this.size--;
 				
-				// Use less verbose logging
-				console.log(`SpatialHashGrid: Block removed at (${x},${y},${z})`);
 				return true;
 			}
 			

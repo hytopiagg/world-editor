@@ -650,7 +650,7 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
   const saveUndo = async (changes) => {
     try {
       console.log("=== SAVING UNDO STATE ===");
-      console.log("Changes to save:", JSON.stringify(changes, null, 2));
+      //console.log("Changes to save:", JSON.stringify(changes, null, 2));
       // Validation check - only save if there are actual changes
       const hasTerrain = changes.terrain && 
         (Object.keys(changes.terrain.added || {}).length > 0 || 
