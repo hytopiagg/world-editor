@@ -52,8 +52,9 @@ class BaseTool {
    * Handle mouse up events
    * @param {Object} event - The mouse event
    * @param {THREE.Vector3} position - The world position
+   * @param {number} button - Mouse button (0 = left, 2 = right)
    */
-  handleMouseUp(event, position) {
+  handleMouseUp(event, position, button) {
     // To be implemented by child classes
   }
 

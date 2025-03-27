@@ -322,7 +322,11 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
         updated[blockType].customTextureId = customTextures[0].id;
       }
       
-      onMappingsUpdated(updated);
+      // Use setTimeout to update parent state outside of render cycle
+      setTimeout(() => {
+        onMappingsUpdated({...updated});
+      }, 0);
+      
       return updated;
     });
   };
@@ -337,7 +341,11 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
         }
       };
       
-      onMappingsUpdated(updated);
+      // Use setTimeout to update parent state outside of render cycle
+      setTimeout(() => {
+        onMappingsUpdated({...updated});
+      }, 0);
+      
       return updated;
     });
   };
@@ -349,6 +357,7 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
     
     console.log("Selected texture:", selectedTexture);
     
+    // First update our local state
     setMappings(prev => {
       const updated = {
         ...prev,
@@ -362,7 +371,11 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
       
       console.log("Updated mapping:", updated[blockType]);
       
-      onMappingsUpdated(updated);
+      // Use setTimeout to update parent state outside of render cycle
+      setTimeout(() => {
+        onMappingsUpdated({...updated});
+      }, 0);
+      
       return updated;
     });
   };
@@ -403,7 +416,11 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
               }
             };
             
-            onMappingsUpdated(updated);
+            // Use another setTimeout to update parent state outside of render cycle
+            setTimeout(() => {
+              onMappingsUpdated({...updated});
+            }, 0);
+            
             return updated;
           });
         }
@@ -449,7 +466,7 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
                 // Get the latest custom blocks
                 const latestCustomBlocks = getCustomBlocks();
                 
-                console.log("Updated custom blocks:", latestCustomBlocks);
+                //console.log("Updated custom blocks:", latestCustomBlocks);
                 
                 // Update our custom textures state
                 setCustomTextures(latestCustomBlocks.map(block => ({
@@ -463,6 +480,14 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
                   detail: { blocks: latestCustomBlocks } 
                 });
                 window.dispatchEvent(event);
+                
+                // Also dispatch refreshBlockTools event to ensure the sidebar updates
+                if (typeof window.refreshBlockTools === 'function') {
+                  window.refreshBlockTools();
+                } else {
+                  // Fallback if the function isn't directly available
+                  window.dispatchEvent(new CustomEvent('refreshBlockTools'));
+                }
               } catch (error) {
                 console.error("Error updating custom textures:", error);
               }
@@ -532,8 +557,12 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
     });
     
     setMappings(autoMappings);
-    onMappingsUpdated(autoMappings);
     setAutoMapped(true);
+    
+    // Use setTimeout to update parent state outside of render cycle
+    setTimeout(() => {
+      onMappingsUpdated({...autoMappings});
+    }, 0);
   };
   
   // New function to map all unmapped/skipped blocks to defaults
@@ -563,7 +592,12 @@ const BlockTypeMapper = ({ worldData, onMappingsUpdated, initialMappings }) => {
     
     // Update state with new mappings
     setMappings(updatedMappings);
-    onMappingsUpdated(updatedMappings);
+    
+    // Use setTimeout to update parent state outside of render cycle
+    setTimeout(() => {
+      onMappingsUpdated({...updatedMappings});
+    }, 0);
+    
     console.log(`Applied default mappings to ${changesCount} previously unmapped blocks`);
   };
   

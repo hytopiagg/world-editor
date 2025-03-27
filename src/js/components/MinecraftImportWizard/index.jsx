@@ -120,19 +120,37 @@ const MinecraftImportWizard = ({ isOpen, onClose, onComplete, terrainBuilderRef 
   }, [currentStep]);
   
   const handleComplete = useCallback(() => {
-    if (importResult && importResult.hytopiaMap) {
-      // Show loading screen with initial message
-      loadingManager.showLoading('Preparing to import Minecraft world...');
+    if (importResult && importResult.success) {
+      // Show loading screen before starting terrain update
+      loadingManager.showLoading('Preparing imported map...', 0);
       
-      // Close dialog right away to avoid UI freeze
-      onComplete && onComplete(importResult);
+      // Do any final processing here
+      console.log("Import completed successfully!", importResult);
+      
+      // Close the import wizard to immediately show the loading screen beneath it
       onClose();
       
-      // Reduce delay to make loading more responsive
+      // Make sure to refresh the block toolbar to show any custom blocks
+      if (typeof window.refreshBlockTools === 'function') {
+        window.refreshBlockTools();
+      } else {
+        window.dispatchEvent(new CustomEvent('refreshBlockTools'));
+      }
+      
+      // Also dispatch a custom-blocks-loaded event to ensure sidebars update
+      window.dispatchEvent(new CustomEvent('custom-blocks-loaded'));
+      
+      // Update the terrain with imported data - loading will be managed inside updateTerrainFromToolBar
       setTimeout(() => {
-        // Update the terrain with imported data - loading will be managed inside updateTerrainFromToolBar
-        terrainBuilderRef.current?.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
-      }, 50); // Reduced from 150ms for faster response
+        if (terrainBuilderRef.current?.updateTerrainFromToolBar) {
+          console.log("Updating terrain with imported Minecraft data");
+          // This method will directly update the terrain without double processing
+          terrainBuilderRef.current.updateTerrainFromToolBar(importResult.hytopiaMap.blocks);
+        }
+        
+        // Call onComplete callback after starting the terrain update
+        onComplete && onComplete(importResult);
+      }, 100); // Reduced delay for faster response
     } else {
       // If no import result, just close normally
       onComplete && onComplete(importResult);

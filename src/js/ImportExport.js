@@ -2,17 +2,22 @@ import { DatabaseManager, STORES } from "./DatabaseManager";
 import { getBlockTypes, processCustomBlock } from "./TerrainBuilder";
 import { environmentModels } from "./EnvironmentBuilder";
 import * as THREE from "three";
-import JSZip from "jszip";
 import { version } from "./Constants";
+import { loadingManager } from './LoadingManager';
 
 
 export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) => {
   try {
+    // Show loading screen at the start of import
+    loadingManager.showLoading('Starting import process...', 0);
+    
     const reader = new FileReader();
     
     return new Promise((resolve, reject) => {
       reader.onload = async (event) => {
         try {
+          loadingManager.updateLoading('Parsing imported file...', 10);
+          
           // get the data from the event, and convert it to a json object
           const importData = JSON.parse(event.target.result);
 
@@ -26,13 +31,14 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
               
             // Process any custom blocks first
             if (importData.blockTypes && importData.blockTypes.length > 0) {
-              console.log(`Processing ${importData.blockTypes.length} block types from import`);
+              loadingManager.updateLoading(`Processing ${importData.blockTypes.length} block types...`, 20);
+              //console.log(`Processing ${importData.blockTypes.length} block types from import`);
               
               // Process each block type, ensuring custom blocks are properly handled
               for (const blockType of importData.blockTypes) {
                 // Only process blocks that are custom or have IDs in the custom range (100-199)
                 if (blockType.isCustom || (blockType.id >= 100 && blockType.id < 200)) {
-                  console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
+                //  console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
                   
                   // Make sure the block has all required properties
                   const processedBlock = {
@@ -57,14 +63,54 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
               }));
             }
 
+            loadingManager.updateLoading('Processing terrain data...', 30);
+            
             // Now process terrain data
             terrainData = Object.entries(importData.blocks).reduce((acc, [key, blockId]) => {
               acc[key] = blockId;
               return acc;
             }, {});
             
+            // Calculate map size from terrain data to update grid size
+            if (Object.keys(terrainData).length > 0 && terrainBuilderRef && terrainBuilderRef.current) {
+              loadingManager.updateLoading('Calculating map dimensions...', 40);
+              console.log("Calculating map dimensions to update grid size...");
+              
+              // Find the min/max coordinates
+              let minX = Infinity, minZ = Infinity;
+              let maxX = -Infinity, maxZ = -Infinity;
+              
+              Object.keys(terrainData).forEach(key => {
+                const [x, y, z] = key.split(',').map(Number);
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minZ = Math.min(minZ, z);
+                maxZ = Math.max(maxZ, z);
+              });
+              
+              // Calculate width and length (adding a small margin)
+              const width = maxX - minX + 10;
+              const length = maxZ - minZ + 10;
+              
+              // Use the larger dimension for the grid size (rounded up to nearest multiple of 16)
+              const gridSize = Math.ceil(Math.max(width, length) / 16) * 16;
+              
+              console.log(`Map dimensions: ${width}x${length}, setting grid size to ${gridSize}`);
+              
+              // Update the grid size before loading the terrain
+              if (terrainBuilderRef.current.updateGridSize) {
+                loadingManager.updateLoading(`Updating grid size to ${gridSize}...`, 50);
+                console.log(`Calling updateGridSize with gridSize=${gridSize}`);
+                terrainBuilderRef.current.updateGridSize(gridSize);
+                console.log(`Grid size update completed, should now be ${gridSize}`);
+              } else {
+                console.warn("updateGridSize method not found on terrainBuilderRef");
+              }
+            }
+            
             // Convert entities to environment format
             if (importData.entities) {
+              loadingManager.updateLoading('Processing environment objects...', 60);
               environmentData = Object.entries(importData.entities)
                 .map(([key, entity], index) => {
                   const [x, y, z] = key.split(',').map(Number);
@@ -103,40 +149,58 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
               console.log(`Imported ${environmentData.length} environment objects`);
             }
           } else {
+            loadingManager.hideLoading();
             alert("Invalid map file format - no valid map data found");
             return;
           }
           
           // Save terrain data
+          loadingManager.updateLoading('Saving terrain data to database...', 70);
           await DatabaseManager.saveData(STORES.TERRAIN, "current", terrainData);
           
           // Save environment data
+          loadingManager.updateLoading('Saving environment data to database...', 80);
           await DatabaseManager.saveData(STORES.ENVIRONMENT, "current", environmentData);
           
           // Refresh terrain and environment builders
           if (terrainBuilderRef && terrainBuilderRef.current) {
+            loadingManager.updateLoading('Rebuilding terrain from imported data...', 85);
+            console.log("Refreshing terrain from DB after import");
             await terrainBuilderRef.current.refreshTerrainFromDB();
+            
+            // The spatial hash is already rebuilt during refreshTerrainFromDB,
+            // so we don't need to do it again here
           }
           
           if (environmentBuilderRef && environmentBuilderRef.current) {
             // Wait for environment refresh to complete
+            loadingManager.updateLoading('Loading environment objects...', 95);
             await environmentBuilderRef.current.refreshEnvironmentFromDB();
           }
           
+          loadingManager.updateLoading('Import complete!', 100);
+          // Allow a moment to see the completed status before hiding
+          setTimeout(() => {
+            loadingManager.hideLoading();
+          }, 500);
+          
           resolve();
         } catch (error) {
+          loadingManager.hideLoading();
           console.error("Error processing import:", error);
           reject(error);
         }
       };
       
       reader.onerror = () => {
+        loadingManager.hideLoading();
         reject(new Error("Error reading file"));
       };
       
       reader.readAsText(file);
     });
   } catch (error) {
+    loadingManager.hideLoading();
     console.error("Error importing map:", error);
     alert("Error importing map. Please try again.");
     throw error;
@@ -152,10 +216,15 @@ export const exportMapFile = async (terrainBuilderRef) => {
       return;
     }
 
+    // Show loading screen at the start of export
+    loadingManager.showLoading('Preparing to export map...', 0);
+
     // Get environment data
+    loadingManager.updateLoading('Retrieving environment data...', 10);
     const environmentObjects = await DatabaseManager.getData(STORES.ENVIRONMENT, "current") || [];
 
     // Simplify terrain data to just include block IDs
+    loadingManager.updateLoading('Processing terrain data...', 30);
     const simplifiedTerrain = Object.entries(terrainBuilderRef.current.getCurrentTerrainData()).reduce((acc, [key, value]) => {
       if (key.split(",").length === 3) {
         acc[key] = value;
@@ -163,10 +232,12 @@ export const exportMapFile = async (terrainBuilderRef) => {
       return acc;
     }, {});
 
+    loadingManager.updateLoading('Collecting block type information...', 50);
     const allBlockTypes = getBlockTypes();
     console.log("Exporting block types:", allBlockTypes);
 
     // Create the export object with properly formatted block types
+    loadingManager.updateLoading('Building export data structure...', 70);
     const exportData = {
       blockTypes: allBlockTypes.map(block => {
         // For custom blocks, preserve the exact texture URI
@@ -232,17 +303,26 @@ export const exportMapFile = async (terrainBuilderRef) => {
     };
 
     // Convert to JSON and create a blob
+    loadingManager.updateLoading('Creating export file...', 90);
     const jsonContent = JSON.stringify(exportData, null, 2);
     const blob = new Blob([jsonContent], { type: "application/json" });
     
     // Create download link
+    loadingManager.updateLoading('Preparing download...', 95);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "terrain.json";
-    a.click();
-    URL.revokeObjectURL(url);
+    
+    loadingManager.updateLoading('Export complete!', 100);
+    // Allow a brief moment to see completion message
+    setTimeout(() => {
+      a.click();
+      URL.revokeObjectURL(url);
+      loadingManager.hideLoading();
+    }, 500);
   } catch (error) {
+    loadingManager.hideLoading();
     console.error("Error exporting map file:", error);
     alert("Error exporting map. Please try again.");
     throw error;
