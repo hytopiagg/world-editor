@@ -2198,9 +2198,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		async refreshTerrainFromDB() {
 			console.log("=== REFRESHING TERRAIN FROM DATABASE ===");
 			
+			// Always show loading screen for terrain refresh
+			loadingManager.showLoading('Loading terrain data...', 0);
+			
 			return new Promise(async resolve => {
 				try {
 					// Get blocks directly
+					loadingManager.updateLoading('Retrieving blocks from database...', 10);
 					const blocks = await DatabaseManager.getData(STORES.TERRAIN, "current");
 					if (!blocks || Object.keys(blocks).length === 0) {
 						console.log("No blocks found in database");
@@ -2209,7 +2213,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						return;
 					}
 					
-					console.log(`Loaded ${Object.keys(blocks).length} blocks from database`);
+					const blockCount = Object.keys(blocks).length;
+					console.log(`Loaded ${blockCount} blocks from database`);
+					loadingManager.updateLoading(`Processing ${blockCount} blocks...`, 30);
 					
 					// Update our terrain reference
 					terrainRef.current = {};
@@ -2218,6 +2224,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					});
 					
 					// Clear existing chunks
+					loadingManager.updateLoading('Clearing existing terrain chunks...', 50);
 					if (getChunkSystem()) {
 						getChunkSystem().reset();
 					}
@@ -2225,18 +2232,24 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					// Add all blocks to chunk system
 					const chunkSystem = getChunkSystem();
 					if (chunkSystem) {
-						console.log(`Adding ${Object.keys(blocks).length} blocks to chunk system all at once`);
+						loadingManager.updateLoading(`Building terrain with ${blockCount} blocks...`, 60);
+						console.log(`Adding ${blockCount} blocks to chunk system all at once`);
 						chunkSystem.updateFromTerrainData(blocks);
 						
 						// Process all chunks immediately
+						loadingManager.updateLoading('Processing terrain chunks...', 70);
 						await loadAllChunks();
 					}
 					
 					// Initialize spatial hash
+					loadingManager.updateLoading('Building spatial hash for collision detection...', 90);
 					await initializeSpatialHash(true, false);
 					
-					// Hide loading screen
-					loadingManager.hideLoading();
+					loadingManager.updateLoading('Terrain refresh complete!', 100);
+					// Allow a brief moment to see completion message
+					setTimeout(() => {
+						loadingManager.hideLoading();
+					}, 300);
 					
 					resolve(true);
 				} catch (error) {

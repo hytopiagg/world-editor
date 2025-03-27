@@ -1,6 +1,7 @@
-import React, { useImperativeHandle } from 'react';
+import React, { useImperativeHandle, useRef, forwardRef, useEffect } from 'react';
 import { DatabaseManager, STORES } from './DatabaseManager';
 import { MIN_UNDO_STATES, UNDO_THRESHOLD } from './Constants';
+import { loadingManager } from './LoadingManager';
 
 function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children }, ref) {
   // Initialize state
@@ -305,10 +306,15 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
   const handleUndo = async () => {
     try {
       console.log("=== UNDO OPERATION STARTED ===");
+      
+      // Show loading screen at the start of undo operation
+      loadingManager.showLoading('Performing undo operation...', 0);
+      
       // Previous check was too restrictive - simplify it
       const undoneChanges = await undo();
       
       if (undoneChanges) {
+        loadingManager.updateLoading('Applying undo changes...', 30);
         console.log("Undo operation successful, selectively updating terrain...");
         
         // Process terrain changes
@@ -432,6 +438,7 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
         
         // Environment changes still use refreshFromDB
         if (environmentBuilderRef?.current?.refreshEnvironmentFromDB) {
+          loadingManager.updateLoading('Refreshing environment objects...', 80);
           console.log("Refreshing environment from DB...");
           try {
             await environmentBuilderRef.current.refreshEnvironmentFromDB();
@@ -444,6 +451,9 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
           console.warn("Unable to refresh environment - refreshEnvironmentFromDB not available");
         }
         
+        loadingManager.updateLoading('Undo operation complete!', 100);
+        // Note: refreshTerrainFromDB will hide the loading screen
+        
         console.log("=== UNDO OPERATION COMPLETED ===");
       } else {
         console.log("Undo operation did not return any changes");
@@ -451,6 +461,7 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
     } catch (error) {
       console.error("=== UNDO OPERATION FAILED ===");
       console.error("Error during undo operation:", error);
+      loadingManager.hideLoading();
       alert(`Undo operation failed: ${error.message}`);
       
       // Try to recover
@@ -468,10 +479,15 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
   const handleRedo = async () => {
     try {
       console.log("=== REDO OPERATION STARTED ===");
+      
+      // Show loading screen at the start of redo operation
+      loadingManager.showLoading('Performing redo operation...', 0);
+      
       // Previous check was too restrictive - simplify it
       const redoneChanges = await redo();
       
       if (redoneChanges) {
+        loadingManager.updateLoading('Applying redo changes...', 30);
         console.log("Redo operation successful, selectively updating terrain...");
         
         // Process terrain changes
@@ -595,6 +611,7 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
         
         // Environment changes still use refreshFromDB
         if (environmentBuilderRef?.current?.refreshEnvironmentFromDB) {
+          loadingManager.updateLoading('Refreshing environment objects...', 80);
           console.log("Refreshing environment from DB...");
           try {
             await environmentBuilderRef.current.refreshEnvironmentFromDB();
@@ -605,6 +622,9 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
           }
         }
         
+        loadingManager.updateLoading('Redo operation complete!', 100);
+        // Note: refreshTerrainFromDB will hide the loading screen
+        
         console.log("=== REDO OPERATION COMPLETED ===");
       } else {
         console.log("Redo operation did not return any changes");
@@ -612,6 +632,7 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
     } catch (error) {
       console.error("=== REDO OPERATION FAILED ===");
       console.error("Error during redo operation:", error);
+      loadingManager.hideLoading();
       alert(`Redo operation failed: ${error.message}`);
       
       // Try to recover

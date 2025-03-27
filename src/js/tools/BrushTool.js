@@ -735,6 +735,8 @@ class BrushTool extends BaseTool {
 		// Only proceed with spatial hash update if blocks were added or removed
 		if ((addedCount > 0 || removedCount > 0) && this.terrainBuilderRef && this.terrainBuilderRef.current) {
 			// For large maps, we need to be more careful with spatial hash updates
+			
+			/*
 			if (this.isLargeMap && (addedCount + removedCount) > 1000) {
 				console.log(`BrushTool: Large update detected (${addedCount + removedCount} blocks), optimizing spatial hash update`);
 				
@@ -747,6 +749,7 @@ class BrushTool extends BaseTool {
 					});
 				}
 			} else {
+			 */
 				// For smaller operations, use the incremental update
 				// Prepare optimized data structures for spatial hash update
 				const addedBlocks = addedCount > 0 ? Array.from(this.addedPositions).map(posKey => {
@@ -786,7 +789,7 @@ class BrushTool extends BaseTool {
 					console.warn('BrushTool: No spatial hash update method found');
 				}
 			}
-		}
+		//}
 
 		// Process any pending chunk updates with a small delay to reduce lag
 		// For large maps, use a bigger delay to prevent UI freezing
