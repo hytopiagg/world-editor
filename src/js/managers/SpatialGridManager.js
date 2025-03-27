@@ -480,8 +480,6 @@ class SpatialGridManager {
 			prioritizeBlocks = true, // Default to prioritizing blocks
 			gridSize = 256,
 			recentlyPlacedBlocks = new Set(),
-			isPlacing = false,
-			mode = 'add', // Default to add mode
 			debug = forceDebug // Enable for detailed debugging
 		} = options;
 		
@@ -569,9 +567,6 @@ class SpatialGridManager {
 		
 		// For determining the correct face when crossing block boundaries
 		let lastEmptyPosition = new THREE.Vector3(currentX, currentY, currentZ);
-		let lastEmptyBlockX = Math.floor(currentX);
-		let lastEmptyBlockY = Math.floor(currentY);
-		let lastEmptyBlockZ = Math.floor(currentZ);
 		
 		// Debug logging for troubleshooting
 		const isDebugEnabled = false;//debug && isPlacing;
@@ -615,10 +610,6 @@ class SpatialGridManager {
 			if (recentlyPlacedBlocks && recentlyPlacedBlocks.has(key)) {
 				// Save this position as the last empty position before advancing
 				lastEmptyPosition.set(currentX, currentY, currentZ);
-				lastEmptyBlockX = blockX;
-				lastEmptyBlockY = blockY;
-				lastEmptyBlockZ = blockZ;
-				
 				// Advance to next position
 				currentX += dirNormalized.x * stepSize;
 				currentY += dirNormalized.y * stepSize;
@@ -635,9 +626,6 @@ class SpatialGridManager {
 			// If we don't hit a block, remember where we were
 			if (blockId === 0 || blockId === null || blockId === undefined) {
 				lastEmptyPosition.set(currentX, currentY, currentZ);
-				lastEmptyBlockX = blockX;
-				lastEmptyBlockY = blockY;
-				lastEmptyBlockZ = blockZ;
 				
 				if (isDebugEnabled && step % 10 === 0) {
 					console.log(`RAYCAST: Empty at (${blockX}, ${blockY}, ${blockZ}), step=${step}`);
@@ -674,12 +662,6 @@ class SpatialGridManager {
 						hitPointRaw, blockX, blockY, blockZ, face
 					);
 					
-					// For debug visualization, also store the block center
-					const blockCenter = new THREE.Vector3(
-						blockX + 0.5,
-						blockY + 0.5,
-						blockZ + 0.5
-					);
 					
 					// Update found information with precise data
 					foundBlockId = blockId;
@@ -752,9 +734,6 @@ class SpatialGridManager {
 		const blockMaxX = blockX + 1;
 		const blockMaxY = blockY + 1;
 		const blockMaxZ = blockZ + 1;
-		const blockCenterX = blockX + 0.5;
-		const blockCenterY = blockY + 0.5;
-		const blockCenterZ = blockZ + 0.5;
 		
 		// Calculate position within block (0-1 range) for the last empty position
 		// This is relative to the block's minimum corner
@@ -874,10 +853,6 @@ class SpatialGridManager {
 		const blockMaxX = blockX + 1;
 		const blockMaxY = blockY + 1;
 		const blockMaxZ = blockZ + 1;
-		const blockCenterX = blockX + 0.5;
-		const blockCenterY = blockY + 0.5;
-		const blockCenterZ = blockZ + 0.5;
-		
 		// Place point exactly on the face
 		switch (face) {
 			case 'minX':

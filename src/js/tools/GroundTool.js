@@ -368,6 +368,7 @@ class GroundTool extends BaseTool {
 				return true;
 			}
 			
+			/*
 			// For polygons, check if point is inside the polygon
 			// Get angle from center (in radians)
 			let angle = Math.atan2(distFromCenterZ, distFromCenterX);
@@ -397,7 +398,7 @@ class GroundTool extends BaseTool {
 			// Calculate vector from center to point
 			const vectorX = distFromCenterX / Math.sqrt(distSquared);
 			const vectorZ = distFromCenterZ / Math.sqrt(distSquared);
-			
+			*/
 			// Calculate perpendicular distance to edge
 			// This is a simplification for preview purposes
 			// Full polygon check would be more complex

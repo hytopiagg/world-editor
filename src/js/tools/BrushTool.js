@@ -6,10 +6,7 @@
 
 import * as THREE from 'three';
 import BaseTool from './BaseTool';
-import TerrainBuilder, { 
-	blockTypes as BlockTypes, 
-	forceChunkUpdateByOrigin 
-} from '../TerrainBuilder';
+
 
 class BrushTool extends BaseTool {
 	/**
