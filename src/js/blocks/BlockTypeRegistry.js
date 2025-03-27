@@ -454,36 +454,116 @@ class BlockTypeRegistry {
   }
 
   /**
-   * Fix custom textures that may not have loaded properly
-   * @returns {boolean} - Whether any textures were fixed
+   * Fix custom textures for all registered block types
+   * Call this method if you're having issues with custom block textures
+   * Can be called from console: window.fixCustomTextures()
+   * @returns {Promise<Object>} Results of the fix operation
    */
-  fixCustomTextures() {
-    try {
-      const customBlocks = Object.values(this._blockTypes)
-        .filter(block => block && block.id >= 100);
-      
-      if (customBlocks.length === 0) {
-        return false;
-      }
-      
-      let fixedCount = 0;
-      
-      // Check each custom block and fix if needed
-      customBlocks.forEach(block => {
-        if (block.textureLocation && !block.hasTextureLoaded) {
-          // Attempt to reload/fix the texture
-          if (block.textureURI && block.textureURI.startsWith('data:image/')) {
-            block.applyCustomTextureDataUri(block.textureURI);
-            fixedCount++;
+  async fixCustomTextures() {
+    console.log('🔧 Starting custom texture repair process...');
+    
+    const results = {
+      fixed: 0,
+      failed: 0,
+      blockIdsFixed: [],
+      errors: []
+    };
+    
+    // First, check for blocks with IDs > 50 which are likely custom blocks
+    const customBlockTypes = Object.values(this._blockTypes).filter(blockType => blockType.id > 50);
+    console.log(`Found ${customBlockTypes.length} potential custom blocks`);
+    
+    if (customBlockTypes.length === 0) {
+      console.log('No custom blocks found to fix');
+      return results;
+    }
+    
+    // For each custom block, try to repair its textures
+    for (const blockType of customBlockTypes) {
+      try {
+        console.log(`Attempting to fix textures for block ${blockType.id} (${blockType.name})`);
+        
+        // Get the texture URIs for this block type
+        const textureUris = blockType.textureUris;
+        
+        // Look for data URIs in the texture URIs
+        let dataUri = null;
+        for (const face in textureUris) {
+          const uri = textureUris[face];
+          if (uri && uri.startsWith('data:image/')) {
+            dataUri = uri;
+            break;
           }
         }
-      });
-      
-      return fixedCount > 0;
-    } catch (err) {
-      console.error("Error fixing custom textures:", err);
-      return false;
+        
+        // If we found a data URI, apply it to all faces
+        if (dataUri) {
+          console.log(`Found data URI for block ${blockType.id}, reapplying to all faces`);
+          
+          // First, try to load the texture into the texture atlas
+          const textureAtlas = BlockTextureAtlas.instance;
+          if (!textureAtlas) {
+            throw new Error('BlockTextureAtlas not available');
+          }
+          
+          // Use the helper method to apply the data URI to all faces of the block
+          await blockType.applyCustomTextureDataUri(dataUri, true);
+          
+          // Force a full update of the chunk meshes
+          if (typeof window !== 'undefined') {
+            const event = new CustomEvent('blockTypeChanged', {
+              detail: { blockTypeId: blockType.id }
+            });
+            window.dispatchEvent(event);
+          }
+          
+          results.fixed++;
+          results.blockIdsFixed.push(blockType.id);
+        } else {
+          console.log(`No data URI found for block ${blockType.id}`);
+          
+          // Check if we have a stored texture in localStorage
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const key = `block-texture-${blockType.id}`;
+            const storedDataUri = window.localStorage.getItem(key);
+            
+            if (storedDataUri && storedDataUri.startsWith('data:image/')) {
+              console.log(`Found stored texture for block ${blockType.id} in localStorage`);
+              
+              // Apply the stored texture
+              await blockType.applyCustomTextureDataUri(storedDataUri, true);
+              
+              // Force a full update of the chunk meshes
+              if (typeof window !== 'undefined') {
+                const event = new CustomEvent('blockTypeChanged', {
+                  detail: { blockTypeId: blockType.id }
+                });
+                window.dispatchEvent(event);
+              }
+              
+              results.fixed++;
+              results.blockIdsFixed.push(blockType.id);
+            } else {
+              console.log(`No stored texture found for block ${blockType.id}`);
+              results.failed++;
+            }
+          } else {
+            console.log(`localStorage not available`);
+            results.failed++;
+          }
+        }
+      } catch (error) {
+        console.error(`Error fixing textures for block ${blockType.id}:`, error);
+        results.failed++;
+        results.errors.push({ blockId: blockType.id, error: error.message });
+      }
     }
+    
+    // Force a rebuild of the texture atlas
+    await BlockTextureAtlas.instance.rebuildTextureAtlas();
+    
+    console.log(`🔧 Custom texture repair complete: Fixed ${results.fixed} blocks, failed ${results.failed} blocks`);
+    return results;
   }
 
   /**

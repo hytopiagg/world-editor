@@ -3,6 +3,9 @@ import { DatabaseManager, STORES } from './DatabaseManager';
 import { MIN_UNDO_STATES, UNDO_THRESHOLD } from './Constants';
 
 function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children }, ref) {
+  // Initialize state
+  const [isInitialized, setIsInitialized] = React.useState(false);
+
   // Check database initialization on component mount
   React.useEffect(() => {
     const checkDatabase = async () => {
@@ -23,6 +26,9 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
           console.log("UndoRedoManager: Creating empty undo states array");
           await DatabaseManager.saveData(STORES.UNDO, 'states', []);
         }
+
+        // Mark as initialized
+        setIsInitialized(true);
       } catch (error) {
         console.error("UndoRedoManager: Error checking database:", error);
       }
@@ -32,12 +38,42 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
   }, []);
 
   useImperativeHandle(ref, () => ({
-    saveUndo,
-    undo,
-    redo,
-    handleUndo,
-    handleRedo
-  }));
+    saveUndo: async (changes) => {
+      if (!isInitialized) {
+        console.warn("UndoRedoManager: Not initialized yet, ignoring saveUndo call");
+        return;
+      }
+      return saveUndo(changes);
+    },
+    undo: async () => {
+      if (!isInitialized) {
+        console.warn("UndoRedoManager: Not initialized yet, ignoring undo call");
+        return;
+      }
+      return undo();
+    },
+    redo: async () => {
+      if (!isInitialized) {
+        console.warn("UndoRedoManager: Not initialized yet, ignoring redo call");
+        return;
+      }
+      return redo();
+    },
+    handleUndo: async () => {
+      if (!isInitialized) {
+        console.warn("UndoRedoManager: Not initialized yet, ignoring handleUndo call");
+        return;
+      }
+      return handleUndo();
+    },
+    handleRedo: async () => {
+      if (!isInitialized) {
+        console.warn("UndoRedoManager: Not initialized yet, ignoring handleRedo call");
+        return;
+      }
+      return handleRedo();
+    }
+  }), [isInitialized]);
 
   const applyStates = async (states, initialTerrain, initialEnvironment) => {
     let newTerrain = { ...initialTerrain };
@@ -133,14 +169,14 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
       const redoChanges = {
         terrain: currentUndo.terrain
           ? {
-              added: currentUndo.terrain.added,
-              removed: currentUndo.terrain.removed
+              added: currentUndo.terrain.removed,
+              removed: currentUndo.terrain.added
             }
           : null,
         environment: currentUndo.environment
           ? {
-              added: currentUndo.environment.added,
-              removed: currentUndo.environment.removed
+              added: currentUndo.environment.removed,
+              removed: currentUndo.environment.added
             }
           : null
       };
@@ -594,10 +630,6 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
     try {
       console.log("=== SAVING UNDO STATE ===");
       console.log("Changes to save:", JSON.stringify(changes, null, 2));
-      
-      // Log where the saveUndo call is coming from
-      console.log("Call stack:", new Error().stack);
-      
       // Validation check - only save if there are actual changes
       const hasTerrain = changes.terrain && 
         (Object.keys(changes.terrain.added || {}).length > 0 || 
@@ -607,10 +639,6 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
         (changes.environment.added?.length > 0 || 
          changes.environment.removed?.length > 0);
       
-      console.log("Has terrain changes:", hasTerrain, 
-                 "Added blocks:", changes.terrain ? Object.keys(changes.terrain.added || {}).length : 0,
-                 "Removed blocks:", changes.terrain ? Object.keys(changes.terrain.removed || {}).length : 0);
-      console.log("Has environment changes:", hasEnvironment);
       
       if (!hasTerrain && !hasEnvironment) {
         console.warn("No actual changes to save in undo state, skipping");
@@ -619,15 +647,12 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
       
       // Get existing undo states
       const undoStates = await DatabaseManager.getData(STORES.UNDO, 'states') || [];
-      console.log(`Found ${undoStates.length} existing undo states`);
-
+     
       // Add new changes to undo stack (front)
       const newUndoStates = [changes, ...undoStates];
-      console.log(`New undo stack will have ${newUndoStates.length} states`);
-
+     
       // If we exceed threshold, commit older states
-      if (newUndoStates.length > UNDO_THRESHOLD) {
-        console.log(`Undo states exceed threshold (${UNDO_THRESHOLD}), committing older states...`);
+      if (newUndoStates.length > MIN_UNDO_STATES) {
         await commitOldStates(newUndoStates);
       } else {
         // Otherwise just save the new state
@@ -637,7 +662,6 @@ function UndoRedoManager({ terrainBuilderRef, environmentBuilderRef, children },
             DatabaseManager.saveData(STORES.UNDO, 'states', newUndoStates),
             DatabaseManager.saveData(STORES.REDO, 'states', [])
           ]);
-          console.log(`Undo state saved successfully. New stack length: ${newUndoStates.length}`);
           
           // Double-check that states were actually saved
           const verifyStates = await DatabaseManager.getData(STORES.UNDO, 'states') || [];

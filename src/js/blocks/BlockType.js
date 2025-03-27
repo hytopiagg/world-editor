@@ -494,9 +494,9 @@ class BlockType {
   }
   
   /**
-   * Apply a custom texture from a data URI to this block type
-   * @param {string} dataUri - Data URI for the texture
-   * @param {boolean} rebuildAtlas - Whether to rebuild the texture atlas (default: false)
+   * Apply a custom texture from a data URI
+   * @param {string} dataUri - The data URI of the texture
+   * @param {boolean} rebuildAtlas - Whether to rebuild the texture atlas
    * @returns {Promise<boolean>} Success status
    */
   async applyCustomTextureDataUri(dataUri, rebuildAtlas = false) {
@@ -506,6 +506,8 @@ class BlockType {
     }
     
     try {
+      console.log(`Applying custom texture data URI for block ID ${this._id}`);
+      
       // Set the texture URI for all faces
       const faces = ['top', 'bottom', 'left', 'right', 'front', 'back'];
       faces.forEach(face => {
@@ -514,29 +516,52 @@ class BlockType {
       
       // Make sure the texture is loaded in the texture atlas
       if (BlockTextureAtlas.instance) {
-        await BlockTextureAtlas.instance.loadTexture(dataUri);
+        // First, try to use the specialized method
+        let success = await BlockTextureAtlas.instance.applyDataUriToAllFaces(`${this._id}`, dataUri);
         
-        // Verify the texture was loaded
-        const metadata = BlockTextureAtlas.instance.getTextureMetadata(dataUri);
-        if (metadata) {
-          // Only rebuild the texture atlas if specifically requested
-          if (rebuildAtlas) {
-            await BlockTextureAtlas.instance.rebuildTextureAtlas();
-          }
+        // If that fails, try direct loading approach
+        if (!success) {
+          console.log(`Fallback: Direct loading for block ${this._id}`);
+          await BlockTextureAtlas.instance.loadTextureFromDataURI(dataUri, dataUri);
           
-          // Always dispatch texture atlas updated event to notify components
-          if (typeof window !== 'undefined') {
-            const event = new CustomEvent('textureAtlasUpdated', {
-              detail: { textureId: dataUri, blockId: this._id }
+          // Get the metadata
+          const metadata = BlockTextureAtlas.instance.getTextureMetadata(dataUri);
+          if (metadata) {
+            // Manually map all the keys
+            BlockTextureAtlas.instance._textureAtlasMetadata.set(`${this._id}`, metadata);
+            BlockTextureAtlas.instance._textureAtlasMetadata.set(this._id, metadata);
+            BlockTextureAtlas.instance._textureAtlasMetadata.set(`blocks/${this._id}`, metadata);
+            faces.forEach(face => {
+              const faceCoord = {
+                'top': '+y', 'bottom': '-y', 'left': '-x', 
+                'right': '+x', 'front': '+z', 'back': '-z'
+              }[face];
+              BlockTextureAtlas.instance._textureAtlasMetadata.set(`blocks/${this._id}/${faceCoord}.png`, metadata);
             });
-            window.dispatchEvent(event);
+            success = true;
           }
-          
-          return true;
-        } else {
-          console.warn('Failed to load data URI texture into atlas');
-          return false;
         }
+        
+        // Force rebuild the texture atlas
+        if (success || rebuildAtlas) {
+          await BlockTextureAtlas.instance.rebuildTextureAtlas();
+        }
+        
+        // Always dispatch texture atlas updated event to notify components
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('textureAtlasUpdated', {
+            detail: { textureId: dataUri, blockId: this._id }
+          });
+          window.dispatchEvent(event);
+          
+          // Also try forcing a refresh of chunk meshes
+          const blockTypeChangedEvent = new CustomEvent('blockTypeChanged', {
+            detail: { blockTypeId: this._id }
+          });
+          window.dispatchEvent(blockTypeChangedEvent);
+        }
+        
+        return success;
       } else {
         console.warn('BlockTextureAtlas not available');
         return false;
