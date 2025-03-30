@@ -105,15 +105,17 @@ class GroundTool extends BaseTool {
 	 * Handles mouse down events for ground placement
 	 */
 	handleMouseDown(event, position, button) {
-		// Safety check - if position is undefined, we can't do anything
-		if (!position) {
-			console.error('GroundTool: position is undefined in handleMouseDown');
+		// Safety check - use previewPositionRef for accurate placement
+		if (!this.previewPositionRef || !this.previewPositionRef.current) {
+			console.error('GroundTool: previewPositionRef is undefined in handleMouseDown');
 			return;
 		}
+		// Use the accurate cursor position from TerrainBuilder
+		const currentPosition = this.previewPositionRef.current;
 
 		console.log('GroundTool: handleMouseDown', {
 			button,
-			position,
+			position: currentPosition, // Use accurate position
 			hasStartPosition: !!this.groundStartPosition,
 			isCtrlPressed: this.isCtrlPressed,
 			undoRedoManager: !!this.undoRedoManager
@@ -155,9 +157,9 @@ class GroundTool extends BaseTool {
 				// Perform the appropriate action based on Ctrl key state
 				let actionPerformed = false;
 				if (this.isCtrlPressed) {
-					actionPerformed = this.eraseGround(this.groundStartPosition, position);
+					actionPerformed = this.eraseGround(this.groundStartPosition, currentPosition); // Use accurate position
 				} else {
-					actionPerformed = this.placeGround(this.groundStartPosition, position);
+					actionPerformed = this.placeGround(this.groundStartPosition, currentPosition); // Use accurate position
 				}
 
 				if (!actionPerformed) {
@@ -213,8 +215,8 @@ class GroundTool extends BaseTool {
 				}
 			} else {
 				// Set start position for a new ground area
-				console.log('Setting ground start position:', position);
-				this.groundStartPosition = position.clone();
+				console.log('Setting ground start position:', currentPosition); // Use accurate position
+				this.groundStartPosition = currentPosition.clone();
 				
 				// Start tracking changes for undo/redo
 				if (this.placementChangesRef) {
@@ -240,8 +242,9 @@ class GroundTool extends BaseTool {
 	 * Handles mouse move events for ground preview
 	 */
 	handleMouseMove(event, position) {
-		if (this.groundStartPosition) {
-			this.updateGroundPreview(this.groundStartPosition, position);
+		// Use the accurate preview position for the end point
+		if (this.groundStartPosition && this.previewPositionRef && this.previewPositionRef.current) {
+			this.updateGroundPreview(this.groundStartPosition, this.previewPositionRef.current);
 		}
 	}
 

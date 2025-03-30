@@ -106,15 +106,17 @@ class PipeTool extends BaseTool {
 	 * Handles mouse down events for pipe placement
 	 */
 	handleMouseDown(event, position, button) {
-		// Safety check - if position is undefined, we can't do anything
-		if (!position) {
-			console.error('PipeTool: position is undefined in handleMouseDown');
+		// Safety check - use previewPositionRef for accurate placement
+		if (!this.previewPositionRef || !this.previewPositionRef.current) {
+			console.error('PipeTool: previewPositionRef is undefined in handleMouseDown');
 			return;
 		}
+		// Use the accurate cursor position from TerrainBuilder
+		const currentPosition = this.previewPositionRef.current;
 
 		console.log('PipeTool: handleMouseDown', {
 			button,
-			position,
+			position: currentPosition, // Use accurate position
 			hasStartPosition: !!this.pipeStartPosition,
 			isCtrlPressed: this.isCtrlPressed,
 			undoRedoManager: !!this.undoRedoManager
@@ -156,9 +158,9 @@ class PipeTool extends BaseTool {
 				// Perform the appropriate action based on Ctrl key state
 				let actionPerformed = false;
 				if (this.isCtrlPressed) {
-					actionPerformed = this.erasePipe(this.pipeStartPosition, position);
+					actionPerformed = this.erasePipe(this.pipeStartPosition, currentPosition); // Use accurate position
 				} else {
-					actionPerformed = this.placePipe(this.pipeStartPosition, position);
+					actionPerformed = this.placePipe(this.pipeStartPosition, currentPosition); // Use accurate position
 				}
 
 				if (!actionPerformed) {
@@ -214,8 +216,8 @@ class PipeTool extends BaseTool {
 				}
 			} else {
 				// Set start position for a new pipe area
-				console.log('Setting pipe start position:', position);
-				this.pipeStartPosition = position.clone();
+				console.log('Setting pipe start position:', currentPosition); // Use accurate position
+				this.pipeStartPosition = currentPosition.clone();
 				
 				// Start tracking changes for undo/redo
 				if (this.placementChangesRef) {
@@ -241,8 +243,9 @@ class PipeTool extends BaseTool {
 	 * Handles mouse move events for pipe preview
 	 */
 	handleMouseMove(event, position) {
-		if (this.pipeStartPosition) {
-			this.updatePipePreview(this.pipeStartPosition, position);
+		// Use the accurate preview position for the end point
+		if (this.pipeStartPosition && this.previewPositionRef && this.previewPositionRef.current) {
+			this.updatePipePreview(this.pipeStartPosition, this.previewPositionRef.current);
 		}
 	}
 

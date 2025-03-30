@@ -111,15 +111,17 @@ class WallTool extends BaseTool {
 	 * Handles mouse down events for wall placement
 	 */
 	handleMouseDown(event, position, button) {
-		// Safety check - if position is undefined, we can't do anything
-		if (!position) {
-			console.error('WallTool: position is undefined in handleMouseDown');
+		// Safety check - use previewPositionRef for accurate placement
+		if (!this.previewPositionRef || !this.previewPositionRef.current) {
+			console.error('WallTool: previewPositionRef is undefined in handleMouseDown');
 			return;
 		}
+		// Use the accurate cursor position from TerrainBuilder
+		const currentPosition = this.previewPositionRef.current;
 
 		console.log('WallTool: handleMouseDown', {
 			button,
-			position,
+			position: currentPosition, // Use accurate position
 			hasStartPosition: !!this.wallStartPosition,
 			isCtrlPressed: this.isCtrlPressed,
 			undoRedoManager: !!this.undoRedoManager
@@ -161,9 +163,9 @@ class WallTool extends BaseTool {
 				// Perform the appropriate action based on Ctrl key state
 				let actionPerformed = false;
 				if (this.isCtrlPressed) {
-					actionPerformed = this.eraseWall(this.wallStartPosition, position, this.wallHeight);
+					actionPerformed = this.eraseWall(this.wallStartPosition, currentPosition, this.wallHeight); // Use accurate position
 				} else {
-					actionPerformed = this.placeWall(this.wallStartPosition, position, this.wallHeight);
+					actionPerformed = this.placeWall(this.wallStartPosition, currentPosition, this.wallHeight); // Use accurate position
 				}
 
 				if (!actionPerformed) {
@@ -176,8 +178,9 @@ class WallTool extends BaseTool {
 				this.removeWallPreview();
 			} else {
 				// Set starting point
-				this.wallStartPosition = position;
-				this.updateWallPreview(this.wallStartPosition, position);
+				console.log('Setting wall start position:', currentPosition); // Use accurate position
+				this.wallStartPosition = currentPosition.clone();
+				this.updateWallPreview(this.wallStartPosition, currentPosition); // Use accurate position
 			}
 		}
 	}
@@ -228,8 +231,9 @@ class WallTool extends BaseTool {
 	 * Handles mouse move events for wall preview
 	 */
 	handleMouseMove(event, position) {
-		if (this.wallStartPosition) {
-			this.updateWallPreview(this.wallStartPosition, position);
+		// Use the accurate preview position for the end point
+		if (this.wallStartPosition && this.previewPositionRef && this.previewPositionRef.current) {
+			this.updateWallPreview(this.wallStartPosition, this.previewPositionRef.current);
 		}
 	}
 
