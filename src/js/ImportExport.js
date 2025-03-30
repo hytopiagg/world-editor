@@ -40,17 +40,24 @@ export const importMap = async (file, terrainBuilderRef, environmentBuilderRef) 
                 if (blockType.isCustom || (blockType.id >= 100 && blockType.id < 200)) {
                 //  console.log(`Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
                   
-                  // Make sure the block has all required properties
+                  // Determine if it's multi-texture based on URI or explicit flag (if present)
+                  // If textureUri doesn't end with .png (or similar image extension), assume multi-texture
+                  const likelyIsMultiTexture = blockType.isMultiTexture !== undefined 
+                    ? blockType.isMultiTexture 
+                    : !(blockType.textureUri?.endsWith('.png') || blockType.textureUri?.endsWith('.jpg') || blockType.textureUri?.endsWith('.jpeg') || blockType.textureUri?.endsWith('.gif'));
+
+                  // Prepare block data for processing
                   const processedBlock = {
                     id: blockType.id,
                     name: blockType.name,
-                    textureUri: blockType.textureUri,
+                    textureUri: blockType.textureUri, // Pass the URI from the file (could be path or data)
                     isCustom: true,
-                    isMultiTexture: blockType.isMultiTexture || false,
+                    isMultiTexture: likelyIsMultiTexture,
+                    // Pass sideTextures if they exist in the import, otherwise default to empty
                     sideTextures: blockType.sideTextures || {}
                   };
                   
-                  // Process the custom block
+                  // Process the custom block - this function needs to handle existing/missing logic
                   await processCustomBlock(processedBlock);
                 }
               }
@@ -240,26 +247,30 @@ export const exportMapFile = async (terrainBuilderRef) => {
     loadingManager.updateLoading('Building export data structure...', 70);
     const exportData = {
       blockTypes: allBlockTypes.map(block => {
-        // For custom blocks, preserve the exact texture URI
-        if (block.isCustom || block.id >= 100) {
+        // Check if it's a custom block (using ID range 100-199 or isCustom flag)
+        if ((block.id >= 100 && block.id < 200) || block.isCustom) {
+          // Generate the custom path based on whether it's multi-texture or not
+          const customPath = block.isMultiTexture 
+            ? `blocks/custom/${block.name}` // Path for multi-texture (folder)
+            : `blocks/custom/${block.name}.png`; // Path for single texture (PNG file)
+          
+          // Return simplified custom block structure
           return {
             id: block.id,
             name: block.name,
-            textureUri: block.textureUri, // Keep the original texture URI for custom blocks
-            isCustom: true,
-            isMultiTexture: block.isMultiTexture || false,
-            sideTextures: block.sideTextures || {}
+            textureUri: customPath,
+            isCustom: true
+            // Removed: isMultiTexture, sideTextures
           };
         } else {
-          // For standard blocks, use the normalized path format
+          // Standard blocks: use the normalized path format
+          // Return simplified standard block structure
           return {
             id: block.id,
             name: block.name,
             textureUri: block.isMultiTexture ? `blocks/${block.name}` : `blocks/${block.name}.png`,
-            isCustom: false,
-            isMultiTexture: block.isMultiTexture || false,
-            isLiquid: block.name.toLowerCase().includes('water') || block.name.toLowerCase().includes('lava') ? true : false,
-            sideTextures: block.sideTextures || {}
+            isCustom: false
+            // Removed: isMultiTexture, sideTextures, isLiquid
           };
         }
       }),
