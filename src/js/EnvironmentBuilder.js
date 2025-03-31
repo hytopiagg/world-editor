@@ -3,7 +3,6 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils';
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { DatabaseManager, STORES } from './DatabaseManager';
-import { ENVIRONMENT_INSTANCED_MESH_CAPACITY } from './constants/performance';
 
 export const environmentModels = (() => {
   try {
@@ -67,6 +66,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     /// state for total environment objects
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
 
+    
     // Convert class methods to functions
     const loadModel = async (modelToLoadUrl) => {
         if (!modelToLoadUrl) {
@@ -237,7 +237,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         });
 
         // Set a large initial capacity
-        const initialCapacity = ENVIRONMENT_INSTANCED_MESH_CAPACITY; // Adjust as needed based on your expected maximum
+        const initialCapacity = 1000; // Adjust as needed based on your expected maximum
 
         const instancedMeshArray = [];
         for (const { material, geometries } of geometriesByMaterial.values()) {
@@ -521,11 +521,6 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         validMeshes.forEach(mesh => {
             const currentCapacity = mesh.instanceMatrix.count;
             if (instanceId >= currentCapacity - 1) {
-                // expandInstancedMeshCapacity(modelUrl);
-                // // Re-get the valid meshes as they might have been replaced
-                // const updatedValidMeshes = instancedData.meshes.filter(m => m !== undefined && m !== null);
-                // validMeshes.length = 0;
-                // updatedValidMeshes.forEach(m => validMeshes.push(m));
                 alert("Maximum Environment Objects Exceeded! Please clear the environment and try again.");
                 return;
             }
@@ -604,9 +599,97 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
     /// places an object in the environment, used when adding an object to the environment
     /// and also when rebuilding the environment
-    const placeEnvironmentModel = () => {
-        if (!currentBlockType || !scene || !placeholderMeshRef.current) return;
+    /// @param {string} mode - "add" or "remove" mode
+    const placeEnvironmentModel = (mode = "add") => {
+        if (!scene || !placeholderMeshRef.current) return;
+        
+        // For removal mode, we don't need a current block type
+        if (mode === "add" && !currentBlockType) return;
 
+        // Remove mode: Find and remove objects at the current position
+        if (mode === "remove") {
+            // Get all placement positions based on current placement size
+            const placementPositions = getPlacementPositions(placeholderMeshRef.current.position, placementSizeRef.current);
+            const removedObjects = [];
+
+            // For each position, check if there are any environment objects there
+            placementPositions.forEach(placementPosition => {
+                // Define a small tolerance for position matching (0.5 units)
+                const POSITION_TOLERANCE = 0.5;
+                
+                // Check each model type and its instances
+                for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+                    // Convert instances to array with instanceId for easy filtering
+                    const instances = Array.from(instancedData.instances.entries()).map(([instanceId, data]) => ({
+                        instanceId,
+                        modelUrl,
+                        position: data.position,
+                        rotation: data.rotation,
+                        scale: data.scale
+                    }));
+                    
+                    // Find instances that are close to the placement position
+                    const matchingInstances = instances.filter(instance => {
+                        return Math.abs(instance.position.x - placementPosition.x) < POSITION_TOLERANCE &&
+                               Math.abs(instance.position.y - placementPosition.y) < POSITION_TOLERANCE &&
+                               Math.abs(instance.position.z - placementPosition.z) < POSITION_TOLERANCE;
+                    });
+                    
+                    // Remove matching instances
+                    matchingInstances.forEach(instance => {
+                        // Get full object data for undo tracking before removing
+                        const objectData = instancedData.instances.get(instance.instanceId);
+                        
+                        // Remove the instance
+                        const removedObject = {
+                            modelUrl,
+                            instanceId: instance.instanceId,
+                            position: { x: objectData.position.x, y: objectData.position.y, z: objectData.position.z },
+                            rotation: { x: objectData.rotation.x, y: objectData.rotation.y, z: objectData.rotation.z },
+                            scale: { x: objectData.scale.x, y: objectData.scale.y, z: objectData.scale.z },
+                        };
+                        
+                        // Remove the instance from the scene
+                        instancedData.instances.delete(instance.instanceId);
+                        
+                        // Update the instanced mesh
+                        instancedData.meshes.forEach(mesh => {
+                            mesh.setMatrixAt(instance.instanceId, new THREE.Matrix4());
+                            // Update count to be the highest remaining instance ID + 1
+                            mesh.count = Math.max(...Array.from(instancedData.instances.keys()), -1) + 1;
+                            mesh.instanceMatrix.needsUpdate = true;
+                        });
+                        
+                        removedObjects.push(removedObject);
+                    });
+                }
+            });
+            
+            // If objects were removed, update undo state and storage
+            if (removedObjects.length > 0) {
+                console.log(`Removed ${removedObjects.length} environment objects`);
+                
+                // Save all changes to undo state at once (if not in an undo/redo operation)
+                if (!isUndoRedoOperation.current) {
+                    const changes = {
+                        terrain: { added: {}, removed: {} }, // no terrain changes
+                        environment: { added: [], removed: removedObjects },
+                    };
+                    if (undoRedoManager?.current?.saveUndo) {
+                        undoRedoManager.current.saveUndo(changes);
+                    }
+                }
+                
+                // Update storage and object count
+                updateLocalStorage();
+                
+                return removedObjects;
+            }
+            
+            return []; // No objects were removed
+        }
+        
+        // Regular add mode logic
         const modelData = environmentModels.find(model => model.id === currentBlockType.id);
         if (!modelData) {
             console.warn(`Could not find model with ID ${currentBlockType.id}`);
@@ -641,16 +724,6 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         const currentCapacity = instancedData.meshes[0]?.instanceMatrix.count || 0;
         
         if (totalNeededInstances > currentCapacity) {
-            // // Expand to double what we need to reduce future expansions
-            // const newCapacity = Math.max(totalNeededInstances * 2, currentCapacity * 2);
-            // expandInstancedMeshCapacity(modelUrl, newCapacity);
-            // // Re-fetch instancedData after expansion
-            // instancedData = instancedMeshes.current.get(modelUrl);
-            // if (!instancedData || !instancedData.meshes.length) {
-            //     console.error('Failed to get expanded instanced data');
-            //     return;
-            // }
-
             alert("Maximum Environment Objects Exceeded! Please clear the environment and try again.");
             return;
         }
@@ -701,11 +774,17 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         });
 
         // Save all changes to undo state at once
-        const changes = {
-            terrain: { added: {}, removed: {} }, // no terrain changes
-            environment: { added: addedObjects, removed: [] },
-        };
-        undoRedoManager.saveUndo(changes);
+        if (!isUndoRedoOperation.current) {
+            const changes = {
+                terrain: { added: {}, removed: {} }, // no terrain changes
+                environment: { added: addedObjects, removed: [] },
+            };
+            if (undoRedoManager?.current?.saveUndo) {
+                undoRedoManager.current.saveUndo(changes);
+            } else {
+                console.warn("EnvironmentBuilder: No undoRedoManager available, changes won't be tracked for undo/redo");
+            }
+        }
 
         // Save to DB, update UI counts
         updateLocalStorage();
@@ -749,50 +828,6 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         DatabaseManager.saveData(STORES.ENVIRONMENT, 'current', allObjects);
         setTotalEnvironmentObjects(allObjects.length);
     };
-
-    // /// expands the capacity of an instanced mesh, used when rebuilding the environment
-    // /// and also when adding an object to the environment
-    // const expandInstancedMeshCapacity = (modelUrl, newCapacity) => {
-    //     const instancedData = instancedMeshes.current.get(modelUrl);
-    //     if (!instancedData || !instancedData.meshes.length) return;
-    
-    //     const newMeshes = instancedData.meshes.map(oldMesh => {
-    //         const newMesh = new THREE.InstancedMesh(
-    //             oldMesh.geometry.clone(),
-    //             oldMesh.material.clone(),
-    //             newCapacity
-    //         );
-    
-    //         // Copy properties
-    //         newMesh.frustumCulled = oldMesh.frustumCulled;
-    //         newMesh.renderOrder = oldMesh.renderOrder;
-    
-    //         // Copy existing instances explicitly by instanceId
-    //         instancedData.instances.forEach((instanceData, instanceId) => {
-    //             newMesh.setMatrixAt(instanceId, instanceData.matrix);
-    //         });
-    
-    //         // Set count to highest instanceId + 1
-    //         const highestInstanceId = Math.max(...instancedData.instances.keys(), -1);
-    //         newMesh.count = highestInstanceId + 1;
-    //         newMesh.instanceMatrix.needsUpdate = true;
-    
-    //         // Replace in scene
-    //         scene.remove(oldMesh);
-    //         scene.add(newMesh);
-    
-    //         // Clean up old mesh
-    //         oldMesh.geometry.dispose();
-    //         oldMesh.material.dispose();
-    //         oldMesh.dispose();
-    
-    //         return newMesh;
-    //     });
-    
-    //     // Update the instancedData with new meshes
-    //     instancedData.meshes = newMeshes;
-    //     instancedMeshes.current.set(modelUrl, instancedData);
-    // };
 
     /// gets the placement positions, used when adding an object to the environment
     const getPlacementPositions = (centerPos, placementSize) => {
@@ -903,7 +938,11 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [removedObject] },
             };
-            undoRedoManager.saveUndo(changes);
+            if (undoRedoManager?.current?.saveUndo) {
+                undoRedoManager.current.saveUndo(changes);
+            } else {
+                console.warn("EnvironmentBuilder: No undoRedoManager available, removal won't be tracked for undo/redo");
+            }
         }
 
         // Always update storage

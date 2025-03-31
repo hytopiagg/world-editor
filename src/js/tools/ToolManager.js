@@ -114,9 +114,9 @@ class ToolManager {
 	/**
 	 * Handle mouse up events by forwarding to the active tool
 	 */
-	handleMouseUp(event, position) {
+	handleMouseUp(event, position, button) {
 		if (this.activeTool) {
-			this.activeTool.handleMouseUp(event, position);
+			this.activeTool.handleMouseUp(event, position, button);
 		}
 	}
 

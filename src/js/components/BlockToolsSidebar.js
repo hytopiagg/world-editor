@@ -3,7 +3,7 @@ import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
 import { DatabaseManager, STORES } from '../DatabaseManager';
 import { environmentModels } from '../EnvironmentBuilder';
-import { blockTypes, processCustomBlock, getCustomBlocks, removeCustomBlock, getBlockTypes } from '../managers/BlockTypesManager';
+import { blockTypes, processCustomBlock, batchProcessCustomBlocks, getCustomBlocks, removeCustomBlock, getBlockTypes } from '../managers/BlockTypesManager';
 import "../../css/BlockToolsSidebar.css";
 
 const SCALE_MIN = 0.1;
@@ -14,10 +14,14 @@ const ROTATION_MAX = 360;
 let selectedBlockID = 0;
 
 export const refreshBlockTools = () => {
-  console.log("Refreshing block tools sidebar");
   const event = new CustomEvent('refreshBlockTools');
   window.dispatchEvent(event);
 };
+
+// Expose the function globally so it can be called from other components
+if (typeof window !== 'undefined') {
+  window.refreshBlockTools = refreshBlockTools;
+}
 
 const BlockToolsSidebar = ({
   activeTab,
@@ -52,18 +56,26 @@ const BlockToolsSidebar = ({
       }
     };
     
+    // Handle custom blocks updated event from Minecraft importer
+    const handleCustomBlocksUpdated = (event) => {
+      console.log("Custom blocks updated from Minecraft importer:", event.detail?.blocks);
+      handleRefresh();
+    };
+    
     // Initial load
     handleRefresh();
     
-    // Listen for refresh events
+    // Listen for all relevant events
     window.addEventListener('refreshBlockTools', handleRefresh);
-    
-    // Also listen for custom-blocks-loaded events from Minecraft imports
     window.addEventListener('custom-blocks-loaded', handleRefresh);
+    window.addEventListener('custom-blocks-updated', handleCustomBlocksUpdated);
+    window.addEventListener('textureAtlasUpdated', handleRefresh);
     
     return () => {
       window.removeEventListener('refreshBlockTools', handleRefresh);
       window.removeEventListener('custom-blocks-loaded', handleRefresh);
+      window.removeEventListener('custom-blocks-updated', handleCustomBlocksUpdated);
+      window.removeEventListener('textureAtlasUpdated', handleRefresh);
     };
   }, []);
 
@@ -172,7 +184,7 @@ const BlockToolsSidebar = ({
   };
 
   const handleBlockSelect = (blockType) => {
-    console.log("Block selected:", blockType);
+    // Set the current block type
     setCurrentBlockType({
       ...blockType,
       isEnvironment: false
@@ -192,60 +204,75 @@ const BlockToolsSidebar = ({
       
       /// if there are any image files, process them
       if (imageFiles.length > 0) {
-        
-        /// create a promise for each inidividual file
-        const filePromises = imageFiles.map(file => {
-
-          /// return each individual file as a promise
-          return new Promise((resolve) => {
-
-            /// read the file
-            const reader = new FileReader();
-
-            /// when the file is loaded, process it
-            reader.onload = () => {
-              /// get the block name from the image file
-              const blockName = file.name.replace(/\.[^/.]+$/, ""); // Remove file extension
-
-              /// create a block object
-              const block = {
-                name: blockName,
-                textureUri: reader.result
+        // Use different approach based on number of files
+        if (imageFiles.length > 1) {
+          // For multiple files, use batch processing for better performance
+          try {
+            // Read all files first
+            const blockPromises = imageFiles.map(file => {
+              return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const blockName = file.name.replace(/\.[^/.]+$/, ""); // Remove file extension
+                  
+                  resolve({
+                    name: blockName,
+                    textureUri: reader.result
+                  });
+                };
+                reader.readAsDataURL(file);
+              });
+            });
+            
+            // Wait for all files to be read
+            const blocks = await Promise.all(blockPromises);
+            
+            // Process all blocks in a batch
+            await batchProcessCustomBlocks(blocks);
+            
+            // Save custom blocks to database after batch processing
+            const updatedCustomBlocks = getCustomBlocks();
+            await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedCustomBlocks);
+            
+            // Refresh the block tools once after batch processing
+            refreshBlockTools();
+          } catch (error) {
+            console.error("Error in batch processing custom blocks:", error);
+          }
+        } else {
+          // For single file, use the original approach
+          const filePromises = imageFiles.map(file => {
+            return new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const blockName = file.name.replace(/\.[^/.]+$/, ""); // Remove file extension
+                const block = {
+                  name: blockName,
+                  textureUri: reader.result
+                };
+                
+                // Process the block
+                processCustomBlock(block);
+                resolve();
               };
-
-              console.log("Processing drag-dropped texture:", block.name);
-              console.log("Which has a texture uri of:", block.textureUri);
-              /// process the block
-              processCustomBlock(block);
-
-              /// resolve the promise
-              resolve();
-            };
-
-            /// read the file
-            reader.readAsDataURL(file);
+              reader.readAsDataURL(file);
+            });
           });
-        });
 
-        // Wait for all files to be processed
-        await Promise.all(filePromises);
-        
-        // CRITICAL: Save the custom blocks to the database
-        try {
-          // Get the latest custom blocks after processing
-          const updatedCustomBlocks = getCustomBlocks();
+          // Wait for the file to be processed
+          await Promise.all(filePromises);
           
-          // Save them to the database
-          console.log("Saving custom blocks to database:", updatedCustomBlocks.length);
-          await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedCustomBlocks);
-          console.log("Custom blocks saved to database successfully");
-        } catch (error) {
-          console.error("Error saving custom blocks to database:", error);
+          // Save the custom blocks to the database
+          try {
+            const updatedCustomBlocks = getCustomBlocks();
+            await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedCustomBlocks);
+          } catch (error) {
+            console.error("Error saving custom blocks to database:", error);
+          }
+          
+          // Refresh the block tools to show the new blocks
+          refreshBlockTools();
         }
-        
-        // Refresh the block tools to show the new blocks
-        console.log("Refreshing block tools after processing custom blocks");
-        refreshBlockTools();
       }
     }
     /// process environment objects next
@@ -290,7 +317,6 @@ const BlockToolsSidebar = ({
               
               if (environmentBuilder) {
                 await environmentBuilder.current.addCustomModel(newEnvironmentModel);
-                console.log(`Successfully loaded custom model: ${fileName}`);
               }
             } catch (error) {
               console.error(`Error processing model ${fileName}:`, error);

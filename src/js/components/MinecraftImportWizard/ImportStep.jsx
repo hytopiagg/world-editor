@@ -81,7 +81,7 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
         blockMappings
       );
       
-      // Set progress callback
+      // Set progress callback to update both our component state and the loading manager
       converter.setProgressCallback((percent) => {
         // Only update UI when progress changes significantly
         if (percent - progress >= 2 || percent === 100) {

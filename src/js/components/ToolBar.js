@@ -1,5 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaMinus, FaCube, FaBorderStyle, FaLock, FaLockOpen, FaUndo, FaRedo, FaExpand, FaTrash, FaCircle, FaSquare, FaMountain, FaDrawPolygon, FaCubes } from "react-icons/fa";
+import {
+	FaPlus,
+	FaMinus,
+	FaLock,
+	FaLockOpen,
+	FaUndo,
+	FaRedo,
+	FaCircle,
+	FaPaintBrush,
+	FaDrawPolygon,
+	FaSquare,
+	FaCube,
+	FaBorderStyle,
+	FaMountain,
+	FaExpand,
+	FaTrash,
+	FaCubes,
+	FaDatabase,
+	FaBorderAll
+} from 'react-icons/fa';
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
 import "../../css/ToolBar.css";
@@ -295,12 +314,19 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 
 	const applyNewGridSize = async (newGridSize) => {
 		if (newGridSize > 10) {
+			// Update App.js state with new grid size
 			setGridSize(newGridSize);
 
-			// save grid size to local storage
-			// this has to be done here, because terrainbuilder
-			// gets the grid size from local storage
-			localStorage.setItem("gridSize", newGridSize);
+			// Use TerrainBuilder's updateGridSize method to ensure consistent behavior
+			// This will also update localStorage internally
+			if (terrainBuilderRef.current && terrainBuilderRef.current.updateGridSize) {
+				console.log(`ToolBar: Updating grid size to ${newGridSize} via terrainBuilderRef`);
+				terrainBuilderRef.current.updateGridSize(newGridSize);
+			} else {
+				// Fallback if the method is not available
+				console.warn("TerrainBuilder updateGridSize method not available, using fallback");
+				localStorage.setItem("gridSize", newGridSize.toString());
+			}
 
 			setShowGridSizeModal(false);
 		} else {
@@ -327,7 +353,19 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 	const onMapFileSelected = (event) => {
 		console.log("Map file selected:", event.target.files[0]);
 		if (event.target.files && event.target.files[0]) {
-			importMap(event.target.files[0], terrainBuilderRef, environmentBuilderRef);
+			// Import the file
+			importMap(event.target.files[0], terrainBuilderRef, environmentBuilderRef)
+				.then(() => {
+					// Reset the file input value after successful import
+					// This allows the same file to be imported again
+					event.target.value = '';
+					console.log("Reset file input after successful import");
+				})
+				.catch((error) => {
+					// Also reset on error to allow retry
+					event.target.value = '';
+					console.error("Error during import:", error);
+				});
 		}
 	};
 
@@ -359,7 +397,8 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 					const wallTool = terrainBuilderRef.current?.toolManagerRef?.current?.tools?.["wall"];
 					if (wallTool) {
 						wallTool.undoRedoManager = undoRedoManager;
-						console.log("ToolBar: Updated WallTool undoRedoManager reference");
+						console.log("ToolBar: Updated WallTool undoRedoManager reference",
+							undoRedoManager && 'current' in undoRedoManager ? "(is ref)" : "(is direct)");
 					}
 				}
 			}
@@ -463,7 +502,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 						
 						<Tooltip text="Undo (Ctrl+Z)">
 							<button
-								onClick={() => undoRedoManager.handleUndo()}
+								onClick={() => undoRedoManager?.current?.handleUndo()}
 								className={`control-button ${!canUndo ? 'disabled' : ''}`}
 								disabled={!canUndo}>
 								<FaUndo />
@@ -471,7 +510,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 						</Tooltip>
 						<Tooltip text="Redo (Ctrl+Y)">
 							<button
-								onClick={() => undoRedoManager.handleRedo()}
+								onClick={() => undoRedoManager?.current?.handleRedo()}
 								className={`control-button ${!canRedo ? 'disabled' : ''}`}
 								disabled={!canRedo}>
 								<FaRedo />
@@ -486,36 +525,16 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 							</button>
 						</Tooltip>
 						<div className="control-divider-vertical"></div>
-						<Tooltip text="Cross pattern (5 blocks)">
+						<Tooltip text="Brush Tool - Click to place/erase blocks. Press 1/2 to adjust size. Press 3 to toggle shape (square/circle). Press 4 to toggle flat/3D mode. Hold Ctrl to erase.">
 							<button
-								onClick={() => setPlacementSize("cross")}
-								className={`control-button ${placementSize === "cross" ? "selected" : ""}`}>
-								<FaCircle style={{ width: "10px", height: "10px" }} />
+								onClick={() => {
+									handleToolToggle("brush");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "brush" ? "selected" : ""}`}>
+								<FaPaintBrush />
 							</button>
 						</Tooltip>
-						<Tooltip text="diamond pattern (13 blocks)">
-							<button
-								onClick={() => setPlacementSize("diamond")}
-								className={`control-button ${placementSize === "diamond" ? "selected" : ""}`}>
-								<FaCircle style={{ width: "20px", height: "20px" }} />
-							</button>
-						</Tooltip>
-						<div className="control-divider-vertical"></div>
-						<Tooltip text="Single block placement">
-							<button
-								onClick={() => setPlacementSize("square9")}
-								className={`control-button ${placementSize === "square9" ? "selected" : ""}`}>
-								<FaSquare style={{ width: "10px", height: "10px" }} />
-							</button>
-						</Tooltip>
-						<Tooltip text="Cross pattern (5 blocks)">
-							<button
-								onClick={() => setPlacementSize("square16")}
-								className={`control-button ${placementSize === "square16" ? "selected" : ""}`}>
-								<FaSquare style={{ width: "20px", height: "20px" }} />
-							</button>
-						</Tooltip>
-						<div className="control-divider-vertical"></div>
 						<Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. q cancels">
 							<button
 								onClick={() => {
@@ -526,6 +545,28 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								<FaDrawPolygon />
 							</button>
 						</Tooltip>
+						<Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.">
+							<button
+								onClick={() => {
+									handleToolToggle("ground");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "ground" ? "selected" : ""}`}>
+								<FaSquare />
+							</button>
+						</Tooltip>
+						
+						<Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.">
+							<button
+								onClick={() => {
+									handleToolToggle("pipe");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "pipe" ? "selected" : ""}`}>
+								<FaBorderAll />
+							</button>
+						</Tooltip>
+						
 					</div>
 					<div className="control-label">Placement Tools</div>
 					

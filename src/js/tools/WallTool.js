@@ -35,6 +35,16 @@ class WallTool extends BaseTool {
 			// Add undoRedoManager reference
 			this.undoRedoManager = terrainBuilderProps.undoRedoManager;
 			console.log('WallTool: Got undoRedoManager reference:', !!this.undoRedoManager);
+			console.log('WallTool: undoRedoManager is ref:', this.undoRedoManager && 'current' in this.undoRedoManager);
+			console.log('WallTool: undoRedoManager.current exists:', this.undoRedoManager && !!this.undoRedoManager.current);
+			console.log('WallTool: undoRedoManager.current has saveUndo:', 
+				this.undoRedoManager && 
+				this.undoRedoManager.current && 
+				typeof this.undoRedoManager.current.saveUndo === 'function');
+
+			// Direct access to saveUndo function
+			this.saveUndoFunction = terrainBuilderProps.saveUndoFunction;
+			console.log('WallTool: Got saveUndoFunction:', !!this.saveUndoFunction);
 
 			// Add direct references to placement tracking
 			this.placementChangesRef = terrainBuilderProps.placementChangesRef;
@@ -101,15 +111,17 @@ class WallTool extends BaseTool {
 	 * Handles mouse down events for wall placement
 	 */
 	handleMouseDown(event, position, button) {
-		// Safety check - if position is undefined, we can't do anything
-		if (!position) {
-			console.error('WallTool: position is undefined in handleMouseDown');
+		// Safety check - use previewPositionRef for accurate placement
+		if (!this.previewPositionRef || !this.previewPositionRef.current) {
+			console.error('WallTool: previewPositionRef is undefined in handleMouseDown');
 			return;
 		}
+		// Use the accurate cursor position from TerrainBuilder
+		const currentPosition = this.previewPositionRef.current;
 
 		console.log('WallTool: handleMouseDown', {
 			button,
-			position,
+			position: currentPosition, // Use accurate position
 			hasStartPosition: !!this.wallStartPosition,
 			isCtrlPressed: this.isCtrlPressed,
 			undoRedoManager: !!this.undoRedoManager
@@ -151,9 +163,9 @@ class WallTool extends BaseTool {
 				// Perform the appropriate action based on Ctrl key state
 				let actionPerformed = false;
 				if (this.isCtrlPressed) {
-					actionPerformed = this.eraseWall(this.wallStartPosition, position, this.wallHeight);
+					actionPerformed = this.eraseWall(this.wallStartPosition, currentPosition, this.wallHeight); // Use accurate position
 				} else {
-					actionPerformed = this.placeWall(this.wallStartPosition, position, this.wallHeight);
+					actionPerformed = this.placeWall(this.wallStartPosition, currentPosition, this.wallHeight); // Use accurate position
 				}
 
 				if (!actionPerformed) {
@@ -161,72 +173,55 @@ class WallTool extends BaseTool {
 					return;
 				}
 
-				// Save undo state directly
-				console.log('WallTool: Saving undo state directly');
-				if (this.placementChangesRef) {
-					const changes = this.placementChangesRef.current;
-					
-					// Check if we have undoRedoManager and changes to save
-					const hasChanges = 
-						Object.keys(changes.terrain.added).length > 0 || 
-						Object.keys(changes.terrain.removed).length > 0;
-						
-					if (hasChanges) {
-						// Try using direct undoRedoManager reference first
-						if (this.undoRedoManager) {
-							console.log('WallTool: Calling saveUndo with direct undoRedoManager reference');
-							this.undoRedoManager.saveUndo(changes);
-						}
-						// Fall back to terrainBuilder reference if available
-						else if (this.terrainBuilderRef.current.undoRedoManager) {
-							console.log('WallTool: Calling saveUndo via terrainBuilderRef');
-							this.terrainBuilderRef.current.undoRedoManager.saveUndo(changes);
-						}
-						else {
-							console.warn('WallTool: No undoRedoManager available, changes won\'t be tracked for undo/redo');
-						}
-						
-						// Reset placement changes after saving
-						this.placementChangesRef.current = { 
-							terrain: { added: {}, removed: {} }, 
-							environment: { added: [], removed: [] } 
-						};
-					} else {
-						console.warn('WallTool: No changes to save');
-					}
-				} else {
-					console.warn('WallTool: placementChangesRef not available, changes won\'t be tracked for undo/redo');
-				}
-
-				// Reset the start position for a new wall
+				// Reset wall state
 				this.wallStartPosition = null;
 				this.removeWallPreview();
-				
-				// Disable placing
-				if (this.isPlacingRef) {
-					console.log('WallTool: Setting isPlacingRef to false (directly)');
-					this.isPlacingRef.current = false;
-				}
 			} else {
-				// Set start position for a new wall
-				console.log('Setting wall start position:', position);
-				this.wallStartPosition = position.clone();
+				// Set starting point
+				console.log('Setting wall start position:', currentPosition); // Use accurate position
+				this.wallStartPosition = currentPosition.clone();
+				this.updateWallPreview(this.wallStartPosition, currentPosition); // Use accurate position
+			}
+		}
+	}
+
+	handleMouseUp(event, position, button) {
+		// Only process if we were actually placing blocks
+		if (this.isPlacingRef?.current) {
+			// Stop placing blocks
+			this.isPlacingRef.current = false;
+			
+			// Save changes to undo stack if there are any changes
+			if (this.placementChangesRef?.current) {
+				const changes = this.placementChangesRef.current;
 				
-				// Start tracking changes for undo/redo
-				if (this.placementChangesRef) {
-					console.log('WallTool: Initializing placementChangesRef for new wall (directly)');
+				// Check if we have undoRedoManager and changes to save
+				if (changes && 
+					(Object.keys(changes.terrain.added || {}).length > 0 || 
+					Object.keys(changes.terrain.removed || {}).length > 0)) {
+					
+					console.log('WallTool: Saving changes to undo stack:', changes);
+					
+					// Try using undoRedoManager reference
+					if (this.undoRedoManager?.current?.saveUndo) {
+						console.log('WallTool: Calling saveUndo with undoRedoManager.current');
+						this.undoRedoManager.current.saveUndo(changes);
+					}
+					else if (this.terrainBuilderRef?.current?.undoRedoManager?.current?.saveUndo) {
+						console.log('WallTool: Calling saveUndo with terrainBuilderRef fallback');
+						this.terrainBuilderRef.current.undoRedoManager.current.saveUndo(changes);
+					}
+					else {
+						console.warn('WallTool: No undoRedoManager available, changes won\'t be tracked for undo/redo');
+					}
+					
+					// Reset placement changes after saving
 					this.placementChangesRef.current = { 
 						terrain: { added: {}, removed: {} }, 
 						environment: { added: [], removed: [] } 
 					};
-					
-					// Start placement
-					if (this.isPlacingRef) {
-						console.log('WallTool: Setting isPlacingRef to true for new wall (directly)');
-						this.isPlacingRef.current = true;
-					}
 				} else {
-					console.warn('WallTool: placementChangesRef not available at wall start');
+					console.warn('WallTool: No changes to save');
 				}
 			}
 		}
@@ -236,8 +231,9 @@ class WallTool extends BaseTool {
 	 * Handles mouse move events for wall preview
 	 */
 	handleMouseMove(event, position) {
-		if (this.wallStartPosition) {
-			this.updateWallPreview(this.wallStartPosition, position);
+		// Use the accurate preview position for the end point
+		if (this.wallStartPosition && this.previewPositionRef && this.previewPositionRef.current) {
+			this.updateWallPreview(this.wallStartPosition, this.previewPositionRef.current);
 		}
 	}
 
@@ -302,75 +298,81 @@ class WallTool extends BaseTool {
 		console.log('WallTool: Placing wall from', startPos, 'to', endPos, 'with height', height);
 
 		if (!startPos || !endPos) {
-			console.error('WallTool: Invalid start or end position for placing');
+			console.error('Invalid start or end position for wall placement');
 			return false;
 		}
 
-		// Ensure the terrainRef is available
-		if (!this.terrainRef || !this.terrainRef.current) {
-			console.error('WallTool: terrainRef not available for placing');
+		// Early validation of references
+		if (!this.terrainBuilderRef || !this.terrainBuilderRef.current) {
+			console.error('WallTool: Cannot place wall - terrainBuilderRef not available');
 			return false;
 		}
 
-		// Ensure we have a block type to place
-		if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
-			console.error('WallTool: No block type to place');
-			return false;
-		}
+		// Get current block type ID from the reference
+		const blockTypeId = this.currentBlockTypeRef.current.id;
+		
+		// Use Bresenham's line algorithm to draw line on the ground
+		const points = this.getLinePoints(
+			Math.round(startPos.x),
+			Math.round(startPos.z),
+			Math.round(endPos.x),
+			Math.round(endPos.z)
+		);
 
-		// Convert positions to integers
-		const startX = Math.round(startPos.x), startY = Math.round(startPos.y), startZ = Math.round(startPos.z);
-		const endX = Math.round(endPos.x), endZ = Math.round(endPos.z);
-
-		// Calculate direction vector
-		const dx = Math.sign(endX - startX);
-		const dz = Math.sign(endZ - startZ);
-
+		// Performance optimization: Batch process all blocks
+		console.time('WallTool-placeWall');
+		
+		// Track any blocks added for state tracking and undo/redo
 		const addedBlocks = {};
-		const blockType = this.currentBlockTypeRef.current.id;
-
-		// Helper function to place a column of blocks
-		const placeColumn = (x, z) => {
+		const baseY = Math.round(startPos.y);
+		
+		// First collect all blocks to add
+		for (const point of points) {
+			const [x, z] = point;
 			for (let y = 0; y < height; y++) {
-				const pos = `${x},${startY + y},${z}`;
-				if (!this.terrainRef.current[pos]) {
-					this.terrainRef.current[pos] = blockType;
-					addedBlocks[pos] = blockType;
-				}
+				const posKey = `${x},${baseY + y},${z}`;
+				// Skip if block already exists
+				if (this.terrainRef.current[posKey]) continue;
+				
+				// Add to our batch
+				addedBlocks[posKey] = blockTypeId;
 			}
-		};
-
-		// Iterate along the path (including endpoint)
-		for (let x = startX, z = startZ; x !== endX || z !== endZ; x += (x !== endX ? dx : 0), z += (z !== endZ ? dz : 0)) {
-			placeColumn(x, z);
 		}
-
-		// Ensure the final column is placed
-		placeColumn(endX, endZ);
-
-		console.log(`WallTool: Added ${Object.keys(addedBlocks).length} blocks to terrain`);
 		
 		// If no blocks were added, return false
 		if (Object.keys(addedBlocks).length === 0) {
 			console.warn('WallTool: No blocks were added during wall placement');
 			return false;
 		}
-
-		// Update the terrain with added blocks
-		if (this.terrainBuilderRef && this.terrainBuilderRef.current && this.terrainBuilderRef.current.updateTerrainBlocks) {
-			this.terrainBuilderRef.current.updateTerrainBlocks(
-				addedBlocks,
-				{},
-				this.currentBlockTypeRef.current.id
-			);
-		} else {
-			console.error('WallTool: Cannot update terrain - terrainBuilderRef not available');
-			return false;
+		
+		console.log(`WallTool: Adding ${Object.keys(addedBlocks).length} blocks in batch`);
+		
+		// Update the terrain data structure with all blocks at once
+		Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
+			this.terrainRef.current[posKey] = blockId;
+		});
+		
+		// Use the optimized imported update function to update all blocks at once
+		this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {});
+		
+		// Convert blocks to the format expected by updateSpatialHashForBlocks
+		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: blockId,
+				position: [x, y, z]
+			};
+		});
+		
+		// Explicitly update the spatial hash for collisions with force option
+		if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
+			console.log('WallTool: Explicitly updating spatial hash after placement');
+			this.terrainBuilderRef.current.updateSpatialHashForBlocks(addedBlocksArray, [], { force: true });
 		}
-
+		
 		// Add to placement changes for undo/redo
 		if (this.placementChangesRef) {
-			console.log('WallTool: Adding placed blocks to placementChangesRef (directly)');
+			console.log('WallTool: Adding placed blocks to placementChangesRef');
 			Object.entries(addedBlocks).forEach(([key, value]) => {
 				this.placementChangesRef.current.terrain.added[key] = value;
 			});
@@ -379,10 +381,9 @@ class WallTool extends BaseTool {
 			const added = Object.keys(this.placementChangesRef.current.terrain.added).length;
 			const removed = Object.keys(this.placementChangesRef.current.terrain.removed).length;
 			console.log(`WallTool: placementChangesRef now has ${added} added and ${removed} removed blocks`);
-		} else {
-			console.warn('WallTool: placementChangesRef not available, changes won\'t be tracked for undo/redo');
 		}
-
+		
+		console.timeEnd('WallTool-placeWall');
 		return true;
 	}
 
@@ -401,66 +402,74 @@ class WallTool extends BaseTool {
 			return false;
 		}
 
-		// Ensure the terrainRef is available
-		if (!this.terrainRef || !this.terrainRef.current) {
-			console.error('WallTool: terrainRef not available for erasing');
+		// Early validation of references
+		if (!this.terrainBuilderRef || !this.terrainBuilderRef.current) {
+			console.error('WallTool: Cannot erase wall - terrainBuilderRef not available');
 			return false;
 		}
 
-		// Convert positions to integers
-		const startX = Math.round(startPos.x), startY = Math.round(startPos.y), startZ = Math.round(startPos.z);
-		const endX = Math.round(endPos.x), endY = Math.round(endPos.y), endZ = Math.round(endPos.z);
+		// Use Bresenham's line algorithm to get all points on the line
+		const points = this.getLinePoints(
+			Math.round(startPos.x),
+			Math.round(startPos.z),
+			Math.round(endPos.x),
+			Math.round(endPos.z)
+		);
 
-		console.log(`Erasing wall from ${startX}, ${startY}, ${startZ} to ${endX}, ${endY}, ${endZ}`);
-
-		const removedBlocks = {};
-		const dx = Math.sign(endX - startX);
-		const dz = Math.sign(endZ - startZ);
-
-		// Helper function to erase a column at a given (x, z)
-		const eraseColumn = (x, z) => {
-			for (let h = 0; h < height; h++) {
-				const posKey = `${x},${startY + h},${z}`;
-				if (this.terrainRef.current[posKey]) {
-					removedBlocks[posKey] = this.terrainRef.current[posKey];
-					delete this.terrainRef.current[posKey];
-				}
-			}
-		};
-
-		// Erase along the path
-		let x = startX, z = startZ;
-		while (x !== endX || z !== endZ) {
-			eraseColumn(x, z);
-			if (x !== endX) x += dx;
-			if (z !== endZ) z += dz;
-		}
-
-		// Erase the final column at the endpoint
-		eraseColumn(endX, endZ);
-
-		console.log(`WallTool: Removed ${Object.keys(removedBlocks).length} blocks from terrain`);
+		// Performance optimization: Batch process all blocks
+		console.time('WallTool-eraseWall');
 		
-		// If no blocks were removed, return false
+		// Track any blocks removed for state tracking and undo/redo
+		const removedBlocks = {};
+		const baseY = Math.round(startPos.y);
+		
+		// First collect all blocks to remove
+		for (const point of points) {
+			const [x, z] = point;
+			for (let y = 0; y < height; y++) {
+				const posKey = `${x},${baseY + y},${z}`;
+				// Skip if no block exists
+				if (!this.terrainRef.current[posKey]) continue;
+				
+				// Add to our batch
+				removedBlocks[posKey] = this.terrainRef.current[posKey];
+			}
+		}
+		
+		// If no blocks were found to remove, return false
 		if (Object.keys(removedBlocks).length === 0) {
-			console.warn('WallTool: No blocks were removed during wall erasure');
+			console.warn('WallTool: No blocks were found to remove during wall erasure');
 			return false;
 		}
-
-		// Update the terrain with removed blocks
-		if (this.terrainBuilderRef && this.terrainBuilderRef.current && this.terrainBuilderRef.current.updateTerrainBlocks) {
-			this.terrainBuilderRef.current.updateTerrainBlocks(
-				{},
-				removedBlocks
-			);
-		} else {
-			console.error('WallTool: Cannot update terrain - terrainBuilderRef not available');
-			return false;
+		
+		console.log(`WallTool: Removing ${Object.keys(removedBlocks).length} blocks in batch`);
+		
+		// Remove the blocks from the terrain data structure
+		Object.keys(removedBlocks).forEach(posKey => {
+			delete this.terrainRef.current[posKey];
+		});
+		
+		// Use the optimized update function to remove all blocks at once
+		this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks);
+		
+		// Convert blocks to the format expected by updateSpatialHashForBlocks
+		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
+			const [x, y, z] = posKey.split(',').map(Number);
+			return {
+				id: 0, // Use 0 for removed blocks
+				position: [x, y, z]
+			};
+		});
+		
+		// Explicitly update the spatial hash for collisions with force option
+		if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
+			console.log('WallTool: Explicitly updating spatial hash after erasure');
+			this.terrainBuilderRef.current.updateSpatialHashForBlocks([], removedBlocksArray, { force: true });
 		}
-
+		
 		// Add to placement changes for undo/redo
 		if (this.placementChangesRef) {
-			console.log('WallTool: Adding removed blocks to placementChangesRef (directly)');
+			console.log('WallTool: Adding removed blocks to placementChangesRef');
 			Object.entries(removedBlocks).forEach(([key, value]) => {
 				this.placementChangesRef.current.terrain.removed[key] = value;
 			});
@@ -469,10 +478,9 @@ class WallTool extends BaseTool {
 			const added = Object.keys(this.placementChangesRef.current.terrain.added).length;
 			const removed = Object.keys(this.placementChangesRef.current.terrain.removed).length;
 			console.log(`WallTool: placementChangesRef now has ${added} added and ${removed} removed blocks`);
-		} else {
-			console.warn('WallTool: placementChangesRef not available, changes won\'t be tracked for undo/redo');
 		}
-
+		
+		console.timeEnd('WallTool-eraseWall');
 		return true;
 	}
 
@@ -491,61 +499,63 @@ class WallTool extends BaseTool {
 		// Don't show a preview if positions aren't valid
 		if (startPos.equals(endPos)) return;
 
-		// Create a geometry for the wall preview
-		const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
-
-		// Use different color based on whether Ctrl is pressed (erase mode)
-		const previewMaterial = new THREE.MeshBasicMaterial({
-			color: this.isCtrlPressed ? 0xff4e4e : 0x4e8eff, // Red for erase, blue for add
-			transparent: true,
-			opacity: 0.5,
-			wireframe: false
-		});
-
-		// Create a group to hold all preview blocks
-		this.wallPreview = new THREE.Group();
-
-		// Convert positions to integers for block placement
-		const startX = Math.round(startPos.x);
-		const startY = Math.round(startPos.y);
-		const startZ = Math.round(startPos.z);
-
-		const endX = Math.round(endPos.x);
-		const endZ = Math.round(endPos.z);
-
-		// Calculate direction vector
-		const dx = Math.sign(endX - startX);
-		const dz = Math.sign(endZ - startZ);
-
-		// Start at the start position
-		let x = startX;
-		let z = startZ;
-
-		// Iterate along the path until we reach the end position
-		while (x !== endX || z !== endZ) {
-			// For each position along the path, create a column of preview blocks
-			for (let y = 0; y < this.wallHeight; y++) {
-				const previewMesh = new THREE.Mesh(previewGeometry, previewMaterial);
-				previewMesh.position.set(x, startY + y, z);
-				this.wallPreview.add(previewMesh);
+		console.time('WallTool-updateWallPreview');
+		
+		// Use Bresenham's line algorithm to get all points on the line
+		const points = this.getLinePoints(
+			Math.round(startPos.x),
+			Math.round(startPos.z),
+			Math.round(endPos.x),
+			Math.round(endPos.z)
+		);
+		
+		// Calculate how many instances we'll need
+		const totalBlocks = points.length * this.wallHeight;
+		
+		// Use instanced mesh for better performance
+		if (totalBlocks > 0) {
+			// Create a geometry for the wall preview
+			const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
+			
+			// Use different color based on whether Ctrl is pressed (erase mode)
+			const previewMaterial = new THREE.MeshBasicMaterial({
+				color: this.isCtrlPressed ? 0xff4e4e : 0x4e8eff, // Red for erase, blue for add
+				transparent: true,
+				opacity: 0.5,
+				wireframe: false
+			});
+			
+			// Create an instanced mesh
+			const instancedMesh = new THREE.InstancedMesh(previewGeometry, previewMaterial, totalBlocks);
+			instancedMesh.frustumCulled = false; // Disable frustum culling for preview
+			
+			// Set position for each instance
+			let instanceIndex = 0;
+			const baseY = Math.round(startPos.y);
+			const matrix = new THREE.Matrix4();
+			
+			// Add instances for all points on the line
+			for (const point of points) {
+				const [x, z] = point;
+				for (let y = 0; y < this.wallHeight; y++) {
+					matrix.setPosition(x, baseY + y, z);
+					instancedMesh.setMatrixAt(instanceIndex++, matrix);
+				}
 			}
-
-			// Move to the next position along the path
-			if (x !== endX) x += dx;
-			if (z !== endZ) z += dz;
+			
+			// Update the instance matrix
+			instancedMesh.instanceMatrix.needsUpdate = true;
+			
+			// Store reference to the instanced mesh
+			this.wallPreview = instancedMesh;
+			
+			// Add the preview to the scene
+			if (this.scene) {
+				this.scene.add(this.wallPreview);
+			}
 		}
-
-		// Add preview blocks for the end position
-		for (let y = 0; y < this.wallHeight; y++) {
-			const previewMesh = new THREE.Mesh(previewGeometry, previewMaterial);
-			previewMesh.position.set(endX, startY + y, endZ);
-			this.wallPreview.add(previewMesh);
-		}
-
-		// Add the preview to the scene
-		if (this.scene) {
-			this.scene.add(this.wallPreview);
-		}
+		
+		console.timeEnd('WallTool-updateWallPreview');
 	}
 
 	/**
@@ -553,19 +563,26 @@ class WallTool extends BaseTool {
 	 */
 	updateWallPreviewMaterial() {
 		// Safety check - if no wall preview exists, nothing to update
-		if (!this.wallPreview || !this.wallPreview.children) {
+		if (!this.wallPreview) {
 			return;
 		}
 
 		// Red for erase mode, blue for add mode
 		const color = this.isCtrlPressed ? 0xff4e4e : 0x4e8eff;
-
-		// Update the color of each mesh in the preview
-		this.wallPreview.children.forEach(mesh => {
-			if (mesh && mesh.material) {
-				mesh.material.color.set(color);
-			}
-		});
+		
+		// For instanced mesh, just update the material directly
+		if (this.wallPreview.isInstancedMesh) {
+			this.wallPreview.material.color.set(color);
+		}
+		// Fallback for group with children (legacy support)
+		else if (this.wallPreview.children) {
+			// Update the color of each mesh in the preview
+			this.wallPreview.children.forEach(mesh => {
+				if (mesh && mesh.material) {
+					mesh.material.color.set(color);
+				}
+			});
+		}
 	}
 
 	/**
@@ -601,6 +618,57 @@ class WallTool extends BaseTool {
 
 		// Call parent dispose method
 		super.dispose();
+	}
+
+	// Helper function to place a column of blocks
+	placeColumn(x, z, baseY, height, addedBlocksTracker) {
+		// Get current block type ID from the reference
+		const blockTypeId = this.currentBlockTypeRef.current.id;
+
+		// Create a column of blocks from baseY up to the specified height
+		baseY = Math.round(baseY);
+		
+		for (let y = 0; y < height; y++) {
+			const posKey = `${x},${baseY + y},${z}`;
+			// Skip if block already exists
+			if (this.terrainRef.current[posKey]) continue;
+			
+			// Add to our terrain data structure
+			this.terrainRef.current[posKey] = blockTypeId;
+			
+			// Track for undo/redo
+			if (addedBlocksTracker) {
+				addedBlocksTracker[posKey] = blockTypeId;
+			}
+		}
+	}
+
+	// Implement Bresenham's line algorithm to get all points on a line
+	getLinePoints(x0, z0, x1, z1) {
+		const points = [];
+		const dx = Math.abs(x1 - x0);
+		const dz = Math.abs(z1 - z0);
+		const sx = x0 < x1 ? 1 : -1;
+		const sz = z0 < z1 ? 1 : -1;
+		let err = dx - dz;
+		
+		while (true) {
+			points.push([x0, z0]);
+			
+			if (x0 === x1 && z0 === z1) break;
+			
+			const e2 = 2 * err;
+			if (e2 > -dz) {
+				err -= dz;
+				x0 += sx;
+			}
+			if (e2 < dx) {
+				err += dx;
+				z0 += sz;
+			}
+		}
+		
+		return points;
 	}
 }
 
