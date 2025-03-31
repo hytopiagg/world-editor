@@ -69,14 +69,7 @@ class WallTool extends BaseTool {
 
 		// Log activation details for debugging
 		console.log('WallTool activated');
-		console.log('terrainRef exists:', !!this.terrainRef);
-		console.log('terrainRef.current exists:', this.terrainRef && !!this.terrainRef.current);
-		console.log('currentBlockTypeRef exists:', !!this.currentBlockTypeRef);
-		console.log('currentBlockTypeRef.current exists:', this.currentBlockTypeRef && !!this.currentBlockTypeRef.current);
-		console.log('undoRedoManager exists:', !!this.undoRedoManager);
-		console.log('placementChangesRef exists:', !!this.placementChangesRef);
-		console.log('isPlacingRef exists:', !!this.isPlacingRef);
-
+		
 		// Initialize empty objects if needed
 		if (this.terrainRef && !this.terrainRef.current) {
 			console.log('Initializing empty terrainRef.current in onActivate');
@@ -118,14 +111,6 @@ class WallTool extends BaseTool {
 		}
 		// Use the accurate cursor position from TerrainBuilder
 		const currentPosition = this.previewPositionRef.current;
-
-		console.log('WallTool: handleMouseDown', {
-			button,
-			position: currentPosition, // Use accurate position
-			hasStartPosition: !!this.wallStartPosition,
-			isCtrlPressed: this.isCtrlPressed,
-			undoRedoManager: !!this.undoRedoManager
-		});
 
 		// Left-click to place wall or set starting point
 		if (button === 0) {
@@ -469,15 +454,13 @@ class WallTool extends BaseTool {
 		
 		// Add to placement changes for undo/redo
 		if (this.placementChangesRef) {
-			console.log('WallTool: Adding removed blocks to placementChangesRef');
 			Object.entries(removedBlocks).forEach(([key, value]) => {
 				this.placementChangesRef.current.terrain.removed[key] = value;
 			});
 			
 			// Log the current state of placement changes
-			const added = Object.keys(this.placementChangesRef.current.terrain.added).length;
-			const removed = Object.keys(this.placementChangesRef.current.terrain.removed).length;
-			console.log(`WallTool: placementChangesRef now has ${added} added and ${removed} removed blocks`);
+			//const added = Object.keys(this.placementChangesRef.current.terrain.added).length;
+			//const removed = Object.keys(this.placementChangesRef.current.terrain.removed).length;
 		}
 		
 		console.timeEnd('WallTool-eraseWall');

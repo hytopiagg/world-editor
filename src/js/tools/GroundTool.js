@@ -478,7 +478,7 @@ class GroundTool extends BaseTool {
 		});
 		
 		// Use the optimized imported update function to update all blocks at once
-		this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {});
+		this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {}, { skipUndoSave: true });
 		
 		// Convert blocks to the format expected by updateSpatialHashForBlocks
 		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
@@ -578,7 +578,7 @@ class GroundTool extends BaseTool {
 		});
 		
 		// Use the optimized update function to remove all blocks at once
-		this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks);
+		this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks, { skipUndoSave: true });
 		
 		// Convert blocks to the format expected by updateSpatialHashForBlocks
 		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {

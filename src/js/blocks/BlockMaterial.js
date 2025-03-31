@@ -58,96 +58,71 @@ class BlockMaterial {
     }
   }
 
-  /**
-   * Get the material for liquid blocks
-   * @returns {THREE.ShaderMaterial} The liquid material
-   */
-  get liquidMaterial() {
-    if (!this._liquidMaterial) {
-      // Create a new shader material for liquids
-      this._liquidMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-          time: { value: 0 },
-          textureAtlas: { value: null }, // Will be set by TextureAtlas
-          ambientLightColor: { value: new THREE.Color(0xffffff) },
-          ambientLightIntensity: { value: 0.8 }
-        },
-        vertexShader: `
-          uniform float time;
-          varying vec3 vNormal;
-          varying vec3 vViewVector;
+	/**
+	* Get the material for liquid blocks
+	* @returns {THREE.ShaderMaterial} The liquid material
+	*/
+	get liquidMaterial() {
+		if (!this._liquidMaterial) {
+			// Create a new shader material for liquids
+			this._liquidMaterial = new THREE.ShaderMaterial({
+				uniforms: {
+					textureAtlas: { value: null },
+					time: { value: 0 }
+				},
+				vertexShader: `
           varying vec2 vUv;
-          varying vec3 vWorldPos;
+          varying vec3 vPosition;
+          varying vec3 vNormal;
+          varying vec3 vWorldPosition;
+          
+          uniform float time;
           
           void main() {
-            vNormal = normalize(normalMatrix * normal);
             vUv = uv;
+            vPosition = position;
+            vNormal = normal;
+            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
             
-            // Calculate world position and view vector
-            vec4 worldPos = modelMatrix * vec4(position, 1.0);
-            vWorldPos = worldPos.xyz;
-            vViewVector = normalize(cameraPosition - worldPos.xyz);
+            vec3 pos = position;
+            float wave = sin(pos.x * 2.0 + time) * 0.1;
+            pos.y += wave;
             
-          
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
           }
         `,
-        fragmentShader: `
-          uniform float time;
+				fragmentShader: `
           uniform sampler2D textureAtlas;
-          uniform vec3 ambientLightColor;
-          uniform float ambientLightIntensity;
-
-          varying vec3 vNormal;
-          varying vec3 vViewVector;
+          uniform float time;
+          
           varying vec2 vUv;
-          varying vec3 vWorldPos;
-
+          varying vec3 vPosition;
+          varying vec3 vNormal;
+          varying vec3 vWorldPosition;
+          
           void main() {
             vec4 texColor = texture2D(textureAtlas, vUv);
             
-            // Early alpha test
-            if (texColor.a < 0.2) {
-              discard;
-            }
+            // Make water brighter and more transparent
+            float brightness = 1.2; // Increase brightness by 20%
+            vec3 brightColor = texColor.rgb * brightness;
             
-            vec3 color = texColor.rgb;
+            // Increase transparency
+            float alpha = texColor.a * 0.8; // More transparent (0.6 instead of 0.8)
             
-            // Apply ambient light
-            vec3 ambientLight = ambientLightColor * ambientLightIntensity;
-            color *= ambientLight;
+            // Add a slight blue tint to water
+            vec3 waterTint = vec3(0.9, 0.9, 1.0); // Light blue tint
+            vec3 finalColor = mix(brightColor, waterTint, 0.2); // Mix with 20% tint
             
-            // Only calculate lighting for top faces
-            if (vNormal.y > 0.5) {
-                vec3 lightDir = normalize(vec3(0.5, -0.8, 0.3));
-                float fresnel = pow(1.0 - dot(vNormal, vViewVector), 4.0);
-                float diffuse = max(dot(vNormal, -lightDir), 0.0);
-                
-                // Combine lighting calculations
-                vec3 halfVector = normalize(-lightDir + vViewVector);
-                float specular = pow(max(dot(vNormal, halfVector), 0.0), 24.0);
-                float waveLighting = sin(dot(vWorldPos.xz, vec2(2.0)) + time * 0.5) * 0.1;
-                
-                // Combine lighting effects
-                color = color * (0.7 + diffuse * 0.3) + 
-                        vec3(0.15) * specular +
-                        vec3(0.08, 0.12, 0.15) * fresnel +
-                        vec3(0.03, 0.05, 0.08) * waveLighting;
-            }
-            texColor.a = 0.8;
-            gl_FragColor = texColor;
+            gl_FragColor = vec4(finalColor, alpha);
           }
         `,
-        transparent: true,
-        depthWrite: false,
-		blendSrcAlpha: THREE.SrcAlphaFactor,
-		blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-		opacity: 0.8,
-      });
-
-      
-    }
-    return this._liquidMaterial;
-  }
+				transparent: true,
+				side: THREE.DoubleSide
+			});
+		}
+		return this._liquidMaterial;
+	}
 }
 
 // Initialize the singleton instance

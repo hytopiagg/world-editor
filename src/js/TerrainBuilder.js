@@ -25,7 +25,7 @@ import { ToolManager, WallTool, BrushTool, GroundTool, PipeTool } from "./tools"
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { processCustomBlock } from "./managers/BlockTypesManager";
 import BlockTypeRegistry from './blocks/BlockTypeRegistry';
-
+import BlockMaterial from './blocks/BlockMaterial'; // Add this import
 
 // Function to optimize rendering performance
 const optimizeRenderer = (gl) => {
@@ -1168,11 +1168,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				};
 				// Forward to tool manager with button parameter
 				toolManagerRef.current.handleMouseUp(mouseEvent, intersection.point, e.button);
-				return;
+				// **** ADDED: Explicitly return AFTER tool handles the event ****
+				return; 
 			}
 		}
 		
-		// Only process if we were actually placing blocks
+		// --- Only run the following default logic if NO tool was active ---
+		
+		// Only process if we were actually placing blocks (default placement)
 		if (isPlacingRef.current) {
 			// Stop placing blocks
 			isPlacingRef.current = false;
@@ -2846,6 +2849,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		const animate = (time) => {
 			frameId = requestAnimationFrame(animate);
+			
+			// Update liquid material time uniform for wave animation
+			if (BlockMaterial.instance.liquidMaterial) {
+			  // Use time (milliseconds) divided by 1000 for seconds, adjust multiplier for speed
+			  BlockMaterial.instance.liquidMaterial.uniforms.time.value = (time / 1000) * 0.5; 
+			}
 			
 			// Calculate delta time for smooth updates
 			const delta = time - lastTime;
