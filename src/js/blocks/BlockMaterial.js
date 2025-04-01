@@ -48,6 +48,27 @@ class BlockMaterial {
    * @param {THREE.Texture} textureAtlas - The texture atlas
    */
   setTextureAtlas(textureAtlas) {
+    // Configure mipmapping for better texture quality at distance
+    if (textureAtlas) {
+      // Enable mipmaps for better distance rendering
+      textureAtlas.generateMipmaps = true;
+      
+      // Use trilinear filtering for smooth transitions between mipmap levels
+      textureAtlas.minFilter = THREE.LinearMipmapLinearFilter;
+      textureAtlas.magFilter = THREE.LinearFilter;
+      
+      // Set high anisotropy for better texture quality at angles
+      // Use a reasonable value that most GPUs support
+      textureAtlas.anisotropy = 16;
+      
+      // Set wrapS and wrapT to clamp to edge to prevent texture bleeding
+      textureAtlas.wrapS = THREE.ClampToEdgeWrapping;
+      textureAtlas.wrapT = THREE.ClampToEdgeWrapping;
+      
+      // Force texture update
+      textureAtlas.needsUpdate = true;
+    }
+    
     if (this._defaultMaterial) {
       this._defaultMaterial.map = textureAtlas;
       this._defaultMaterial.needsUpdate = true;
@@ -84,9 +105,27 @@ class BlockMaterial {
             vNormal = normal;
             vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
             
+            // Only create waves on the top surface (where normal.y is near 1)
+            float isTopSurface = step(0.9, normal.y);
+            
+            // Create subtle waves with multiple frequencies
             vec3 pos = position;
-            float wave = sin(pos.x * 2.0 + time) * 0.1;
-            pos.y += wave;
+            
+            if (isTopSurface > 0.5) {
+              // Lower the top surface by 0.1 units
+              pos.y -= 0.1;
+              
+              // Add wave animation
+              float wave1 = sin(pos.x * 2.0 + time) * 0.03;
+              float wave2 = cos(pos.z * 3.0 + time * 0.7) * 0.02;
+              float wave3 = sin(pos.x * 5.0 + pos.z * 5.0 + time * 2.0) * 0.01;
+              
+              // Combine waves with smaller amplitude
+              float combinedWave = wave1 + wave2 + wave3;
+              
+              // Add waves to top face only
+              pos.y += combinedWave;
+            }
             
             gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
           }
@@ -104,15 +143,31 @@ class BlockMaterial {
             vec4 texColor = texture2D(textureAtlas, vUv);
             
             // Make water brighter and more transparent
-            float brightness = 1.2; // Increase brightness by 20%
+            float brightness = 1.3;
             vec3 brightColor = texColor.rgb * brightness;
             
             // Increase transparency
-            float alpha = texColor.a * 0.8; // More transparent (0.6 instead of 0.8)
+            float alpha = texColor.a * 0.75;
             
             // Add a slight blue tint to water
-            vec3 waterTint = vec3(0.9, 0.9, 1.0); // Light blue tint
-            vec3 finalColor = mix(brightColor, waterTint, 0.2); // Mix with 20% tint
+            vec3 waterTint = vec3(0.9, 0.9, 1.0);
+            vec3 finalColor = mix(brightColor, waterTint, 0.2);
+            
+            // Add subtle ripples on top faces only
+            if (vNormal.y > 0.9) {
+              float waveTime = time * 2.0;
+              
+              // Create subtle ripple pattern
+              float wave1 = sin(vWorldPosition.x * 8.0 + vWorldPosition.z * 6.0 + waveTime) * 0.5 + 0.5;
+              float wave2 = sin(vWorldPosition.x * 5.0 - vWorldPosition.z * 7.0 + waveTime * 0.8) * 0.5 + 0.5;
+              
+              float combinedWave = (wave1 * 0.65 + wave2 * 0.45);
+              float rippleFactor = combinedWave * 0.15; // 10% intensity
+              
+              // Apply subtle highlights to the water surface
+              vec3 highlightColor = vec3(1.0, 1.0, 1.0);
+              finalColor = mix(finalColor, highlightColor, rippleFactor);
+            }
             
             gl_FragColor = vec4(finalColor, alpha);
           }
@@ -120,6 +175,14 @@ class BlockMaterial {
 				transparent: true,
 				side: THREE.DoubleSide
 			});
+			
+			// Enable mipmapping features for shader material
+			this._liquidMaterial.extensions = {
+				derivatives: true, // Enables GL_OES_standard_derivatives for better edge rendering
+				fragDepth: false,
+				drawBuffers: false,
+				shaderTextureLOD: true // Enables textureLod for manual mipmap level selection
+			};
 		}
 		return this._liquidMaterial;
 	}

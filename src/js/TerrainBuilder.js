@@ -559,6 +559,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Add Tool Manager ref
 	const toolManagerRef = useRef(null);
 
+	// Initialize placement refs
+	const mouseDownTimestampRef = useRef(0);
+	const blockPlacementTimeoutRef = useRef(null);
+
 
 
 
@@ -793,6 +797,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// (This check is redundant now, but kept for clarity)
 			if (!isToolActive) {
 				isPlacingRef.current = true;
+				
+				
 				
 				isFirstBlockRef.current = true;
 				currentPlacingYRef.current = previewPositionRef.current.y;
@@ -2519,6 +2525,32 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			window.removeEventListener('keyup', handleKeyUp);
 		};
 	}, []);
+	
+	// Add mouse button tracking for fail-safe detection
+	useEffect(() => {
+		// Initialize the window.mouseButtons property to track mouse state
+		window.mouseButtons = 0;
+		
+		// Add global event listeners to track mouse button state
+		const updateMouseButtonsDown = (e) => {
+			window.mouseButtons |= (1 << e.button);
+		};
+		
+		const updateMouseButtonsUp = (e) => {
+			window.mouseButtons &= ~(1 << e.button);
+		};
+		
+		// Add listeners to document to catch events even when outside the canvas
+		document.addEventListener('mousedown', updateMouseButtonsDown);
+		document.addEventListener('mouseup', updateMouseButtonsUp);
+		document.addEventListener('mouseleave', updateMouseButtonsUp); // Handle case when mouse leaves window
+		
+		return () => {
+			document.removeEventListener('mousedown', updateMouseButtonsDown);
+			document.removeEventListener('mouseup', updateMouseButtonsUp);
+			document.removeEventListener('mouseleave', updateMouseButtonsUp);
+		};
+	}, []);
 
 	// Add cleanup for tool manager when component unmounts
 	useEffect(() => {
@@ -2864,6 +2896,18 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Calculate delta time for smooth updates
 			//const delta = time - lastTime;
 			lastTime = time;
+			
+			// Add fail-safe check for mouse state
+			// If mouse button is up but we're still placing, it means we missed the mouseup event
+			if (isPlacingRef.current && frameCount % 30 === 0) {
+				// Check if primary mouse button is not pressed
+				if (!window.mouseButtons || !(window.mouseButtons & 1)) {
+					// Mouse is up but we're still in placing mode - likely missed the event during lag
+					console.warn("Detected mouse button up while still in placing mode - fixing state");
+					// Simulate a mouse up event to fix the state
+					handleMouseUp({ button: 0 });
+				}
+			}
 			
 			// Only run heavy operations every few frames to reduce lag
 			frameCount++;
