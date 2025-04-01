@@ -20,6 +20,7 @@ import {CHUNK_SIZE,
 
 // Import tools
 import { ToolManager, WallTool, BrushTool, GroundTool, PipeTool } from "./tools";
+import SeedGeneratorTool from './tools/SeedGeneratorTool'; // Add SeedGeneratorTool import
 
 // Import chunk utility functions
 import { SpatialGridManager } from "./managers/SpatialGridManager";
@@ -28,7 +29,7 @@ import BlockTypeRegistry from './blocks/BlockTypeRegistry';
 import BlockMaterial from './blocks/BlockMaterial'; // Add this import
 
 // Function to optimize rendering performance
-const optimizeRenderer = (gl) => {
+function optimizeRenderer(gl) {
   // Optimize THREE.js renderer
   if (gl) {
     // Disable shadow auto update
@@ -36,7 +37,7 @@ const optimizeRenderer = (gl) => {
     gl.shadowMap.needsUpdate = true;
     
     // Optimize for static scenes
-    gl.sortObjects = false;
+    gl.sortObjects = true;
     
     // Don't change physically correct lights (keep default)
     // Don't set output encoding (keep default)
@@ -1854,6 +1855,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const pipeTool = new PipeTool(terrainBuilderProps);
 		toolManagerRef.current.registerTool("pipe", pipeTool);
 		
+		// Register the new SeedGeneratorTool
+		const seedGeneratorTool = new SeedGeneratorTool(terrainBuilderProps);
+		toolManagerRef.current.registerTool("seed", seedGeneratorTool);
+		
 		initialize();
 
 		// Add at the end of the initialize() function, right before the final closing bracket
@@ -2020,12 +2025,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		};
 	}, [scene, gl, threeCamera]);
 
+	/*
 	/// build update terrain when the terrain state changes
 	useEffect(() => {
 		buildUpdateTerrain();
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [terrainRef.current]); // terrainRef.current is a mutable object, react-hooks/exhaustive-deps warning is expected
-
+*/
 	/// onSceneReady send the scene to App.js via a setter
 	useEffect(() => {
 		if (scene && onSceneReady) {
@@ -2830,8 +2836,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Add these variables to track camera movement outside the animate function
 	const lastCameraPosition = new THREE.Vector3();
 	const lastCameraRotation = new THREE.Euler();
-	const cameraMovementTimeout = { current: null };
-	const chunkUpdateThrottle = { current: 0 };
+	//const cameraMovementTimeout = { current: null };
+	//	const chunkUpdateThrottle = { current: 0 };
 	
 	// Update the usages of these optimizations
 	useEffect(() => {
@@ -2856,12 +2862,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			}
 			
 			// Calculate delta time for smooth updates
-			const delta = time - lastTime;
+			//const delta = time - lastTime;
 			lastTime = time;
 			
 			// Only run heavy operations every few frames to reduce lag
 			frameCount++;
-			const shouldRunHeavyOperations = frameCount % 2 === 0; // Reduced from 3 to 2 for more frequent updates
+			//const shouldRunHeavyOperations = frameCount % 2 === 0; // Reduced from 3 to 2 for more frequent updates
 			
 			// Check for valid camera
 			if (!threeCamera) {
@@ -2896,6 +2902,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			const isCameraMoving = positionChanged || rotationChanged;
 			
+			cameraMoving.current = isCameraMoving;
+
 			// Update stored values (cheaper than .copy())
 			lastCameraPosition.x = posX;
 			lastCameraPosition.y = posY;
@@ -2910,7 +2918,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// Always do this regardless of movement
 			
 
-			if (frameCount % 10 === 0) { // Every ~0.1 second at 60fps
+			if (frameCount % 5 === 0) { // Every ~0.1 second at 60fps
 				updateChunkSystemWithCamera();
 			}
 
@@ -3580,7 +3588,7 @@ const loadAllChunks = async () => {
     console.log(`Processing chunks in order of distance to camera`);
     
     // Process chunks in batches from closest to farthest
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 50;
     let processedCount = 0;
     
     // Process all chunks in distance-sorted batches

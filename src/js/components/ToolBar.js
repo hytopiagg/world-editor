@@ -17,7 +17,8 @@ import {
 	FaTrash,
 	FaCubes,
 	FaDatabase,
-	FaBorderAll
+	FaBorderAll,
+	FaSeedling
 } from 'react-icons/fa';
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
@@ -620,6 +621,16 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								onClick={() => setShowMinecraftImportModal(true)}
 								className="control-button">
 								<FaCubes />
+							</button>
+						</Tooltip>
+						<Tooltip text="Generate world from seed">
+							<button
+								onClick={() => {
+									handleToolToggle("seed");
+									setPlacementSize("single");
+								}}
+								className={`control-button ${activeTool === "seed" ? "selected" : ""}`}>
+								<FaSeedling />
 							</button>
 						</Tooltip>
 					</div>
