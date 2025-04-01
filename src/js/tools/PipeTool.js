@@ -35,20 +35,11 @@ class PipeTool extends BaseTool {
 			
 			// Add undoRedoManager reference
 			this.undoRedoManager = terrainBuilderProps.undoRedoManager;
-			console.log('PipeTool: Got undoRedoManager reference:', !!this.undoRedoManager);
-			console.log('PipeTool: undoRedoManager is ref:', this.undoRedoManager && 'current' in this.undoRedoManager);
-			console.log('PipeTool: undoRedoManager.current exists:', this.undoRedoManager && !!this.undoRedoManager.current);
-			console.log('PipeTool: undoRedoManager.current has saveUndo:', 
-				this.undoRedoManager && 
-				this.undoRedoManager.current && 
-				typeof this.undoRedoManager.current.saveUndo === 'function');
-
+		
 			// Add direct references to placement tracking
 			this.placementChangesRef = terrainBuilderProps.placementChangesRef;
 			this.isPlacingRef = terrainBuilderProps.isPlacingRef;
-			console.log('PipeTool: Got placementChangesRef:', !!this.placementChangesRef);
-			console.log('PipeTool: Got isPlacingRef:', !!this.isPlacingRef);
-
+		
 			// Add missing preview position ref
 			this.previewPositionRef = terrainBuilderProps.previewPositionRef;
 			
@@ -64,14 +55,6 @@ class PipeTool extends BaseTool {
 
 		// Log activation details for debugging
 		console.log('PipeTool activated');
-		console.log('terrainRef exists:', !!this.terrainRef);
-		console.log('terrainRef.current exists:', this.terrainRef && !!this.terrainRef.current);
-		console.log('currentBlockTypeRef exists:', !!this.currentBlockTypeRef);
-		console.log('currentBlockTypeRef.current exists:', this.currentBlockTypeRef && !!this.currentBlockTypeRef.current);
-		console.log('undoRedoManager exists:', !!this.undoRedoManager);
-		console.log('placementChangesRef exists:', !!this.placementChangesRef);
-		console.log('isPlacingRef exists:', !!this.isPlacingRef);
-
 		// Initialize empty objects if needed
 		if (this.terrainRef && !this.terrainRef.current) {
 			console.log('Initializing empty terrainRef.current in onActivate');
@@ -113,14 +96,6 @@ class PipeTool extends BaseTool {
 		}
 		// Use the accurate cursor position from TerrainBuilder
 		const currentPosition = this.previewPositionRef.current;
-
-		console.log('PipeTool: handleMouseDown', {
-			button,
-			position: currentPosition, // Use accurate position
-			hasStartPosition: !!this.pipeStartPosition,
-			isCtrlPressed: this.isCtrlPressed,
-			undoRedoManager: !!this.undoRedoManager
-		});
 
 		// Left-click to place pipe or set starting point
 		if (button === 0) {
@@ -512,7 +487,7 @@ class PipeTool extends BaseTool {
 		});
 		
 		// Use the optimized imported update function to update all blocks at once
-		this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {});
+		this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {}, { skipUndoSave: true });
 		
 		// Convert blocks to the format expected by updateSpatialHashForBlocks
 		const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
@@ -613,7 +588,7 @@ class PipeTool extends BaseTool {
 		});
 		
 		// Use the optimized update function to remove all blocks at once
-		this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks);
+		this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks, { skipUndoSave: true });
 		
 		// Convert blocks to the format expected by updateSpatialHashForBlocks
 		const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {

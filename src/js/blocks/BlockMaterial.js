@@ -48,6 +48,27 @@ class BlockMaterial {
    * @param {THREE.Texture} textureAtlas - The texture atlas
    */
   setTextureAtlas(textureAtlas) {
+    // Configure mipmapping for better texture quality at distance
+    if (textureAtlas) {
+      // Enable mipmaps for better distance rendering
+      textureAtlas.generateMipmaps = true;
+      
+      // Use trilinear filtering for smooth transitions between mipmap levels
+      textureAtlas.minFilter = THREE.LinearMipmapLinearFilter;
+      textureAtlas.magFilter = THREE.LinearFilter;
+      
+      // Set high anisotropy for better texture quality at angles
+      // Use a reasonable value that most GPUs support
+      textureAtlas.anisotropy = 16;
+      
+      // Set wrapS and wrapT to clamp to edge to prevent texture bleeding
+      textureAtlas.wrapS = THREE.ClampToEdgeWrapping;
+      textureAtlas.wrapT = THREE.ClampToEdgeWrapping;
+      
+      // Force texture update
+      textureAtlas.needsUpdate = true;
+    }
+    
     if (this._defaultMaterial) {
       this._defaultMaterial.map = textureAtlas;
       this._defaultMaterial.needsUpdate = true;
@@ -58,96 +79,113 @@ class BlockMaterial {
     }
   }
 
-  /**
-   * Get the material for liquid blocks
-   * @returns {THREE.ShaderMaterial} The liquid material
-   */
-  get liquidMaterial() {
-    if (!this._liquidMaterial) {
-      // Create a new shader material for liquids
-      this._liquidMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-          time: { value: 0 },
-          textureAtlas: { value: null }, // Will be set by TextureAtlas
-          ambientLightColor: { value: new THREE.Color(0xffffff) },
-          ambientLightIntensity: { value: 0.8 }
-        },
-        vertexShader: `
-          uniform float time;
-          varying vec3 vNormal;
-          varying vec3 vViewVector;
+	/**
+	* Get the material for liquid blocks
+	* @returns {THREE.ShaderMaterial} The liquid material
+	*/
+	get liquidMaterial() {
+		if (!this._liquidMaterial) {
+			// Create a new shader material for liquids
+			this._liquidMaterial = new THREE.ShaderMaterial({
+				uniforms: {
+					textureAtlas: { value: null },
+					time: { value: 0 }
+				},
+				vertexShader: `
           varying vec2 vUv;
-          varying vec3 vWorldPos;
+          varying vec3 vPosition;
+          varying vec3 vNormal;
+          varying vec3 vWorldPosition;
+          
+          uniform float time;
           
           void main() {
-            vNormal = normalize(normalMatrix * normal);
             vUv = uv;
+            vPosition = position;
+            vNormal = normal;
+            vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
             
-            // Calculate world position and view vector
-            vec4 worldPos = modelMatrix * vec4(position, 1.0);
-            vWorldPos = worldPos.xyz;
-            vViewVector = normalize(cameraPosition - worldPos.xyz);
+            // Only create waves on the top surface (where normal.y is near 1)
+            float isTopSurface = step(0.9, normal.y);
             
-          
+            // Create subtle waves with multiple frequencies
+            vec3 pos = position;
+            
+            if (isTopSurface > 0.5) {
+              // Lower the top surface by 0.1 units
+              pos.y -= 0.1;
+              
+              // Add wave animation
+              float wave1 = sin(pos.x * 2.0 + time) * 0.03;
+              float wave2 = cos(pos.z * 3.0 + time * 0.7) * 0.02;
+              float wave3 = sin(pos.x * 5.0 + pos.z * 5.0 + time * 2.0) * 0.01;
+              
+              // Combine waves with smaller amplitude
+              float combinedWave = wave1 + wave2 + wave3;
+              
+              // Add waves to top face only
+              pos.y += combinedWave;
+            }
+            
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
           }
         `,
-        fragmentShader: `
-          uniform float time;
+				fragmentShader: `
           uniform sampler2D textureAtlas;
-          uniform vec3 ambientLightColor;
-          uniform float ambientLightIntensity;
-
-          varying vec3 vNormal;
-          varying vec3 vViewVector;
+          uniform float time;
+          
           varying vec2 vUv;
-          varying vec3 vWorldPos;
-
+          varying vec3 vPosition;
+          varying vec3 vNormal;
+          varying vec3 vWorldPosition;
+          
           void main() {
             vec4 texColor = texture2D(textureAtlas, vUv);
             
-            // Early alpha test
-            if (texColor.a < 0.2) {
-              discard;
+            // Make water brighter and more transparent
+            float brightness = 1.3;
+            vec3 brightColor = texColor.rgb * brightness;
+            
+            // Increase transparency
+            float alpha = texColor.a * 0.75;
+            
+            // Add a slight blue tint to water
+            vec3 waterTint = vec3(0.9, 0.9, 1.0);
+            vec3 finalColor = mix(brightColor, waterTint, 0.2);
+            
+            // Add subtle ripples on top faces only
+            if (vNormal.y > 0.9) {
+              float waveTime = time * 2.0;
+              
+              // Create subtle ripple pattern
+              float wave1 = sin(vWorldPosition.x * 8.0 + vWorldPosition.z * 6.0 + waveTime) * 0.5 + 0.5;
+              float wave2 = sin(vWorldPosition.x * 5.0 - vWorldPosition.z * 7.0 + waveTime * 0.8) * 0.5 + 0.5;
+              
+              float combinedWave = (wave1 * 0.65 + wave2 * 0.45);
+              float rippleFactor = combinedWave * 0.15; // 10% intensity
+              
+              // Apply subtle highlights to the water surface
+              vec3 highlightColor = vec3(1.0, 1.0, 1.0);
+              finalColor = mix(finalColor, highlightColor, rippleFactor);
             }
             
-            vec3 color = texColor.rgb;
-            
-            // Apply ambient light
-            vec3 ambientLight = ambientLightColor * ambientLightIntensity;
-            color *= ambientLight;
-            
-            // Only calculate lighting for top faces
-            if (vNormal.y > 0.5) {
-                vec3 lightDir = normalize(vec3(0.5, -0.8, 0.3));
-                float fresnel = pow(1.0 - dot(vNormal, vViewVector), 4.0);
-                float diffuse = max(dot(vNormal, -lightDir), 0.0);
-                
-                // Combine lighting calculations
-                vec3 halfVector = normalize(-lightDir + vViewVector);
-                float specular = pow(max(dot(vNormal, halfVector), 0.0), 24.0);
-                float waveLighting = sin(dot(vWorldPos.xz, vec2(2.0)) + time * 0.5) * 0.1;
-                
-                // Combine lighting effects
-                color = color * (0.7 + diffuse * 0.3) + 
-                        vec3(0.15) * specular +
-                        vec3(0.08, 0.12, 0.15) * fresnel +
-                        vec3(0.03, 0.05, 0.08) * waveLighting;
-            }
-            texColor.a = 0.8;
-            gl_FragColor = texColor;
+            gl_FragColor = vec4(finalColor, alpha);
           }
         `,
-        transparent: true,
-        depthWrite: false,
-		blendSrcAlpha: THREE.SrcAlphaFactor,
-		blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-		opacity: 0.8,
-      });
-
-      
-    }
-    return this._liquidMaterial;
-  }
+				transparent: true,
+				side: THREE.DoubleSide
+			});
+			
+			// Enable mipmapping features for shader material
+			this._liquidMaterial.extensions = {
+				derivatives: true, // Enables GL_OES_standard_derivatives for better edge rendering
+				fragDepth: false,
+				drawBuffers: false,
+				shaderTextureLOD: true // Enables textureLod for manual mipmap level selection
+			};
+		}
+		return this._liquidMaterial;
+	}
 }
 
 // Initialize the singleton instance

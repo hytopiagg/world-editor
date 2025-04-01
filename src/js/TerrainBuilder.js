@@ -20,15 +20,16 @@ import {CHUNK_SIZE,
 
 // Import tools
 import { ToolManager, WallTool, BrushTool, GroundTool, PipeTool } from "./tools";
+import SeedGeneratorTool from './tools/SeedGeneratorTool'; // Add SeedGeneratorTool import
 
 // Import chunk utility functions
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { processCustomBlock } from "./managers/BlockTypesManager";
 import BlockTypeRegistry from './blocks/BlockTypeRegistry';
-
+import BlockMaterial from './blocks/BlockMaterial'; // Add this import
 
 // Function to optimize rendering performance
-const optimizeRenderer = (gl) => {
+function optimizeRenderer(gl) {
   // Optimize THREE.js renderer
   if (gl) {
     // Disable shadow auto update
@@ -36,7 +37,7 @@ const optimizeRenderer = (gl) => {
     gl.shadowMap.needsUpdate = true;
     
     // Optimize for static scenes
-    gl.sortObjects = false;
+    gl.sortObjects = true;
     
     // Don't change physically correct lights (keep default)
     // Don't set output encoding (keep default)
@@ -558,6 +559,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Add Tool Manager ref
 	const toolManagerRef = useRef(null);
 
+	// Initialize placement refs
+	const mouseDownTimestampRef = useRef(0);
+	const blockPlacementTimeoutRef = useRef(null);
+
 
 
 
@@ -792,6 +797,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			// (This check is redundant now, but kept for clarity)
 			if (!isToolActive) {
 				isPlacingRef.current = true;
+				
+				
 				
 				isFirstBlockRef.current = true;
 				currentPlacingYRef.current = previewPositionRef.current.y;
@@ -1168,11 +1175,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				};
 				// Forward to tool manager with button parameter
 				toolManagerRef.current.handleMouseUp(mouseEvent, intersection.point, e.button);
-				return;
+				// **** ADDED: Explicitly return AFTER tool handles the event ****
+				return; 
 			}
 		}
 		
-		// Only process if we were actually placing blocks
+		// --- Only run the following default logic if NO tool was active ---
+		
+		// Only process if we were actually placing blocks (default placement)
 		if (isPlacingRef.current) {
 			// Stop placing blocks
 			isPlacingRef.current = false;
@@ -1851,6 +1861,10 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const pipeTool = new PipeTool(terrainBuilderProps);
 		toolManagerRef.current.registerTool("pipe", pipeTool);
 		
+		// Register the new SeedGeneratorTool
+		const seedGeneratorTool = new SeedGeneratorTool(terrainBuilderProps);
+		toolManagerRef.current.registerTool("seed", seedGeneratorTool);
+		
 		initialize();
 
 		// Add at the end of the initialize() function, right before the final closing bracket
@@ -2017,12 +2031,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		};
 	}, [scene, gl, threeCamera]);
 
+	/*
 	/// build update terrain when the terrain state changes
 	useEffect(() => {
 		buildUpdateTerrain();
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [terrainRef.current]); // terrainRef.current is a mutable object, react-hooks/exhaustive-deps warning is expected
-
+*/
 	/// onSceneReady send the scene to App.js via a setter
 	useEffect(() => {
 		if (scene && onSceneReady) {
@@ -2510,6 +2525,32 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			window.removeEventListener('keyup', handleKeyUp);
 		};
 	}, []);
+	
+	// Add mouse button tracking for fail-safe detection
+	useEffect(() => {
+		// Initialize the window.mouseButtons property to track mouse state
+		window.mouseButtons = 0;
+		
+		// Add global event listeners to track mouse button state
+		const updateMouseButtonsDown = (e) => {
+			window.mouseButtons |= (1 << e.button);
+		};
+		
+		const updateMouseButtonsUp = (e) => {
+			window.mouseButtons &= ~(1 << e.button);
+		};
+		
+		// Add listeners to document to catch events even when outside the canvas
+		document.addEventListener('mousedown', updateMouseButtonsDown);
+		document.addEventListener('mouseup', updateMouseButtonsUp);
+		document.addEventListener('mouseleave', updateMouseButtonsUp); // Handle case when mouse leaves window
+		
+		return () => {
+			document.removeEventListener('mousedown', updateMouseButtonsDown);
+			document.removeEventListener('mouseup', updateMouseButtonsUp);
+			document.removeEventListener('mouseleave', updateMouseButtonsUp);
+		};
+	}, []);
 
 	// Add cleanup for tool manager when component unmounts
 	useEffect(() => {
@@ -2827,10 +2868,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Add these variables to track camera movement outside the animate function
 	const lastCameraPosition = new THREE.Vector3();
 	const lastCameraRotation = new THREE.Euler();
-	const cameraMovementTimeout = { current: null };
-	const chunkUpdateThrottle = { current: 0 };
-	const logThrottle = { current: 0, lastTime: 0 }; // Add throttling for logs
-
+	//const cameraMovementTimeout = { current: null };
+	//	const chunkUpdateThrottle = { current: 0 };
+	
 	// Update the usages of these optimizations
 	useEffect(() => {
 		// Apply renderer optimizations
@@ -2847,13 +2887,31 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		const animate = (time) => {
 			frameId = requestAnimationFrame(animate);
 			
+			// Update liquid material time uniform for wave animation
+			if (BlockMaterial.instance.liquidMaterial) {
+			  // Use time (milliseconds) divided by 1000 for seconds, adjust multiplier for speed
+			  BlockMaterial.instance.liquidMaterial.uniforms.time.value = (time / 1000) * 0.5; 
+			}
+			
 			// Calculate delta time for smooth updates
-			const delta = time - lastTime;
+			//const delta = time - lastTime;
 			lastTime = time;
+			
+			// Add fail-safe check for mouse state
+			// If mouse button is up but we're still placing, it means we missed the mouseup event
+			if (isPlacingRef.current && frameCount % 30 === 0) {
+				// Check if primary mouse button is not pressed
+				if (!window.mouseButtons || !(window.mouseButtons & 1)) {
+					// Mouse is up but we're still in placing mode - likely missed the event during lag
+					console.warn("Detected mouse button up while still in placing mode - fixing state");
+					// Simulate a mouse up event to fix the state
+					handleMouseUp({ button: 0 });
+				}
+			}
 			
 			// Only run heavy operations every few frames to reduce lag
 			frameCount++;
-			const shouldRunHeavyOperations = frameCount % 2 === 0; // Reduced from 3 to 2 for more frequent updates
+			//const shouldRunHeavyOperations = frameCount % 2 === 0; // Reduced from 3 to 2 for more frequent updates
 			
 			// Check for valid camera
 			if (!threeCamera) {
@@ -2888,6 +2946,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			
 			const isCameraMoving = positionChanged || rotationChanged;
 			
+			cameraMoving.current = isCameraMoving;
+
 			// Update stored values (cheaper than .copy())
 			lastCameraPosition.x = posX;
 			lastCameraPosition.y = posY;
@@ -2897,49 +2957,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			lastCameraRotation.y = rotY;
 			lastCameraRotation.z = rotZ;
 			
-			// Log camera movement details (throttled to prevent console spam)
-			logThrottle.current++;
-			const now = Date.now();
-			if ((isCameraMoving && logThrottle.current >= 30) || (now - logThrottle.lastTime > 5000)) {
-				logThrottle.current = 0;
-				logThrottle.lastTime = now;
-			}
 			
 			// Update chunk system with the current camera and process render queue
 			// Always do this regardless of movement
-			const updateResult = updateChunkSystemWithCamera();
 			
-			// If camera is moving, update more frequently and force visibility updates
-			if (isCameraMoving) {
-				// Force an extra chunk system update to ensure visibility is updated
-				const chunkSystem = getChunkSystem();
-				if (chunkSystem && chunkSystem._scene && chunkSystem._scene.camera) {
-					
-					// Only force update visibility every 5 frames during movement
-					// This reduces performance impact while maintaining visual quality
-					if (frameCount % 10 === 0) {
-						// IMPORTANT: Use the new method to force chunk visibility updates
-						// This bypasses the render queue and directly updates all chunks
-						const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
-						forceUpdateChunkVisibility();
-					}
-				}
-			} else {
-				// When camera is still, update much less frequently (every ~1 second at 60fps)
-				// Force a full chunk update periodically even if the camera isn't moving
-				// This ensures chunk visibility is refreshed regularly but at a lower cost
-				if (frameCount % 60 === 0) { // Every ~1 second at 60fps
-					// Use direct force update instead of the older refresh method
-					const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
-					forceUpdateChunkVisibility();
-				}
+
+			if (frameCount % 5 === 0) { // Every ~0.1 second at 60fps
+				updateChunkSystemWithCamera();
+			}
+
+			if (frameCount % 60 === 0) { // Every ~1 second at 60fps
+				// Use direct force update instead of the older refresh method
+				const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
+				forceUpdateChunkVisibility();
 			}
 			
-			// Only log failure occasionally
-			if (!updateResult && logThrottle.current % 60 === 0) {
-				console.error("[Animation] Failed to update chunk system with camera");
-			}
-			
+			/*
 			// Set camera moving state
 			if (isCameraMoving) {
 				cameraMoving.current = true;
@@ -2963,6 +2996,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}, 50);
 				}, 100); // Reduced from 150ms to 100ms for faster response
 			}
+			
 			
 			// Only update if enough time has passed (throttle updates)
 			if (delta > 16 && shouldRunHeavyOperations) { // ~60fps max and only every 2nd frame
@@ -2999,6 +3033,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}
 				}
 			}
+				*/
 		}
 		
 		// Start the animation loop
@@ -3597,7 +3632,7 @@ const loadAllChunks = async () => {
     console.log(`Processing chunks in order of distance to camera`);
     
     // Process chunks in batches from closest to farthest
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 50;
     let processedCount = 0;
     
     // Process all chunks in distance-sorted batches

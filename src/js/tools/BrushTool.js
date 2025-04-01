@@ -283,14 +283,15 @@ class BrushTool extends BaseTool {
 		const chunkCount = this.chunkUpdateQueue.size;
 		
 		// Limit the number of chunks processed at once to prevent lag
-		const MAX_CHUNKS_PER_UPDATE = this.isLargeMap ? 3 : 5;
+		// More conservative limits for large maps
+		const MAX_CHUNKS_PER_UPDATE = this.isLargeMap ? 2 : 4; // Reduced from 3/5 to 2/4
 		
 		// If we have too many chunks, process them in batches
 		if (chunkCount > MAX_CHUNKS_PER_UPDATE && typeof setTimeout === 'function') {
 			const chunkKeysArray = Array.from(this.chunkUpdateQueue);
 			
 			// On large maps, prioritize chunks near the camera
-			if (this.isLargeMap && this.terrainBuilderRef?.current?.threeCamera) {
+			if (this.terrainBuilderRef?.current?.threeCamera) {
 				const camera = this.terrainBuilderRef.current.threeCamera;
 				const cameraPos = camera.position;
 				
@@ -314,34 +315,31 @@ class BrushTool extends BaseTool {
 				// Extract sorted chunk keys
 				const sortedChunkKeys = chunksWithDistances.map(c => c.chunkKey);
 				
-				// Process closest chunks first
+				// Process closest chunks first - but limit to fewer chunks
 				const firstBatch = sortedChunkKeys.slice(0, MAX_CHUNKS_PER_UPDATE);
 				const remainingChunks = sortedChunkKeys.slice(MAX_CHUNKS_PER_UPDATE);
 				
 				// Process first batch immediately
 				this.updateChunkBatch(firstBatch);
 				
-				// Store remaining chunks for later
-				const remainingChunksSet = new Set(remainingChunks);
-				
 				// Clear the queue immediately to prevent double processing
 				this.chunkUpdateQueue.clear();
 				
-				// Process remaining chunks after a delay
+				// Process remaining chunks after a delay - only if there aren't too many
 				if (remainingChunks.length > 0) {
 					setTimeout(() => {
-						// On large maps, limit the number of deferred chunks to process
-						if (this.isLargeMap && remainingChunks.length > 10) {
-							console.log(`BrushTool: Limiting deferred chunks from ${remainingChunks.length} to 10 for performance reasons`);
-							// Just process the 10 closest chunks
-							const closestChunks = new Set(Array.from(remainingChunksSet).slice(0, 10));
+						// On large maps, limit the number of deferred chunks even more
+						if (this.isLargeMap && remainingChunks.length > 5) { // Reduced from 10 to 5
+							console.log(`BrushTool: Limiting deferred chunks from ${remainingChunks.length} to 5 for performance reasons`);
+							// Just process the 5 closest chunks
+							const closestChunks = new Set(remainingChunks.slice(0, 5));
 							this.chunkUpdateQueue = closestChunks;
 						} else {
-							this.chunkUpdateQueue = remainingChunksSet;
+							this.chunkUpdateQueue = new Set(remainingChunks);
 						}
 						
 						this.processChunkUpdates();
-					}, this.isLargeMap ? 100 : 50); // Longer delay for large maps
+					}, this.isLargeMap ? 150 : 75); // Increased delay
 				}
 				
 				return;
@@ -354,19 +352,23 @@ class BrushTool extends BaseTool {
 			// Process first batch immediately
 			this.updateChunkBatch(firstBatch);
 			
-			// Store remaining chunks for later
-			const remainingChunksSet = new Set(remainingChunks);
-			
 			// Clear the queue immediately to prevent double processing
 			this.chunkUpdateQueue.clear();
 			
-			// Process remaining chunks in the next frame
+			// Process remaining chunks with a delay
 			if (remainingChunks.length > 0) {
 				setTimeout(() => {
-					console.log(`BrushTool: Processing ${remainingChunks.length} deferred chunks`);
-					this.chunkUpdateQueue = remainingChunksSet;
+					// Limit remaining chunks for large maps
+					if (this.isLargeMap && remainingChunks.length > 5) {
+						const limitedChunks = remainingChunks.slice(0, 5);
+						console.log(`BrushTool: Processing ${limitedChunks.length} deferred chunks (limited from ${remainingChunks.length})`);
+						this.chunkUpdateQueue = new Set(limitedChunks);
+					} else {
+						console.log(`BrushTool: Processing ${remainingChunks.length} deferred chunks`);
+						this.chunkUpdateQueue = new Set(remainingChunks);
+					}
 					this.processChunkUpdates();
-				}, this.isLargeMap ? 100 : 50); // Longer delay for large maps
+				}, this.isLargeMap ? 150 : 75); // Increased delay
 			}
 			
 			return;
@@ -389,9 +391,15 @@ class BrushTool extends BaseTool {
 			return;
 		}
 		
-		// For very large maps, limit the number of chunks updated at once
-		if (this.isLargeMap && chunkKeys.length > 20) {
-			console.log(`BrushTool: Limiting chunk update from ${chunkKeys.length} to 20 chunks to improve performance`);
+		// For very large maps, be even more conservative with chunk updates
+		const MAX_CHUNKS = this.isLargeMap ? 3 : 5; // Reduced from 20 to 3 for large maps
+		
+		// Only update the chunks that absolutely need it
+		let chunksToUpdate = chunkKeys;
+		
+		if (chunkKeys.length > MAX_CHUNKS) {
+			console.log(`BrushTool: Limiting chunk update from ${chunkKeys.length} to ${MAX_CHUNKS} chunks to improve performance`);
+			
 			// Sort by distance to camera if possible
 			if (this.terrainBuilderRef?.current?.threeCamera) {
 				const camera = this.terrainBuilderRef.current.threeCamera;
@@ -416,11 +424,23 @@ class BrushTool extends BaseTool {
 				// Sort by distance (closest first)
 				chunksWithDistances.sort((a, b) => a.distSq - b.distSq);
 				
-				// Take the closest 20 chunks
-				chunkKeys = chunksWithDistances.slice(0, 20).map(c => c.chunkKey);
+				// Take only the closest chunks
+				chunksToUpdate = chunksWithDistances.slice(0, MAX_CHUNKS).map(c => c.chunkKey);
 			} else {
-				// If we can't sort by distance, just take the first 20
-				chunkKeys = chunkKeys.slice(0, 20);
+				// If we can't sort by distance, just take the first MAX_CHUNKS
+				chunksToUpdate = chunkKeys.slice(0, MAX_CHUNKS);
+			}
+			
+			// Queue the remaining chunks with a longer delay to spread out the work
+			const remainingChunks = chunkKeys.filter(key => !chunksToUpdate.includes(key));
+			if (remainingChunks.length > 0) {
+				setTimeout(() => {
+					console.log(`BrushTool: Queueing ${remainingChunks.length} additional chunks with delay`);
+					// Only queue up to MAX_CHUNKS additional chunks to prevent lag
+					const nextBatch = remainingChunks.slice(0, MAX_CHUNKS);
+					this.chunkUpdateQueue = new Set(nextBatch);
+					this.processChunkUpdates();
+				}, this.isLargeMap ? 200 : 100); // Longer delay for large maps
 			}
 		}
 		
@@ -428,7 +448,8 @@ class BrushTool extends BaseTool {
 		if (this.terrainBuilderRef && this.terrainBuilderRef.current) {
 			// Check if the method exists on the terrainBuilderRef object
 			if (this.terrainBuilderRef.current.forceChunkUpdate) {
-				this.terrainBuilderRef.current.forceChunkUpdate(chunkKeys, { 
+				console.log(`ChunkSystem: Forcing update for ${chunksToUpdate.length} chunks (skipping neighbors)`);
+				this.terrainBuilderRef.current.forceChunkUpdate(chunksToUpdate, { 
 					skipNeighbors: true, // Skip neighbors for better performance
 					frustumCulled: true,  // Only update chunks in view
 					deferMeshBuilding: this.isLargeMap // Defer mesh building for large maps

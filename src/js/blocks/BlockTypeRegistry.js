@@ -69,9 +69,13 @@ class BlockTypeRegistry {
     
     // First pass: register all block types without loading textures
     for (const blockTypeData of blockTypes) {
+
+	  const isLiquid = blockTypeData.name.toLowerCase().includes('water') ||
+	  				   blockTypeData.name.toLowerCase().includes('lava');
+
       const blockType = new BlockType({
         id: blockTypeData.id,
-        isLiquid: blockTypeData.isLiquid || false,
+		  isLiquid: blockTypeData.isLiquid || isLiquid,
         name: blockTypeData.name || 'Unknown',
         textureUris: blockTypeData.isMultiTexture 
           ? blockTypeData.sideTextures 
