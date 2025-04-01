@@ -63,14 +63,7 @@ class GroundTool extends BaseTool {
 
 		// Log activation details for debugging
 		console.log('GroundTool activated');
-		console.log('terrainRef exists:', !!this.terrainRef);
-		console.log('terrainRef.current exists:', this.terrainRef && !!this.terrainRef.current);
-		console.log('currentBlockTypeRef exists:', !!this.currentBlockTypeRef);
-		console.log('currentBlockTypeRef.current exists:', this.currentBlockTypeRef && !!this.currentBlockTypeRef.current);
-		console.log('undoRedoManager exists:', !!this.undoRedoManager);
-		console.log('placementChangesRef exists:', !!this.placementChangesRef);
-		console.log('isPlacingRef exists:', !!this.isPlacingRef);
-
+		
 		// Initialize empty objects if needed
 		if (this.terrainRef && !this.terrainRef.current) {
 			console.log('Initializing empty terrainRef.current in onActivate');
@@ -113,13 +106,6 @@ class GroundTool extends BaseTool {
 		// Use the accurate cursor position from TerrainBuilder
 		const currentPosition = this.previewPositionRef.current;
 
-		console.log('GroundTool: handleMouseDown', {
-			button,
-			position: currentPosition, // Use accurate position
-			hasStartPosition: !!this.groundStartPosition,
-			isCtrlPressed: this.isCtrlPressed,
-			undoRedoManager: !!this.undoRedoManager
-		});
 
 		// Left-click to place ground or set starting point
 		if (button === 0) {

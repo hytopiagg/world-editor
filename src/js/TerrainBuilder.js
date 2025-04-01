@@ -2832,8 +2832,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const lastCameraRotation = new THREE.Euler();
 	const cameraMovementTimeout = { current: null };
 	const chunkUpdateThrottle = { current: 0 };
-	const logThrottle = { current: 0, lastTime: 0 }; // Add throttling for logs
-
+	
 	// Update the usages of these optimizations
 	useEffect(() => {
 		// Apply renderer optimizations
@@ -2906,49 +2905,22 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			lastCameraRotation.y = rotY;
 			lastCameraRotation.z = rotZ;
 			
-			// Log camera movement details (throttled to prevent console spam)
-			logThrottle.current++;
-			const now = Date.now();
-			if ((isCameraMoving && logThrottle.current >= 30) || (now - logThrottle.lastTime > 5000)) {
-				logThrottle.current = 0;
-				logThrottle.lastTime = now;
-			}
 			
 			// Update chunk system with the current camera and process render queue
 			// Always do this regardless of movement
-			const updateResult = updateChunkSystemWithCamera();
 			
-			// If camera is moving, update more frequently and force visibility updates
-			if (isCameraMoving) {
-				// Force an extra chunk system update to ensure visibility is updated
-				const chunkSystem = getChunkSystem();
-				if (chunkSystem && chunkSystem._scene && chunkSystem._scene.camera) {
-					
-					// Only force update visibility every 5 frames during movement
-					// This reduces performance impact while maintaining visual quality
-					if (frameCount % 10 === 0) {
-						// IMPORTANT: Use the new method to force chunk visibility updates
-						// This bypasses the render queue and directly updates all chunks
-						const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
-						forceUpdateChunkVisibility();
-					}
-				}
-			} else {
-				// When camera is still, update much less frequently (every ~1 second at 60fps)
-				// Force a full chunk update periodically even if the camera isn't moving
-				// This ensures chunk visibility is refreshed regularly but at a lower cost
-				if (frameCount % 60 === 0) { // Every ~1 second at 60fps
-					// Use direct force update instead of the older refresh method
-					const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
-					forceUpdateChunkVisibility();
-				}
+
+			if (frameCount % 10 === 0) { // Every ~0.1 second at 60fps
+				updateChunkSystemWithCamera();
+			}
+
+			if (frameCount % 60 === 0) { // Every ~1 second at 60fps
+				// Use direct force update instead of the older refresh method
+				const { forceUpdateChunkVisibility } = require('./chunks/TerrainBuilderIntegration');
+				forceUpdateChunkVisibility();
 			}
 			
-			// Only log failure occasionally
-			if (!updateResult && logThrottle.current % 60 === 0) {
-				console.error("[Animation] Failed to update chunk system with camera");
-			}
-			
+			/*
 			// Set camera moving state
 			if (isCameraMoving) {
 				cameraMoving.current = true;
@@ -2972,6 +2944,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}, 50);
 				}, 100); // Reduced from 150ms to 100ms for faster response
 			}
+			
 			
 			// Only update if enough time has passed (throttle updates)
 			if (delta > 16 && shouldRunHeavyOperations) { // ~60fps max and only every 2nd frame
@@ -3008,6 +2981,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 					}
 				}
 			}
+				*/
 		}
 		
 		// Start the animation loop
