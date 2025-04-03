@@ -548,6 +548,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const previewIsGroundPlaneRef = useRef(false);
 	const placedBlockCountRef = useRef(0); // Track number of blocks placed during a mouse down/up cycle
 	const lastDeletionTimeRef = useRef(0); // Add this ref to track the last deletion time
+	const lastPlacementTimeRef = useRef(0); // Add this ref to track the last placement time
 
 	// state for preview position to force re-render of preview cube when it changes
 	const [previewPosition, setPreviewPosition] = useState(new THREE.Vector3());
@@ -874,17 +875,25 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		} else {
 			// Standard block placement
 			if (modeRef.current === "add") {
-				
+				// Get current time for placement delay
+				const now = performance.now();
+
+				// Check if enough time has passed since the last placement
+				if (now - lastPlacementTimeRef.current < 100) { // 100ms delay
+					return; // Exit if the delay hasn't passed
+				}
+
 				// Get all positions to place blocks at based on placement size
 				const positions = getPlacementPositions(previewPositionRef.current, placementSizeRef.current);
-				
+
 				// Create new blocks
 				const addedBlocks = {};
-				
+				let blockWasPlaced = false; // Flag to track if any block was actually placed
+
 				// Check each position
 				positions.forEach(pos => {
 					const blockKey = `${pos.x},${pos.y},${pos.z}`;
-					
+
 					// Don't place if block exists at this position and we're in add mode
 					if (!terrainRef.current[blockKey]) {
 						addedBlocks[blockKey] = currentBlockTypeRef.current.id;
@@ -895,27 +904,34 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						
 						// IMPORTANT: Track for undo/redo
 						placementChangesRef.current.terrain.added[blockKey] = currentBlockTypeRef.current.id;
+						blockWasPlaced = true;
 					}
 				});
 
-				importedUpdateTerrainBlocks(addedBlocks, {});
-				
-				// Explicitly update the spatial hash for collisions with force option
-				const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
-					const [x, y, z] = posKey.split(',').map(Number);
-					return {
-						id: blockId,
-						position: [x, y, z]
-					};
-				});
-				
-				// Force immediate update of spatial hash for collision detection
-				if (addedBlocksArray.length > 0) {
-					updateSpatialHashForBlocks(addedBlocksArray, [], { force: true });
+				// Only update if blocks were actually placed
+				if (blockWasPlaced) {
+					importedUpdateTerrainBlocks(addedBlocks, {});
+					
+					// Explicitly update the spatial hash for collisions with force option
+					const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
+						const [x, y, z] = posKey.split(',').map(Number);
+						return {
+							id: blockId,
+							position: [x, y, z]
+						};
+					});
+					
+					// Force immediate update of spatial hash for collision detection
+					if (addedBlocksArray.length > 0) {
+						updateSpatialHashForBlocks(addedBlocksArray, [], { force: true });
+					}
+					
+					// Increment the placed block counter
+					placedBlockCountRef.current += Object.keys(addedBlocks).length;
+
+					// Update the last placement time only if a block was placed
+					lastPlacementTimeRef.current = now;
 				}
-				
-				// Increment the placed block counter
-				placedBlockCountRef.current += Object.keys(addedBlocks).length;
 			} else if (modeRef.current === "remove") {
 				// Removal logic
 

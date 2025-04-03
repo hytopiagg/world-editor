@@ -526,7 +526,7 @@ class SpatialGridManager {
 		}
 		
 		// Use a very small step size for more accurate detection of all faces
-		const stepSize = 0.02; // Reduced for better accuracy with thin walls
+		const stepSize = 0.005; // Reduced for better accuracy with thin walls
 		const maxSteps = Math.ceil(maxDistance / stepSize);
 		
 		// DDA algorithm for efficient ray traversal through the grid
