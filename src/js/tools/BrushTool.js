@@ -182,9 +182,9 @@ class BrushTool extends BaseTool {
 			this.previewMaterialAdd = new THREE.MeshBasicMaterial({
 				color: 0x4e8eff, // Blue
 				transparent: true, 
-				opacity: 0.5,
+				opacity: 0.6,
 				depthTest: true,
-				depthWrite: false
+				depthWrite: true  // Enable depth writing
 			});
 		}
 		
@@ -192,9 +192,9 @@ class BrushTool extends BaseTool {
 			this.previewMaterialErase = new THREE.MeshBasicMaterial({
 				color: 0xff4e4e, // Red
 				transparent: true, 
-				opacity: 0.5,
+				opacity: 0.6,
 				depthTest: true,
-				depthWrite: false
+				depthWrite: true  // Enable depth writing
 			});
 		}
 	}
@@ -1379,7 +1379,7 @@ class BrushTool extends BaseTool {
 		const material = this.isEraseMode ? this.previewMaterialErase : this.previewMaterialAdd;
 
 		// Generate blocks for each position
-		const blockSize = 1.02; // Slightly larger than 1 for visibility
+		const blockSize = 1.05; // Make blocks slightly larger to appear in front
 		let previewGeometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
 
 		// Create instances for each brush position
