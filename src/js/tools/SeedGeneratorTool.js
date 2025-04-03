@@ -34,7 +34,7 @@ class SeedGeneratorTool extends BaseTool {
     
     // Default generation options
     this.generationOptions = {
-      seed: "Hytopia",
+      seed: Math.floor(Math.random() * 1000000).toString(),
       width: 200,
       length: 200,
       caveDensity: 50,
