@@ -7,9 +7,10 @@
 This repository contains the HYTOPIA World Editor, available for use at https://build.hytopia.com - it is intentionally open sourced to allow community members to actively contribute to its development. We encourage community members to take an active role if interested in forking this repository, and submitting new features & solutions via pull requests. All merged pull requests will deploy to https://build.hytopia.com for the greater community to use.
 
 ## Get Paid To Add Features And Fix Bugs! (OFFICIAL PAID BOUNTY SYSTEM)
+
 Bounties are requests for bug fixes, refactors, or feature additions that meet certain criteria and are submitted as a pull request. The HYTOPIA team will review your PR relative to the bounty you're submitting it for, and if your PR is accepted, the designated bounty for the request will be awarded.
 
-Additionally! If you have found a bug, issue with the world editor, or believe a specific feature would be valuable, you can [submit it via a Github issue here](https://github.com/hytopiagg/world-editor/issues). 
+Additionally! If you have found a bug, issue with the world editor, or believe a specific feature would be valuable, you can [submit it via a Github issue here](https://github.com/hytopiagg/world-editor/issues).
 
 If your issue, request or bug is escalated by our team to become a bounty, you will be included in the official bounty issue, and receive 10% of the total bounty amount after you or another developer submits a pull request we deem acceptable to fulfill the bounty. That means, if a bounty is escalated and has a $500 reward, you as the submitter would receive $50, the developer whos PR is accepted for the bounty would receive $500. Bounty payments are distributed by the HYTOPIA team via PayPal.
 

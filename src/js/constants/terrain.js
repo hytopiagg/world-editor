@@ -18,18 +18,18 @@ export const CENTER_IMPORTS_AT_ORIGIN = true;
 let selectionDistance = 128; // Store the current value
 export const getSelectionDistance = () => selectionDistance;
 export const setSelectionDistance = (distance) => {
-  const newDistance = Math.max(16, Math.min(256, distance)); // Clamp between 16 and 256
-  selectionDistance = newDistance;
-  console.log(`Selection distance set to ${newDistance} blocks`);
-  return newDistance;
+    const newDistance = Math.max(16, Math.min(256, distance)); // Clamp between 16 and 256
+    selectionDistance = newDistance;
+    console.log(`Selection distance set to ${newDistance} blocks`);
+    return newDistance;
 };
 
 // View distance for frustum culling
 let viewDistance = FRUSTUM_CULLING_DISTANCE; // Store the current value
 export const getViewDistance = () => viewDistance;
 export const setViewDistance = (distance) => {
-  const newDistance = Math.max(32, Math.min(256, distance)); // Clamp between 32 and 256
-  viewDistance = newDistance;
-  console.log(`View distance set to ${newDistance} blocks`);
-  return newDistance;
-}; 
+    const newDistance = Math.max(32, Math.min(256, distance)); // Clamp between 32 and 256
+    viewDistance = newDistance;
+    console.log(`View distance set to ${newDistance} blocks`);
+    return newDistance;
+};

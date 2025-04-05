@@ -1,54 +1,70 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils';
-import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
-import { DatabaseManager, STORES } from './DatabaseManager';
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils";
+import {
+    useEffect,
+    useRef,
+    useState,
+    useImperativeHandle,
+    forwardRef,
+} from "react";
+import { DatabaseManager, STORES } from "./DatabaseManager";
 
 export const environmentModels = (() => {
-  try {
-    // Function to fetch directory listing from the server synchronously
-    const fetchModelList = () => {
-      const manifestUrl = `${process.env.PUBLIC_URL}/assets/models/environment/mattifest.json`;
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', manifestUrl, false); // false makes it synchronous
-      xhr.send();
-      
-      if (xhr.status !== 200) {
-        throw new Error('Failed to load model mattifest');
-      }
-      
-      return JSON.parse(xhr.responseText);
-    };
+    try {
+        // Function to fetch directory listing from the server synchronously
+        const fetchModelList = () => {
+            const manifestUrl = `${process.env.PUBLIC_URL}/assets/models/environment/mattifest.json`;
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", manifestUrl, false); // false makes it synchronous
+            xhr.send();
 
-    let idCounter = 1000;
-    const models = new Map();
-    const result = [];
+            if (xhr.status !== 200) {
+                throw new Error("Failed to load model mattifest");
+            }
 
-    // Load models synchronously
-    const modelList = fetchModelList();
-    modelList.forEach(fileName => {
-      const name = fileName.replace('.gltf', '');
-      const model = {
-        id: idCounter++,
-        name: name,
-        modelUrl: `assets/models/environment/${fileName}`,
-        isEnvironment: true,
-        animations: ['idle']
-      };
-      models.set(name, model);
-      result.push(model);
-    });
+            return JSON.parse(xhr.responseText);
+        };
 
-    return result;
+        let idCounter = 1000;
+        const models = new Map();
+        const result = [];
 
-  } catch (error) {
-    console.error('Error loading environment models:', error);
-    return [];
-  }
+        // Load models synchronously
+        const modelList = fetchModelList();
+        modelList.forEach((fileName) => {
+            const name = fileName.replace(".gltf", "");
+            const model = {
+                id: idCounter++,
+                name: name,
+                modelUrl: `assets/models/environment/${fileName}`,
+                isEnvironment: true,
+                animations: ["idle"],
+            };
+            models.set(name, model);
+            result.push(model);
+        });
+
+        return result;
+    } catch (error) {
+        console.error("Error loading environment models:", error);
+        return [];
+    }
 })();
 
-const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType, mode, onTotalObjectsChange, placementSize = 'single', placementSettings, undoRedoManager}, ref) => {
-
+const EnvironmentBuilder = (
+    {
+        scene,
+        previewPositionFromAppJS,
+        currentBlockType,
+        mode,
+        onTotalObjectsChange,
+        placementSize = "single",
+        placementSettings,
+        undoRedoManager,
+    },
+    ref
+) => {
     // Convert class properties to refs and state
     const loader = useRef(new GLTFLoader());
     const placeholderMeshRef = useRef(null);
@@ -56,9 +72,9 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     const instancedMeshes = useRef(new Map());
     const positionOffset = useRef(new THREE.Vector3(0, -0.5, 0));
     const placementSizeRef = useRef(placementSize);
-    const lastPreviewTransform = useRef({ 
-        scale: new THREE.Vector3(1, 1, 1), 
-        rotation: new THREE.Euler(0, 0, 0) 
+    const lastPreviewTransform = useRef({
+        scale: new THREE.Vector3(1, 1, 1),
+        rotation: new THREE.Euler(0, 0, 0),
     });
     const placementSettingsRef = useRef(placementSettings);
     const isUndoRedoOperation = useRef(false);
@@ -66,11 +82,10 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     /// state for total environment objects
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
 
-    
     // Convert class methods to functions
     const loadModel = async (modelToLoadUrl) => {
         if (!modelToLoadUrl) {
-            console.warn('No model URL provided');
+            console.warn("No model URL provided");
             return null;
         }
 
@@ -81,12 +96,12 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
         // Properly construct the URL
         let fullUrl;
-        if (modelToLoadUrl.startsWith('blob:')) {
+        if (modelToLoadUrl.startsWith("blob:")) {
             fullUrl = modelToLoadUrl;
-        } else if (modelToLoadUrl.startsWith('http')) {
+        } else if (modelToLoadUrl.startsWith("http")) {
             fullUrl = modelToLoadUrl;
         } else {
-            const cleanPath = modelToLoadUrl.replace(/^\/+/, '');
+            const cleanPath = modelToLoadUrl.replace(/^\/+/, "");
             fullUrl = `${process.env.PUBLIC_URL}/${cleanPath}`;
         }
 
@@ -97,9 +112,11 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             }
 
             const arrayBuffer = await response.arrayBuffer();
-            
+
             return new Promise((resolve, reject) => {
-                loader.current.parse(arrayBuffer, '', 
+                loader.current.parse(
+                    arrayBuffer,
+                    "",
                     (gltf) => {
                         loadedModels.current.set(modelToLoadUrl, gltf);
                         resolve(gltf);
@@ -107,9 +124,8 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                     (error) => reject(error)
                 );
             });
-
         } catch (error) {
-            console.error('Error loading model:', fullUrl, error);
+            console.error("Error loading model:", fullUrl, error);
             return null;
         }
     };
@@ -117,64 +133,80 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     const preloadModels = async () => {
         // Load custom models from DB first
         try {
-            const customModels = await DatabaseManager.getData(STORES.CUSTOM_MODELS, 'models');
+            const customModels = await DatabaseManager.getData(
+                STORES.CUSTOM_MODELS,
+                "models"
+            );
             if (customModels) {
                 // Clear any existing custom models to prevent duplicates
                 const customModelIndices = environmentModels
-                    .filter(model => model.isCustom)
-                    .map(model => environmentModels.indexOf(model));
-                
+                    .filter((model) => model.isCustom)
+                    .map((model) => environmentModels.indexOf(model));
+
                 // Remove from highest index to lowest to avoid shifting issues
-                customModelIndices.sort((a, b) => b - a).forEach(index => {
-                    environmentModels.splice(index, 1);
-                });
-                
+                customModelIndices
+                    .sort((a, b) => b - a)
+                    .forEach((index) => {
+                        environmentModels.splice(index, 1);
+                    });
+
                 for (const model of customModels) {
-                    const blob = new Blob([model.data], { type: 'model/gltf+json' });
+                    const blob = new Blob([model.data], {
+                        type: "model/gltf+json",
+                    });
                     const fileUrl = URL.createObjectURL(blob);
-                    
+
                     const newEnvironmentModel = {
-                        id: Math.max(...environmentModels.map(model => model.id), 199) + 1,
+                        id:
+                            Math.max(
+                                ...environmentModels.map((model) => model.id),
+                                199
+                            ) + 1,
                         name: model.name,
                         modelUrl: fileUrl,
                         isEnvironment: true,
                         isCustom: true,
-                        animations: ['idle']
+                        animations: ["idle"],
                     };
-                    
+
                     environmentModels.push(newEnvironmentModel);
                 }
             }
 
             // Load and setup all models
-            await Promise.all(environmentModels.map(async (model) => {
-                try {
-                    const gltf = await loadModel(model.modelUrl);
-                    if (gltf) {
-                        // Ensure it's fully updated
-                        gltf.scene.updateMatrixWorld(true);
+            await Promise.all(
+                environmentModels.map(async (model) => {
+                    try {
+                        const gltf = await loadModel(model.modelUrl);
+                        if (gltf) {
+                            // Ensure it's fully updated
+                            gltf.scene.updateMatrixWorld(true);
 
-                        // Optionally wait a small tick:
-                        await new Promise(r => setTimeout(r, 0));
+                            // Optionally wait a small tick:
+                            await new Promise((r) => setTimeout(r, 0));
 
-                        // Now safely merge geometry
-                        setupInstancedMesh(model, gltf);
+                            // Now safely merge geometry
+                            setupInstancedMesh(model, gltf);
+                        }
+                    } catch (error) {
+                        console.error(
+                            `Error preloading model ${model.name}:`,
+                            error
+                        );
                     }
-                } catch (error) {
-                    console.error(`Error preloading model ${model.name}:`, error);
-                }
-            }));
+                })
+            );
 
             // Load saved environment after models are loaded
             await refreshEnvironmentFromDB();
         } catch (error) {
-            console.error('Error loading custom models from DB:', error);
+            console.error("Error loading custom models from DB:", error);
         }
     };
-    
+
     const setupInstancedMesh = (modelType, gltf) => {
         if (!gltf || !gltf.scene) {
-            console.error('Invalid GLTF data for model:', modelType.name);
+            console.error("Invalid GLTF data for model:", modelType.name);
             return;
         }
 
@@ -184,11 +216,13 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         const boundingHeight = size.y;
 
         // Add boundingBoxHeight to the model type in environmentModels
-        const modelIndex = environmentModels.findIndex(model => model.id === modelType.id);
+        const modelIndex = environmentModels.findIndex(
+            (model) => model.id === modelType.id
+        );
         if (modelIndex !== -1) {
             environmentModels[modelIndex] = {
                 ...environmentModels[modelIndex],
-                boundingBoxHeight: boundingHeight
+                boundingBoxHeight: boundingHeight,
             };
         }
 
@@ -200,34 +234,41 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
         // Group geometries by material
         const geometriesByMaterial = new Map();
-        
-        gltf.scene.traverse(object => {
+
+        gltf.scene.traverse((object) => {
             if (object.isMesh) {
                 const worldMatrix = object.matrixWorld.clone();
-                const materials = Array.isArray(object.material) ? object.material : [object.material];
-                
+                const materials = Array.isArray(object.material)
+                    ? object.material
+                    : [object.material];
+
                 materials.forEach((material, materialIndex) => {
                     const newMaterial = material.clone();
                     newMaterial.depthWrite = true;
                     newMaterial.depthTest = true;
                     newMaterial.transparent = true;
                     newMaterial.alphaTest = 0.5;
-                    
+
                     const key = newMaterial.uuid;
                     if (!geometriesByMaterial.has(key)) {
                         geometriesByMaterial.set(key, {
                             material: newMaterial,
-                            geometries: []
+                            geometries: [],
                         });
                     }
-                    
+
                     const geometry = object.geometry.clone();
                     geometry.applyMatrix4(worldMatrix);
-                    
+
                     if (Array.isArray(object.material)) {
-                        const filteredGeometry = filterGeometryByMaterialIndex(geometry, materialIndex);
+                        const filteredGeometry = filterGeometryByMaterialIndex(
+                            geometry,
+                            materialIndex
+                        );
                         if (filteredGeometry) {
-                            geometriesByMaterial.get(key).geometries.push(filteredGeometry);
+                            geometriesByMaterial
+                                .get(key)
+                                .geometries.push(filteredGeometry);
                         }
                     } else {
                         geometriesByMaterial.get(key).geometries.push(geometry);
@@ -248,7 +289,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                     material,
                     initialCapacity
                 );
-                
+
                 instancedMesh.frustumCulled = false;
                 instancedMesh.renderOrder = 1;
                 instancedMesh.count = 0;
@@ -263,7 +304,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         instancedMeshes.current.set(modelType.modelUrl, {
             meshes: instancedMeshArray,
             instances: new Map(),
-            modelHeight: boundingHeight
+            modelHeight: boundingHeight,
         });
     };
 
@@ -273,14 +314,15 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
         const newGeometry = geometry.clone();
         const indices = [];
-        
+
         for (let i = 0; i < geometry.index.count; i += 3) {
             const faceIndex = Math.floor(i / 3);
-            const group = geometry.groups.find(g => 
-                faceIndex >= g.start / 3 && 
-                faceIndex < (g.start + g.count) / 3
+            const group = geometry.groups.find(
+                (g) =>
+                    faceIndex >= g.start / 3 &&
+                    faceIndex < (g.start + g.count) / 3
             );
-            
+
             if (group && group.materialIndex === materialIndex) {
                 indices.push(
                     geometry.index.array[i],
@@ -289,9 +331,9 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                 );
             }
         }
-        
+
         if (indices.length === 0) return null;
-        
+
         newGeometry.setIndex(indices);
         return newGeometry;
     };
@@ -302,7 +344,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         try {
             const gltf = await loadModel(currentBlockType.modelUrl);
             if (!gltf) {
-                console.error('Failed to load model for preview');
+                console.error("Failed to load model for preview");
                 return;
             }
 
@@ -316,11 +358,11 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             previewModel.traverse((child) => {
                 if (child.isMesh) {
                     child.material = Array.isArray(child.material)
-                        ? child.material.map(m => m.clone())
+                        ? child.material.map((m) => m.clone())
                         : child.material.clone();
 
                     if (Array.isArray(child.material)) {
-                        child.material.forEach(material => {
+                        child.material.forEach((material) => {
                             material.transparent = true;
                             material.opacity = 0.5;
                             material.depthWrite = false;
@@ -350,7 +392,9 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
             // Position the preview (if you have a valid position)
             if (position) {
-                previewModel.position.copy(position).add(positionOffset.current);
+                previewModel.position
+                    .copy(position)
+                    .add(positionOffset.current);
             }
 
             // Remove old preview, then add the new one
@@ -360,7 +404,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             scene.add(previewModel);
             placeholderMeshRef.current = previewModel;
         } catch (error) {
-            console.error('Error setting up preview:', error);
+            console.error("Error setting up preview:", error);
         }
     };
 
@@ -376,13 +420,22 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         }
 
         // Only create new preview if needed
-        if (!placeholderMeshRef.current || placeholderMeshRef.current.userData.modelId !== currentBlockType.id) {
+        if (
+            !placeholderMeshRef.current ||
+            placeholderMeshRef.current.userData.modelId !== currentBlockType.id
+        ) {
             await setupPreview(position);
         } else if (position) {
             // Just update position if preview exists
-            placeholderMeshRef.current.position.copy(position.clone().add(positionOffset.current));
-            placeholderMeshRef.current.scale.copy(lastPreviewTransform.current.scale);
-            placeholderMeshRef.current.rotation.copy(lastPreviewTransform.current.rotation);
+            placeholderMeshRef.current.position.copy(
+                position.clone().add(positionOffset.current)
+            );
+            placeholderMeshRef.current.scale.copy(
+                lastPreviewTransform.current.scale
+            );
+            placeholderMeshRef.current.rotation.copy(
+                lastPreviewTransform.current.rotation
+            );
         }
     };
 
@@ -391,7 +444,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     const updateEnvironmentToMatch = (targetState) => {
         try {
             isUndoRedoOperation.current = true;
-            
+
             // Create maps for efficient lookups
             const currentObjects = new Map(); // Map<instanceId, {modelUrl, position, rotation, scale}>
             const targetObjects = new Map(); // Map<instanceId, {modelUrl, position, rotation, scale}>
@@ -404,28 +457,44 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                         instanceId,
                         position: data.position,
                         rotation: data.rotation,
-                        scale: data.scale
+                        scale: data.scale,
                     });
                 });
             }
 
             // Build target state map
-            targetState.forEach(obj => {
+            targetState.forEach((obj) => {
                 // Find the corresponding model in environmentModels
-                const modelType = environmentModels.find(model => 
-                    model.name === obj.name || model.modelUrl === obj.modelUrl
+                const modelType = environmentModels.find(
+                    (model) =>
+                        model.name === obj.name ||
+                        model.modelUrl === obj.modelUrl
                 );
-                
+
                 if (modelType) {
                     targetObjects.set(obj.instanceId, {
                         ...obj,
                         modelUrl: modelType.modelUrl, // Use the current modelUrl from environmentModels
-                        position: new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z),
-                        rotation: new THREE.Euler(obj.rotation.x, obj.rotation.y, obj.rotation.z),
-                        scale: new THREE.Vector3(obj.scale.x, obj.scale.y, obj.scale.z)
+                        position: new THREE.Vector3(
+                            obj.position.x,
+                            obj.position.y,
+                            obj.position.z
+                        ),
+                        rotation: new THREE.Euler(
+                            obj.rotation.x,
+                            obj.rotation.y,
+                            obj.rotation.z
+                        ),
+                        scale: new THREE.Vector3(
+                            obj.scale.x,
+                            obj.scale.y,
+                            obj.scale.z
+                        ),
                     });
                 } else {
-                    console.warn(`Could not find model for ${obj.name || obj.modelUrl}`);
+                    console.warn(
+                        `Could not find model for ${obj.name || obj.modelUrl}`
+                    );
                 }
             });
 
@@ -440,16 +509,22 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             for (const [instanceId, obj] of targetObjects) {
                 if (!currentObjects.has(instanceId)) {
                     // Add new object
-                    const modelType = environmentModels.find(model => 
-                        model.modelUrl === obj.modelUrl || model.name === obj.name
+                    const modelType = environmentModels.find(
+                        (model) =>
+                            model.modelUrl === obj.modelUrl ||
+                            model.name === obj.name
                     );
-                    
+
                     if (modelType) {
                         const tempMesh = new THREE.Object3D();
                         tempMesh.position.copy(obj.position);
                         tempMesh.rotation.copy(obj.rotation);
                         tempMesh.scale.copy(obj.scale);
-                        placeEnvironmentModelWithoutSaving(modelType, tempMesh, instanceId);
+                        placeEnvironmentModelWithoutSaving(
+                            modelType,
+                            tempMesh,
+                            instanceId
+                        );
                     }
                 }
             }
@@ -457,9 +532,8 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             // Update UI
             updateLocalStorage();
             setTotalEnvironmentObjects(targetObjects.size);
-
         } catch (error) {
-            console.error('Error updating environment:', error);
+            console.error("Error updating environment:", error);
         } finally {
             isUndoRedoOperation.current = false;
         }
@@ -467,13 +541,19 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
     /// places an object in the environment, without saving state
     /// only used when rebuilding the environment, so that the state is not saved to the database untill after the environment has been rebuilt
-    const placeEnvironmentModelWithoutSaving = (blockType, mesh, savedInstanceId = null) => {
+    const placeEnvironmentModelWithoutSaving = (
+        blockType,
+        mesh,
+        savedInstanceId = null
+    ) => {
         if (!blockType || !mesh) {
             console.warn(`blockType and mesh null`);
             return null;
         }
 
-        const modelData = environmentModels.find(model => model.id === blockType.id);
+        const modelData = environmentModels.find(
+            (model) => model.id === blockType.id
+        );
         if (!modelData) {
             console.warn(`Could not find model with ID ${blockType.id}`);
             return null;
@@ -481,15 +561,19 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
         const modelUrl = modelData.modelUrl;
         const instancedData = instancedMeshes.current.get(modelUrl);
-        
+
         if (!instancedData) {
-            console.warn(`Could not find instanced data for model ${modelData.modelUrl}`);
+            console.warn(
+                `Could not find instanced data for model ${modelData.modelUrl}`
+            );
             return null;
         }
 
         // Check if meshes array exists and is not empty
         if (!instancedData.meshes || instancedData.meshes.length === 0) {
-            console.warn(`No instanced meshes available for model ${modelData.name}`);
+            console.warn(
+                `No instanced meshes available for model ${modelData.name}`
+            );
             return null;
         }
 
@@ -501,7 +585,11 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         const scale = mesh.scale.clone();
 
         const matrix = new THREE.Matrix4();
-        matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
+        matrix.compose(
+            position,
+            new THREE.Quaternion().setFromEuler(rotation),
+            scale
+        );
 
         // Use provided instanceId if available, otherwise find next available ID
         let instanceId;
@@ -514,17 +602,21 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                 instanceId++;
             }
         }
-        
+
         // Filter out any undefined meshes before processing
-        const validMeshes = instancedData.meshes.filter(mesh => mesh !== undefined && mesh !== null);
-        
-        validMeshes.forEach(mesh => {
+        const validMeshes = instancedData.meshes.filter(
+            (mesh) => mesh !== undefined && mesh !== null
+        );
+
+        validMeshes.forEach((mesh) => {
             const currentCapacity = mesh.instanceMatrix.count;
             if (instanceId >= currentCapacity - 1) {
-                alert("Maximum Environment Objects Exceeded! Please clear the environment and try again.");
+                alert(
+                    "Maximum Environment Objects Exceeded! Please clear the environment and try again."
+                );
                 return;
             }
-            
+
             mesh.count = Math.max(mesh.count, instanceId + 1);
             mesh.setMatrixAt(instanceId, matrix);
             mesh.instanceMatrix.needsUpdate = true;
@@ -534,7 +626,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             position,
             rotation,
             scale,
-            matrix
+            matrix,
         });
 
         return {
@@ -542,7 +634,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             instanceId,
             position,
             rotation,
-            scale
+            scale,
         };
     };
 
@@ -554,11 +646,11 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         // Clear all instances but keep mesh setup
         for (const instancedData of instancedMeshes.current.values()) {
             // Reset count on all meshes to 0
-            instancedData.meshes.forEach(mesh => {
+            instancedData.meshes.forEach((mesh) => {
                 mesh.count = 0;
                 mesh.instanceMatrix.needsUpdate = true;
             });
-            
+
             // Clear all instances from the Map
             instancedData.instances.clear();
         }
@@ -575,25 +667,25 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     const getPlacementTransform = () => {
         const settings = placementSettingsRef.current;
         if (!settings) {
-            console.warn('No placement settings provided');
+            console.warn("No placement settings provided");
             return {
                 scale: new THREE.Vector3(1, 1, 1),
-                rotation: new THREE.Euler(0, 0, 0)
+                rotation: new THREE.Euler(0, 0, 0),
             };
         }
 
         const scaleValue = settings.randomScale
             ? getRandomValue(settings.minScale, settings.maxScale)
             : settings.scale;
-        
+
         const rotationDegrees = settings.randomRotation
             ? getRandomValue(settings.minRotation, settings.maxRotation)
             : settings.rotation;
-        
+
         // Apply uniform scale to all axes
         return {
             scale: new THREE.Vector3(scaleValue, scaleValue, scaleValue),
-            rotation: new THREE.Euler(0, rotationDegrees * Math.PI / 180, 0)
+            rotation: new THREE.Euler(0, (rotationDegrees * Math.PI) / 180, 0),
         };
     };
 
@@ -602,73 +694,114 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     /// @param {string} mode - "add" or "remove" mode
     const placeEnvironmentModel = (mode = "add") => {
         if (!scene || !placeholderMeshRef.current) return;
-        
+
         // For removal mode, we don't need a current block type
         if (mode === "add" && !currentBlockType) return;
 
         // Remove mode: Find and remove objects at the current position
         if (mode === "remove") {
             // Get all placement positions based on current placement size
-            const placementPositions = getPlacementPositions(placeholderMeshRef.current.position, placementSizeRef.current);
+            const placementPositions = getPlacementPositions(
+                placeholderMeshRef.current.position,
+                placementSizeRef.current
+            );
             const removedObjects = [];
 
             // For each position, check if there are any environment objects there
-            placementPositions.forEach(placementPosition => {
+            placementPositions.forEach((placementPosition) => {
                 // Define a small tolerance for position matching (0.5 units)
                 const POSITION_TOLERANCE = 0.5;
-                
+
                 // Check each model type and its instances
-                for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+                for (const [
+                    modelUrl,
+                    instancedData,
+                ] of instancedMeshes.current.entries()) {
                     // Convert instances to array with instanceId for easy filtering
-                    const instances = Array.from(instancedData.instances.entries()).map(([instanceId, data]) => ({
+                    const instances = Array.from(
+                        instancedData.instances.entries()
+                    ).map(([instanceId, data]) => ({
                         instanceId,
                         modelUrl,
                         position: data.position,
                         rotation: data.rotation,
-                        scale: data.scale
+                        scale: data.scale,
                     }));
-                    
+
                     // Find instances that are close to the placement position
-                    const matchingInstances = instances.filter(instance => {
-                        return Math.abs(instance.position.x - placementPosition.x) < POSITION_TOLERANCE &&
-                               Math.abs(instance.position.y - placementPosition.y) < POSITION_TOLERANCE &&
-                               Math.abs(instance.position.z - placementPosition.z) < POSITION_TOLERANCE;
+                    const matchingInstances = instances.filter((instance) => {
+                        return (
+                            Math.abs(
+                                instance.position.x - placementPosition.x
+                            ) < POSITION_TOLERANCE &&
+                            Math.abs(
+                                instance.position.y - placementPosition.y
+                            ) < POSITION_TOLERANCE &&
+                            Math.abs(
+                                instance.position.z - placementPosition.z
+                            ) < POSITION_TOLERANCE
+                        );
                     });
-                    
+
                     // Remove matching instances
-                    matchingInstances.forEach(instance => {
+                    matchingInstances.forEach((instance) => {
                         // Get full object data for undo tracking before removing
-                        const objectData = instancedData.instances.get(instance.instanceId);
-                        
+                        const objectData = instancedData.instances.get(
+                            instance.instanceId
+                        );
+
                         // Remove the instance
                         const removedObject = {
                             modelUrl,
                             instanceId: instance.instanceId,
-                            position: { x: objectData.position.x, y: objectData.position.y, z: objectData.position.z },
-                            rotation: { x: objectData.rotation.x, y: objectData.rotation.y, z: objectData.rotation.z },
-                            scale: { x: objectData.scale.x, y: objectData.scale.y, z: objectData.scale.z },
+                            position: {
+                                x: objectData.position.x,
+                                y: objectData.position.y,
+                                z: objectData.position.z,
+                            },
+                            rotation: {
+                                x: objectData.rotation.x,
+                                y: objectData.rotation.y,
+                                z: objectData.rotation.z,
+                            },
+                            scale: {
+                                x: objectData.scale.x,
+                                y: objectData.scale.y,
+                                z: objectData.scale.z,
+                            },
                         };
-                        
+
                         // Remove the instance from the scene
                         instancedData.instances.delete(instance.instanceId);
-                        
+
                         // Update the instanced mesh
-                        instancedData.meshes.forEach(mesh => {
-                            mesh.setMatrixAt(instance.instanceId, new THREE.Matrix4());
+                        instancedData.meshes.forEach((mesh) => {
+                            mesh.setMatrixAt(
+                                instance.instanceId,
+                                new THREE.Matrix4()
+                            );
                             // Update count to be the highest remaining instance ID + 1
-                            mesh.count = Math.max(...Array.from(instancedData.instances.keys()), -1) + 1;
+                            mesh.count =
+                                Math.max(
+                                    ...Array.from(
+                                        instancedData.instances.keys()
+                                    ),
+                                    -1
+                                ) + 1;
                             mesh.instanceMatrix.needsUpdate = true;
                         });
-                        
+
                         removedObjects.push(removedObject);
                     });
                 }
             });
-            
+
             // If objects were removed, update undo state and storage
             if (removedObjects.length > 0) {
-                console.log(`Removed ${removedObjects.length} environment objects`);
-                
+                console.log(
+                    `Removed ${removedObjects.length} environment objects`
+                );
+
                 // Save all changes to undo state at once (if not in an undo/redo operation)
                 if (!isUndoRedoOperation.current) {
                     const changes = {
@@ -679,18 +812,20 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                         undoRedoManager.current.saveUndo(changes);
                     }
                 }
-                
+
                 // Update storage and object count
                 updateLocalStorage();
-                
+
                 return removedObjects;
             }
-            
+
             return []; // No objects were removed
         }
-        
+
         // Regular add mode logic
-        const modelData = environmentModels.find(model => model.id === currentBlockType.id);
+        const modelData = environmentModels.find(
+            (model) => model.id === currentBlockType.id
+        );
         if (!modelData) {
             console.warn(`Could not find model with ID ${currentBlockType.id}`);
             return;
@@ -699,12 +834,17 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         const modelUrl = modelData.modelUrl;
         let instancedData = instancedMeshes.current.get(modelUrl);
         if (!instancedData) {
-            console.warn(`Could not find instanced data for model ${modelData.modelUrl}`);
+            console.warn(
+                `Could not find instanced data for model ${modelData.modelUrl}`
+            );
             return;
         }
 
         // Get all placement positions based on current placement size
-        const placementPositions = getPlacementPositions(placeholderMeshRef.current.position, placementSizeRef.current);
+        const placementPositions = getPlacementPositions(
+            placeholderMeshRef.current.position,
+            placementSizeRef.current
+        );
         const addedObjects = [];
 
         // Find the highest instance ID across ALL models
@@ -721,20 +861,27 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
         // Check and expand capacity for all objects we're about to place
         const totalNeededInstances = nextInstanceId + placementPositions.length;
-        const currentCapacity = instancedData.meshes[0]?.instanceMatrix.count || 0;
-        
+        const currentCapacity =
+            instancedData.meshes[0]?.instanceMatrix.count || 0;
+
         if (totalNeededInstances > currentCapacity) {
-            alert("Maximum Environment Objects Exceeded! Please clear the environment and try again.");
+            alert(
+                "Maximum Environment Objects Exceeded! Please clear the environment and try again."
+            );
             return;
         }
 
         // Place an object at each position
-        placementPositions.forEach(placementPosition => {
+        placementPositions.forEach((placementPosition) => {
             const instanceId = nextInstanceId++;
-            
+
             // Use the transform stored in lastPreviewTransform.current
             const transform = getPlacementTransform();
-            const position = new THREE.Vector3(placementPosition.x, placementPosition.y, placementPosition.z);
+            const position = new THREE.Vector3(
+                placementPosition.x,
+                placementPosition.y,
+                placementPosition.z
+            );
 
             const matrix = new THREE.Matrix4();
             matrix.compose(
@@ -744,9 +891,9 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             );
 
             // Process all meshes
-            instancedData.meshes.forEach(mesh => {
+            instancedData.meshes.forEach((mesh) => {
                 if (!mesh) {
-                    console.error('Invalid mesh encountered');
+                    console.error("Invalid mesh encountered");
                     return;
                 }
                 mesh.count = Math.max(mesh.count, instanceId + 1);
@@ -759,8 +906,16 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                 modelUrl,
                 instanceId,
                 position: { x: position.x, y: position.y, z: position.z },
-                rotation: { x: transform.rotation.x, y: transform.rotation.y, z: transform.rotation.z },
-                scale: { x: transform.scale.x, y: transform.scale.y, z: transform.scale.z },
+                rotation: {
+                    x: transform.rotation.x,
+                    y: transform.rotation.y,
+                    z: transform.rotation.z,
+                },
+                scale: {
+                    x: transform.scale.x,
+                    y: transform.scale.y,
+                    z: transform.scale.z,
+                },
             };
             addedObjects.push(newObject);
 
@@ -769,7 +924,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                 position: position.clone(),
                 rotation: transform.rotation.clone(),
                 scale: transform.scale.clone(),
-                matrix: matrix.clone()
+                matrix: matrix.clone(),
             });
         });
 
@@ -782,16 +937,21 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             if (undoRedoManager?.current?.saveUndo) {
                 undoRedoManager.current.saveUndo(changes);
             } else {
-                console.warn("EnvironmentBuilder: No undoRedoManager available, changes won't be tracked for undo/redo");
+                console.warn(
+                    "EnvironmentBuilder: No undoRedoManager available, changes won't be tracked for undo/redo"
+                );
             }
         }
 
         // Save to DB, update UI counts
         updateLocalStorage();
-        setTotalEnvironmentObjects(prev => prev + placementPositions.length);
+        setTotalEnvironmentObjects((prev) => prev + placementPositions.length);
 
         // Re-randomize for the next placement if needed
-        if (placementSettingsRef.current?.randomScale || placementSettingsRef.current?.randomRotation) {
+        if (
+            placementSettingsRef.current?.randomScale ||
+            placementSettingsRef.current?.randomRotation
+        ) {
             const nextTransform = getPlacementTransform();
             lastPreviewTransform.current = nextTransform;
 
@@ -799,7 +959,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             placeholderMeshRef.current.scale.copy(nextTransform.scale);
             placeholderMeshRef.current.rotation.copy(nextTransform.rotation);
         }
-        
+
         return addedObjects;
     };
 
@@ -807,12 +967,14 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     /// used when adding an object to the environment
     const updateLocalStorage = () => {
         const allObjects = [];
-        
+
         // Collect all instances from all models
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
             // Find the corresponding model data to get the name
-            const modelData = environmentModels.find(model => model.modelUrl === modelUrl);
-            
+            const modelData = environmentModels.find(
+                (model) => model.modelUrl === modelUrl
+            );
+
             instancedData.instances.forEach((data, instanceId) => {
                 allObjects.push({
                     modelUrl,
@@ -820,85 +982,90 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
                     instanceId,
                     position: data.position,
                     rotation: data.rotation,
-                    scale: data.scale
+                    scale: data.scale,
                 });
             });
         }
 
-        DatabaseManager.saveData(STORES.ENVIRONMENT, 'current', allObjects);
+        DatabaseManager.saveData(STORES.ENVIRONMENT, "current", allObjects);
         setTotalEnvironmentObjects(allObjects.length);
     };
 
     /// gets the placement positions, used when adding an object to the environment
     const getPlacementPositions = (centerPos, placementSize) => {
-		const positions = [];
+        const positions = [];
 
-		// Always include center position
-		positions.push({ ...centerPos });
+        // Always include center position
+        positions.push({ ...centerPos });
 
-		switch (placementSize) {
-			default:
-			case "single":
-				break;
+        switch (placementSize) {
+            default:
+            case "single":
+                break;
 
-			case "cross":
-				positions.push({ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z }, { x: centerPos.x - 1, y: centerPos.y, z: centerPos.z }, { x: centerPos.x, y: centerPos.y, z: centerPos.z + 1 }, { x: centerPos.x, y: centerPos.y, z: centerPos.z - 1 });
-				break;
+            case "cross":
+                positions.push(
+                    { x: centerPos.x + 1, y: centerPos.y, z: centerPos.z },
+                    { x: centerPos.x - 1, y: centerPos.y, z: centerPos.z },
+                    { x: centerPos.x, y: centerPos.y, z: centerPos.z + 1 },
+                    { x: centerPos.x, y: centerPos.y, z: centerPos.z - 1 }
+                );
+                break;
 
-			case "diamond":
-				// 13-block diamond pattern
-				positions.push(
-					// Inner cardinal positions (4 blocks)
-					{ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x - 1, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z + 1 },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z - 1 },
-					// Middle diagonal positions (4 blocks)
-					{ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z + 1 },
-					{ x: centerPos.x + 1, y: centerPos.y, z: centerPos.z - 1 },
-					{ x: centerPos.x - 1, y: centerPos.y, z: centerPos.z + 1 },
-					{ x: centerPos.x - 1, y: centerPos.y, z: centerPos.z - 1 },
-					// Outer cardinal positions (4 blocks)
-					{ x: centerPos.x + 2, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x - 2, y: centerPos.y, z: centerPos.z },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z + 2 },
-					{ x: centerPos.x, y: centerPos.y, z: centerPos.z - 2 }
-				);
-				break;
+            case "diamond":
+                // 13-block diamond pattern
+                positions.push(
+                    // Inner cardinal positions (4 blocks)
+                    { x: centerPos.x + 1, y: centerPos.y, z: centerPos.z },
+                    { x: centerPos.x - 1, y: centerPos.y, z: centerPos.z },
+                    { x: centerPos.x, y: centerPos.y, z: centerPos.z + 1 },
+                    { x: centerPos.x, y: centerPos.y, z: centerPos.z - 1 },
+                    // Middle diagonal positions (4 blocks)
+                    { x: centerPos.x + 1, y: centerPos.y, z: centerPos.z + 1 },
+                    { x: centerPos.x + 1, y: centerPos.y, z: centerPos.z - 1 },
+                    { x: centerPos.x - 1, y: centerPos.y, z: centerPos.z + 1 },
+                    { x: centerPos.x - 1, y: centerPos.y, z: centerPos.z - 1 },
+                    // Outer cardinal positions (4 blocks)
+                    { x: centerPos.x + 2, y: centerPos.y, z: centerPos.z },
+                    { x: centerPos.x - 2, y: centerPos.y, z: centerPos.z },
+                    { x: centerPos.x, y: centerPos.y, z: centerPos.z + 2 },
+                    { x: centerPos.x, y: centerPos.y, z: centerPos.z - 2 }
+                );
+                break;
 
-			case "square9":
-				for (let x = -1; x <= 1; x++) {
-					for (let z = -1; z <= 1; z++) {
-						if (x !== 0 || z !== 0) {
-							// Skip center as it's already added
-							positions.push({
-								x: centerPos.x + x,
-								y: centerPos.y,
-								z: centerPos.z + z,
-							});
-						}
-					}
-				}
-				break;
+            case "square9":
+                for (let x = -1; x <= 1; x++) {
+                    for (let z = -1; z <= 1; z++) {
+                        if (x !== 0 || z !== 0) {
+                            // Skip center as it's already added
+                            positions.push({
+                                x: centerPos.x + x,
+                                y: centerPos.y,
+                                z: centerPos.z + z,
+                            });
+                        }
+                    }
+                }
+                break;
 
-			case "square16":
-				for (let x = -2; x <= 1; x++) {
-					for (let z = -2; z <= 1; z++) {
-						if (x !== 0 || z !== 0) {
-							// Skip center as it's already added
-							positions.push({
-								x: centerPos.x + x,
-								y: centerPos.y,
-								z: centerPos.z + z,
-							});
-						}
-					}
-				}
-				break;
-		}
+            case "square16":
+                for (let x = -2; x <= 1; x++) {
+                    for (let z = -2; z <= 1; z++) {
+                        if (x !== 0 || z !== 0) {
+                            // Skip center as it's already added
+                            positions.push({
+                                x: centerPos.x + x,
+                                y: centerPos.y,
+                                z: centerPos.z + z,
+                            });
+                        }
+                    }
+                }
+                break;
+        }
 
-		return positions;
-	};
+        return positions;
+    };
 
     /// removes an instance from the instanced mesh, used in rebuilding the environment
     /// and also when removing an object from the environment
@@ -911,15 +1078,16 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
         // Get the object data before any modifications
         const objectData = instancedData.instances.get(instanceId);
-        
+
         // Simply remove this instance - no moving of other instances
         instancedData.instances.delete(instanceId);
-        
+
         // Clear the matrix at this instance ID
-        instancedData.meshes.forEach(mesh => {
+        instancedData.meshes.forEach((mesh) => {
             mesh.setMatrixAt(instanceId, new THREE.Matrix4());
             // Update count to be the highest remaining instance ID + 1
-            mesh.count = Math.max(...Array.from(instancedData.instances.keys()), -1) + 1;
+            mesh.count =
+                Math.max(...Array.from(instancedData.instances.keys()), -1) + 1;
             mesh.instanceMatrix.needsUpdate = true;
         });
 
@@ -927,9 +1095,21 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         const removedObject = {
             modelUrl,
             instanceId, // Include the instanceId in removed object
-            position: { x: objectData.position.x, y: objectData.position.y, z: objectData.position.z },
-            rotation: { x: objectData.rotation.x, y: objectData.rotation.y, z: objectData.rotation.z },
-            scale: { x: objectData.scale.x, y: objectData.scale.y, z: objectData.scale.z },
+            position: {
+                x: objectData.position.x,
+                y: objectData.position.y,
+                z: objectData.position.z,
+            },
+            rotation: {
+                x: objectData.rotation.x,
+                y: objectData.rotation.y,
+                z: objectData.rotation.z,
+            },
+            scale: {
+                x: objectData.scale.x,
+                y: objectData.scale.y,
+                z: objectData.scale.z,
+            },
         };
 
         // Only save undo state if we're not in an undo/redo operation
@@ -941,7 +1121,9 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
             if (undoRedoManager?.current?.saveUndo) {
                 undoRedoManager.current.saveUndo(changes);
             } else {
-                console.warn("EnvironmentBuilder: No undoRedoManager available, removal won't be tracked for undo/redo");
+                console.warn(
+                    "EnvironmentBuilder: No undoRedoManager available, removal won't be tracked for undo/redo"
+                );
             }
         }
 
@@ -951,10 +1133,15 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
 
     const refreshEnvironmentFromDB = async () => {
         try {
-            const savedEnv = await DatabaseManager.getData(STORES.ENVIRONMENT, "current");
+            const savedEnv = await DatabaseManager.getData(
+                STORES.ENVIRONMENT,
+                "current"
+            );
             if (Array.isArray(savedEnv) && savedEnv.length > 0) {
-                console.log(`Loading ${savedEnv.length} environment objects from database`);
-                updateEnvironmentToMatch(savedEnv); 
+                console.log(
+                    `Loading ${savedEnv.length} environment objects from database`
+                );
+                updateEnvironmentToMatch(savedEnv);
             } else {
                 console.log("No environment objects found in database");
                 clearEnvironments();
@@ -968,23 +1155,26 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         // 5) NO LONGER re-randomize scale/rotation here.
         //    Just move the preview to the new position.
         if (placeholderMeshRef.current && position) {
-            placeholderMeshRef.current.position.copy(position.clone().add(positionOffset.current));
+            placeholderMeshRef.current.position.copy(
+                position.clone().add(positionOffset.current)
+            );
         }
     };
 
     const removePreview = () => {
-
         if (placeholderMeshRef.current) {
             // Remove from scene
             scene.remove(placeholderMeshRef.current);
-            
+
             // Clean up materials to prevent memory leaks
             placeholderMeshRef.current.traverse((child) => {
                 if (child.isMesh) {
                     if (child.material) {
                         // Dispose of materials
                         if (Array.isArray(child.material)) {
-                            child.material.forEach(material => material.dispose());
+                            child.material.forEach((material) =>
+                                material.dispose()
+                            );
                         } else {
                             child.material.dispose();
                         }
@@ -1025,7 +1215,7 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     // Add initialization in useEffect
     useEffect(() => {
         if (scene) {
-            preloadModels().catch(error => {
+            preloadModels().catch((error) => {
                 console.error("Error in preloadModels:", error);
             });
         }
@@ -1051,19 +1241,23 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
     useEffect(() => {
         if (placeholderMeshRef.current && currentBlockType?.isEnvironment) {
             const transform = getPlacementTransform();
-            
+
             // Apply transform only to the root mesh
             placeholderMeshRef.current.scale.copy(transform.scale);
             placeholderMeshRef.current.rotation.copy(transform.rotation);
         }
     }, [placementSettings]); // Watch for changes in placement settings
-    
+
     // Add effect to track placementSize changes
     useEffect(() => {
         placementSizeRef.current = placementSize;
         // Update preview if it exists
         if (placeholderMeshRef.current && currentBlockType?.isEnvironment) {
-            updateModelPreview(placeholderMeshRef.current.position.clone().sub(positionOffset.current));
+            updateModelPreview(
+                placeholderMeshRef.current.position
+                    .clone()
+                    .sub(positionOffset.current)
+            );
         }
     }, [placementSize]);
 
@@ -1081,22 +1275,26 @@ const EnvironmentBuilder = ({ scene, previewPositionFromAppJS, currentBlockType,
         isUndoRedoOperation.current = false;
     };
 
-    useImperativeHandle(ref, () => ({
-        updateModelPreview,
-        removePreview,
-        rotatePreview,
-        setScale,
-        placeEnvironmentModel,
-        preloadModels,
-        clearEnvironments,
-        removeInstance,
-        updatePreviewPosition,
-        updateEnvironmentToMatch,
-        loadModel,
-        refreshEnvironmentFromDB,
-        beginUndoRedoOperation,
-        endUndoRedoOperation,
-    }), [scene, currentBlockType, placeholderMeshRef.current]);
+    useImperativeHandle(
+        ref,
+        () => ({
+            updateModelPreview,
+            removePreview,
+            rotatePreview,
+            setScale,
+            placeEnvironmentModel,
+            preloadModels,
+            clearEnvironments,
+            removeInstance,
+            updatePreviewPosition,
+            updateEnvironmentToMatch,
+            loadModel,
+            refreshEnvironmentFromDB,
+            beginUndoRedoOperation,
+            endUndoRedoOperation,
+        }),
+        [scene, currentBlockType, placeholderMeshRef.current]
+    );
 
     // Return null since this component doesn't need to render anything visible
     return null;
