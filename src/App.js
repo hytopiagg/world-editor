@@ -192,29 +192,61 @@ function App() {
 			Object.keys(faceTextures).length
 		);
 		try {
+			// Map face names to coordinate system keys
+			const faceMap = {
+				top: "+y",
+				bottom: "-y",
+				left: "-x",
+				right: "+x",
+				front: "+z",
+				back: "-z",
+			};
+
 			// Prepare the block data for processCustomBlock
 			const newBlockData = {
 				name:
 					textureName
 						.replace(/[^a-zA-Z0-9_\-\s]/g, "")
 						.replace(/\s+/g, "_") || "custom_texture",
-				textureUri: faceTextures.all, // Use the 'all' texture as the primary URI
+				// Use 'all' or fallback to 'top' if 'all' is missing but others exist
+				textureUri: faceTextures.all || faceTextures.top || null,
 				sideTextures: {},
 				isCustom: true,
 			};
 
-			// Populate sideTextures, excluding 'all'
+			// Populate sideTextures using the mapped keys, excluding 'all'
 			let hasSpecificFaces = false;
 			for (const face in faceTextures) {
-				if (face !== "all" && faceTextures[face]) {
-					// Use face names directly as keys, assuming processCustomBlock or BlockType handles them
-					newBlockData.sideTextures[face] = faceTextures[face];
+				if (face !== "all" && faceTextures[face] && faceMap[face]) {
+					const coordinateKey = faceMap[face];
+					newBlockData.sideTextures[coordinateKey] =
+						faceTextures[face];
 					hasSpecificFaces = true;
 				}
 			}
 
-			// Explicitly set isMultiTexture if specific faces were added
+			// If only 'all' texture was provided, but we expect multi-texture, copy 'all' to '+y'
+			// This helps with previews if the modal only returned an 'all' texture.
+			if (!hasSpecificFaces && faceTextures.all) {
+				newBlockData.sideTextures["+y"] = faceTextures.all;
+				// Technically not multi-texture, but lets BlockButton preview work
+				// isMultiTexture will be false based on hasSpecificFaces below.
+			} else if (
+				hasSpecificFaces &&
+				!newBlockData.sideTextures["+y"] &&
+				newBlockData.textureUri
+			) {
+				// If we have specific faces but somehow miss +y, use the main textureUri as +y fallback for preview
+				newBlockData.sideTextures["+y"] = newBlockData.textureUri;
+			}
+
+			// Set isMultiTexture based only on whether specific faces (top, bottom, etc.) were provided
 			newBlockData.isMultiTexture = hasSpecificFaces;
+
+			// Fallback textureUri if 'all' and 'top' were missing
+			if (!newBlockData.textureUri && hasSpecificFaces) {
+				newBlockData.textureUri = newBlockData.sideTextures["+y"]; // Use top as the main URI
+			}
 
 			console.log("Processing block data:", newBlockData);
 

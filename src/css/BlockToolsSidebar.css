@@ -488,16 +488,14 @@
   border-radius: 50%;
   background-color: #ff4444;
   opacity: 0;
-  position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #ffffff;
   transition: all 0.2s ease-in-out;
-  left: -5px;
-  top: -5px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   border: 1px solid #ff2222;
+  cursor: pointer;
 }
 
 .block-button:hover .delete-button {
@@ -531,4 +529,43 @@
   /* Existing styles for drop zone */
   border: 2px dashed #444;
   /* ... other existing styles ... */
+}
+
+/* Container for custom block actions (top-right corner) */
+.custom-block-actions {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  gap: 4px; /* Space between buttons */
+  background-color: rgba(40, 40, 40, 0.6); /* Semi-transparent background */
+  padding: 2px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.block-button:hover .custom-block-actions {
+  opacity: 1; /* Show buttons on hover */
+}
+
+/* Styling for individual action buttons (delete, download) */
+.delete-button,
+.download-button {
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.8em; /* Smaller icons */
+  padding: 2px;
+  display: flex; /* Center icon */
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+}
+
+.delete-button:hover {
+  color: #ff6b6b; /* Red on hover */
+}
+
+.download-button:hover {
+  color: #66ccff; /* Blue on hover */
 }

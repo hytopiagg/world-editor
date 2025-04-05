@@ -11,6 +11,8 @@ import {
 	removeCustomBlock,
 	getBlockTypes,
 } from "../managers/BlockTypesManager";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 import "../../css/BlockToolsSidebar.css";
 
 const SCALE_MIN = 0.1;
@@ -29,6 +31,44 @@ export const refreshBlockTools = () => {
 if (typeof window !== "undefined") {
 	window.refreshBlockTools = refreshBlockTools;
 }
+
+// Helper function to convert data URL to Blob
+const dataURLtoBlob = (dataurl) => {
+	if (!dataurl || !dataurl.startsWith("data:image")) return null;
+	try {
+		const arr = dataurl.split(",");
+		const mimeMatch = arr[0].match(/:(.*?);/);
+		if (!mimeMatch) return null;
+		const mime = mimeMatch[1];
+		const bstr = atob(arr[1]);
+		let n = bstr.length;
+		const u8arr = new Uint8Array(n);
+		while (n--) {
+			u8arr[n] = bstr.charCodeAt(n);
+		}
+		return new Blob([u8arr], { type: mime });
+	} catch (e) {
+		console.error("Error converting data URL to Blob:", e);
+		return null;
+	}
+};
+
+// Helper to create a placeholder magenta PNG blob (if texture is missing)
+const createPlaceholderBlob = () => {
+	const canvas = document.createElement("canvas");
+	canvas.width = 16; // Or your default texture size
+	canvas.height = 16;
+	const ctx = canvas.getContext("2d");
+	if (ctx) {
+		ctx.fillStyle = "#FF00FF"; // Magenta
+		ctx.fillRect(0, 0, 16, 16);
+		// Optional: Add a black border or pattern?
+		// ctx.strokeStyle = '#000000';
+		// ctx.strokeRect(0.5, 0.5, 15, 15);
+		return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+	}
+	return Promise.resolve(null); // Fallback
+};
 
 const BlockToolsSidebar = ({
 	activeTab,
@@ -105,6 +145,62 @@ const BlockToolsSidebar = ({
 
 	const handleDragStart = (blockId) => {
 		console.log("Drag started with block:", blockId);
+	};
+
+	// *** Add Download Handler ***
+	const handleDownloadBlock = async (blockType) => {
+		if (!blockType || !blockType.isCustom) return;
+
+		const zip = new JSZip();
+		const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
+		const textures = blockType.sideTextures || {};
+		const mainTexture = blockType.textureUri;
+
+		console.log("Preparing download for:", blockType.name);
+		console.log("Main Texture URI:", mainTexture);
+		console.log("Side Textures:", textures);
+
+		let hasError = false;
+
+		for (const key of faceKeys) {
+			const textureDataUrl = textures[key] || mainTexture; // Use side texture or fall back to main
+			let blob = dataURLtoBlob(textureDataUrl);
+
+			if (!blob) {
+				console.warn(
+					`Missing or invalid texture data for face ${key} in block ${blockType.name}. Using placeholder.`
+				);
+				blob = await createPlaceholderBlob();
+				if (!blob) {
+					console.error(
+						`Failed to create placeholder for face ${key}. Skipping this face.`
+					);
+					hasError = true;
+					continue; // Skip adding this file if placeholder fails
+				}
+			}
+
+			zip.file(`${key}.png`, blob);
+		}
+
+		if (hasError) {
+			console.warn(
+				"Some textures were missing or invalid and replaced with placeholders."
+			);
+			// Optionally alert the user?
+			// alert("Warning: Some textures were missing and have been replaced with placeholders in the downloaded zip.");
+		}
+
+		try {
+			const zipBlob = await zip.generateAsync({ type: "blob" });
+			saveAs(zipBlob, `${blockType.name}.zip`);
+			console.log(`Downloaded ${blockType.name}.zip`);
+		} catch (error) {
+			console.error("Error generating or saving zip file:", error);
+			alert(
+				"Failed to generate or save the zip file. See console for details."
+			);
+		}
 	};
 
 	// Update the tab switching logic
@@ -480,6 +576,7 @@ const BlockToolsSidebar = ({
 											);
 										}}
 										onDelete={handleDeleteCustomBlock}
+										onDownload={handleDownloadBlock}
 										handleDragStart={handleDragStart}
 									/>
 								))}
@@ -505,6 +602,7 @@ const BlockToolsSidebar = ({
 											);
 										}}
 										onDelete={handleDeleteCustomBlock}
+										onDownload={handleDownloadBlock}
 										handleDragStart={handleDragStart}
 										needsTexture={blockType.needsTexture}
 									/>

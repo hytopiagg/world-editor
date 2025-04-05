@@ -92,6 +92,7 @@ const TextureGenerationModal = ({
 						height: GRID_SIZE,
 						prompt: prompt,
 						num_images: 1,
+						prompt_style: "mc_texture",
 					}),
 				}
 			);
