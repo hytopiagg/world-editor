@@ -1,340 +1,426 @@
-import React, {useState, useRef, useEffect} from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
-import TerrainBuilder, {blockTypes} from "./js/TerrainBuilder";
-import EnvironmentBuilder, {environmentModels} from "./js/EnvironmentBuilder";
-import {
-  FaCamera,
-  FaVolumeMute,
-  FaDatabase,
-  FaSave,
-} from "react-icons/fa";
+import TerrainBuilder, { blockTypes } from "./js/TerrainBuilder";
+import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
+import { FaCamera, FaVolumeMute, FaDatabase, FaSave } from "react-icons/fa";
 import Tooltip from "./js/components/Tooltip";
 import hytopiaLogo from "./images/hytopia_logo_white.png";
 import "./css/App.css";
-import {toggleMute, isMuted} from "./js/Sound";
-import DebugInfo from './js/components/DebugInfo';
-import BlockToolsSidebar from './js/components/BlockToolsSidebar';
-import { version, IS_UNDER_CONSTRUCTION } from './js/Constants';
-import ToolBar from './js/components/ToolBar';
-import {DatabaseManager} from './js/DatabaseManager';
+import { toggleMute, isMuted } from "./js/Sound";
+import DebugInfo from "./js/components/DebugInfo";
+import BlockToolsSidebar from "./js/components/BlockToolsSidebar";
+import { version, IS_UNDER_CONSTRUCTION } from "./js/Constants";
+import ToolBar from "./js/components/ToolBar";
+import { DatabaseManager } from "./js/DatabaseManager";
 import UnderConstruction from "./js/components/UnderConstruction";
 import UndoRedoManager from "./js/UndoRedo";
-import QuickTips from './js/components/QuickTips';
-import {getCustomBlocks} from "./js/TerrainBuilder";
-import GlobalLoadingScreen from './js/components/GlobalLoadingScreen';
+import QuickTips from "./js/components/QuickTips";
+import { getCustomBlocks } from "./js/TerrainBuilder";
+import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
+import TextureGenerationModal from "./js/components/TextureGenerationModal";
+import { processCustomBlock } from "./js/managers/BlockTypesManager";
+import { refreshBlockTools } from "./js/components/BlockToolsSidebar";
 
 function App() {
-  const undoRedoManagerRef = useRef(null);
-  const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
-  const [mode, setMode] = useState("add");
-  const [debugInfo, setDebugInfo] = useState({ mouse: {}, preview: {}, grid: {}});
-  const [totalBlocks, setTotalBlocks] = useState(0);
-  const [axisLockEnabled, setAxisLockEnabled] = useState(false);
-  const [cameraReset, setCameraReset] = useState(false);
-  const [cameraAngle, setCameraAngle] = useState(0);
-  const [placementSize, setPlacementSize] = useState("single");
-  const [activeTab, setActiveTab] = useState("blocks");
-  const [pageIsLoaded, setPageIsLoaded] = useState(false);
-  const handleDropRef = useRef(null);
-  const [scene, setScene] = useState(null);
-  const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
-  const [gridSize, setGridSize] = useState(100);
-  const [currentPreviewPosition, setCurrentPreviewPosition] = useState(null);
-  const environmentBuilderRef = useRef(null);
-  const blockToolsRef = useRef(null);
-  const terrainBuilderRef = useRef(null);
-  const [placementSettings, setPlacementSettings] = useState({
-    randomScale: false,
-    randomRotation: false,
-    minScale: 0.5,
-    maxScale: 1.5,
-    minRotation: 0,
-    maxRotation: 360,
-    scale: 1.0,
-    rotation: 0
-  });
-  const [isSaving, setIsSaving] = useState(false);
+	const undoRedoManagerRef = useRef(null);
+	const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
+	const [mode, setMode] = useState("add");
+	const [debugInfo, setDebugInfo] = useState({
+		mouse: {},
+		preview: {},
+		grid: {},
+	});
+	const [totalBlocks, setTotalBlocks] = useState(0);
+	const [axisLockEnabled, setAxisLockEnabled] = useState(false);
+	const [cameraReset, setCameraReset] = useState(false);
+	const [cameraAngle, setCameraAngle] = useState(0);
+	const [placementSize, setPlacementSize] = useState("single");
+	const [activeTab, setActiveTab] = useState("blocks");
+	const [pageIsLoaded, setPageIsLoaded] = useState(false);
+	const handleDropRef = useRef(null);
+	const [scene, setScene] = useState(null);
+	const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
+	const [gridSize, setGridSize] = useState(100);
+	const [currentPreviewPosition, setCurrentPreviewPosition] = useState(null);
+	const environmentBuilderRef = useRef(null);
+	const blockToolsRef = useRef(null);
+	const terrainBuilderRef = useRef(null);
+	const [placementSettings, setPlacementSettings] = useState({
+		randomScale: false,
+		randomRotation: false,
+		minScale: 0.5,
+		maxScale: 1.5,
+		minRotation: 0,
+		maxRotation: 360,
+		scale: 1.0,
+		rotation: 0,
+	});
+	const [isSaving, setIsSaving] = useState(false);
+	const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
+	const [retroDiffusionApiKey, setRetroDiffusionApiKey] = useState(
+		"rdpk-e6894c28a3697e7e25617d0fe5d2c500"
+	);
 
-  useEffect(() => {
-    const loadSavedToolSelection = () => {
-      const savedBlockId = localStorage.getItem("selectedBlock");
-      if (savedBlockId) {
-        const blockId = parseInt(savedBlockId);
-        
-        if (blockId < 200) {
-          const block = [...blockTypes, ...getCustomBlocks()].find(b => b.id === blockId);
-          if (block) {
-            setCurrentBlockType(block);
-            setActiveTab("blocks");
-          }
-        } else {
-          if (environmentModels && environmentModels.length > 0) {
-            const envModel = environmentModels.find(m => m.id === blockId);
-            if (envModel) {
-              setCurrentBlockType({...envModel, isEnvironment: true});
-              setActiveTab("environment");
-            }
-          }
-        }
-      }
-    };
+	useEffect(() => {
+		const loadSavedToolSelection = () => {
+			const savedBlockId = localStorage.getItem("selectedBlock");
+			if (savedBlockId) {
+				const blockId = parseInt(savedBlockId);
 
-    if (pageIsLoaded) {
-      loadSavedToolSelection();
-    }
-  }, [pageIsLoaded]);
+				if (blockId < 200) {
+					const block = [...blockTypes, ...getCustomBlocks()].find(
+						(b) => b.id === blockId
+					);
+					if (block) {
+						setCurrentBlockType(block);
+						setActiveTab("blocks");
+					}
+				} else {
+					if (environmentModels && environmentModels.length > 0) {
+						const envModel = environmentModels.find(
+							(m) => m.id === blockId
+						);
+						if (envModel) {
+							setCurrentBlockType({
+								...envModel,
+								isEnvironment: true,
+							});
+							setActiveTab("environment");
+						}
+					}
+				}
+			}
+		};
 
-  // Check if terrain is saving
-  useEffect(() => {
-    const checkSavingStatus = () => {
-      if (terrainBuilderRef.current) {
-        const savingState = terrainBuilderRef.current.isSaving;
-        if (savingState !== isSaving) {
-          console.log("Saving state changed:", savingState);
-          setIsSaving(savingState);
-        }
-      }
-    };
-    
-    // Check every 100ms
-    const interval = setInterval(checkSavingStatus, 100);
-    return () => clearInterval(interval);
-  }, [isSaving]);
+		if (pageIsLoaded) {
+			loadSavedToolSelection();
+		}
+	}, [pageIsLoaded]);
 
-  // Add Ctrl+S hotkey for saving
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Check for Ctrl+S (or Cmd+S on Mac)
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault(); // Prevent browser's save dialog
-        
-        // Set saving state directly for immediate feedback
-        setIsSaving(true);
-        
-        // Call the save function
-        if (terrainBuilderRef.current) {
-          console.log("Saving via Ctrl+S hotkey");
-          terrainBuilderRef.current.saveTerrainManually();
-        }
-        
-        // Set a fallback timer to clear the saving state if something goes wrong
-        setTimeout(() => setIsSaving(false), 5000);
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+	// Check if terrain is saving
+	useEffect(() => {
+		const checkSavingStatus = () => {
+			if (terrainBuilderRef.current) {
+				const savingState = terrainBuilderRef.current.isSaving;
+				if (savingState !== isSaving) {
+					console.log("Saving state changed:", savingState);
+					setIsSaving(savingState);
+				}
+			}
+		};
 
-  // Log undoRedoManager initialization and updates
-  useEffect(() => {
-    console.log("App: undoRedoManagerRef initialized");
-    
-    return () => {
-      console.log("App: component unmounting, undoRedoManagerRef:", undoRedoManagerRef.current);
-    };
-  }, []);
+		// Check every 100ms
+		const interval = setInterval(checkSavingStatus, 100);
+		return () => clearInterval(interval);
+	}, [isSaving]);
 
-  useEffect(() => {
-    if (undoRedoManagerRef.current) {
-      console.log("App: undoRedoManagerRef.current updated:", 
-        {
-          exists: !!undoRedoManagerRef.current,
-          hasCurrentProp: undoRedoManagerRef.current && 'current' in undoRedoManagerRef.current,
-          hasSaveUndo: undoRedoManagerRef.current && typeof undoRedoManagerRef.current.saveUndo === 'function',
-          saveUndoType: undoRedoManagerRef.current && typeof undoRedoManagerRef.current.saveUndo
-        }
-      );
-    }
-  }, [undoRedoManagerRef.current]);
+	// Add Ctrl+S hotkey for saving
+	useEffect(() => {
+		const handleKeyDown = (e) => {
+			// Check for Ctrl+S (or Cmd+S on Mac)
+			if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+				e.preventDefault(); // Prevent browser's save dialog
 
-  const LoadingScreen = () => (
-    <div className="loading-screen">
-      <img src={hytopiaLogo} alt="Hytopia Logo" className="loading-logo" />
-      <div className="loading-spinner"></div>
-      <div className="loading-text">
-        <i>Loading...</i>
-      </div>
-      <div className="version-text">HYTOPIA Map Builder v{version}</div>
-    </div>
-  );
+				// Set saving state directly for immediate feedback
+				setIsSaving(true);
 
-  return (
-    <div className="App">
-      {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
-      
-      {/* Loading Screen */}
-      {!pageIsLoaded && <LoadingScreen />}
+				// Call the save function
+				if (terrainBuilderRef.current) {
+					console.log("Saving via Ctrl+S hotkey");
+					terrainBuilderRef.current.saveTerrainManually();
+				}
 
-      {/* Global Loading Screen for heavy operations */}
-      <GlobalLoadingScreen />
+				// Set a fallback timer to clear the saving state if something goes wrong
+				setTimeout(() => setIsSaving(false), 5000);
+			}
+		};
 
-      {/* Hytopia Logo */}
-      <div className="hytopia-logo-wrapper">
-        <img src={hytopiaLogo}/>
-        <p className="hytopia-version-text">World Editor Version {version}</p>
-      </div>
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, []);
 
-      <QuickTips />
+	// Log undoRedoManager initialization and updates
+	useEffect(() => {
+		console.log("App: undoRedoManagerRef initialized");
 
-      <UndoRedoManager
-        ref={undoRedoManagerRef}
-        terrainBuilderRef={terrainBuilderRef}
-        environmentBuilderRef={environmentBuilderRef}
-      />
+		return () => {
+			console.log(
+				"App: component unmounting, undoRedoManagerRef:",
+				undoRedoManagerRef.current
+			);
+		};
+	}, []);
 
-      <BlockToolsSidebar
-        terrainBuilderRef={terrainBuilderRef}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        setCurrentBlockType={setCurrentBlockType}
-        environmentBuilder={environmentBuilderRef.current}
-        onPlacementSettingsChange={setPlacementSettings}
-      />
+	useEffect(() => {
+		if (undoRedoManagerRef.current) {
+			console.log("App: undoRedoManagerRef.current updated:", {
+				exists: !!undoRedoManagerRef.current,
+				hasCurrentProp:
+					undoRedoManagerRef.current &&
+					"current" in undoRedoManagerRef.current,
+				hasSaveUndo:
+					undoRedoManagerRef.current &&
+					typeof undoRedoManagerRef.current.saveUndo === "function",
+				saveUndoType:
+					undoRedoManagerRef.current &&
+					typeof undoRedoManagerRef.current.saveUndo,
+			});
+		}
+	}, [undoRedoManagerRef.current]);
 
-      <div className="vignette-gradient"></div>
+	const LoadingScreen = () => (
+		<div className="loading-screen">
+			<img
+				src={hytopiaLogo}
+				alt="Hytopia Logo"
+				className="loading-logo"
+			/>
+			<div className="loading-spinner"></div>
+			<div className="loading-text">
+				<i>Loading...</i>
+			</div>
+			<div className="version-text">HYTOPIA Map Builder v{version}</div>
+		</div>
+	);
 
-      {/* Saving indicator */}
-      {isSaving && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '80px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            color: 'white',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            pointerEvents: 'none' // Ensure it doesn't interfere with clicks
-          }}
-        >
-          <div
-            style={{
-              width: '16px',
-              height: '16px',
-              borderRadius: '50%',
-              border: '3px solid rgba(255, 255, 255, 0.3)',
-              borderTopColor: 'white',
-              animation: 'spin 1s linear infinite'
-            }}
-          />
-          Saving...
-        </div>
-      )}
+	// Callback for when the modal finishes editing/generating
+	const handleTextureReady = async (faceTextures, textureName) => {
+		console.log(
+			"Texture ready:",
+			textureName,
+			"Face Count:",
+			Object.keys(faceTextures).length
+		);
+		try {
+			// Prepare the block data for processCustomBlock
+			const newBlockData = {
+				name:
+					textureName
+						.replace(/[^a-zA-Z0-9_\-\s]/g, "")
+						.replace(/\s+/g, "_") || "custom_texture",
+				textureUri: faceTextures.all, // Use the 'all' texture as the primary URI
+				sideTextures: {},
+				isCustom: true,
+			};
 
-      <Canvas shadows className="canvas-container">
-        <TerrainBuilder
-          ref={terrainBuilderRef}
-          blockToolsRef={blockToolsRef}
-          currentBlockType={currentBlockType}
-          mode={mode}
-          setDebugInfo={setDebugInfo}
-          sendTotalBlocks={setTotalBlocks}
-          axisLockEnabled={axisLockEnabled}
-          placementSize={placementSize}
-          cameraReset={cameraReset}
-          cameraAngle={cameraAngle}
-          onCameraAngleChange={setCameraAngle}
-          setPageIsLoaded={setPageIsLoaded}
-          onHandleDropRef={(fn) => (handleDropRef.current = fn)}
-          onSceneReady={(sceneObject) => setScene(sceneObject)}
-          totalEnvironmentObjects={totalEnvironmentObjects}
-          gridSize={gridSize}
-          environmentBuilderRef={environmentBuilderRef}
-          previewPositionToAppJS={setCurrentPreviewPosition}
-          undoRedoManager={undoRedoManagerRef}
-        />
-        <EnvironmentBuilder
-          ref={environmentBuilderRef}
-          scene={scene}
-          currentBlockType={currentBlockType}
-          mode={mode}
-          onTotalObjectsChange={setTotalEnvironmentObjects}
-          placementSize={placementSize}
-          previewPositionFromAppJS={currentPreviewPosition}
-          placementSettings={placementSettings}
-          undoRedoManager={undoRedoManagerRef}
-        />
-      </Canvas>
+			// Populate sideTextures, excluding 'all'
+			let hasSpecificFaces = false;
+			for (const face in faceTextures) {
+				if (face !== "all" && faceTextures[face]) {
+					// Use face names directly as keys, assuming processCustomBlock or BlockType handles them
+					newBlockData.sideTextures[face] = faceTextures[face];
+					hasSpecificFaces = true;
+				}
+			}
 
-      <DebugInfo 
-        debugInfo={debugInfo}
-        totalBlocks={totalBlocks}
-        totalEnvironmentObjects={totalEnvironmentObjects} 
-        terrainBuilderRef={terrainBuilderRef}
-      />
+			// Explicitly set isMultiTexture if specific faces were added
+			newBlockData.isMultiTexture = hasSpecificFaces;
 
-      <ToolBar
-        terrainBuilderRef={terrainBuilderRef}
-        environmentBuilderRef={environmentBuilderRef}
-        mode={mode}
-        handleModeChange={setMode}
-        axisLockEnabled={axisLockEnabled}
-        setAxisLockEnabled={setAxisLockEnabled}
-        placementSize={placementSize}
-        setPlacementSize={setPlacementSize}
-        setGridSize={setGridSize}
-        undoRedoManager={undoRedoManagerRef}
-        currentBlockType={currentBlockType}
-      />
+			console.log("Processing block data:", newBlockData);
 
-      <div className="camera-controls-wrapper">
-        <Tooltip text="Save terrain (Ctrl+S)">
-          <button
-            onClick={() => {
-              // Set saving state directly for immediate feedback
-              setIsSaving(true);
-              // Then call the actual save function
-              if (terrainBuilderRef.current) {
-                terrainBuilderRef.current.saveTerrainManually();
-              }
-              // Set a fallback timer to clear the saving state if something goes wrong
-              setTimeout(() => setIsSaving(false), 5000);
-            }}
-            className="camera-control-button save-button"
-          >
-            <FaSave />
-          </button>
-        </Tooltip>
-        
-        <div className="camera-buttons">
-          <Tooltip text="Reset camera position">
-            <button onClick={() => setCameraReset((prev) => !prev)} className="camera-control-button">
-              <FaCamera />
-            </button>
-          </Tooltip>
-          <Tooltip text={isMuted ? "Unmute" : "Mute"}>
-            <button
-              onClick={toggleMute}
-              className={`camera-control-button ${!isMuted ? "active" : ""}`}
-            >
-              <FaVolumeMute />
-            </button>
-          </Tooltip>
-        </div>
+			// Process the new texture as a custom block
+			await processCustomBlock(newBlockData);
+			console.log("Custom block processed:", newBlockData.name);
 
-       
-      </div>
+			// Refresh the block tools sidebar to show the new block
+			refreshBlockTools();
+		} catch (error) {
+			console.error("Error processing generated texture:", error);
+			// Show an error message to the user?
+		}
+	};
 
-      <button
-        className="toolbar-button"
-        onClick={async () => await DatabaseManager.clearDatabase()}
-        title="Clear Database"
-        style={{ position: "absolute", bottom: "10px", left: "10px" }}
-      >
-        <FaDatabase />
-      </button>
-    </div>
-  );
+	return (
+		<div className="App">
+			{IS_UNDER_CONSTRUCTION && <UnderConstruction />}
+
+			{/* Loading Screen */}
+			{!pageIsLoaded && <LoadingScreen />}
+
+			{/* Global Loading Screen for heavy operations */}
+			<GlobalLoadingScreen />
+
+			{/* Hytopia Logo */}
+			<div className="hytopia-logo-wrapper">
+				<img src={hytopiaLogo} />
+				<p className="hytopia-version-text">
+					World Editor Version {version}
+				</p>
+			</div>
+
+			<QuickTips />
+
+			<UndoRedoManager
+				ref={undoRedoManagerRef}
+				terrainBuilderRef={terrainBuilderRef}
+				environmentBuilderRef={environmentBuilderRef}
+			/>
+
+			<BlockToolsSidebar
+				onOpenTextureModal={() => setIsTextureModalOpen(true)}
+				terrainBuilderRef={terrainBuilderRef}
+				activeTab={activeTab}
+				setActiveTab={setActiveTab}
+				setCurrentBlockType={setCurrentBlockType}
+				environmentBuilder={environmentBuilderRef.current}
+				onPlacementSettingsChange={setPlacementSettings}
+			/>
+
+			{/* Texture Generation Modal */}
+			<TextureGenerationModal
+				isOpen={isTextureModalOpen}
+				onClose={() => setIsTextureModalOpen(false)}
+				apiKey={retroDiffusionApiKey}
+				onTextureReady={handleTextureReady}
+			/>
+
+			<div className="vignette-gradient"></div>
+
+			{/* Saving indicator */}
+			{isSaving && (
+				<div
+					style={{
+						position: "fixed",
+						bottom: "80px",
+						left: "50%",
+						transform: "translateX(-50%)",
+						backgroundColor: "rgba(0, 0, 0, 0.8)",
+						color: "white",
+						padding: "8px 16px",
+						borderRadius: "4px",
+						zIndex: 9999,
+						display: "flex",
+						alignItems: "center",
+						gap: "8px",
+						boxShadow: "0 2px 10px rgba(0, 0, 0, 0.3)",
+						fontFamily: "Arial, sans-serif",
+						fontSize: "14px",
+						fontWeight: "bold",
+						pointerEvents: "none", // Ensure it doesn't interfere with clicks
+					}}
+				>
+					<div
+						style={{
+							width: "16px",
+							height: "16px",
+							borderRadius: "50%",
+							border: "3px solid rgba(255, 255, 255, 0.3)",
+							borderTopColor: "white",
+							animation: "spin 1s linear infinite",
+						}}
+					/>
+					Saving...
+				</div>
+			)}
+
+			<Canvas shadows className="canvas-container">
+				<TerrainBuilder
+					isInputDisabled={isTextureModalOpen}
+					ref={terrainBuilderRef}
+					blockToolsRef={blockToolsRef}
+					currentBlockType={currentBlockType}
+					mode={mode}
+					setDebugInfo={setDebugInfo}
+					sendTotalBlocks={setTotalBlocks}
+					axisLockEnabled={axisLockEnabled}
+					placementSize={placementSize}
+					cameraReset={cameraReset}
+					cameraAngle={cameraAngle}
+					onCameraAngleChange={setCameraAngle}
+					setPageIsLoaded={setPageIsLoaded}
+					onHandleDropRef={(fn) => (handleDropRef.current = fn)}
+					onSceneReady={(sceneObject) => setScene(sceneObject)}
+					totalEnvironmentObjects={totalEnvironmentObjects}
+					gridSize={gridSize}
+					environmentBuilderRef={environmentBuilderRef}
+					previewPositionToAppJS={setCurrentPreviewPosition}
+					undoRedoManager={undoRedoManagerRef}
+				/>
+				<EnvironmentBuilder
+					ref={environmentBuilderRef}
+					scene={scene}
+					currentBlockType={currentBlockType}
+					mode={mode}
+					onTotalObjectsChange={setTotalEnvironmentObjects}
+					placementSize={placementSize}
+					previewPositionFromAppJS={currentPreviewPosition}
+					placementSettings={placementSettings}
+					undoRedoManager={undoRedoManagerRef}
+				/>
+			</Canvas>
+
+			<DebugInfo
+				debugInfo={debugInfo}
+				totalBlocks={totalBlocks}
+				totalEnvironmentObjects={totalEnvironmentObjects}
+				terrainBuilderRef={terrainBuilderRef}
+			/>
+
+			<ToolBar
+				terrainBuilderRef={terrainBuilderRef}
+				environmentBuilderRef={environmentBuilderRef}
+				mode={mode}
+				handleModeChange={setMode}
+				axisLockEnabled={axisLockEnabled}
+				setAxisLockEnabled={setAxisLockEnabled}
+				placementSize={placementSize}
+				setPlacementSize={setPlacementSize}
+				setGridSize={setGridSize}
+				undoRedoManager={undoRedoManagerRef}
+				currentBlockType={currentBlockType}
+			/>
+
+			<div className="camera-controls-wrapper">
+				<Tooltip text="Save terrain (Ctrl+S)">
+					<button
+						onClick={() => {
+							// Set saving state directly for immediate feedback
+							setIsSaving(true);
+							// Then call the actual save function
+							if (terrainBuilderRef.current) {
+								terrainBuilderRef.current.saveTerrainManually();
+							}
+							// Set a fallback timer to clear the saving state if something goes wrong
+							setTimeout(() => setIsSaving(false), 5000);
+						}}
+						className="camera-control-button save-button"
+					>
+						<FaSave />
+					</button>
+				</Tooltip>
+
+				<div className="camera-buttons">
+					<Tooltip text="Reset camera position">
+						<button
+							onClick={() => setCameraReset((prev) => !prev)}
+							className="camera-control-button"
+						>
+							<FaCamera />
+						</button>
+					</Tooltip>
+					<Tooltip text={isMuted ? "Unmute" : "Mute"}>
+						<button
+							onClick={toggleMute}
+							className={`camera-control-button ${
+								!isMuted ? "active" : ""
+							}`}
+						>
+							<FaVolumeMute />
+						</button>
+					</Tooltip>
+				</div>
+			</div>
+
+			<button
+				className="toolbar-button"
+				onClick={async () => await DatabaseManager.clearDatabase()}
+				title="Clear Database"
+				style={{ position: "absolute", bottom: "10px", left: "10px" }}
+			>
+				<FaDatabase />
+			</button>
+		</div>
+	);
 }
 
 export default App;

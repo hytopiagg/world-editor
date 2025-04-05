@@ -1,0 +1,51 @@
+.editor-toolbar {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 15px;
+  padding: 8px;
+  background-color: #3a3a3e;
+  border-radius: 4px;
+}
+
+.tool-button {
+  background-color: #4f4f54;
+  border: 1px solid #666;
+  color: #ccc;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.1rem; /* Make icons slightly larger */
+  line-height: 1;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.tool-button:hover {
+  background-color: #5a5a60;
+  border-color: #888;
+}
+
+.tool-button.active {
+  background-color: #6a6aff;
+  border-color: #8a8aff;
+  color: white;
+}
+
+/* Container for undo/redo */
+.undo-redo-buttons {
+  display: flex;
+  gap: 5px;
+  /* margin-bottom: 15px; */ /* Add margin if needed */
+}
+
+.undo-redo-buttons .tool-button {
+  /* Use same style as other tool buttons */
+  flex-grow: 1; /* Make buttons fill space */
+}
+
+.undo-redo-buttons .tool-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background-color: #4f4f54; /* Keep background consistent */
+  border-color: #666;
+  color: #888;
+} 

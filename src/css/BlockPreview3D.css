@@ -1,0 +1,12 @@
+.block-preview-3d-container {
+  width: 150px; /* Adjust size as needed */
+  height: 150px;
+  /* background-color: #222; */ /* Optional background for the canvas area */
+  border-radius: 4px;
+  overflow: hidden; /* Clip canvas */
+  border: 1px solid #444;
+}
+
+.block-preview-3d-container canvas {
+  display: block; /* Remove extra space below canvas */
+} 

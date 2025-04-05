@@ -1,0 +1,32 @@
+.color-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
+  gap: 4px;
+  margin-bottom: 15px;
+  padding: 8px;
+  background-color: #3a3a3e;
+  border-radius: 4px;
+  max-width: 200px; /* Limit width */
+}
+
+.color-swatch {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #555;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+  outline: none;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+  border-color: #999;
+}
+
+.color-swatch.active {
+  border: 2px solid #fff;
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  transform: scale(1.1);
+} 
