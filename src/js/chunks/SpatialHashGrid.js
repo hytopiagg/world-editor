@@ -46,7 +46,7 @@ export class SpatialHashGrid {
 		// Initialize arrays with initial capacity
 		this.initializeArrays(1000);
 		
-		console.log(`🧊 SpatialHashGrid: Binary TypedArray singleton instance created (chunkSize: ${this.chunkSize})`);
+		//console.log(`🧊 SpatialHashGrid: Binary TypedArray singleton instance created (chunkSize: ${this.chunkSize})`);
 	}
 	
 	/**
