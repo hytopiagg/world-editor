@@ -90,7 +90,7 @@ const TextureGenerationModal = ({
                         model: "RD_FLUX",
                         width: GRID_SIZE,
                         height: GRID_SIZE,
-                        prompt: prompt,
+                        prompt: `${prompt} with a smooth texture, only 3 shades per color max`,
                         num_images: 1,
                         prompt_style: "mc_texture",
                     }),
@@ -102,6 +102,8 @@ const TextureGenerationModal = ({
             }
 
             const data = await response.json();
+
+            console.log(data.base64_images[0]);
 
             if (data.base64_images && data.base64_images.length > 0) {
                 const imageDataUrl = `data:image/png;base64,${data.base64_images[0]}`;

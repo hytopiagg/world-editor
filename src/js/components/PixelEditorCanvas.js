@@ -158,19 +158,7 @@ const PixelEditorCanvas = forwardRef(
                 }
             }
 
-            // Draw the internal grid_size data scaled up
-            if (imgData) {
-                const offscreenCanvas = document.createElement("canvas");
-                offscreenCanvas.width = GRID_SIZE;
-                offscreenCanvas.height = GRID_SIZE;
-                const offCtx = offscreenCanvas.getContext("2d");
-                offCtx.putImageData(imgData, 0, 0);
-
-                ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(offscreenCanvas, 0, 0, canvasSize, canvasSize);
-            }
-
-            // Draw grid lines
+            // *** Draw the grid lines FIRST ***
             ctx.strokeStyle = "rgba(0, 0, 0, 0.1)";
             ctx.lineWidth = 1;
             for (let i = 0; i <= GRID_SIZE; i++) {
@@ -182,6 +170,27 @@ const PixelEditorCanvas = forwardRef(
                 ctx.moveTo(0, i * pixelSize);
                 ctx.lineTo(canvasSize, i * pixelSize);
                 ctx.stroke();
+            }
+
+            // *** Draw the pixel data LAST (on top of the grid) ***
+            if (imgData) {
+                const offscreenCanvas = document.createElement("canvas");
+                offscreenCanvas.width = GRID_SIZE;
+                offscreenCanvas.height = GRID_SIZE;
+                const offCtx = offscreenCanvas.getContext("2d");
+                if (offCtx) {
+                    // Check if context was obtained
+                    offCtx.putImageData(imgData, 0, 0);
+
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(
+                        offscreenCanvas,
+                        0,
+                        0,
+                        canvasSize,
+                        canvasSize
+                    );
+                }
             }
         }, [canvasSize, pixelSize, currentImageData]);
 

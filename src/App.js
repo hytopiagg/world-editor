@@ -57,9 +57,6 @@ function App() {
     });
     const [isSaving, setIsSaving] = useState(false);
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
-    const [retroDiffusionApiKey, setRetroDiffusionApiKey] = useState(
-        "rdpk-e6894c28a3697e7e25617d0fe5d2c500"
-    );
 
     useEffect(() => {
         const loadSavedToolSelection = () => {
@@ -302,7 +299,7 @@ function App() {
             <TextureGenerationModal
                 isOpen={isTextureModalOpen}
                 onClose={() => setIsTextureModalOpen(false)}
-                apiKey={retroDiffusionApiKey}
+                apiKey={process.env.REACT_APP_RETRO_DIFFUSION_API_KEY}
                 onTextureReady={handleTextureReady}
             />
 
