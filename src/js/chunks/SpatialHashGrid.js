@@ -46,7 +46,7 @@ export class SpatialHashGrid {
 		// Initialize arrays with initial capacity
 		this.initializeArrays(1000);
 		
-		console.log(`🧊 SpatialHashGrid: Binary TypedArray singleton instance created (chunkSize: ${this.chunkSize})`);
+		//console.log(`🧊 SpatialHashGrid: Binary TypedArray singleton instance created (chunkSize: ${this.chunkSize})`);
 	}
 	
 	/**
@@ -90,17 +90,40 @@ export class SpatialHashGrid {
 			this.HASH_PRIME2 = hashConstants.HASH_PRIME2;
 			this.HASH_PRIME3 = hashConstants.HASH_PRIME3;
 		}
-		
-		// Set TypedArrays directly
-		this._blocks = blockIds;
-		this._coords = coordinates;
-		this.hashTable = hashTable; 
-		this.collisionTable = collisionTable;
-		this.size = size;
-		this._capacity = Math.max(size, this._capacity);
+
+		console.log(`SpatialHashGrid: Rebuilding grid from binary data with ${size} blocks...`);
+
+		// 1. Clear the existing grid state completely
+		this.clear();
+
+		// 2. Ensure capacity is sufficient (avoids multiple expansions during set)
+		if (size > this._capacity) {
+			this.initializeArrays(Math.ceil(size * 1.5)); // Initialize with extra capacity
+		}
+
+		// 3. Iteratively add blocks using the set method to ensure consistent state
+		let addedCount = 0;
+		for (let i = 0; i < size; i++) {
+			const blockId = blockIds[i];
+			// Skip air blocks potentially included in worker data
+			if (blockId === 0 || blockId === undefined || blockId === null) continue;
+
+			const x = coordinates[i * 3];
+			const y = coordinates[i * 3 + 1];
+			const z = coordinates[i * 3 + 2];
+
+			if (this.set(x, y, z, blockId)) {
+				addedCount++;
+			} else {
+				console.warn(`SpatialHashGrid: Failed to set block at (${x},${y},${z}) during binary initialization`);
+			}
+		}
+
+		// Set the final size based on successfully added blocks
+		this.size = addedCount;
 		
 		// Log with some sample blocks to verify data
-		console.log(`SpatialHashGrid: Initialized from binary data with ${size} blocks`);
+		console.log(`SpatialHashGrid: Rebuilt grid from binary data. Final size: ${this.size} blocks.`);
 		this.logSampleBlocks(3);
 	}
 
