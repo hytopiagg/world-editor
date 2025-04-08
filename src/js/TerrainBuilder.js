@@ -1449,7 +1449,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Update localStorage with the new value
 				localStorage.setItem("gridSize", gridSizeToUse.toString());
 			} else {
-				gridSizeToUse = parseInt(localStorage.getItem("gridSize"), 10) || 64; // Default to 64
+				gridSizeToUse = parseInt(localStorage.getItem("gridSize"), 10) || 200; // Default to 200
 			}
 			
 			// Update the gridSizeRef to maintain current grid size value

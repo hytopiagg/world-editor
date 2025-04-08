@@ -2,11 +2,9 @@
 .block-tools-container {
   position: absolute;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  width: 400px;
+  flex-direction: row;
+  height: 100%; /* Ensure container takes full height */
+  width: 450px;
   z-index: 100;
   min-height: 400px; /* Add minimum height to prevent too much compression */
   pointer-events: none;
@@ -14,39 +12,38 @@
 
 .block-tools-sidebar {
   position: absolute;
-  height: 100%;
-  width: 313px;
+  width: 332px;
   background-color: rgba(13, 13, 13, 0.8);
   padding: 15px;
   border-radius: 12px;
   border: none;
   display: flex;
   flex-direction: column;
-  min-height: 400px;
-  max-height: 70vh;
+  min-height: 450px;
+  height: 70%;
+  max-height: 70%;
   overflow: hidden;
-  margin-top: 140px;
-  margin-bottom: 140px;
   pointer-events: all;
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* Block Buttons Grid */
 .block-buttons-grid {
-  width: 285px;
-  border-radius: 12px;
-  border: 1.5px solid rgba(241, 241, 241, 0.15);
-  padding: 13px;
-  display: flex;
-  flex-wrap: wrap;
+  flex-grow: 1; /* Allow grid to take available space */
+  overflow-y: auto; /* Enable scrolling if content overflows */
+  display: flex; /* Use flexbox for better control */
+  flex-direction: row;  /* Arrange items in rows */
+  flex-wrap: wrap;     /* Allow items to wrap to the next row */
+  width: 100%;
   gap: 6px;
+  padding-right: 5px;
   scroll-padding: 0px;
-  overflow-y: auto;
   overflow-x: hidden;
   align-content: flex-start;
-  flex: 1;
 }
 
 /* Custom Scrollbar Styles */
@@ -71,8 +68,10 @@
 
 .block-tools-section-label {
   font-size: 12px;
-  width: 100%;
+  width: 100%; /* Ensure full width */
   text-align: left;
+  box-sizing: border-box; /* Include padding/border in width */
+  color: #828282;
 }
 
 /* Block Button Styles */
@@ -137,10 +136,9 @@
 .tab-button-wrapper {
   width: 100%;
   height: 45px;
+  min-height: 45px;
   display: flex;
-  justify-content: space-between;
   position: relative;
-  bottom: 0px;
   margin-bottom: 8px;
 }
 
@@ -192,46 +190,74 @@
 
 /* Environment Button Styles */
 .environment-button-wrapper {
-  height: auto;
+  width: 100%;
   display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  justify-content: flex-start;
-  height: 100%;
-  gap: 2px;
-  overflow: visible;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 4px;
 }
 
 .environment-button {
   position: relative;
-  height: 70px;
-  width: 165px;
-  border: 2px solid #a8a8a8;
+  height: 50px;
+  width: 100%;
   border-radius: 8px;
-  background: #d8d8d8;
+  background: rgba(255, 255, 255, 0.1);
   cursor: pointer;
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: left;
   transition: all 0.2s ease;
+  padding:4px;
 }
 
-.environment-button:hover {
-  border: 2px solid #a8a8a8;
-  background: #d6d6d6;
+.environment-button:not(.selected):hover {
+  border: 2px solid #272727;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .environment-button.selected {
-  border: 2px solid #0084ff;
-  background: #bae0ff;
+  padding-left:6px;
 }
 
+.environment-label-wrapper {
+  position: relative;
+  height: 100%;
+  max-width: 250px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow-wrap: break-word;
+  word-break: break-all;
+  padding-left: 10px;
+}
+
+.environment-button-label {
+  position: relative;
+  width: 100%;
+  font-size: 12px;
+  text-align: center;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  word-break: break-all;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.environment-button-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
+
 .object-preview {
-  width: 60px;
-  height: 60px;
+  width: 40px;
+  height: 40px;
   border-radius: 5px;
-  margin-left: 2px;
   background-color: rgba(255, 255, 255, 0.484);
   overflow: hidden;
 }
@@ -245,7 +271,8 @@
 .texture-drop-zone {
   position: relative;
   z-index: 10;
-  height: 100px;
+  height: 80px;
+  min-height: 80px;
   margin-top: 12px;
   border: 1.5px dashed rgba(255, 255, 255, 0.2);
   border-radius: 12px;
@@ -264,6 +291,7 @@
   color: rgba(241, 241, 241, 0.5);
   font-size: 11px;
   pointer-events: none;
+  width: 80%;
 }
 
 .drop-zone-content {
@@ -271,14 +299,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  align-content: center;
   height: 100%;
-  gap: 10px;
 }
 
 .drop-zone-icons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  height: 20px;
+  margin-bottom: 10px;
 }
 
 .upload-icon,
@@ -294,18 +321,16 @@
 
 .placement-tools {
   position: relative;
-  background-color: rgba(255, 255, 255, 0.363);
-  border: 2px solid #ffffff;
+  border: 1.5px solid rgba(241, 241, 241, 0.15);
   border-radius: 12px;
   padding: 10px;
   margin-top: 10px;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .placement-tools-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
   width: 100%;
 }
 
@@ -313,16 +338,13 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 5px;
-  position: relative;
+  justify-content: center;
+  vertical-align: middle;
+  margin-bottom: 10px;
 }
 
-.placement-tool label {
-  display: inline-block;
-}
-
-.placement-checkbox {
-  margin-right: 8px;
+#randomScaleLabel, #randomRotationLabel {
+  margin-left: 5px;
 }
 
 .placement-tool-slider {
@@ -330,6 +352,8 @@
     flex-direction: column;
     gap: 5px;
     position: relative;
+    margin-left: 5px;
+    margin-right: 5px;
   }
 
 .placement-slider {
@@ -339,14 +363,9 @@
   width: 100%;
   height: 8px;
   border-radius: 5px;
-  background: white;
-  border: 1px solid #ccc;
+  background: rgb(255, 255, 255);
   cursor: pointer;
   margin-top: 5px;
-}
-
-.placement-slider:hover {
-  background: #f5f5f5;
 }
 
 .placement-slider::-webkit-slider-thumb {
@@ -354,7 +373,8 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: linear-gradient(to bottom, #34a7ff, #5cb8ff);
+  background: #0084FF;
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.5);
   cursor: pointer;
   border: none;
 }
@@ -363,17 +383,17 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: linear-gradient(to bottom, #34a7ff, #5cb8ff);
+  background: #0084FF;
   cursor: pointer;
   border: none;
 }
 
 .placement-slider::-webkit-slider-thumb:hover {
-  background: linear-gradient(to bottom, #5cb8ff, #34a7ff);
+  transform: scale(1.1);
 }
 
 .placement-slider::-moz-range-thumb:hover {
-  background: linear-gradient(to bottom, #5cb8ff, #34a7ff);
+  transform: scale(1.1);
 }
 
 /* Custom styling for checkboxes */
@@ -423,8 +443,6 @@
 .randomize-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
 }
 
 .min-max-inputs {
@@ -445,40 +463,8 @@
 
 .min-max-input label {
   font-size: 12px;
-  color: #000000;
   margin-right: 5px;
   margin-left: 5px;
-}
-
-.environment-label-wrapper {
-  position: relative;
-  height: 100%;
-  max-width: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow-wrap: break-word;
-  word-break: break-all;
-  margin-left: 5px;
-}
-
-.environment-button-label {
-  position: relative;
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  color: #2e2e2e;
-  overflow: hidden;
-  overflow-wrap: break-word;
-  word-break: break-all;
-}
-
-.environment-button-container {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  position: relative;
 }
 
 .delete-button {
@@ -505,4 +491,39 @@
   opacity: 1;
   background-color: #ff2222;
   transform: scale(1.1);
+}
+
+/* Styles for the environment preview container and no-preview text */
+.environment-preview-container {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.model-preview-canvas {
+  width: 100%;
+  height: 150px; /* Adjust height as needed */
+  background-color: #444444;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.model-preview-canvas canvas {
+  display: block;
+}
+
+.no-preview-text {
+  width: 100%;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ccc;
+  background-color: #3a3a3a;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 10px;
+  padding: 5px;
+  box-sizing: border-box;
+  text-align: center;
 }

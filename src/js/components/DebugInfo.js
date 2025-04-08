@@ -7,7 +7,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
   const [maxFrameTime, setMaxFrameTime] = useState(0);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
   const [selectionDistance, setSelectionDistance] = useState(128);
-  const [viewDistance, setViewDistance] = useState(64);
+  const [viewDistance, setViewDistance] = useState(128);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   
   const frameTimesRef = useRef([]);
