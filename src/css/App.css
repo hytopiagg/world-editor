@@ -36,6 +36,7 @@ body {
   font-family: 'Inter', sans-serif;
   font-weight: 400;
   font-size: 14px;
+  text-shadow: 0 1px 3px #00000079;
   color: white;
 }
 
@@ -52,7 +53,6 @@ button {
   padding: 8px 15px;
   cursor: pointer;
   color: white;
-  font-weight: bold;
 }
 
 button:hover {

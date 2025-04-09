@@ -428,7 +428,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 							<button
 								onClick={() => document.getElementById("mapFileInput").click()}
 								className="control-button import-export-button">
-								Map
+								Import
 							</button>
 							<input
 								id="mapFileInput"
@@ -453,12 +453,6 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								/>
 							</Tooltip>
 						)}
-					</div>
-					<div className="control-label">Import</div>
-				</div>
-
-				<div className="control-group">
-					<div className="control-button-wrapper">
 						{!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
 							<Tooltip text="Export map and assets as a complete package">
 								<button
@@ -471,11 +465,11 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 							<button
 								onClick={() => handleExportMap()}
 								className="control-button import-export-button">
-								Map
+								Export
 							</button>
 						</Tooltip>
 					</div>
-					<div className="control-label">Export</div>
+					<div className="control-label">Import/Export Map</div>
 				</div>
 
 				<div className="control-group">

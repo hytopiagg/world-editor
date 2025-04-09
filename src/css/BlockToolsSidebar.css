@@ -155,6 +155,8 @@
   color: #fff;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-weight: bold;
+  text-transform: uppercase;
 }
 
 .tab-button-right {
@@ -170,6 +172,8 @@
   color: #fff;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-weight: bold;
+  text-transform: uppercase;
 }
 
 .tab-button-left:hover {
