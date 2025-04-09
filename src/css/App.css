@@ -206,13 +206,6 @@ button.selected {
   color: white;
 }
 
-.camera-control-button.save-button {
-  font-size: 1.3em;
-  padding: 12px;
-  margin-right: 10px;
-  margin-bottom: 10px;
-}
-
 .camera-buttons {
   display: flex;
   flex-direction: column;
