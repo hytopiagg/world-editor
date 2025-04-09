@@ -38,7 +38,6 @@ class BlockMaterial {
         alphaTest: 0.1,
         shininess: 0,
         specular: 0x000000,
-        filter: THREE.NearestFilter
       });
     }
     return this._defaultMaterial;

@@ -322,95 +322,97 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	// Function to efficiently save terrain data
 	const efficientTerrainSave = async () => { // Make it async
 
-		console.log("SAVING TERRAIN");
-		// Skip if database is being cleared
-		if (window.IS_DATABASE_CLEARING) {
-			console.log("Database is being cleared, skipping terrain save");
-			return;
-		}
+		console.warn("Efficient terrain save called, however it is disabled for now due to improper implementation with other existing systems.");
 
-		// Skip if no changes to save
-		// Check both terrain and pendingChangesRef.current itself
-		if (!pendingChangesRef.current || 
-			!pendingChangesRef.current.terrain ||
-			(Object.keys(pendingChangesRef.current.terrain.added || {}).length === 0 && 
-			 Object.keys(pendingChangesRef.current.terrain.removed || {}).length === 0)) {
-			console.log("efficientTerrainSave: No pending terrain changes to save.");
-			return; // Explicitly return if no changes
-		}
+		// console.log("SAVING TERRAIN");
+		// // Skip if database is being cleared
+		// if (window.IS_DATABASE_CLEARING) {
+		// 	console.log("Database is being cleared, skipping terrain save");
+		// 	return;
+		// }
 
-		// Capture the changes to save
-		// Ensure we have a valid object even if terrain is null momentarily
-		const changesToSave = { 
-		    added: { ...(pendingChangesRef.current.terrain?.added || {}) },
-		    removed: { ...(pendingChangesRef.current.terrain?.removed || {}) }
-		};
+		// // Skip if no changes to save
+		// // Check both terrain and pendingChangesRef.current itself
+		// if (!pendingChangesRef.current || 
+		// 	!pendingChangesRef.current.terrain ||
+		// 	(Object.keys(pendingChangesRef.current.terrain.added || {}).length === 0 && 
+		// 	 Object.keys(pendingChangesRef.current.terrain.removed || {}).length === 0)) {
+		// 	console.log("efficientTerrainSave: No pending terrain changes to save.");
+		// 	return; // Explicitly return if no changes
+		// }
+
+		// // Capture the changes to save
+		// // Ensure we have a valid object even if terrain is null momentarily
+		// const changesToSave = { 
+		//     added: { ...(pendingChangesRef.current.terrain?.added || {}) },
+		//     removed: { ...(pendingChangesRef.current.terrain?.removed || {}) }
+		// };
 		
-		// Log the exact changes being saved
-		const addedCount = Object.keys(changesToSave.added).length;
-		const removedCount = Object.keys(changesToSave.removed).length;
-		console.log(`efficientTerrainSave: Attempting to save ${addedCount} added and ${removedCount} removed blocks.`);
+		// // Log the exact changes being saved
+		// const addedCount = Object.keys(changesToSave.added).length;
+		// const removedCount = Object.keys(changesToSave.removed).length;
+		// console.log(`efficientTerrainSave: Attempting to save ${addedCount} added and ${removedCount} removed blocks.`);
 
-		// Reset pending changes immediately *before* starting the async save
-		resetPendingChanges(); 
+		// // Reset pending changes immediately *before* starting the async save
+		// resetPendingChanges(); 
 
-		// Log the reset action
-		console.log("efficientTerrainSave: Pending changes have been reset.");
+		// // Log the reset action
+		// console.log("efficientTerrainSave: Pending changes have been reset.");
 
-		try {
-			// Get a write transaction
-			const db = await DatabaseManager.getDBConnection();
-			const tx = db.transaction(STORES.TERRAIN, 'readwrite');
-			const store = tx.objectStore(STORES.TERRAIN);
+		// try {
+		// 	// Get a write transaction
+		// 	const db = await DatabaseManager.getDBConnection();
+		// 	const tx = db.transaction(STORES.TERRAIN, 'readwrite');
+		// 	const store = tx.objectStore(STORES.TERRAIN);
 			
-			// Apply removals
-			if (changesToSave.removed && removedCount > 0) {
-				console.log(`efficientTerrainSave: Deleting ${removedCount} blocks...`);
-				await Promise.all(Object.keys(changesToSave.removed).map(key => {
-					const deleteRequest = store.delete(`${key}`);
-					return new Promise((resolve, reject) => {
-						deleteRequest.onsuccess = resolve;
-						deleteRequest.onerror = reject;
-					});
-				}));
-				console.log(`efficientTerrainSave: Deleted ${removedCount} blocks from DB`);
-			}
+		// 	// Apply removals
+		// 	if (changesToSave.removed && removedCount > 0) {
+		// 		console.log(`efficientTerrainSave: Deleting ${removedCount} blocks...`);
+		// 		await Promise.all(Object.keys(changesToSave.removed).map(key => {
+		// 			const deleteRequest = store.delete(`${key}`);
+		// 			return new Promise((resolve, reject) => {
+		// 				deleteRequest.onsuccess = resolve;
+		// 				deleteRequest.onerror = reject;
+		// 			});
+		// 		}));
+		// 		console.log(`efficientTerrainSave: Deleted ${removedCount} blocks from DB`);
+		// 	}
 
-			// Apply additions/updates
-			if (changesToSave.added && addedCount > 0) {
-				console.log(`efficientTerrainSave: Adding/Updating ${addedCount} blocks...`);
-				await Promise.all(Object.entries(changesToSave.added).map(([key, value]) => {
-					const putRequest = store.put(value, key);
-					return new Promise((resolve, reject) => {
-						putRequest.onsuccess = resolve;
-						putRequest.onerror = reject;
-					});
-				}));
-				console.log(`efficientTerrainSave: Added/Updated ${addedCount} blocks in DB`);
-			}
+		// 	// Apply additions/updates
+		// 	if (changesToSave.added && addedCount > 0) {
+		// 		console.log(`efficientTerrainSave: Adding/Updating ${addedCount} blocks...`);
+		// 		await Promise.all(Object.entries(changesToSave.added).map(([key, value]) => {
+		// 			const putRequest = store.put(value, key);
+		// 			return new Promise((resolve, reject) => {
+		// 				putRequest.onsuccess = resolve;
+		// 				putRequest.onerror = reject;
+		// 			});
+		// 		}));
+		// 		console.log(`efficientTerrainSave: Added/Updated ${addedCount} blocks in DB`);
+		// 	}
 
-			// Complete the transaction
-			await new Promise((resolve, reject) => {
-				tx.oncomplete = resolve;
-				tx.onerror = reject;
-			});
+		// 	// Complete the transaction
+		// 	await new Promise((resolve, reject) => {
+		// 		tx.oncomplete = resolve;
+		// 		tx.onerror = reject;
+		// 	});
 			
-			console.log("Efficient terrain save completed successfully.");
-			lastSaveTimeRef.current = Date.now(); // Update last save time
-		} catch (error) {
-			console.error("Error during efficient terrain save:", error);
-			// IMPORTANT: Restore pending changes if save failed
-			// Combine the restored changes with any new changes that might have occurred
-			pendingChangesRef.current.terrain.added = { 
-			    ...changesToSave.added, 
-			    ...(pendingChangesRef.current.terrain?.added || {}) 
-			};
-			pendingChangesRef.current.terrain.removed = { 
-			    ...changesToSave.removed, 
-			    ...(pendingChangesRef.current.terrain?.removed || {}) 
-			};
-			console.log("efficientTerrainSave: Restored pending changes due to save error.");
-		}
+		// 	console.log("Efficient terrain save completed successfully.");
+		// 	lastSaveTimeRef.current = Date.now(); // Update last save time
+		// } catch (error) {
+		// 	console.error("Error during efficient terrain save:", error);
+		// 	// IMPORTANT: Restore pending changes if save failed
+		// 	// Combine the restored changes with any new changes that might have occurred
+		// 	pendingChangesRef.current.terrain.added = { 
+		// 	    ...changesToSave.added, 
+		// 	    ...(pendingChangesRef.current.terrain?.added || {}) 
+		// 	};
+		// 	pendingChangesRef.current.terrain.removed = { 
+		// 	    ...changesToSave.removed, 
+		// 	    ...(pendingChangesRef.current.terrain?.removed || {}) 
+		// 	};
+		// 	console.log("efficientTerrainSave: Restored pending changes due to save error.");
+		// }
 	};
 	
 	// Initialize the incremental terrain save system
@@ -1664,7 +1666,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Save empty terrain to database
 		console.log("Saving empty terrain to database...");
-		efficientTerrainSave();
+		import('./DatabaseManager').then(({ DatabaseManager, STORES }) => {
+			DatabaseManager.saveData(STORES.TERRAIN, 'current', {})
+				.then(() => console.log("Empty terrain saved to database successfully"))
+				.catch(error => console.error("Failed to save empty terrain to database:", error));
+		}).catch(error => {
+			console.error("Failed to import DatabaseManager:", error);
+		});
 		
 		console.log("Map cleared successfully");
 		resetPendingChanges();
