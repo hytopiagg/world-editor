@@ -39,6 +39,9 @@ function optimizeRenderer(gl) {
     // Optimize for static scenes
     gl.sortObjects = true;
     
+    // Set default texture filtering to nearest neighbor for pixelated look
+    THREE.Texture.DEFAULT_FILTER = THREE.NearestFilter;
+    
     // Don't change physically correct lights (keep default)
     // Don't set output encoding (keep default)
     
@@ -79,7 +82,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	});
 	const initialSaveCompleteRef = useRef(false);
 	const autoSaveIntervalRef = useRef(null);
-	const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
+	const AUTO_SAVE_INTERVAL = 300000;
 	const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
 	const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
 	
@@ -97,10 +100,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				console.log(`Auto-save enabled with interval: ${AUTO_SAVE_INTERVAL/1000} seconds`);
 				autoSaveIntervalRef.current = setInterval(() => {
 					// Only save if there are pending changes
-					if (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
-						Object.keys(pendingChangesRef.current.terrain.removed).length > 0) {
+					// *** ADD NULL CHECKS HERE ***
+					const hasPendingTerrain = pendingChangesRef.current && pendingChangesRef.current.terrain;
+					const hasAdded = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0;
+					const hasRemoved = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0;
+
+					if (hasAdded || hasRemoved) {
 						console.log("Auto-saving terrain...");
-						efficientTerrainSave();
+						saveTerrainManually();
 					}
 				}, AUTO_SAVE_INTERVAL);
 			} else {
@@ -216,7 +223,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const trackTerrainChanges = (added = {}, removed = {}) => {
 		// Skip if the database is being cleared
 		if (window.IS_DATABASE_CLEARING) {
-			console.log("Database is being cleared, skipping tracking changes");
+			// console.log("Database is being cleared, skipping tracking changes"); // Reduce log noise
 			return;
 		}
 
@@ -277,10 +284,29 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				pendingChangesRef.current.terrain.removed[key] = value;
 			}
 		});
+		
+		// *** ADD LOGGING HERE ***
+		// Only log if there are actual terrain changes to avoid spam
+		const addedCount = Object.keys(pendingChangesRef.current.terrain?.added || {}).length;
+		const removedCount = Object.keys(pendingChangesRef.current.terrain?.removed || {}).length;
+		if (addedCount > 0 || removedCount > 0) {
+		    // Use JSON.stringify to get a snapshot, limit depth for large objects if needed
+		    try {
+		        console.log("trackTerrainChanges: Pending changes updated:", 
+		            JSON.parse(JSON.stringify(pendingChangesRef.current)) // Deep clone for logging snapshot
+		        );
+		    } catch (e) {
+		        console.error("Error logging pending changes:", e);
+		        // Fallback log if stringify fails
+		        console.log("trackTerrainChanges: Pending changes ref (may not be exact snapshot):", pendingChangesRef.current);
+		    }
+		}
 	};
 	
 	// Helper function to properly reset pendingChangesRef
 	const resetPendingChanges = () => {
+		// *** ADD LOGGING HERE ***
+		console.log("resetPendingChanges: Clearing pending changes.");
 		pendingChangesRef.current = {
 			terrain: {
 				added: {},
@@ -295,6 +321,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Function to efficiently save terrain data
 	const efficientTerrainSave = async () => { // Make it async
+
+		console.log("SAVING TERRAIN");
 		// Skip if database is being cleared
 		if (window.IS_DATABASE_CLEARING) {
 			console.log("Database is being cleared, skipping terrain save");
@@ -302,21 +330,32 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		}
 
 		// Skip if no changes to save
+		// Check both terrain and pendingChangesRef.current itself
 		if (!pendingChangesRef.current || 
 			!pendingChangesRef.current.terrain ||
 			(Object.keys(pendingChangesRef.current.terrain.added || {}).length === 0 && 
 			 Object.keys(pendingChangesRef.current.terrain.removed || {}).length === 0)) {
-			// console.log("No pending changes to save.");
-			return;
+			console.log("efficientTerrainSave: No pending terrain changes to save.");
+			return; // Explicitly return if no changes
 		}
 
 		// Capture the changes to save
-		const changesToSave = { ...pendingChangesRef.current.terrain };
+		// Ensure we have a valid object even if terrain is null momentarily
+		const changesToSave = { 
+		    added: { ...(pendingChangesRef.current.terrain?.added || {}) },
+		    removed: { ...(pendingChangesRef.current.terrain?.removed || {}) }
+		};
 		
+		// Log the exact changes being saved
+		const addedCount = Object.keys(changesToSave.added).length;
+		const removedCount = Object.keys(changesToSave.removed).length;
+		console.log(`efficientTerrainSave: Attempting to save ${addedCount} added and ${removedCount} removed blocks.`);
+
 		// Reset pending changes immediately *before* starting the async save
 		resetPendingChanges(); 
 
-		console.log("Efficiently saving terrain changes:", changesToSave);
+		// Log the reset action
+		console.log("efficientTerrainSave: Pending changes have been reset.");
 
 		try {
 			// Get a write transaction
@@ -325,7 +364,8 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			const store = tx.objectStore(STORES.TERRAIN);
 			
 			// Apply removals
-			if (changesToSave.removed && Object.keys(changesToSave.removed).length > 0) {
+			if (changesToSave.removed && removedCount > 0) {
+				console.log(`efficientTerrainSave: Deleting ${removedCount} blocks...`);
 				await Promise.all(Object.keys(changesToSave.removed).map(key => {
 					const deleteRequest = store.delete(`${key}`);
 					return new Promise((resolve, reject) => {
@@ -333,11 +373,12 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						deleteRequest.onerror = reject;
 					});
 				}));
-				console.log(`Deleted ${Object.keys(changesToSave.removed).length} blocks from DB`);
+				console.log(`efficientTerrainSave: Deleted ${removedCount} blocks from DB`);
 			}
 
 			// Apply additions/updates
-			if (changesToSave.added && Object.keys(changesToSave.added).length > 0) {
+			if (changesToSave.added && addedCount > 0) {
+				console.log(`efficientTerrainSave: Adding/Updating ${addedCount} blocks...`);
 				await Promise.all(Object.entries(changesToSave.added).map(([key, value]) => {
 					const putRequest = store.put(value, key);
 					return new Promise((resolve, reject) => {
@@ -345,7 +386,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 						putRequest.onerror = reject;
 					});
 				}));
-				console.log(`Added/Updated ${Object.keys(changesToSave.added).length} blocks in DB`);
+				console.log(`efficientTerrainSave: Added/Updated ${addedCount} blocks in DB`);
 			}
 
 			// Complete the transaction
@@ -359,7 +400,16 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		} catch (error) {
 			console.error("Error during efficient terrain save:", error);
 			// IMPORTANT: Restore pending changes if save failed
-			pendingChangesRef.current.terrain = changesToSave;
+			// Combine the restored changes with any new changes that might have occurred
+			pendingChangesRef.current.terrain.added = { 
+			    ...changesToSave.added, 
+			    ...(pendingChangesRef.current.terrain?.added || {}) 
+			};
+			pendingChangesRef.current.terrain.removed = { 
+			    ...changesToSave.removed, 
+			    ...(pendingChangesRef.current.terrain?.removed || {}) 
+			};
+			console.log("efficientTerrainSave: Restored pending changes due to save error.");
 		}
 	};
 	
@@ -927,6 +977,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				if (blockWasPlaced) {
 					importedUpdateTerrainBlocks(addedBlocks, {});
 					
+					// *** ADD CALL TO trackTerrainChanges HERE ***
+					trackTerrainChanges(addedBlocks, {});
+
 					// Explicitly update the spatial hash for collisions with force option
 					const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
 						const [x, y, z] = posKey.split(',').map(Number);
@@ -983,6 +1036,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Only proceed if blocks were actually removed
 				if (blockWasRemoved) {
 					importedUpdateTerrainBlocks({}, removedBlocks);
+
+					// *** ADD CALL TO trackTerrainChanges HERE ***
+					trackTerrainChanges({}, removedBlocks);
 
 					// Explicitly update the spatial hash for collisions with force option
 					const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
@@ -1790,6 +1846,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			const loader = new THREE.CubeTextureLoader();
 			loader.setPath("./assets/skyboxes/partly-cloudy/");
 			const textureCube = loader.load(["+x.png", "-x.png", "+y.png", "-y.png", "+z.png", "-z.png"]);
+			// Set nearest filtering for the skybox textures
+			textureCube.minFilter = THREE.NearestFilter;
+			textureCube.magFilter = THREE.NearestFilter;
 			if (scene) {
 				scene.background = textureCube;
 			}
@@ -2139,9 +2198,46 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	}, [scene, onSceneReady]);
 
 	// Function to manually save the terrain (can be called from parent or UI)
-	const saveTerrainManually = () => {
+	const saveTerrainManually = async () => {
 		console.log("Manual save requested...");
-		return efficientTerrainSave();
+		
+		// Skip if database is being cleared
+		if (window.IS_DATABASE_CLEARING) {
+			console.warn("Manual save skipped: Database is being cleared.");
+			return Promise.resolve(false); // Indicate save didn't happen
+		}
+		
+		// Get the complete current terrain data
+		const currentTerrainData = terrainRef.current;
+		
+		// Check if there's data to save
+		if (!currentTerrainData || Object.keys(currentTerrainData).length === 0) {
+			console.log("Manual save: No terrain data to save.");
+			// Still reset pending changes if terrain is empty
+			resetPendingChanges();
+			return Promise.resolve(true); // Indicate success (saving nothing)
+		}
+		
+		const blockCount = Object.keys(currentTerrainData).length;
+		console.log(`Manual save: Saving ${blockCount} blocks to database...`);
+		
+		try {
+			// Directly save the entire current terrain state
+			await DatabaseManager.saveData(STORES.TERRAIN, "current", currentTerrainData);
+			
+			console.log("Manual save completed successfully.");
+			lastSaveTimeRef.current = Date.now(); // Update last save time
+			
+			// IMPORTANT: Reset pending changes after a successful manual save
+			// because the saved state now incorporates all previous changes.
+			resetPendingChanges();
+			console.log("Manual save: Pending changes reset.");
+			
+			return Promise.resolve(true); // Indicate success
+		} catch (error) {
+			console.error("Error during manual terrain save:", error);
+			return Promise.resolve(false); // Indicate failure
+		}
 	};
 
 	// Helper function to enable/disable auto-save
@@ -2161,18 +2257,24 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			console.log(`Auto-save enabled with interval: ${AUTO_SAVE_INTERVAL/1000} seconds`);
 			autoSaveIntervalRef.current = setInterval(() => {
 				// Only save if there are pending changes and not in the middle of an operation
-				if (!isPlacingRef.current && 
-				    (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
-				    Object.keys(pendingChangesRef.current.terrain.removed).length > 0)) {
+				// Add null check for pendingChangesRef.current and pendingChangesRef.current.terrain
+				const hasPendingTerrain = pendingChangesRef.current && pendingChangesRef.current.terrain;
+				const hasAdded = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0;
+				const hasRemoved = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0;
+
+				if (!isPlacingRef.current && (hasAdded || hasRemoved)) {
 					console.log("Auto-saving terrain...");
 					efficientTerrainSave();
 				}
 			}, AUTO_SAVE_INTERVAL);
 			
 			// Save immediately if there are pending changes and not in the middle of an operation
-			if (!isPlacingRef.current && 
-			    (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
-			    Object.keys(pendingChangesRef.current.terrain.removed).length > 0)) {
+			// Add null check for pendingChangesRef.current and pendingChangesRef.current.terrain
+			const hasPendingTerrainNow = pendingChangesRef.current && pendingChangesRef.current.terrain;
+			const hasAddedNow = hasPendingTerrainNow && Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0;
+			const hasRemovedNow = hasPendingTerrainNow && Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0;
+			
+			if (!isPlacingRef.current && (hasAddedNow || hasRemovedNow)) {
 				console.log("Immediate save after enabling auto-save...");
 				efficientTerrainSave();
 			}

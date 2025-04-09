@@ -37,7 +37,8 @@ class BlockMaterial {
         transparent: true,
         alphaTest: 0.1,
         shininess: 0,
-        specular: 0x000000
+        specular: 0x000000,
+        filter: THREE.NearestFilter
       });
     }
     return this._defaultMaterial;
@@ -48,18 +49,17 @@ class BlockMaterial {
    * @param {THREE.Texture} textureAtlas - The texture atlas
    */
   setTextureAtlas(textureAtlas) {
-    // Configure mipmapping for better texture quality at distance
+    // Configure nearest neighbor filtering for pixelated look
     if (textureAtlas) {
-      // Enable mipmaps for better distance rendering
-      textureAtlas.generateMipmaps = true;
+      // Disable mipmaps since we want crisp pixels
+      textureAtlas.generateMipmaps = false;
       
-      // Use trilinear filtering for smooth transitions between mipmap levels
-      textureAtlas.minFilter = THREE.LinearMipmapLinearFilter;
-      textureAtlas.magFilter = THREE.LinearFilter;
+      // Use nearest neighbor filtering
+      textureAtlas.minFilter = THREE.NearestFilter;
+      textureAtlas.magFilter = THREE.NearestFilter;
       
-      // Set high anisotropy for better texture quality at angles
-      // Use a reasonable value that most GPUs support
-      textureAtlas.anisotropy = 16;
+      // Disable anisotropic filtering
+      textureAtlas.anisotropy = 1;
       
       // Set wrapS and wrapT to clamp to edge to prevent texture bleeding
       textureAtlas.wrapS = THREE.ClampToEdgeWrapping;
@@ -89,7 +89,8 @@ class BlockMaterial {
 			this._liquidMaterial = new THREE.ShaderMaterial({
 				uniforms: {
 					textureAtlas: { value: null },
-					time: { value: 0 }
+					time: { value: 0 },
+          filter: { value: THREE.NearestFilter }
 				},
 				vertexShader: `
           varying vec2 vUv;
@@ -176,12 +177,12 @@ class BlockMaterial {
 				side: THREE.DoubleSide
 			});
 			
-			// Enable mipmapping features for shader material
+			// Disable mipmapping features for shader material
 			this._liquidMaterial.extensions = {
-				derivatives: true, // Enables GL_OES_standard_derivatives for better edge rendering
+				derivatives: false,
 				fragDepth: false,
 				drawBuffers: false,
-				shaderTextureLOD: true // Enables textureLod for manual mipmap level selection
+				shaderTextureLOD: false
 			};
 		}
 		return this._liquidMaterial;
