@@ -285,27 +285,10 @@ function App() {
         setGridSize={setGridSize}
         undoRedoManager={undoRedoManagerRef}
         currentBlockType={currentBlockType}
+        setIsSaving={setIsSaving}
       />
 
       <div className="camera-controls-wrapper">
-        <Tooltip text="Save terrain (Ctrl+S)">
-          <button
-            onClick={() => {
-              // Set saving state directly for immediate feedback
-              setIsSaving(true);
-              // Then call the actual save function
-              if (terrainBuilderRef.current) {
-                terrainBuilderRef.current.saveTerrainManually();
-              }
-              // Set a fallback timer to clear the saving state if something goes wrong
-              setTimeout(() => setIsSaving(false), 5000);
-            }}
-            className="camera-control-button save-button"
-          >
-            <FaSave />
-          </button>
-        </Tooltip>
-        
         <div className="camera-buttons">
           <Tooltip text="Reset camera position">
             <button onClick={() => setCameraReset((prev) => !prev)} className="camera-control-button">

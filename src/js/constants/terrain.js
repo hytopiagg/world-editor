@@ -1,11 +1,11 @@
 // Define chunk constants
 export const CHUNK_SIZE = 16;
 export const CHUNK_BLOCK_CAPACITY = 4096; // Fixed capacity for chunks (16x16x16)
-export const FRUSTUM_CULLING_DISTANCE = 64; // Increase view distance for less pop-in
+export const FRUSTUM_CULLING_DISTANCE = 128; // Changed from 64 to 128
 export const MAX_SELECTION_DISTANCE = 256; // Maximum distance for block selection (in blocks)
 
 // Placement threshold
-export const THRESHOLD_FOR_PLACING = 0.9; // Minimum distance for block placement (in world units)
+export const THRESHOLD_FOR_PLACING = 0.4; // Minimum distance for block placement (in world units)
 
 // Map import size limitations
 export const MAX_IMPORT_SIZE_X = 500;

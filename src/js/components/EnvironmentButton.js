@@ -185,7 +185,7 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
   return (
     <Tooltip text={envType.name}>
       <button 
-        className={`block-button environment-button ${isSelected ? 'selected' : ''}`} 
+        className={`environment-button ${isSelected ? 'selected' : ''}`} 
         onClick={() => {
           onSelect(envType);
           playUIClick();

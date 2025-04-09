@@ -490,15 +490,26 @@ export const refreshChunkMaterials = () => {
 export const rebuildTextureAtlas = async () => {
 	console.log("Rebuilding texture atlas and refreshing all materials...");
 	
+	// Set default texture filtering to nearest
+	THREE.Texture.DEFAULT_FILTER = THREE.NearestFilter;
+	
 	try {
 		// Step 1: Rebuild the texture atlas
-		await BlockTextureAtlas.instance.rebuildTextureAtlas();
+		const atlasTexture = await BlockTextureAtlas.instance.rebuildTextureAtlas();
 		
 		// Step 2: Reload textures for ALL block types (now they're all essential)
 		await BlockTypeRegistry.instance.preload();
 		
 		// Step 3: Update materials with the new texture atlas
 		const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
+		
+		// Make sure the atlas texture has nearest filtering
+		if (textureAtlas) {
+			textureAtlas.minFilter = THREE.NearestFilter;
+			textureAtlas.magFilter = THREE.NearestFilter;
+			textureAtlas.needsUpdate = true;
+		}
+		
 		BlockMaterial.instance.setTextureAtlas(textureAtlas);
 		
 		// Step 4: Force an update of chunk visibility to refresh rendering

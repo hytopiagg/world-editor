@@ -7,7 +7,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
   const [maxFrameTime, setMaxFrameTime] = useState(0);
   const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
   const [selectionDistance, setSelectionDistance] = useState(128);
-  const [viewDistance, setViewDistance] = useState(64);
+  const [viewDistance, setViewDistance] = useState(128);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   
   const frameTimesRef = useRef([]);
@@ -182,7 +182,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
       <div className="single-line"></div>
       <div className="debug-row performance-settings">
         <span className="debug-label" onClick={togglePerformanceDetails} style={{cursor: 'pointer'}}>
-          Performance {showPerformanceDetails ? '▼' : '►'}
+          Performance Settings {showPerformanceDetails ? '▼' : '►'}
         </span>
         
         {showPerformanceDetails && (
@@ -193,7 +193,7 @@ const DebugInfo = ({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBui
                 checked={autoSaveEnabled} 
                 onChange={handleAutoSaveToggle}
               />
-              Auto-Save (5 min)
+              Enable Auto-Save (5 min)
             </label>
             
             <div className="slider-container">

@@ -20,7 +20,7 @@ class ChunkSystem {
 		this._chunkManager = new ChunkManager(scene);
 		this._initialized = false;
 		this._options = {
-			viewDistance: options.viewDistance || 64,
+			viewDistance: options.viewDistance || 128,
 			viewDistanceEnabled: options.viewDistanceEnabled !== undefined ? options.viewDistanceEnabled : true
 		};
 	}

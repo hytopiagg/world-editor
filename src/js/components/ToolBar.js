@@ -18,7 +18,8 @@ import {
 	FaCubes,
 	FaDatabase,
 	FaBorderAll,
-	FaSeedling
+	FaSeedling,
+	FaSave
 } from 'react-icons/fa';
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
@@ -32,7 +33,7 @@ import {
 } from '../ImportExport';
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from '../Constants';
 import MinecraftImportWizard from './MinecraftImportWizard';
-const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, setAxisLockEnabled, placementSize, setPlacementSize, setGridSize, undoRedoManager, currentBlockType, environmentBuilderRef }) => {
+const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, setAxisLockEnabled, placementSize, setPlacementSize, setGridSize, undoRedoManager, currentBlockType, environmentBuilderRef, setIsSaving }) => {
 	const [newGridSize, setNewGridSize] = useState(100);
 	const [showDimensionsModal, setShowDimensionsModal] = useState(false);
 	const [dimensions, setDimensions] = useState({
@@ -427,7 +428,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 							<button
 								onClick={() => document.getElementById("mapFileInput").click()}
 								className="control-button import-export-button">
-								Map
+								Import
 							</button>
 							<input
 								id="mapFileInput"
@@ -452,12 +453,6 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 								/>
 							</Tooltip>
 						)}
-					</div>
-					<div className="control-label">Import</div>
-				</div>
-
-				<div className="control-group">
-					<div className="control-button-wrapper">
 						{!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
 							<Tooltip text="Export map and assets as a complete package">
 								<button
@@ -470,11 +465,11 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 							<button
 								onClick={() => handleExportMap()}
 								className="control-button import-export-button">
-								Map
+								Export
 							</button>
 						</Tooltip>
 					</div>
-					<div className="control-label">Export</div>
+					<div className="control-label">Import/Export Map</div>
 				</div>
 
 				<div className="control-group">
@@ -600,7 +595,7 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 					<div className="control-label">Shape Tools</div>
 				</div>
 
-				<div className="control-group contol-group-end">
+				<div className="control-group">
 					<div className="control-button-wrapper">
 						<Tooltip text="Change grid size">
 							<button
@@ -635,6 +630,30 @@ const ToolBar = ({ terrainBuilderRef, mode, handleModeChange, axisLockEnabled, s
 						</Tooltip>
 					</div>
 					<div className="control-label">Map Tools</div>
+				</div>
+
+				<div className="control-group contol-group-end">
+					
+					<div className="control-button-wrapper">
+					<Tooltip text="Save terrain (Ctrl+S)">
+						<button
+							onClick={() => {
+							// Use the setIsSaving prop here
+							setIsSaving(true);
+							// Then call the actual save function
+							if (terrainBuilderRef.current) {
+								terrainBuilderRef.current.saveTerrainManually();
+							}
+							// Set a fallback timer to clear the saving state if something goes wrong
+							setTimeout(() => setIsSaving(false), 5000);
+							}}
+							className="control-button"
+						>
+							<FaSave />
+						</button>
+					</Tooltip>
+					</div>
+					<div className="control-label">Save</div>
 				</div>
 			</div>
 

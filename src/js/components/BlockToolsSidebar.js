@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
+import ModelPreview from "./ModelPreview";
 import { DatabaseManager, STORES } from '../DatabaseManager';
 import { environmentModels } from '../EnvironmentBuilder';
 import { blockTypes, processCustomBlock, batchProcessCustomBlocks, getCustomBlocks, removeCustomBlock, getBlockTypes } from '../managers/BlockTypesManager';
@@ -23,6 +24,10 @@ if (typeof window !== 'undefined') {
   window.refreshBlockTools = refreshBlockTools;
 }
 
+// Find the first default model before the component definition
+const firstDefaultModel = environmentModels.find(m => !m.isCustom);
+const initialPreviewUrl = firstDefaultModel?.modelUrl ?? null;
+
 const BlockToolsSidebar = ({
   activeTab,
   terrainBuilderRef,
@@ -43,6 +48,30 @@ const BlockToolsSidebar = ({
   });
 
   const [customBlocks, setCustomBlocks] = useState([]);
+  const [previewModelUrl, setPreviewModelUrl] = useState(initialPreviewUrl);
+
+  // Effect to set initial block type and ID if environment tab is active initially
+  useEffect(() => {
+    // Only run if the initial tab is 'environment' and we found an initial model URL
+    if (activeTab === 'environment' && initialPreviewUrl) {
+      const model = environmentModels.find(m => m.modelUrl === initialPreviewUrl);
+      if (model) {
+        // Check if it's not already selected (e.g., by localStorage persistence)
+        // We read selectedBlockID from localStorage later, so initialize here directly
+        // and let the localStorage load potentially override if needed.
+        selectedBlockID = model.id;
+        setCurrentBlockType({
+          ...model,
+          isEnvironment: true
+        });
+        console.log("Initial environment model auto-selected:", model.name);
+        // We might need to update localStorage here if we want this auto-selection persisted
+        // localStorage.setItem("selectedBlock", model.id);
+      }
+    }
+    // This effect should ideally run only once based on the initial props.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -92,12 +121,19 @@ const BlockToolsSidebar = ({
 
     // Update the tab switching logic
   const handleTabChange = (newTab) => {
-    // Reset current block type to default block when switching to blocks tab
     if (newTab === "blocks") {
-        setCurrentBlockType(blockTypes[0]);
-    }
-    else if (newTab === "environment") {
-      setCurrentBlockType(environmentModels[0]);
+      setCurrentBlockType(blockTypes[0]);
+      setPreviewModelUrl(null);
+    } else if (newTab === "environment") {
+      const defaultEnvModel = environmentModels.find(m => !m.isCustom);
+      if (defaultEnvModel) {
+        setCurrentBlockType(defaultEnvModel);
+        setPreviewModelUrl(defaultEnvModel.modelUrl);
+        selectedBlockID = defaultEnvModel.id;
+      } else {
+        setCurrentBlockType(null);
+        setPreviewModelUrl(null);
+      }
     }
     setActiveTab(newTab);
   };
@@ -168,6 +204,10 @@ const BlockToolsSidebar = ({
         if (environmentBuilder && environmentBuilder.current) {
           await environmentBuilder.current.refreshEnvironmentFromDB();
         }
+
+        if (modelToDelete && previewModelUrl === modelToDelete.modelUrl) {
+          setPreviewModelUrl(null);
+        }
       } catch (error) {
         console.error('Error deleting environment model:', error);
       }
@@ -181,6 +221,7 @@ const BlockToolsSidebar = ({
       isEnvironment: true
     });
     selectedBlockID = envType.id;
+    setPreviewModelUrl(envType.modelUrl);
   };
 
   const handleBlockSelect = (blockType) => {
@@ -316,7 +357,8 @@ const BlockToolsSidebar = ({
               environmentModels.push(newEnvironmentModel);
               
               if (environmentBuilder) {
-                await environmentBuilder.current.addCustomModel(newEnvironmentModel);
+                await environmentBuilder.current.loadModel(newEnvironmentModel.modelUrl);
+                console.log(`Custom model ${newEnvironmentModel.name} added and loaded.`);
               }
             } catch (error) {
               console.error(`Error processing model ${fileName}:`, error);
@@ -324,6 +366,7 @@ const BlockToolsSidebar = ({
           };
           reader.readAsArrayBuffer(file);
         }
+        refreshBlockTools();
       }
     }
   };
@@ -343,7 +386,7 @@ const BlockToolsSidebar = ({
             className={`tab-button-right ${activeTab === "environment" ? "active" : ""}`}
             onClick={() => handleTabChange("environment")}
           >
-            Environment
+            Models
           </button>
         </div>
         <div className="block-buttons-grid">
@@ -384,39 +427,47 @@ const BlockToolsSidebar = ({
               ))}
             </>
           ) : (
-            <div className="environment-button-wrapper">
-              <div style={{ width: "100%", borderBottom: "2px solid #ccc", fontSize: "12px", textAlign: "left" }}>
-                Default Environment Objects (ID: 200-299)
+            <>
+              <div className="environment-preview-container">
+                {previewModelUrl ? (
+                  <ModelPreview modelUrl={previewModelUrl} />
+                ) : (
+                  <div className="no-preview-text">Select an object to preview</div>
+                )}
               </div>
-              {environmentModels.filter(envType => !envType.isCustom).map((envType) => (
-                <EnvironmentButton
-                  key={envType.id}
-                  envType={envType}
-                  isSelected={selectedBlockID === envType.id}
-                  onSelect={(envType) => {
-                    handleEnvironmentSelect(envType);
-                    localStorage.setItem("selectedBlock", envType.id);
-                  }}
-                  onDelete={handleDeleteEnvironmentModel}
-                />
-
-              ))}
-              <div style={{ width: "100%", borderBottom: "2px solid #ccc", fontSize: "12px", textAlign: "left", marginTop: "10px" }}>
-                Custom Environment Objects (ID: 300+)
+              <div className="environment-button-wrapper">
+                <div className="block-tools-section-label">
+                  Default Models (ID: 200-299)
+                </div>
+                {environmentModels.filter(envType => !envType.isCustom).map((envType) => (
+                  <EnvironmentButton
+                    key={envType.id}
+                    envType={envType}
+                    isSelected={selectedBlockID === envType.id}
+                    onSelect={(envType) => {
+                      handleEnvironmentSelect(envType);
+                      localStorage.setItem("selectedBlock", envType.id);
+                    }}
+                    onDelete={handleDeleteEnvironmentModel}
+                  />
+                ))}
+                <div className="block-tools-section-label">
+                  Custom Models (ID: 300+)
+                </div>
+                {environmentModels.filter(envType => envType.isCustom).map((envType) => (
+                  <EnvironmentButton
+                    key={envType.id}
+                    envType={envType}
+                    isSelected={selectedBlockID === envType.id}
+                    onSelect={(envType) => {
+                      handleEnvironmentSelect(envType);
+                      localStorage.setItem("selectedBlock", envType.id);
+                    }}
+                    onDelete={handleDeleteEnvironmentModel}
+                  />
+                ))}
               </div>
-              {environmentModels.filter(envType => envType.isCustom).map((envType) => (
-                <EnvironmentButton
-                  key={envType.id}
-                  envType={envType}
-                  isSelected={selectedBlockID === envType.id}
-                  onSelect={(envType) => {
-                    handleEnvironmentSelect(envType);
-                    localStorage.setItem("selectedBlock", envType.id);
-                  }}
-                  onDelete={handleDeleteEnvironmentModel}
-                />
-              ))}
-            </div>
+            </>
           )}
         </div>
 
@@ -432,7 +483,7 @@ const BlockToolsSidebar = ({
                     checked={settings.randomScale}
                     onChange={(e) => updateSettings({ randomScale: e.target.checked })}
                   />
-                  <label htmlFor="randomScale">Randomize Scale</label>
+                  <label id="randomScaleLabel" htmlFor="randomScale">Randomize Scale</label>
                 </div>
                 <div className="min-max-inputs">
                   <div className="min-max-input">
@@ -489,7 +540,7 @@ const BlockToolsSidebar = ({
                     checked={settings.randomRotation}
                     onChange={(e) => updateSettings({ randomRotation: e.target.checked })}
                   />
-                  <label htmlFor="randomRotation">Randomize Rotation</label>
+                  <label id="randomRotationLabel" htmlFor="randomRotation">Randomize Rotation</label>
                 </div>
                 <div className="min-max-inputs">
                   <div className="min-max-input">
@@ -629,7 +680,7 @@ const BlockToolsSidebar = ({
             <div className="drop-zone-text">
               {activeTab === "blocks" 
                 ? "Drag textures here to add new blocks or fix missing textures"
-                : "Drag .gltf models here to add new environment objects"}
+                : "Drag .gltf files here to add custom models"}
             </div>
           </div>
         </div>

@@ -39,6 +39,9 @@ function optimizeRenderer(gl) {
     // Optimize for static scenes
     gl.sortObjects = true;
     
+    // Set default texture filtering to nearest neighbor for pixelated look
+    THREE.Texture.DEFAULT_FILTER = THREE.NearestFilter;
+    
     // Don't change physically correct lights (keep default)
     // Don't set output encoding (keep default)
     
@@ -79,7 +82,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	});
 	const initialSaveCompleteRef = useRef(false);
 	const autoSaveIntervalRef = useRef(null);
-	const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
+	const AUTO_SAVE_INTERVAL = 300000;
 	const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
 	const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
 	
@@ -97,10 +100,14 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				console.log(`Auto-save enabled with interval: ${AUTO_SAVE_INTERVAL/1000} seconds`);
 				autoSaveIntervalRef.current = setInterval(() => {
 					// Only save if there are pending changes
-					if (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
-						Object.keys(pendingChangesRef.current.terrain.removed).length > 0) {
+					// *** ADD NULL CHECKS HERE ***
+					const hasPendingTerrain = pendingChangesRef.current && pendingChangesRef.current.terrain;
+					const hasAdded = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0;
+					const hasRemoved = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0;
+
+					if (hasAdded || hasRemoved) {
 						console.log("Auto-saving terrain...");
-						efficientTerrainSave();
+						saveTerrainManually();
 					}
 				}, AUTO_SAVE_INTERVAL);
 			} else {
@@ -216,7 +223,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const trackTerrainChanges = (added = {}, removed = {}) => {
 		// Skip if the database is being cleared
 		if (window.IS_DATABASE_CLEARING) {
-			console.log("Database is being cleared, skipping tracking changes");
+			// console.log("Database is being cleared, skipping tracking changes"); // Reduce log noise
 			return;
 		}
 
@@ -277,10 +284,29 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				pendingChangesRef.current.terrain.removed[key] = value;
 			}
 		});
+		
+		// *** ADD LOGGING HERE ***
+		// Only log if there are actual terrain changes to avoid spam
+		const addedCount = Object.keys(pendingChangesRef.current.terrain?.added || {}).length;
+		const removedCount = Object.keys(pendingChangesRef.current.terrain?.removed || {}).length;
+		if (addedCount > 0 || removedCount > 0) {
+		    // Use JSON.stringify to get a snapshot, limit depth for large objects if needed
+		    try {
+		        console.log("trackTerrainChanges: Pending changes updated:", 
+		            JSON.parse(JSON.stringify(pendingChangesRef.current)) // Deep clone for logging snapshot
+		        );
+		    } catch (e) {
+		        console.error("Error logging pending changes:", e);
+		        // Fallback log if stringify fails
+		        console.log("trackTerrainChanges: Pending changes ref (may not be exact snapshot):", pendingChangesRef.current);
+		    }
+		}
 	};
 	
 	// Helper function to properly reset pendingChangesRef
 	const resetPendingChanges = () => {
+		// *** ADD LOGGING HERE ***
+		console.log("resetPendingChanges: Clearing pending changes.");
 		pendingChangesRef.current = {
 			terrain: {
 				added: {},
@@ -295,72 +321,98 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 	// Function to efficiently save terrain data
 	const efficientTerrainSave = async () => { // Make it async
-		// Skip if database is being cleared
-		if (window.IS_DATABASE_CLEARING) {
-			console.log("Database is being cleared, skipping terrain save");
-			return;
-		}
 
-		// Skip if no changes to save
-		if (!pendingChangesRef.current || 
-			!pendingChangesRef.current.terrain ||
-			(Object.keys(pendingChangesRef.current.terrain.added || {}).length === 0 && 
-			 Object.keys(pendingChangesRef.current.terrain.removed || {}).length === 0)) {
-			// console.log("No pending changes to save.");
-			return;
-		}
+		console.warn("Efficient terrain save called, however it is disabled for now due to improper implementation with other existing systems.");
 
-		// Capture the changes to save
-		const changesToSave = { ...pendingChangesRef.current.terrain };
+		// console.log("SAVING TERRAIN");
+		// // Skip if database is being cleared
+		// if (window.IS_DATABASE_CLEARING) {
+		// 	console.log("Database is being cleared, skipping terrain save");
+		// 	return;
+		// }
+
+		// // Skip if no changes to save
+		// // Check both terrain and pendingChangesRef.current itself
+		// if (!pendingChangesRef.current || 
+		// 	!pendingChangesRef.current.terrain ||
+		// 	(Object.keys(pendingChangesRef.current.terrain.added || {}).length === 0 && 
+		// 	 Object.keys(pendingChangesRef.current.terrain.removed || {}).length === 0)) {
+		// 	console.log("efficientTerrainSave: No pending terrain changes to save.");
+		// 	return; // Explicitly return if no changes
+		// }
+
+		// // Capture the changes to save
+		// // Ensure we have a valid object even if terrain is null momentarily
+		// const changesToSave = { 
+		//     added: { ...(pendingChangesRef.current.terrain?.added || {}) },
+		//     removed: { ...(pendingChangesRef.current.terrain?.removed || {}) }
+		// };
 		
-		// Reset pending changes immediately *before* starting the async save
-		resetPendingChanges(); 
+		// // Log the exact changes being saved
+		// const addedCount = Object.keys(changesToSave.added).length;
+		// const removedCount = Object.keys(changesToSave.removed).length;
+		// console.log(`efficientTerrainSave: Attempting to save ${addedCount} added and ${removedCount} removed blocks.`);
 
-		console.log("Efficiently saving terrain changes:", changesToSave);
+		// // Reset pending changes immediately *before* starting the async save
+		// resetPendingChanges(); 
 
-		try {
-			// Get a write transaction
-			const db = await DatabaseManager.getDBConnection();
-			const tx = db.transaction(STORES.TERRAIN, 'readwrite');
-			const store = tx.objectStore(STORES.TERRAIN);
+		// // Log the reset action
+		// console.log("efficientTerrainSave: Pending changes have been reset.");
+
+		// try {
+		// 	// Get a write transaction
+		// 	const db = await DatabaseManager.getDBConnection();
+		// 	const tx = db.transaction(STORES.TERRAIN, 'readwrite');
+		// 	const store = tx.objectStore(STORES.TERRAIN);
 			
-			// Apply removals
-			if (changesToSave.removed && Object.keys(changesToSave.removed).length > 0) {
-				await Promise.all(Object.keys(changesToSave.removed).map(key => {
-					const deleteRequest = store.delete(`${key}`);
-					return new Promise((resolve, reject) => {
-						deleteRequest.onsuccess = resolve;
-						deleteRequest.onerror = reject;
-					});
-				}));
-				console.log(`Deleted ${Object.keys(changesToSave.removed).length} blocks from DB`);
-			}
+		// 	// Apply removals
+		// 	if (changesToSave.removed && removedCount > 0) {
+		// 		console.log(`efficientTerrainSave: Deleting ${removedCount} blocks...`);
+		// 		await Promise.all(Object.keys(changesToSave.removed).map(key => {
+		// 			const deleteRequest = store.delete(`${key}`);
+		// 			return new Promise((resolve, reject) => {
+		// 				deleteRequest.onsuccess = resolve;
+		// 				deleteRequest.onerror = reject;
+		// 			});
+		// 		}));
+		// 		console.log(`efficientTerrainSave: Deleted ${removedCount} blocks from DB`);
+		// 	}
 
-			// Apply additions/updates
-			if (changesToSave.added && Object.keys(changesToSave.added).length > 0) {
-				await Promise.all(Object.entries(changesToSave.added).map(([key, value]) => {
-					const putRequest = store.put(value, key);
-					return new Promise((resolve, reject) => {
-						putRequest.onsuccess = resolve;
-						putRequest.onerror = reject;
-					});
-				}));
-				console.log(`Added/Updated ${Object.keys(changesToSave.added).length} blocks in DB`);
-			}
+		// 	// Apply additions/updates
+		// 	if (changesToSave.added && addedCount > 0) {
+		// 		console.log(`efficientTerrainSave: Adding/Updating ${addedCount} blocks...`);
+		// 		await Promise.all(Object.entries(changesToSave.added).map(([key, value]) => {
+		// 			const putRequest = store.put(value, key);
+		// 			return new Promise((resolve, reject) => {
+		// 				putRequest.onsuccess = resolve;
+		// 				putRequest.onerror = reject;
+		// 			});
+		// 		}));
+		// 		console.log(`efficientTerrainSave: Added/Updated ${addedCount} blocks in DB`);
+		// 	}
 
-			// Complete the transaction
-			await new Promise((resolve, reject) => {
-				tx.oncomplete = resolve;
-				tx.onerror = reject;
-			});
+		// 	// Complete the transaction
+		// 	await new Promise((resolve, reject) => {
+		// 		tx.oncomplete = resolve;
+		// 		tx.onerror = reject;
+		// 	});
 			
-			console.log("Efficient terrain save completed successfully.");
-			lastSaveTimeRef.current = Date.now(); // Update last save time
-		} catch (error) {
-			console.error("Error during efficient terrain save:", error);
-			// IMPORTANT: Restore pending changes if save failed
-			pendingChangesRef.current.terrain = changesToSave;
-		}
+		// 	console.log("Efficient terrain save completed successfully.");
+		// 	lastSaveTimeRef.current = Date.now(); // Update last save time
+		// } catch (error) {
+		// 	console.error("Error during efficient terrain save:", error);
+		// 	// IMPORTANT: Restore pending changes if save failed
+		// 	// Combine the restored changes with any new changes that might have occurred
+		// 	pendingChangesRef.current.terrain.added = { 
+		// 	    ...changesToSave.added, 
+		// 	    ...(pendingChangesRef.current.terrain?.added || {}) 
+		// 	};
+		// 	pendingChangesRef.current.terrain.removed = { 
+		// 	    ...changesToSave.removed, 
+		// 	    ...(pendingChangesRef.current.terrain?.removed || {}) 
+		// 	};
+		// 	console.log("efficientTerrainSave: Restored pending changes due to save error.");
+		// }
 	};
 	
 	// Initialize the incremental terrain save system
@@ -529,6 +581,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const directionalLightRef = useRef();
 	const terrainRef = useRef({});
 	const gridRef = useRef();
+	const placementInitialPositionRef = useRef(null); // Add ref for initial placement position
 
 	
 	// Animation tracking
@@ -538,6 +591,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	const isPlacingRef = useRef(false);
 	const currentPlacingYRef = useRef(0);
 	const previewPositionRef = useRef(new THREE.Vector3());
+	const rawPlacementAnchorRef = useRef(new THREE.Vector3()); // *** NEW: Anchor for the raw intersection point ***
 	const lockedAxisRef = useRef(null);
 	const selectionDistanceRef = useRef(MAX_SELECTION_DISTANCE/2);
 	const axisLockEnabledRef = useRef(axisLockEnabled);
@@ -798,35 +852,48 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		// Otherwise use default behavior for block placement
 		if (e.button === 0) {
 			// Only set isPlacingRef.current to true if no tool is active
-			// (This check is redundant now, but kept for clarity)
 			if (!isToolActive) {
 				isPlacingRef.current = true;
 				
-				
-				
-				isFirstBlockRef.current = true;
-				currentPlacingYRef.current = previewPositionRef.current.y;
-				
-				// Clear recently placed blocks on mouse down
-				recentlyPlacedBlocksRef.current.clear();
-
-				// Reset the placed block counter for a new placement session
-				placedBlockCountRef.current = 0;
-
-				// Store initial position for axis lock
-				if (axisLockEnabledRef.current) {
-					placementStartPosition.current = previewPositionRef.current.clone();
+				// Get the SNAPPED preview position for Y-lock
+				const initialBlockIntersection = getRaycastIntersection();
+				if (initialBlockIntersection) {
+					currentPlacingYRef.current = previewPositionRef.current.y; // Use current preview Y
 				}
 
-				// Reset the placement changes tracker
+				// Get the RAW GROUND intersection for the initial anchor
+				const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
+				const groundPoint = new THREE.Vector3();
+				threeRaycaster.ray.intersectPlane(groundPlane, groundPoint);
+
+				if (groundPoint) {
+					rawPlacementAnchorRef.current.copy(groundPoint);
+					console.log("Set initial ground anchor:", groundPoint.toArray());
+				} else {
+					console.warn("Initial ground plane raycast failed on mousedown. Cannot set raw placement anchor.");
+				}
+
+				isFirstBlockRef.current = true;
+				recentlyPlacedBlocksRef.current.clear();
+				placedBlockCountRef.current = 0;
+
+				// Store initial position for axis lock (if needed)
+				if (axisLockEnabledRef.current) {
+					// placementStartPosition.current = previewPositionRef.current.clone(); 
+				}
+
 				placementChangesRef.current = { 
 					terrain: { added: {}, removed: {} }, 
 					environment: { added: [], removed: [] } 
 				};
 
-				// Handle initial placement
+				// Handle initial placement (might place immediately based on first frame logic)
 				updatePreviewPosition();
-				playPlaceSound();
+				// Force an immediate block placement on mouse down
+				if (isFirstBlockRef.current) {
+					handleBlockPlacement();
+				}
+				playPlaceSound(); // Play sound on initial click
 			}
 		}
 	};
@@ -879,7 +946,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				const now = performance.now();
 
 				// Check if enough time has passed since the last placement
-				if (now - lastPlacementTimeRef.current < 100) { // 100ms delay
+				if (now - lastPlacementTimeRef.current < 50) { // 50ms delay
 					return; // Exit if the delay hasn't passed
 				}
 
@@ -912,6 +979,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				if (blockWasPlaced) {
 					importedUpdateTerrainBlocks(addedBlocks, {});
 					
+					// *** ADD CALL TO trackTerrainChanges HERE ***
+					trackTerrainChanges(addedBlocks, {});
+
 					// Explicitly update the spatial hash for collisions with force option
 					const addedBlocksArray = Object.entries(addedBlocks).map(([posKey, blockId]) => {
 						const [x, y, z] = posKey.split(',').map(Number);
@@ -939,7 +1009,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				const now = performance.now();
 
 				// Check if enough time has passed since the last deletion
-				if (now - lastDeletionTimeRef.current < 100) { // 100ms delay
+				if (now - lastDeletionTimeRef.current < 50) { // 50ms delay
 					return; // Exit if the delay hasn't passed
 				}
 
@@ -968,6 +1038,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Only proceed if blocks were actually removed
 				if (blockWasRemoved) {
 					importedUpdateTerrainBlocks({}, removedBlocks);
+
+					// *** ADD CALL TO trackTerrainChanges HERE ***
+					trackTerrainChanges({}, removedBlocks);
 
 					// Explicitly update the spatial hash for collisions with force option
 					const removedBlocksArray = Object.entries(removedBlocks).map(([posKey, blockId]) => {
@@ -1065,15 +1138,25 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			canvasRectRef.current = gl.domElement.getBoundingClientRect();
 		}
 
-		// Get intersection for preview
+		// Get intersection for preview (potentially snapped by grid/blocks)
 		const blockIntersection = getRaycastIntersection();
-		
-		// If we have a valid intersection and mouse position:
+
+		// *** Get RAW ground intersection point for threshold checking ***
+		const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
+		const currentGroundPoint = new THREE.Vector3();
+		// Ensure raycaster is updated (already done in getRaycastIntersection, but good practice)
+		const normalizedMouse = pointer.clone(); 
+		threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
+		const hitGround = threeRaycaster.ray.intersectPlane(groundPlane, currentGroundPoint);
+
+		// If we have a valid BLOCK intersection and mouse position:
 		if (blockIntersection && blockIntersection.point) {
-			// Check if a tool is active - this is important to prevent default block placement when tools are active
+			// Check if a tool is active
 			const isToolActive = toolManagerRef.current && toolManagerRef.current.getActiveTool();
-			
-			// Delegate mouse move to tool if active
+			// Store the calculated SNAPPED position before applying constraints
+			const potentialNewPosition = tempVectorRef.current.clone();
+
+			// Delegate mouse move to tool if active (using blockIntersection)
 			if (isToolActive) {
 				const activeTool = toolManagerRef.current.getActiveTool();
 				// Only call the tool's handleMouseMove if it has this method
@@ -1093,25 +1176,19 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				}
 			}
 			
-			// Always update previewPositionRef for tools and default behavior
-			tempVectorRef.current.copy(blockIntersection.point);
-
-			// If in delete/remove mode, select the actual block, not the face
+			// Calculate the SNAPPED potential new position (based on blockIntersection)
+			potentialNewPosition.copy(blockIntersection.point);
 			if (modeRef.current === "delete" || modeRef.current === "remove") {
-				// For delete/remove mode, use the block coordinates directly
 				if (blockIntersection.block) {
-					tempVectorRef.current.x = blockIntersection.block.x;
-					tempVectorRef.current.y = blockIntersection.block.y;
-					tempVectorRef.current.z = blockIntersection.block.z;
+					potentialNewPosition.x = blockIntersection.block.x;
+					potentialNewPosition.y = blockIntersection.block.y;
+					potentialNewPosition.z = blockIntersection.block.z;
 				} else {
-					// If no block property, use the old method as fallback
-					tempVectorRef.current.x = Math.round(tempVectorRef.current.x - blockIntersection.normal.x * 0.5);
-					tempVectorRef.current.y = Math.round(tempVectorRef.current.y - blockIntersection.normal.y * 0.5);
-					tempVectorRef.current.z = Math.round(tempVectorRef.current.z - blockIntersection.normal.z * 0.5);
+					potentialNewPosition.x = Math.round(potentialNewPosition.x - blockIntersection.normal.x * 0.5);
+					potentialNewPosition.y = Math.round(potentialNewPosition.y - blockIntersection.normal.y * 0.5);
+					potentialNewPosition.z = Math.round(potentialNewPosition.z - blockIntersection.normal.z * 0.5);
 				}
 			} else {
-				// For add mode, calculate placement position precisely based on the face that was hit
-				// First, get the block coordinates where we hit
 				const hitBlock = blockIntersection.block || {
 					x: Math.floor(blockIntersection.point.x),
 					y: Math.floor(blockIntersection.point.y),
@@ -1121,71 +1198,110 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Use the face information if available for more precise placement
 				if (blockIntersection.face && blockIntersection.normal) {
 					// Position the new block adjacent to the face that was hit
-					// By adding the normal vector, we place the block directly against the hit face
-					tempVectorRef.current.x = hitBlock.x + blockIntersection.normal.x;
-					tempVectorRef.current.y = hitBlock.y + blockIntersection.normal.y;
-					tempVectorRef.current.z = hitBlock.z + blockIntersection.normal.z;
-					
+					potentialNewPosition.x = hitBlock.x + blockIntersection.normal.x;
+					potentialNewPosition.y = hitBlock.y + blockIntersection.normal.y;
+					potentialNewPosition.z = hitBlock.z + blockIntersection.normal.z;
+
 					// Ensure we have integer coordinates for block placement
-					tempVectorRef.current.x = Math.round(tempVectorRef.current.x);
-					tempVectorRef.current.y = Math.round(tempVectorRef.current.y);
-					tempVectorRef.current.z = Math.round(tempVectorRef.current.z);
-					
+					potentialNewPosition.x = Math.round(potentialNewPosition.x);
+					potentialNewPosition.y = Math.round(potentialNewPosition.y);
+					potentialNewPosition.z = Math.round(potentialNewPosition.z);
+
 					// Log face detection for debugging
 				} else {
 					// Fallback to the old method if face information is not available
-					tempVectorRef.current.add(blockIntersection.normal.clone().multiplyScalar(0.5));
-					tempVectorRef.current.x = Math.round(tempVectorRef.current.x);
-					tempVectorRef.current.y = Math.round(tempVectorRef.current.y);
-					tempVectorRef.current.z = Math.round(tempVectorRef.current.z);
+					potentialNewPosition.add(blockIntersection.normal.clone().multiplyScalar(0.5));
+					potentialNewPosition.x = Math.round(potentialNewPosition.x);
+					potentialNewPosition.y = Math.round(potentialNewPosition.y);
+					potentialNewPosition.z = Math.round(potentialNewPosition.z);
 				}
-				
+
 				// Handle y-coordinate special case if this is a ground plane hit
 				if (blockIntersection.isGroundPlane && modeRef.current === "add") {
-					tempVectorRef.current.y = 0; // Position at y=0 when placing on ground plane
+					potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
 				}
-				
-				// Apply axis lock if enabled
-				if (axisLockEnabled) {
+
+				// Apply axis lock if enabled (This seems distinct from the Y-lock during placement)
+				// Note: This axis lock logic might conflict or interact with the new Y-lock. Review needed.
+				if (axisLockEnabledRef.current) { // Changed from axisLockEnabled to ref
 					// Keep only movement along the selected axis
-					const originalPos = previewPositionRef.current.clone();
+					const originalPos = previewPositionRef.current.clone(); // Use the current preview position as the reference
 					const axisLock = lockedAxisRef.current;
-					
+
 					if (axisLock === 'x') {
-						tempVectorRef.current.y = originalPos.y;
-						tempVectorRef.current.z = originalPos.z;
+						potentialNewPosition.y = originalPos.y;
+						potentialNewPosition.z = originalPos.z;
 					} else if (axisLock === 'y') {
-						tempVectorRef.current.x = originalPos.x;
-						tempVectorRef.current.z = originalPos.z;
+						potentialNewPosition.x = originalPos.x;
+						potentialNewPosition.z = originalPos.z;
 					} else if (axisLock === 'z') {
-						tempVectorRef.current.x = originalPos.x;
-						tempVectorRef.current.y = originalPos.y;
+						potentialNewPosition.x = originalPos.x;
+						potentialNewPosition.y = originalPos.y;
 					}
 				}
 			}
-			
-			// CRITICAL: Update the previewPositionRef with the calculated position from tempVectorRef
-			// This ensures the preview block moves with the mouse
-			if (previewPositionRef && previewPositionRef.current) {
-				previewPositionRef.current.copy(tempVectorRef.current);
-				
-				// CRITICAL: Also update the React state variable that's used for rendering the preview box
-				// This ensures the green box indicator follows the mouse
-				setPreviewPosition(tempVectorRef.current.clone());
-				
-				// Send the preview position to the App component, which forwards it to EnvironmentBuilder
-				if (previewPositionToAppJS && typeof previewPositionToAppJS === 'function') {
-					previewPositionToAppJS(tempVectorRef.current.clone());
+
+			// --- Start: Placement Constraints Logic (Using Raw Ground Intersection) ---
+			let shouldUpdatePreview = true;
+			let thresholdMet = false; // Flag to track if raw ground threshold was met
+
+			if (isPlacingRef.current && !isToolActive) {
+				// Use the RAW GROUND intersection point for distance check
+				if (hitGround && rawPlacementAnchorRef.current) {
+					const groundDistanceMoved = currentGroundPoint.distanceTo(rawPlacementAnchorRef.current);
+
+					// Check if this is the first block placement after mouse down
+					if (isFirstBlockRef.current) {
+						// For the first block, bypass the threshold check and always place
+						shouldUpdatePreview = true;
+						thresholdMet = true; // Mark that we're forcing the placement
+						// Lock the Y-coordinate of the SNAPPED position
+						potentialNewPosition.y = currentPlacingYRef.current;
+					} else {
+						// After first block, apply normal threshold logic
+						// Optional: Log ground distance check
+						// console.log(`Ground Distance Check: Moved=${groundDistanceMoved.toFixed(4)}, Threshold=${THRESHOLD_FOR_PLACING}`);
+						if (groundDistanceMoved < THRESHOLD_FOR_PLACING) {
+							// Raw ground projection hasn't moved enough since last placement trigger.
+							shouldUpdatePreview = false;
+						} else {
+							// Raw ground distance threshold met: Allow preview update and placement.
+							shouldUpdatePreview = true;
+							thresholdMet = true; // Mark that we passed the raw ground check
+							// Lock the Y-coordinate of the SNAPPED position
+							potentialNewPosition.y = currentPlacingYRef.current;
+							// Ground anchor update happens *after* successful preview update below
+						}
+					}
+				} else {
+					// Cannot perform check if anchor or current ground point is missing
+					shouldUpdatePreview = false; 
+					console.warn("Missing raw ground anchor or ground intersection point for threshold check.");
 				}
 			}
-			
-			// Important check: Only call handleBlockPlacement if a tool is NOT active.
-			// This prevents the default block placement behavior from interfering with tools like WallTool
-			if (isPlacingRef.current && !isToolActive) {
+			// --- End: Placement Constraints Logic (Using Raw Ground Intersection) ---
+
+			// CRITICAL: Update the SNAPPED preview position only if allowed
+			if (shouldUpdatePreview && previewPositionRef && previewPositionRef.current) {
+					previewPositionRef.current.copy(potentialNewPosition); // Update internal ref with SNAPPED pos
+					setPreviewPosition(potentialNewPosition.clone()); // Update React state for preview rendering
+					if (previewPositionToAppJS) {
+						previewPositionToAppJS(potentialNewPosition.clone());
+					}
+
+					// *** NEW: Update the RAW GROUND anchor point IF the raw threshold was met ***
+					if (isPlacingRef.current && !isToolActive && thresholdMet && hitGround) {
+						rawPlacementAnchorRef.current.copy(currentGroundPoint); // Reset the raw ground anchor
+						// console.log("Updated ground anchor:", currentGroundPoint.toArray());
+					}
+			}
+
+			// Only call handleBlockPlacement if placing, NOT using a tool, and allowed to update preview (threshold met)
+			if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
 				handleBlockPlacement();
 			}
 		}
-		
+
 		// Reset processing flag at the end of the frame
 		updatePreviewPosition.isProcessing = false;
 	};
@@ -1449,7 +1565,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				// Update localStorage with the new value
 				localStorage.setItem("gridSize", gridSizeToUse.toString());
 			} else {
-				gridSizeToUse = parseInt(localStorage.getItem("gridSize"), 10) || 64; // Default to 64
+				gridSizeToUse = parseInt(localStorage.getItem("gridSize"), 10) || 200; // Default to 200
 			}
 			
 			// Update the gridSizeRef to maintain current grid size value
@@ -1550,7 +1666,13 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 		
 		// Save empty terrain to database
 		console.log("Saving empty terrain to database...");
-		efficientTerrainSave();
+		import('./DatabaseManager').then(({ DatabaseManager, STORES }) => {
+			DatabaseManager.saveData(STORES.TERRAIN, 'current', {})
+				.then(() => console.log("Empty terrain saved to database successfully"))
+				.catch(error => console.error("Failed to save empty terrain to database:", error));
+		}).catch(error => {
+			console.error("Failed to import DatabaseManager:", error);
+		});
 		
 		console.log("Map cleared successfully");
 		resetPendingChanges();
@@ -1732,6 +1854,9 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			const loader = new THREE.CubeTextureLoader();
 			loader.setPath("./assets/skyboxes/partly-cloudy/");
 			const textureCube = loader.load(["+x.png", "-x.png", "+y.png", "-y.png", "+z.png", "-z.png"]);
+			// Set nearest filtering for the skybox textures
+			textureCube.minFilter = THREE.NearestFilter;
+			textureCube.magFilter = THREE.NearestFilter;
 			if (scene) {
 				scene.background = textureCube;
 			}
@@ -2081,9 +2206,46 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 	}, [scene, onSceneReady]);
 
 	// Function to manually save the terrain (can be called from parent or UI)
-	const saveTerrainManually = () => {
+	const saveTerrainManually = async () => {
 		console.log("Manual save requested...");
-		return efficientTerrainSave();
+		
+		// Skip if database is being cleared
+		if (window.IS_DATABASE_CLEARING) {
+			console.warn("Manual save skipped: Database is being cleared.");
+			return Promise.resolve(false); // Indicate save didn't happen
+		}
+		
+		// Get the complete current terrain data
+		const currentTerrainData = terrainRef.current;
+		
+		// Check if there's data to save
+		if (!currentTerrainData || Object.keys(currentTerrainData).length === 0) {
+			console.log("Manual save: No terrain data to save.");
+			// Still reset pending changes if terrain is empty
+			resetPendingChanges();
+			return Promise.resolve(true); // Indicate success (saving nothing)
+		}
+		
+		const blockCount = Object.keys(currentTerrainData).length;
+		console.log(`Manual save: Saving ${blockCount} blocks to database...`);
+		
+		try {
+			// Directly save the entire current terrain state
+			await DatabaseManager.saveData(STORES.TERRAIN, "current", currentTerrainData);
+			
+			console.log("Manual save completed successfully.");
+			lastSaveTimeRef.current = Date.now(); // Update last save time
+			
+			// IMPORTANT: Reset pending changes after a successful manual save
+			// because the saved state now incorporates all previous changes.
+			resetPendingChanges();
+			console.log("Manual save: Pending changes reset.");
+			
+			return Promise.resolve(true); // Indicate success
+		} catch (error) {
+			console.error("Error during manual terrain save:", error);
+			return Promise.resolve(false); // Indicate failure
+		}
 	};
 
 	// Helper function to enable/disable auto-save
@@ -2103,18 +2265,24 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 			console.log(`Auto-save enabled with interval: ${AUTO_SAVE_INTERVAL/1000} seconds`);
 			autoSaveIntervalRef.current = setInterval(() => {
 				// Only save if there are pending changes and not in the middle of an operation
-				if (!isPlacingRef.current && 
-				    (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
-				    Object.keys(pendingChangesRef.current.terrain.removed).length > 0)) {
+				// Add null check for pendingChangesRef.current and pendingChangesRef.current.terrain
+				const hasPendingTerrain = pendingChangesRef.current && pendingChangesRef.current.terrain;
+				const hasAdded = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0;
+				const hasRemoved = hasPendingTerrain && Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0;
+
+				if (!isPlacingRef.current && (hasAdded || hasRemoved)) {
 					console.log("Auto-saving terrain...");
 					efficientTerrainSave();
 				}
 			}, AUTO_SAVE_INTERVAL);
 			
 			// Save immediately if there are pending changes and not in the middle of an operation
-			if (!isPlacingRef.current && 
-			    (Object.keys(pendingChangesRef.current.terrain.added).length > 0 || 
-			    Object.keys(pendingChangesRef.current.terrain.removed).length > 0)) {
+			// Add null check for pendingChangesRef.current and pendingChangesRef.current.terrain
+			const hasPendingTerrainNow = pendingChangesRef.current && pendingChangesRef.current.terrain;
+			const hasAddedNow = hasPendingTerrainNow && Object.keys(pendingChangesRef.current.terrain.added || {}).length > 0;
+			const hasRemovedNow = hasPendingTerrainNow && Object.keys(pendingChangesRef.current.terrain.removed || {}).length > 0;
+			
+			if (!isPlacingRef.current && (hasAddedNow || hasRemovedNow)) {
 				console.log("Immediate save after enabling auto-save...");
 				efficientTerrainSave();
 			}
@@ -3516,7 +3684,6 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 
 // Convert to forwardRef
 export default forwardRef(TerrainBuilder);
-
 // Export block types and related functions
 export { blockTypes, getCustomBlocks, processCustomBlock, getBlockTypes } from "./managers/BlockTypesManager";
 // Add a method to explicitly set deferred chunk meshing mode
@@ -3730,3 +3897,5 @@ const loadAllChunks = async () => {
     console.log("Finished loading all chunks prioritized by camera distance");
     return true;
 };
+
+
