@@ -1,0 +1,339 @@
+/* SeedGeneratorTool.css - Styling for the Hytopia Seed Generator */
+
+.generator-ui {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  width: 300px;
+  background-color: rgba(13, 13, 13, 0.8);
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.468);
+  z-index: 1000;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  transform: translateY(-50%);
+}
+
+/* Custom Scrollbar */
+.generator-ui::-webkit-scrollbar {
+  width: 10px;
+}
+
+.generator-ui::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 5px;
+}
+
+.generator-ui::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  transition: background 0.2s ease;
+}
+
+.generator-ui::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Header */
+.generator-header {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 5px;
+}
+
+.compact-button, .close-button {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.compact-button {
+  font-size: 16px;
+  padding: 0 5px;
+}
+
+.close-button {
+  font-size: 24px;
+}
+
+/* Content container */
+.generator-content {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 5px;
+}
+
+/* Form Sections */
+.form-section {
+  margin-bottom: 10px;
+}
+
+.section-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+.section-title-top {
+  font-weight: bold;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+/* Input Containers */
+.input-container {
+  display: flex;
+  gap: 8px;
+}
+
+/* Input Styles */
+.generator-input {
+  padding: 8px;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.generator-input:focus {
+  outline: none;
+  border-color: #0084FF;
+}
+
+/* Button Styles */
+.generator-button {
+  padding: 8px;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.generator-button:hover {
+  background-color: rgba(80, 80, 80, 0.5);
+}
+
+.flex-grow {
+  flex-grow: 1;
+}
+
+/* Special Buttons */
+.random-button {
+  width: 40px;
+  font-size: 16px;
+}
+
+.quick-size-container {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Slider Styles */
+.slider-container {
+  margin-bottom: 8px;
+}
+
+.slider-label-container {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.slider-label {
+  font-size: 14px;
+}
+
+.slider-value {
+  font-family: monospace;
+}
+
+.generator-slider {
+  width: 100%;
+  accent-color: #0084FF;
+  height: 8px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.generator-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0084FF;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  border: none;
+}
+
+.generator-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #0084FF;
+  cursor: pointer;
+  border: none;
+}
+
+.generator-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.generator-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+}
+
+/* Checkbox Styles */
+.checkbox-container {
+  margin-top: 8px;
+}
+
+.checkbox-label {
+  margin-left: 8px;
+}
+
+/* Generator Controls */
+.controls-section {
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  position: sticky;
+  bottom: 0;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.1);
+  z-index: 10;
+}
+
+/* Special Buttons */
+.screenshot-button {
+  padding: 8px;
+  background-color: #9C27B0;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  margin-bottom: 10px;
+  transition: background-color 0.3s;
+}
+
+.screenshot-button:hover {
+  background-color: #7B1FA2;
+}
+
+.generate-button {
+  padding: 12px;
+  background-color: #0084FF;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 16px;
+  transition: background-color 0.3s;
+}
+
+.generate-button:hover {
+  background-color: #0078e7;
+}
+
+.generate-button:disabled {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* Progress UI */
+.progress-container {
+  display: none;
+  margin-top: 15px;
+}
+
+.progress-label {
+  margin-bottom: 5px;
+}
+
+.progress-bar-outer {
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.progress-bar-inner {
+  width: 0%;
+  height: 20px;
+  background-color: #0084FF;
+  transition: width 0.2s;
+}
+
+/* Error state */
+.error-label {
+  color: red;
+}
+
+/* Restore UI button */
+#restore-ui-button-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10000;
+}
+
+#restore-ui-button {
+  width: auto;
+  min-width: 80px;
+  height: 40px;
+  padding: 0 15px;
+  border-radius: 20px;
+  background-color: rgba(0, 132, 255, 0.9);
+  color: white;
+  border: 2px solid white;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 10000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, transform 0.2s;
+}
+
+#restore-ui-button:hover {
+  background-color: rgba(0, 132, 255, 1);
+  transform: scale(1.05);
+}
+
+/* Optional section styling */
+.optional-section {
+  opacity: 0.8;
+} 
