@@ -879,7 +879,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				const now = performance.now();
 
 				// Check if enough time has passed since the last placement
-				if (now - lastPlacementTimeRef.current < 100) { // 100ms delay
+				if (now - lastPlacementTimeRef.current < 50) { // 50ms delay
 					return; // Exit if the delay hasn't passed
 				}
 
@@ -939,7 +939,7 @@ function TerrainBuilder({ onSceneReady, previewPositionToAppJS, currentBlockType
 				const now = performance.now();
 
 				// Check if enough time has passed since the last deletion
-				if (now - lastDeletionTimeRef.current < 100) { // 100ms delay
+				if (now - lastDeletionTimeRef.current < 50) { // 50ms delay
 					return; // Exit if the delay hasn't passed
 				}
 
