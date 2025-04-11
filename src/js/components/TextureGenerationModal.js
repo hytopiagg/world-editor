@@ -81,7 +81,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
         try {
             const response = await fetch(
-                "http://localhost:3001/generate_texture",
+                `${process.env.REACT_APP_API_URL}/generate_texture`,
                 {
                     method: "POST",
                     headers: {
