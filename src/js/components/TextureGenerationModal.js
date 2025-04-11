@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import { FaUndo, FaRedo } from "react-icons/fa";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import EditorToolbar, { TOOLS } from "./EditorToolbar";
 import ColorPalette from "./ColorPalette";
 import PixelEditorCanvas from "./PixelEditorCanvas";
@@ -27,17 +28,15 @@ const createTexture = (size) => {
     return texture;
 };
 
-const TextureGenerationModal = ({
-    isOpen,
-    onClose,
-    apiKey,
-    onTextureReady,
-}) => {
+const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     const [prompt, setPrompt] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     // State to hold the actual THREE.CanvasTexture objects
     const [textureObjects, setTextureObjects] = useState({});
     const [error, setError] = useState(null);
+    const [hCaptchaToken, setHCaptchaToken] = useState(null);
+    const [captchaError, setCaptchaError] = useState(null);
+    const hCaptchaRef = useRef(null); // Ref for resetting captcha
 
     // Editor state
     const [selectedTool, setSelectedTool] = useState(TOOLS.PENCIL);
@@ -65,10 +64,6 @@ const TextureGenerationModal = ({
             setError("Please enter a prompt.");
             return;
         }
-        if (!apiKey) {
-            setError("API Key is missing. Please configure it.");
-            return;
-        }
 
         setIsLoading(true);
         // Dispose existing textures before creating new ones
@@ -76,23 +71,25 @@ const TextureGenerationModal = ({
         setTextureObjects({});
         setError(null);
         setSelectedFace("all");
+        setCaptchaError(null); // Clear captcha error on new generation attempt
+
+        if (!hCaptchaToken) {
+            setCaptchaError("Please complete the CAPTCHA verification.");
+            setIsLoading(false);
+            return;
+        }
 
         try {
             const response = await fetch(
-                "https://api.retrodiffusion.ai/v1/inferences",
+                "http://localhost:3001/generate_texture",
                 {
                     method: "POST",
                     headers: {
-                        "X-RD-Token": apiKey,
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        model: "RD_FLUX",
-                        width: GRID_SIZE,
-                        height: GRID_SIZE,
-                        prompt: `${prompt} with a smooth texture, only 3 shades per color max`,
-                        num_images: 1,
-                        prompt_style: "mc_texture",
+                        prompt: prompt,
+                        hCaptchaToken: hCaptchaToken,
                     }),
                 }
             );
@@ -103,10 +100,10 @@ const TextureGenerationModal = ({
 
             const data = await response.json();
 
-            console.log(data.base64_images[0]);
+            console.log(data);
 
-            if (data.base64_images && data.base64_images.length > 0) {
-                const imageDataUrl = `data:image/png;base64,${data.base64_images[0]}`;
+            if (data.base64_image) {
+                const imageDataUrl = `data:image/png;base64,${data.base64_image}`;
 
                 // Load the image
                 const img = new Image();
@@ -155,6 +152,13 @@ const TextureGenerationModal = ({
             });
             setTextureObjects(errorTextures);
             setIsLoading(false);
+        } finally {
+            // Reset captcha token and potentially the widget after attempt
+            setHCaptchaToken(null);
+            if (hCaptchaRef.current) {
+                hCaptchaRef.current.resetCaptcha();
+            }
+            setIsLoading(false); // Ensure loading is false on errors too
         }
     };
 
@@ -292,16 +296,20 @@ const TextureGenerationModal = ({
     return (
         <div className="modal-overlay">
             <div className="modal-content texture-editor-modal">
-                {/* Top Bar: Prompt and Generate */}
+                {/* Top Bar: Title and Buttons */}
                 <div className="modal-header">
                     <h2>Create & Edit Texture</h2>
-                    <button
-                        className="modal-close-button"
-                        onClick={handleClose}
-                    >
-                        ×
-                    </button>
+                    {/* Group close and logout buttons */}
+                    <div className="header-buttons">
+                        <button
+                            className="modal-close-button"
+                            onClick={handleClose}
+                        >
+                            ×
+                        </button>
+                    </div>
                 </div>
+                {/* Generation Controls */}
                 <div className="generation-controls">
                     <textarea
                         className="prompt-input"
@@ -309,16 +317,44 @@ const TextureGenerationModal = ({
                         onChange={(e) => setPrompt(e.target.value)}
                         placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
                         rows="2"
-                        disabled={isLoading}
+                        disabled={isLoading} // Only disable based on loading state
                     />
+                    {/* Show Generate button */}
                     <button
                         className="generate-button"
                         onClick={handleGenerate}
-                        disabled={isLoading || !prompt.trim()}
+                        disabled={isLoading || !prompt.trim() || !hCaptchaToken} // Disable based on loading state, prompt, and captcha token
                     >
                         {isLoading ? "Generating..." : "Generate"}
                     </button>
                 </div>
+
+                {/* hCaptcha Component */}
+                <div className="hcaptcha-container">
+                    <HCaptcha
+                        ref={hCaptchaRef}
+                        sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY} // Make sure this env var is set!
+                        onVerify={(token) => {
+                            setHCaptchaToken(token);
+                            setCaptchaError(null); // Clear error on successful verification
+                        }}
+                        onExpire={() => {
+                            setHCaptchaToken(null);
+                            setCaptchaError(
+                                "CAPTCHA expired. Please verify again."
+                            );
+                        }}
+                        onError={(err) => {
+                            setHCaptchaToken(null);
+                            setCaptchaError(`CAPTCHA error: ${err}`);
+                        }}
+                    />
+                </div>
+                {captchaError && (
+                    <div className="error-message captcha-error">
+                        {captchaError}
+                    </div>
+                )}
 
                 {isLoading && (
                     <div className="loading-indicator">Generating image...</div>
@@ -395,7 +431,6 @@ const TextureGenerationModal = ({
 TextureGenerationModal.propTypes = {
     isOpen: PropTypes.bool.isRequired,
     onClose: PropTypes.func.isRequired,
-    apiKey: PropTypes.string,
     onTextureReady: PropTypes.func.isRequired,
 };
 

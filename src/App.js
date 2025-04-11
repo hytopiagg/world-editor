@@ -299,7 +299,6 @@ function App() {
             <TextureGenerationModal
                 isOpen={isTextureModalOpen}
                 onClose={() => setIsTextureModalOpen(false)}
-                apiKey={process.env.REACT_APP_RETRO_DIFFUSION_API_KEY}
                 onTextureReady={handleTextureReady}
             />
 

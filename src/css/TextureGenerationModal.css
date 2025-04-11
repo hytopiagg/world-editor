@@ -17,23 +17,25 @@
     border-radius: 8px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
     width: 90%;
-    max-width: 500px;
-    position: relative;
+    max-width: 500px; /* Let's keep this size for now */
     color: #e0e0e0; /* Light text */
     font-family: "Arial", sans-serif;
+    display: flex; /* Use flexbox for overall layout */
+    flex-direction: column; /* Stack elements vertically */
 }
 
 .modal-close-button {
-    position: absolute;
-    top: 10px;
-    right: 15px;
+    /* position: absolute; */
+    /* top: 10px; */
+    /* right: 15px; */
     background: none;
     border: none;
     font-size: 1.8rem;
     color: #aaa;
     cursor: pointer;
     line-height: 1;
-    padding: 5px;
+    padding: 0 5px; /* Add slight padding */
+    margin-left: auto; /* Push to the right within header-buttons */
 }
 
 .modal-close-button:hover {
@@ -143,15 +145,41 @@
 
 .modal-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; /* Space between title and button group */
     align-items: center;
+    /* border-bottom: 1px solid #eee; */ /* Maybe remove border? */
+    padding-bottom: 15px;
     margin-bottom: 15px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #444;
+    width: 100%; /* Take full width */
 }
 
 .modal-header h2 {
     margin: 0;
+    font-size: 1.4em;
+    color: #e0e0e0; /* Light text */
+    flex-shrink: 0; /* Don't let title shrink */
+}
+
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Add some space between buttons */
+    margin-left: 20px; /* Add space between title and buttons */
+}
+
+.logout-button {
+    background-color: #f44336; /* Red background */
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+}
+
+.logout-button:hover {
+    background-color: #d32f2f; /* Darker red on hover */
 }
 
 .generation-controls {
@@ -167,9 +195,34 @@
     min-height: 40px; /* Ensure minimum height */
 }
 
-.generation-controls .generate-button {
+.generation-controls .generate-button,
+.generation-controls .login-button {
     flex-shrink: 0;
     width: auto; /* Adjust width */
+    padding: 10px 15px; /* Match input height roughly */
+    height: 40px; /* Match input height */
+    box-sizing: border-box;
+}
+
+.login-button { /* Add styling for the login button */
+    background-color: #007bff; /* Blue for login */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.login-button:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+.login-button:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
 }
 
 /* Editor Layout */
@@ -226,4 +279,16 @@
     background-color: #555;
     cursor: not-allowed;
     opacity: 0.7;
+}
+
+/* hCaptcha styling */
+.hcaptcha-container {
+    display: flex;
+    justify-content: center;
+    margin: 15px 0;
+}
+
+.error-message.captcha-error {
+    margin-top: 0; /* Remove extra space above if it directly follows hCaptcha */
+    margin-bottom: 15px;
 }

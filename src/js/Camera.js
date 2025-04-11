@@ -284,15 +284,20 @@ class CameraManager {
             "arrowleft",
             "arrowright",
         ];
-        if (isInput && movementKeys.includes(event.key.toLowerCase())) {
+        if (
+            isInput &&
+            event.key &&
+            movementKeys.includes(event.key.toLowerCase())
+        ) {
             return; // Stop processing if it's a movement key in an input field
         }
 
         // Otherwise, add the key to the set for camera movement
-        this.keys.add(event.key.toLowerCase());
+        if (event.key) this.keys.add(event.key.toLowerCase());
     };
 
     handleKeyUp = (event) => {
+        if (!event.key) return;
         this.keys.delete(event.key.toLowerCase());
     };
 

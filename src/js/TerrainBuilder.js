@@ -2332,6 +2332,8 @@ function TerrainBuilder(
         // Also register a keydown event listener to detect WASD movement
         window.addEventListener("keydown", (event) => {
             // For WASD/arrow keys movement, also trigger chunk loading
+
+            if (!event.key) return;
             const key = event.key.toLowerCase();
             if (
                 [
