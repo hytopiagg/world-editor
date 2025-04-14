@@ -558,7 +558,9 @@ class GroundTool extends BaseTool {
         }
 
         console.log(
-            `GroundTool: Adding ${Object.keys(addedBlocks).length} blocks in batch`
+            `GroundTool: Adding ${
+                Object.keys(addedBlocks).length
+            } blocks in batch`
         );
 
         // Update the terrain data structure with all blocks at once
@@ -702,7 +704,9 @@ class GroundTool extends BaseTool {
         }
 
         console.log(
-            `GroundTool: Removing ${Object.keys(removedBlocks).length} blocks in batch`
+            `GroundTool: Removing ${
+                Object.keys(removedBlocks).length
+            } blocks in batch`
         );
 
         // Remove the blocks from the terrain data structure

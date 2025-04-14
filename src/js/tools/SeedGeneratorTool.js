@@ -409,7 +409,9 @@ class SeedGeneratorTool extends BaseTool {
         // Water Level slider
         const waterSlider = this.createSlider(
             "water-slider",
-            `Water Level (Sea Height: ${32 + Math.round((this.generationOptions.waterLevel / 100) * 6)})`,
+            `Water Level (Sea Height: ${
+                32 + Math.round((this.generationOptions.waterLevel / 100) * 6)
+            })`,
             this.generationOptions.waterLevel,
             0,
             100,
@@ -1433,7 +1435,9 @@ class SeedGeneratorTool extends BaseTool {
 
         try {
             console.log(
-                `Force saving ${Object.keys(terrainData).length} blocks to database...`
+                `Force saving ${
+                    Object.keys(terrainData).length
+                } blocks to database...`
             );
 
             // Import the DatabaseManager directly here to avoid circular dependencies

@@ -41,6 +41,7 @@ import {
     BrushTool,
     GroundTool,
     PipeTool,
+    SchematicPlacementTool, // Import the new tool
 } from "./tools";
 import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorTool import
 
@@ -2299,8 +2300,12 @@ function TerrainBuilder(
             getPlacementPositions, // Share position calculation utility
             importedUpdateTerrainBlocks, // Direct access to optimized terrain update function
             updateSpatialHashForBlocks, // Direct access to spatial hash update function
+            updateTerrainForUndoRedo, // <<< Add this function explicitly
             totalBlocksRef, // Provide access to the total block count ref
             sendTotalBlocks, // Provide the function to update the total block count in the UI
+            // Add the activateTool function so tools can switch context
+            activateTool: (toolName, activationData) =>
+                toolManagerRef.current?.activateTool(toolName, activationData),
             // Add any other properties tools might need
         };
 
@@ -2325,6 +2330,15 @@ function TerrainBuilder(
         // Register the new SeedGeneratorTool
         const seedGeneratorTool = new SeedGeneratorTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("seed", seedGeneratorTool);
+
+        // Register the new SchematicPlacementTool
+        const schematicPlacementTool = new SchematicPlacementTool(
+            terrainBuilderProps
+        );
+        toolManagerRef.current.registerTool(
+            "schematic",
+            schematicPlacementTool
+        );
 
         initialize();
 
@@ -2637,14 +2651,19 @@ function TerrainBuilder(
         updateGridSize, // Expose for updating grid size when importing maps
 
         // Tool management
-        activateTool: (toolName) => {
+        activateTool: (toolName, activationData) => {
+            // <<< Add activationData here
             if (!toolManagerRef.current) {
                 console.error(
                     "Cannot activate tool: tool manager not initialized"
                 );
                 return false;
             }
-            return toolManagerRef.current.activateTool(toolName);
+            // Pass both arguments to the internal ToolManager function
+            return toolManagerRef.current.activateTool(
+                toolName,
+                activationData
+            );
         },
 
         // Expose toolManagerRef for direct access (but only as read-only)

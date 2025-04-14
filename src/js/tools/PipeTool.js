@@ -583,7 +583,9 @@ class PipeTool extends BaseTool {
         }
 
         console.log(
-            `PipeTool: Adding ${Object.keys(addedBlocks).length} blocks in batch`
+            `PipeTool: Adding ${
+                Object.keys(addedBlocks).length
+            } blocks in batch`
         );
 
         // Update the terrain data structure with all blocks at once
@@ -730,7 +732,9 @@ class PipeTool extends BaseTool {
         }
 
         console.log(
-            `PipeTool: Removing ${Object.keys(removedBlocks).length} blocks in batch`
+            `PipeTool: Removing ${
+                Object.keys(removedBlocks).length
+            } blocks in batch`
         );
 
         // Remove the blocks from the terrain data structure

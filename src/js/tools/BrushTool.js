@@ -1049,7 +1049,9 @@ class BrushTool extends BaseTool {
         else if (event.key === "3") {
             this.isCircular = !this.isCircular;
             console.log(
-                `BrushTool: Shape changed to ${this.isCircular ? "circle" : "square"}`
+                `BrushTool: Shape changed to ${
+                    this.isCircular ? "circle" : "square"
+                }`
             );
             this.positionCache.clear();
         }

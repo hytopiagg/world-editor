@@ -55,12 +55,13 @@ class ToolManager {
 
     /**
      * Activate a specific tool by name
-     * @param {string} toolName - Name of the tool to activate
+     * @param {string | null} toolName - Name of the tool to activate, or null to deactivate
+     * @param {any} activationData - Optional data to pass to the tool's activate method
      */
-    activateTool(toolName) {
+    activateTool(toolName, activationData) {
         // Deactivate current tool if there is one
         if (this.activeTool) {
-            this.activeTool.onDeactivate();
+            this.activeTool.deactivate();
         }
 
         // If toolName is null or undefined, just deactivate the current tool
@@ -75,7 +76,18 @@ class ToolManager {
         // Activate the new tool
         if (this.tools[toolName]) {
             this.activeTool = this.tools[toolName];
-            this.activeTool.onActivate();
+            const activationSuccessful =
+                this.activeTool.activate(activationData);
+
+            // If activation failed (returned false), reset activeTool
+            if (!activationSuccessful) {
+                console.warn(`Activation failed for tool: ${toolName}`);
+                this.activeTool = null;
+                // Reset the QuickTip to default
+                QuickTipsManager.setToDefaultTip();
+                return false;
+            }
+
             console.log(`Activated tool: ${toolName}`);
 
             // Update the QuickTip with the tool's tooltip

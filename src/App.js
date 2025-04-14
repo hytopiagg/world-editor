@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import TerrainBuilder, { blockTypes } from "./js/TerrainBuilder";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
@@ -20,6 +20,8 @@ import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import { processCustomBlock } from "./js/managers/BlockTypesManager";
 import { refreshBlockTools } from "./js/components/BlockToolsSidebar";
+import AIAssistantPanel from "./js/components/AIAssistantPanel";
+import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -57,6 +59,10 @@ function App() {
     });
     const [isSaving, setIsSaving] = useState(false);
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
+
+    // AI Assistant State
+    const [currentSchematic, setCurrentSchematic] = useState(null);
+    const [isAIAssistantVisible, setIsAIAssistantVisible] = useState(true);
 
     useEffect(() => {
         const loadSavedToolSelection = () => {
@@ -124,11 +130,13 @@ function App() {
                 // Call the save function
                 if (terrainBuilderRef.current) {
                     console.log("Saving via Ctrl+S hotkey");
-                    terrainBuilderRef.current.saveTerrainManually();
+                    terrainBuilderRef.current
+                        .saveTerrainManually()
+                        .finally(() => {
+                            // Ensure saving state is cleared
+                            setIsSaving(false);
+                        });
                 }
-
-                // Set a fallback timer to clear the saving state if something goes wrong
-                setTimeout(() => setIsSaving(false), 5000);
             }
         };
 
@@ -259,6 +267,30 @@ function App() {
         }
     };
 
+    // Callback to get available blocks for AI Panel
+    const handleGetAvailableBlocks = useCallback(() => {
+        try {
+            return getHytopiaBlocks();
+        } catch (error) {
+            console.error("Error getting Hytopia blocks:", error);
+            return []; // Return empty array on error
+        }
+    }, []);
+
+    // Callback to load schematic data and activate the placement tool
+    const handleLoadAISchematic = useCallback((schematic) => {
+        console.log("App: Loading AI schematic and activating tool", schematic);
+        setCurrentSchematic(schematic); // Store schematic data
+        // Activate the tool via TerrainBuilder's ref
+        terrainBuilderRef.current?.activateTool("schematic", schematic);
+    }, []);
+
+    // Callback for the SchematicPlacementTool to call when it's done (placed or cancelled)
+    const handleClearAISchematic = useCallback(() => {
+        console.log("App: Clearing AI schematic state");
+        setCurrentSchematic(null);
+    }, []);
+
     return (
         <div className="App">
             {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
@@ -271,7 +303,7 @@ function App() {
 
             {/* Hytopia Logo */}
             <div className="hytopia-logo-wrapper">
-                <img src={hytopiaLogo} />
+                <img src={hytopiaLogo} alt="Hytopia Logo" />
                 <p className="hytopia-version-text">
                     World Editor Version {version}
                 </p>
@@ -300,6 +332,13 @@ function App() {
                 isOpen={isTextureModalOpen}
                 onClose={() => setIsTextureModalOpen(false)}
                 onTextureReady={handleTextureReady}
+            />
+
+            {/* AI Assistant Panel */}
+            <AIAssistantPanel
+                isVisible={isAIAssistantVisible}
+                getAvailableBlocks={handleGetAvailableBlocks}
+                loadAISchematic={handleLoadAISchematic}
             />
 
             <div className="vignette-gradient"></div>
@@ -354,15 +393,13 @@ function App() {
                     placementSize={placementSize}
                     cameraReset={cameraReset}
                     cameraAngle={cameraAngle}
-                    onCameraAngleChange={setCameraAngle}
                     setPageIsLoaded={setPageIsLoaded}
-                    onHandleDropRef={(fn) => (handleDropRef.current = fn)}
                     onSceneReady={(sceneObject) => setScene(sceneObject)}
-                    totalEnvironmentObjects={totalEnvironmentObjects}
                     gridSize={gridSize}
                     environmentBuilderRef={environmentBuilderRef}
                     previewPositionToAppJS={setCurrentPreviewPosition}
                     undoRedoManager={undoRedoManagerRef}
+                    clearAISchematic={handleClearAISchematic}
                 />
                 <EnvironmentBuilder
                     ref={environmentBuilderRef}
@@ -396,6 +433,8 @@ function App() {
                 setGridSize={setGridSize}
                 undoRedoManager={undoRedoManagerRef}
                 currentBlockType={currentBlockType}
+                toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
+                isAIAssistantVisible={isAIAssistantVisible}
             />
 
             <div className="camera-controls-wrapper">
@@ -406,14 +445,22 @@ function App() {
                             setIsSaving(true);
                             // Then call the actual save function
                             if (terrainBuilderRef.current) {
-                                terrainBuilderRef.current.saveTerrainManually();
+                                terrainBuilderRef.current
+                                    .saveTerrainManually()
+                                    .finally(() => {
+                                        // Ensure saving state is cleared
+                                        setIsSaving(false);
+                                    });
                             }
-                            // Set a fallback timer to clear the saving state if something goes wrong
-                            setTimeout(() => setIsSaving(false), 5000);
                         }}
                         className="camera-control-button save-button"
+                        disabled={isSaving}
                     >
-                        <FaSave />
+                        {isSaving ? (
+                            <div className="mini-spinner"></div>
+                        ) : (
+                            <FaSave />
+                        )}
                     </button>
                 </Tooltip>
 

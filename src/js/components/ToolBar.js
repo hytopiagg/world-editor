@@ -19,6 +19,7 @@ import {
     FaDatabase,
     FaBorderAll,
     FaSeedling,
+    FaRobot,
 } from "react-icons/fa";
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
@@ -44,6 +45,8 @@ const ToolBar = ({
     undoRedoManager,
     currentBlockType,
     environmentBuilderRef,
+    toggleAIAssistant,
+    isAIAssistantVisible,
 }) => {
     const [newGridSize, setNewGridSize] = useState(100);
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
@@ -562,7 +565,9 @@ const ToolBar = ({
                                 onClick={() =>
                                     handleModeChangeWithToolReset("add")
                                 }
-                                className={`control-button ${mode === "add" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    mode === "add" ? "selected" : ""
+                                }`}
                             >
                                 <FaPlus />
                             </button>
@@ -572,7 +577,9 @@ const ToolBar = ({
                                 onClick={() =>
                                     handleModeChangeWithToolReset("remove")
                                 }
-                                className={`control-button ${mode === "remove" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    mode === "remove" ? "selected" : ""
+                                }`}
                             >
                                 <FaMinus />
                             </button>
@@ -588,7 +595,9 @@ const ToolBar = ({
                                 onClick={() =>
                                     setAxisLockEnabled(!axisLockEnabled)
                                 }
-                                className={`control-button ${axisLockEnabled ? "selected" : ""}`}
+                                className={`control-button ${
+                                    axisLockEnabled ? "selected" : ""
+                                }`}
                             >
                                 {axisLockEnabled ? <FaLock /> : <FaLockOpen />}
                             </button>
@@ -599,7 +608,9 @@ const ToolBar = ({
                                 onClick={() =>
                                     undoRedoManager?.current?.handleUndo()
                                 }
-                                className={`control-button ${!canUndo ? "disabled" : ""}`}
+                                className={`control-button ${
+                                    !canUndo ? "disabled" : ""
+                                }`}
                                 disabled={!canUndo}
                             >
                                 <FaUndo />
@@ -610,7 +621,9 @@ const ToolBar = ({
                                 onClick={() =>
                                     undoRedoManager?.current?.handleRedo()
                                 }
-                                className={`control-button ${!canRedo ? "disabled" : ""}`}
+                                className={`control-button ${
+                                    !canRedo ? "disabled" : ""
+                                }`}
                                 disabled={!canRedo}
                             >
                                 <FaRedo />
@@ -620,7 +633,9 @@ const ToolBar = ({
                         <Tooltip text="Single block placement">
                             <button
                                 onClick={() => setPlacementSize("single")}
-                                className={`control-button ${placementSize === "single" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    placementSize === "single" ? "selected" : ""
+                                }`}
                             >
                                 <FaCircle
                                     style={{ width: "5px", height: "5px" }}
@@ -634,7 +649,9 @@ const ToolBar = ({
                                     handleToolToggle("brush");
                                     setPlacementSize("single");
                                 }}
-                                className={`control-button ${activeTool === "brush" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    activeTool === "brush" ? "selected" : ""
+                                }`}
                             >
                                 <FaPaintBrush />
                             </button>
@@ -645,7 +662,9 @@ const ToolBar = ({
                                     handleToolToggle("wall");
                                     setPlacementSize("single");
                                 }}
-                                className={`control-button ${activeTool === "wall" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    activeTool === "wall" ? "selected" : ""
+                                }`}
                             >
                                 <FaDrawPolygon />
                             </button>
@@ -656,7 +675,9 @@ const ToolBar = ({
                                     handleToolToggle("ground");
                                     setPlacementSize("single");
                                 }}
-                                className={`control-button ${activeTool === "ground" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    activeTool === "ground" ? "selected" : ""
+                                }`}
                             >
                                 <FaSquare />
                             </button>
@@ -668,7 +689,9 @@ const ToolBar = ({
                                     handleToolToggle("pipe");
                                     setPlacementSize("single");
                                 }}
-                                className={`control-button ${activeTool === "pipe" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    activeTool === "pipe" ? "selected" : ""
+                                }`}
                             >
                                 <FaBorderAll />
                             </button>
@@ -740,9 +763,27 @@ const ToolBar = ({
                                     handleToolToggle("seed");
                                     setPlacementSize("single");
                                 }}
-                                className={`control-button ${activeTool === "seed" ? "selected" : ""}`}
+                                className={`control-button ${
+                                    activeTool === "seed" ? "selected" : ""
+                                }`}
                             >
                                 <FaSeedling />
+                            </button>
+                        </Tooltip>
+                        <Tooltip
+                            text={
+                                isAIAssistantVisible
+                                    ? "Hide AI Assistant"
+                                    : "Show AI Assistant"
+                            }
+                        >
+                            <button
+                                onClick={toggleAIAssistant}
+                                className={`control-button ${
+                                    isAIAssistantVisible ? "selected" : ""
+                                }`}
+                            >
+                                <FaRobot />
                             </button>
                         </Tooltip>
                     </div>
