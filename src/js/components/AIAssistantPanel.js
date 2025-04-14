@@ -87,7 +87,7 @@ const AIAssistantPanel = ({
     // Basic styling - can be improved
     const panelStyle = {
         position: "absolute",
-        top: "150px",
+        top: "400px",
         right: "20px",
         width: "300px",
         padding: "15px",
