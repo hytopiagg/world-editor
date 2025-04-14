@@ -184,6 +184,7 @@ class BrushTool extends BaseTool {
                 this.placementThreshold = Math.max(this.brushSize * 0.15, 0.2);
             }
         }
+        return true; // Indicate successful activation
     }
 
     /**
@@ -1001,6 +1002,7 @@ class BrushTool extends BaseTool {
      * Handles key down events
      */
     handleKeyDown(event) {
+        console.log("BrushTool: handleKeyDown event:", event);
         // Check for Control key
         if (event.key === "Control") {
             this.isEraseMode = true;

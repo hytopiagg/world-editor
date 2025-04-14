@@ -144,6 +144,7 @@ class ToolManager {
      * Handle key down events by forwarding to the active tool
      */
     handleKeyDown(event) {
+        console.log("ToolManager: handleKeyDown event:", event);
         if (this.activeTool) {
             this.activeTool.handleKeyDown(event);
         }

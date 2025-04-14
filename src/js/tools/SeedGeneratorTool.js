@@ -79,6 +79,7 @@ class SeedGeneratorTool extends BaseTool {
         if (ui) {
             ui.style.display = "block";
         }
+        return true; // Indicate successful activation
     }
 
     onDeactivate() {

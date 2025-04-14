@@ -86,32 +86,73 @@ class WallTool extends BaseTool {
 
     onActivate() {
         super.onActivate();
+        console.log("WallTool activating...");
 
-        // Log activation details for debugging
-        console.log("WallTool activated");
-
-        // Initialize empty objects if needed
+        // --- Essential Ref Checks ---
+        // Check terrainRef
+        if (!this.terrainRef) {
+            console.error("WallTool Activation Error: terrainRef is missing.");
+            // Stop further activation steps if critical ref is missing
+            return;
+        }
+        // Initialize terrainRef.current if necessary and possible
         if (this.terrainRef && !this.terrainRef.current) {
-            console.log("Initializing empty terrainRef.current in onActivate");
+            console.warn(
+                "WallTool: Initializing terrainRef.current in onActivate (was null/undefined)."
+            );
             this.terrainRef.current = {};
         }
 
+        // Check isPlacingRef
+        if (!this.isPlacingRef) {
+            console.error(
+                "WallTool Activation Error: isPlacingRef is missing."
+            );
+            return; // Stop activation
+        }
+        // Check placementChangesRef
+        if (!this.placementChangesRef) {
+            console.error(
+                "WallTool Activation Error: placementChangesRef is missing."
+            );
+            return; // Stop activation
+        }
+        // Check scene
+        if (!this.scene) {
+            console.error("WallTool Activation Error: scene is missing.");
+            return; // Stop activation
+        }
+        // Check previewPositionRef (might be less critical for initial activation but needed later)
+        if (!this.previewPositionRef) {
+            console.warn(
+                "WallTool Activation Warning: previewPositionRef is missing. Wall preview might not work correctly."
+            );
+            // Don't necessarily stop activation for this one, but log it.
+        }
+
+        // --- Reset State ---
         // Reset wall state on activation
         this.wallStartPosition = null;
-        this.removeWallPreview();
+        this.removeWallPreview(); // Needs this.scene, checked above
 
-        // Reset tracking state to ensure clean activation
+        // Reset tracking state (refs confirmed to exist above)
+        // We can now safely access .current
         if (this.isPlacingRef) {
+            // Double check just in case
             this.isPlacingRef.current = false;
         }
 
-        // Reset placement changes to ensure we don't have leftover changes
+        // Reset placement changes (refs confirmed to exist above)
         if (this.placementChangesRef) {
+            // Double check
             this.placementChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
             };
         }
+
+        console.log("WallTool finished onActivate successfully.");
+        return true; // Indicate successful activation
     }
 
     onDeactivate() {
@@ -314,6 +355,7 @@ class WallTool extends BaseTool {
      * Track Ctrl key state for erasing and handle wall height adjustments
      */
     handleKeyDown(event) {
+        console.log("WallTool: handleKeyDown event:", event);
         if (event.key === "Control") {
             console.log("WallTool: Ctrl pressed, switching to erase mode");
             this.isCtrlPressed = true;
@@ -699,8 +741,27 @@ class WallTool extends BaseTool {
      * Removes the wall preview from the scene
      */
     removeWallPreview() {
-        if (this.wallPreview) {
+        // Check if scene exists before trying to remove
+        if (this.scene && this.wallPreview) {
             this.scene.remove(this.wallPreview);
+            // Consider disposing geometry/material if they are unique to the preview
+            if (this.wallPreview.geometry) {
+                this.wallPreview.geometry.dispose();
+            }
+            if (this.wallPreview.material) {
+                // Check if material is an array (e.g., multi-material object)
+                if (Array.isArray(this.wallPreview.material)) {
+                    this.wallPreview.material.forEach((mat) => mat.dispose());
+                } else {
+                    this.wallPreview.material.dispose();
+                }
+            }
+            this.wallPreview = null;
+        } else if (this.wallPreview) {
+            console.warn(
+                "WallTool: Tried to remove wall preview, but scene is not available."
+            );
+            // Still nullify the reference
             this.wallPreview = null;
         }
     }
