@@ -657,6 +657,7 @@ function TerrainBuilder(
     const directionalLightRef = useRef();
     const terrainRef = useRef({});
     const gridRef = useRef();
+    const placementInitialPositionRef = useRef(null); // Add ref for initial placement position
 
     // Animation tracking
     const mouseMoveAnimationRef = useRef(null);
@@ -665,6 +666,7 @@ function TerrainBuilder(
     const isPlacingRef = useRef(false);
     const currentPlacingYRef = useRef(0);
     const previewPositionRef = useRef(new THREE.Vector3());
+    const rawPlacementAnchorRef = useRef(new THREE.Vector3());
     const lockedAxisRef = useRef(null);
     const selectionDistanceRef = useRef(MAX_SELECTION_DISTANCE / 2);
     const axisLockEnabledRef = useRef(axisLockEnabled);
@@ -964,19 +966,41 @@ function TerrainBuilder(
             if (!isToolActive) {
                 isPlacingRef.current = true;
 
+                // Get the SNAPPED preview position for Y-lock
+                const initialBlockIntersection = getRaycastIntersection();
+                if (initialBlockIntersection) {
+                    currentPlacingYRef.current = previewPositionRef.current.y; // Use current preview Y
+                }
+
+                // Get the RAW GROUND intersection for the initial anchor
+                const groundPlane = new THREE.Plane(
+                    new THREE.Vector3(0, 1, 0),
+                    0
+                ); // Plane at y=0
+                const groundPoint = new THREE.Vector3();
+                threeRaycaster.ray.intersectPlane(groundPlane, groundPoint);
+
+                if (groundPoint) {
+                    rawPlacementAnchorRef.current.copy(groundPoint);
+                    console.log(
+                        "Set initial ground anchor:",
+                        groundPoint.toArray()
+                    );
+                } else {
+                    console.warn(
+                        "Initial ground plane raycast failed on mousedown. Cannot set raw placement anchor."
+                    );
+                }
+
                 isFirstBlockRef.current = true;
-                currentPlacingYRef.current = previewPositionRef.current.y;
 
-                // Clear recently placed blocks on mouse down
                 recentlyPlacedBlocksRef.current.clear();
-
-                // Reset the placed block counter for a new placement session
                 placedBlockCountRef.current = 0;
 
                 // Store initial position for axis lock
                 if (axisLockEnabledRef.current) {
-                    placementStartPosition.current =
-                        previewPositionRef.current.clone();
+                    // placementStartPosition.current =
+                    //     previewPositionRef.current.clone();
                 }
 
                 // Reset the placement changes tracker
@@ -987,7 +1011,11 @@ function TerrainBuilder(
 
                 // Handle initial placement
                 updatePreviewPosition();
-                playPlaceSound();
+                // Force an immediate block placement on mouse down
+                if (isFirstBlockRef.current) {
+                    handleBlockPlacement();
+                }
+                playPlaceSound(); // Play sound on initial click
             }
         }
     };
@@ -1135,8 +1163,8 @@ function TerrainBuilder(
                 const now = performance.now();
 
                 // Check if enough time has passed since the last deletion
-                if (now - lastDeletionTimeRef.current < 100) {
-                    // 100ms delay
+                if (now - lastDeletionTimeRef.current < 50) {
+                    // 50ms delay
                     return; // Exit if the delay hasn't passed
                 }
 
@@ -1290,6 +1318,17 @@ function TerrainBuilder(
         // Get intersection for preview
         const blockIntersection = getRaycastIntersection();
 
+        // *** Get RAW ground intersection point for threshold checking ***
+        const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
+        const currentGroundPoint = new THREE.Vector3();
+        // Ensure raycaster is updated (already done in getRaycastIntersection, but good practice)
+        const normalizedMouse = pointer.clone();
+        threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
+        const hitGround = threeRaycaster.ray.intersectPlane(
+            groundPlane,
+            currentGroundPoint
+        );
+
         // If we have a valid intersection and mouse position:
         if (blockIntersection && blockIntersection.point) {
             // Check if a tool is active - this is important to prevent default block placement when tools are active
@@ -1298,6 +1337,10 @@ function TerrainBuilder(
                 toolManagerRef.current.getActiveTool();
 
             // Delegate mouse move to tool if active
+            // Store the calculated SNAPPED position before applying constraints
+            const potentialNewPosition = tempVectorRef.current.clone();
+
+            // Delegate mouse move to tool if active (using blockIntersection)
             if (isToolActive) {
                 const activeTool = toolManagerRef.current.getActiveTool();
                 // Only call the tool's handleMouseMove if it has this method
@@ -1324,28 +1367,28 @@ function TerrainBuilder(
                 }
             }
 
-            // Always update previewPositionRef for tools and default behavior
-            tempVectorRef.current.copy(blockIntersection.point);
+            // Calculate the SNAPPED potential new position (based on blockIntersection)
+            potentialNewPosition.copy(blockIntersection.point);
 
             // If in delete/remove mode, select the actual block, not the face
             if (modeRef.current === "delete" || modeRef.current === "remove") {
                 // For delete/remove mode, use the block coordinates directly
                 if (blockIntersection.block) {
-                    tempVectorRef.current.x = blockIntersection.block.x;
-                    tempVectorRef.current.y = blockIntersection.block.y;
-                    tempVectorRef.current.z = blockIntersection.block.z;
+                    potentialNewPosition.x = blockIntersection.block.x;
+                    potentialNewPosition.y = blockIntersection.block.y;
+                    potentialNewPosition.z = blockIntersection.block.z;
                 } else {
                     // If no block property, use the old method as fallback
-                    tempVectorRef.current.x = Math.round(
-                        tempVectorRef.current.x -
+                    potentialNewPosition.x = Math.round(
+                        potentialNewPosition.x -
                             blockIntersection.normal.x * 0.5
                     );
-                    tempVectorRef.current.y = Math.round(
-                        tempVectorRef.current.y -
+                    potentialNewPosition.y = Math.round(
+                        potentialNewPosition.y -
                             blockIntersection.normal.y * 0.5
                     );
-                    tempVectorRef.current.z = Math.round(
-                        tempVectorRef.current.z -
+                    potentialNewPosition.z = Math.round(
+                        potentialNewPosition.z -
                             blockIntersection.normal.z * 0.5
                     );
                 }
@@ -1362,39 +1405,27 @@ function TerrainBuilder(
                 if (blockIntersection.face && blockIntersection.normal) {
                     // Position the new block adjacent to the face that was hit
                     // By adding the normal vector, we place the block directly against the hit face
-                    tempVectorRef.current.x =
+                    potentialNewPosition.x =
                         hitBlock.x + blockIntersection.normal.x;
-                    tempVectorRef.current.y =
+                    potentialNewPosition.y =
                         hitBlock.y + blockIntersection.normal.y;
-                    tempVectorRef.current.z =
+                    potentialNewPosition.z =
                         hitBlock.z + blockIntersection.normal.z;
 
                     // Ensure we have integer coordinates for block placement
-                    tempVectorRef.current.x = Math.round(
-                        tempVectorRef.current.x
-                    );
-                    tempVectorRef.current.y = Math.round(
-                        tempVectorRef.current.y
-                    );
-                    tempVectorRef.current.z = Math.round(
-                        tempVectorRef.current.z
-                    );
+                    potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                    potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                    potentialNewPosition.z = Math.round(potentialNewPosition.z);
 
                     // Log face detection for debugging
                 } else {
                     // Fallback to the old method if face information is not available
-                    tempVectorRef.current.add(
+                    potentialNewPosition.add(
                         blockIntersection.normal.clone().multiplyScalar(0.5)
                     );
-                    tempVectorRef.current.x = Math.round(
-                        tempVectorRef.current.x
-                    );
-                    tempVectorRef.current.y = Math.round(
-                        tempVectorRef.current.y
-                    );
-                    tempVectorRef.current.z = Math.round(
-                        tempVectorRef.current.z
-                    );
+                    potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                    potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                    potentialNewPosition.z = Math.round(potentialNewPosition.z);
                 }
 
                 // Handle y-coordinate special case if this is a ground plane hit
@@ -1402,49 +1433,99 @@ function TerrainBuilder(
                     blockIntersection.isGroundPlane &&
                     modeRef.current === "add"
                 ) {
-                    tempVectorRef.current.y = 0; // Position at y=0 when placing on ground plane
+                    potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
                 }
 
                 // Apply axis lock if enabled
-                if (axisLockEnabled) {
+                if (axisLockEnabledRef.current) {
                     // Keep only movement along the selected axis
                     const originalPos = previewPositionRef.current.clone();
                     const axisLock = lockedAxisRef.current;
 
                     if (axisLock === "x") {
-                        tempVectorRef.current.y = originalPos.y;
-                        tempVectorRef.current.z = originalPos.z;
+                        potentialNewPosition.y = originalPos.y;
+                        potentialNewPosition.z = originalPos.z;
                     } else if (axisLock === "y") {
-                        tempVectorRef.current.x = originalPos.x;
-                        tempVectorRef.current.z = originalPos.z;
+                        potentialNewPosition.x = originalPos.x;
+                        potentialNewPosition.z = originalPos.z;
                     } else if (axisLock === "z") {
-                        tempVectorRef.current.x = originalPos.x;
-                        tempVectorRef.current.y = originalPos.y;
+                        potentialNewPosition.x = originalPos.x;
+                        potentialNewPosition.y = originalPos.y;
                     }
                 }
             }
 
-            // CRITICAL: Update the previewPositionRef with the calculated position from tempVectorRef
-            // This ensures the preview block moves with the mouse
-            if (previewPositionRef && previewPositionRef.current) {
-                previewPositionRef.current.copy(tempVectorRef.current);
+            // --- Start: Placement Constraints Logic (Using Raw Ground Intersection) ---
+            let shouldUpdatePreview = true;
+            let thresholdMet = false; // Flag to track if raw ground threshold was met
 
-                // CRITICAL: Also update the React state variable that's used for rendering the preview box
-                // This ensures the green box indicator follows the mouse
-                setPreviewPosition(tempVectorRef.current.clone());
+            if (isPlacingRef.current && !isToolActive) {
+                // Use the RAW GROUND intersection point for distance check
+                if (hitGround && rawPlacementAnchorRef.current) {
+                    const groundDistanceMoved = currentGroundPoint.distanceTo(
+                        rawPlacementAnchorRef.current
+                    );
 
-                // Send the preview position to the App component, which forwards it to EnvironmentBuilder
-                if (
-                    previewPositionToAppJS &&
-                    typeof previewPositionToAppJS === "function"
-                ) {
-                    previewPositionToAppJS(tempVectorRef.current.clone());
+                    // Check if this is the first block placement after mouse down
+                    if (isFirstBlockRef.current) {
+                        // For the first block, bypass the threshold check and always place
+                        shouldUpdatePreview = true;
+                        thresholdMet = true; // Mark that we're forcing the placement
+                        // Lock the Y-coordinate of the SNAPPED position
+                        potentialNewPosition.y = currentPlacingYRef.current;
+                    } else {
+                        // After first block, apply normal threshold logic
+                        // Optional: Log ground distance check
+                        // console.log(`Ground Distance Check: Moved=${groundDistanceMoved.toFixed(4)}, Threshold=${THRESHOLD_FOR_PLACING}`);
+                        if (groundDistanceMoved < THRESHOLD_FOR_PLACING) {
+                            // Raw ground projection hasn't moved enough since last placement trigger.
+                            shouldUpdatePreview = false;
+                        } else {
+                            // Raw ground distance threshold met: Allow preview update and placement.
+                            shouldUpdatePreview = true;
+                            thresholdMet = true; // Mark that we passed the raw ground check
+                            // Lock the Y-coordinate of the SNAPPED position
+                            potentialNewPosition.y = currentPlacingYRef.current;
+                            // Ground anchor update happens *after* successful preview update below
+                        }
+                    }
+                } else {
+                    // Cannot perform check if anchor or current ground point is missing
+                    shouldUpdatePreview = false;
+                    console.warn(
+                        "Missing raw ground anchor or ground intersection point for threshold check."
+                    );
                 }
             }
 
-            // Important check: Only call handleBlockPlacement if a tool is NOT active.
-            // This prevents the default block placement behavior from interfering with tools like WallTool
-            if (isPlacingRef.current && !isToolActive) {
+            // --- End: Placement Constraints Logic (Using Raw Ground Intersection) ---
+
+            // CRITICAL: Update the SNAPPED preview position only if allowed
+            if (
+                shouldUpdatePreview &&
+                previewPositionRef &&
+                previewPositionRef.current
+            ) {
+                previewPositionRef.current.copy(potentialNewPosition); // Update internal ref with SNAPPED pos
+                setPreviewPosition(potentialNewPosition.clone()); // Update React state for preview rendering
+                if (previewPositionToAppJS) {
+                    previewPositionToAppJS(potentialNewPosition.clone());
+                }
+
+                // *** NEW: Update the RAW GROUND anchor point IF the raw threshold was met ***
+                if (
+                    isPlacingRef.current &&
+                    !isToolActive &&
+                    thresholdMet &&
+                    hitGround
+                ) {
+                    rawPlacementAnchorRef.current.copy(currentGroundPoint); // Reset the raw ground anchor
+                    // console.log("Updated ground anchor:", currentGroundPoint.toArray());
+                }
+            }
+
+            // Only call handleBlockPlacement if placing, NOT using a tool, and allowed to update preview (threshold met)
+            if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
                 handleBlockPlacement();
             }
         }
@@ -1783,7 +1864,7 @@ function TerrainBuilder(
                 localStorage.setItem("gridSize", gridSizeToUse.toString());
             } else {
                 gridSizeToUse =
-                    parseInt(localStorage.getItem("gridSize"), 10) || 64; // Default to 64
+                    parseInt(localStorage.getItem("gridSize"), 10) || 200; // Default to 200
             }
 
             // Update the gridSizeRef to maintain current grid size value

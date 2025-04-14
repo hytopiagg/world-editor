@@ -48,24 +48,17 @@ class BlockMaterial {
      * @param {THREE.Texture} textureAtlas - The texture atlas
      */
     setTextureAtlas(textureAtlas) {
-        // Configure mipmapping for better texture quality at distance
+        // Configure nearest neighbor filtering for pixelated look
         if (textureAtlas) {
-            // --- Keep pixel art crisp ---
-            // Disable mipmaps for block textures if they cause blurring
+            // Disable mipmaps since we want crisp pixels
             textureAtlas.generateMipmaps = false;
 
-            // Use Nearest Neighbor filtering for sharp pixels
+            // Use nearest neighbor filtering
             textureAtlas.minFilter = THREE.NearestFilter;
             textureAtlas.magFilter = THREE.NearestFilter;
 
-            // Anisotropy is not needed/useful with NearestFilter
-            // textureAtlas.anisotropy = 1; // Set to 1 or remove
-
-            // --- Original settings (commented out) ---
-            // textureAtlas.generateMipmaps = true;
-            // textureAtlas.minFilter = THREE.LinearMipmapLinearFilter;
-            // textureAtlas.magFilter = THREE.LinearFilter;
-            // textureAtlas.anisotropy = 16;
+            // Disable anisotropic filtering
+            textureAtlas.anisotropy = 1;
 
             // Set wrapS and wrapT to clamp to edge to prevent texture bleeding
             textureAtlas.wrapS = THREE.ClampToEdgeWrapping;
@@ -81,15 +74,7 @@ class BlockMaterial {
         }
 
         if (this._liquidMaterial) {
-            // Liquid material might still benefit from linear filtering? Test this.
-            // For now, let's keep it consistent.
-            if (textureAtlas) {
-                textureAtlas.generateMipmaps = false;
-                textureAtlas.minFilter = THREE.NearestFilter;
-                textureAtlas.magFilter = THREE.NearestFilter;
-            }
             this._liquidMaterial.uniforms.textureAtlas.value = textureAtlas;
-            // We might need to update the liquid material shader or uniforms if filtering changes behavior.
         }
     }
 
@@ -104,6 +89,7 @@ class BlockMaterial {
                 uniforms: {
                     textureAtlas: { value: null },
                     time: { value: 0 },
+                    filter: { value: THREE.NearestFilter },
                 },
                 vertexShader: `
           varying vec2 vUv;
@@ -190,12 +176,12 @@ class BlockMaterial {
                 side: THREE.DoubleSide,
             });
 
-            // Enable mipmapping features for shader material
+            // Disable mipmapping features for shader material
             this._liquidMaterial.extensions = {
-                derivatives: true, // Enables GL_OES_standard_derivatives for better edge rendering
+                derivatives: false,
                 fragDepth: false,
                 drawBuffers: false,
-                shaderTextureLOD: true, // Enables textureLod for manual mipmap level selection
+                shaderTextureLOD: false,
             };
         }
         return this._liquidMaterial;

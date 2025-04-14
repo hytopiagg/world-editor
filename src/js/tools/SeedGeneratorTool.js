@@ -10,6 +10,7 @@ import * as THREE from "three";
 import BaseTool from "./BaseTool";
 import { generateHytopiaWorld } from "../utils/TerrainGenerator";
 import { getBlockTypes } from "../managers/BlockTypesManager";
+import "../../css/SeedGeneratorTool.css";
 
 class SeedGeneratorTool extends BaseTool {
     constructor(terrainBuilderProps) {
@@ -105,36 +106,10 @@ class SeedGeneratorTool extends BaseTool {
         const uiContainer = document.createElement("div");
         uiContainer.id = "seed-generator-ui";
         uiContainer.className = "generator-ui";
-        uiContainer.style.position = "absolute";
-        uiContainer.style.top = "50px";
-        uiContainer.style.right = "20px";
-        uiContainer.style.width = "300px";
-        uiContainer.style.backgroundColor = "#2c2c2c";
-        uiContainer.style.padding = "15px";
-        uiContainer.style.borderRadius = "8px";
-        uiContainer.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.5)";
-        uiContainer.style.zIndex = "1000";
-        uiContainer.style.color = "#fff";
-        uiContainer.style.fontFamily = "Arial, sans-serif";
-        uiContainer.style.maxHeight = "80vh"; // Add max height constraint
-        uiContainer.style.overflowY = "auto"; // Make it scrollable
-        uiContainer.style.display = "flex"; // Use flexbox
-        uiContainer.style.flexDirection = "column"; // Stack children vertically
 
         // Create UI header
         const header = document.createElement("div");
-        header.style.fontSize = "18px";
-        header.style.fontWeight = "bold";
-        header.style.marginBottom = "10px"; // Reduced from 15px
-        header.style.borderBottom = "1px solid #444";
-        header.style.paddingBottom = "8px";
-        header.style.display = "flex";
-        header.style.justifyContent = "space-between";
-        header.style.alignItems = "center";
-        header.style.position = "sticky"; // Make header sticky
-        header.style.top = "0";
-        header.style.backgroundColor = "#2c2c2c";
-        header.style.zIndex = "10";
+        header.className = "generator-header";
 
         // Title
         const title = document.createElement("div");
@@ -142,19 +117,13 @@ class SeedGeneratorTool extends BaseTool {
 
         // Button container
         const headerButtons = document.createElement("div");
-        headerButtons.style.display = "flex";
-        headerButtons.style.gap = "5px";
+        headerButtons.className = "header-buttons";
 
         // Compact mode button
         const compactButton = document.createElement("button");
         compactButton.innerHTML = "🔍";
         compactButton.title = "Toggle Compact Mode";
-        compactButton.style.background = "none";
-        compactButton.style.border = "none";
-        compactButton.style.color = "#fff";
-        compactButton.style.fontSize = "16px";
-        compactButton.style.cursor = "pointer";
-        compactButton.style.padding = "0 5px";
+        compactButton.className = "compact-button";
 
         // Track compact mode state
         this.isCompactMode = false;
@@ -212,11 +181,7 @@ class SeedGeneratorTool extends BaseTool {
         // Close button
         const closeButton = document.createElement("button");
         closeButton.innerHTML = "×";
-        closeButton.style.background = "none";
-        closeButton.style.border = "none";
-        closeButton.style.color = "#fff";
-        closeButton.style.fontSize = "24px";
-        closeButton.style.cursor = "pointer";
+        closeButton.className = "close-button";
         closeButton.onclick = () => this.hideUI();
 
         // Add buttons to header
@@ -228,25 +193,21 @@ class SeedGeneratorTool extends BaseTool {
 
         // Create content container with scrolling
         const contentContainer = document.createElement("div");
-        contentContainer.style.overflowY = "auto";
-        contentContainer.style.flex = "1";
-        contentContainer.style.paddingRight = "5px";
+        contentContainer.className = "generator-content";
 
         // Seed input section with reduced margins
         const seedSection = this.createFormSection("Seed Value");
 
         // Seed input with random button
         const seedInputContainer = document.createElement("div");
-        seedInputContainer.style.display = "flex";
-        seedInputContainer.style.gap = "8px";
+        seedInputContainer.className = "input-container";
 
         const seedInput = document.createElement("input");
         seedInput.id = "seed-input";
         seedInput.type = "text";
         seedInput.value = this.generationOptions.seed;
         seedInput.placeholder = "Enter seed value";
-        this.applyInputStyles(seedInput);
-        seedInput.style.flexGrow = "1";
+        seedInput.className = "generator-input flex-grow";
         seedInput.addEventListener("change", (e) => {
             this.generationOptions.seed = e.target.value;
         });
@@ -254,9 +215,7 @@ class SeedGeneratorTool extends BaseTool {
         const randomButton = document.createElement("button");
         randomButton.innerHTML = "🎲";
         randomButton.title = "Generate random seed";
-        this.applyButtonStyles(randomButton);
-        randomButton.style.width = "40px";
-        randomButton.style.fontSize = "16px";
+        randomButton.className = "generator-button random-button";
         randomButton.addEventListener("click", () => {
             const randomSeed = Math.floor(Math.random() * 1000000).toString();
             seedInput.value = randomSeed;
@@ -272,8 +231,7 @@ class SeedGeneratorTool extends BaseTool {
         const sizeSection = this.createFormSection("World Size");
 
         const sizeContainer = document.createElement("div");
-        sizeContainer.style.display = "flex";
-        sizeContainer.style.gap = "8px";
+        sizeContainer.className = "input-container";
 
         const widthInput = this.createNumberInput(
             "width-input",
@@ -283,7 +241,7 @@ class SeedGeneratorTool extends BaseTool {
             1000,
             10
         );
-        widthInput.style.flexGrow = "1";
+        widthInput.classList.add("flex-grow");
         widthInput.addEventListener("change", (e) => {
             this.generationOptions.width = parseInt(e.target.value);
         });
@@ -296,7 +254,7 @@ class SeedGeneratorTool extends BaseTool {
             1000,
             10
         );
-        lengthInput.style.flexGrow = "1";
+        lengthInput.classList.add("flex-grow");
         lengthInput.addEventListener("change", (e) => {
             this.generationOptions.length = parseInt(e.target.value);
         });
@@ -307,9 +265,7 @@ class SeedGeneratorTool extends BaseTool {
 
         // Quick size buttons
         const quickSizeContainer = document.createElement("div");
-        quickSizeContainer.style.display = "flex";
-        quickSizeContainer.style.gap = "8px";
-        quickSizeContainer.style.marginTop = "8px";
+        quickSizeContainer.className = "quick-size-container";
 
         const sizes = [
             { label: "Small", width: 100, length: 100 },
@@ -320,8 +276,7 @@ class SeedGeneratorTool extends BaseTool {
         sizes.forEach((size) => {
             const button = document.createElement("button");
             button.innerHTML = size.label;
-            this.applyButtonStyles(button);
-            button.style.flexGrow = "1";
+            button.className = "generator-button flex-grow";
             button.addEventListener("click", () => {
                 widthInput.value = size.width;
                 lengthInput.value = size.length;
@@ -497,7 +452,7 @@ class SeedGeneratorTool extends BaseTool {
 
         // Generate Ore checkboxes
         const oreCheckbox = document.createElement("div");
-        oreCheckbox.style.marginTop = "8px";
+        oreCheckbox.className = "checkbox-container";
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
@@ -510,7 +465,7 @@ class SeedGeneratorTool extends BaseTool {
         const label = document.createElement("label");
         label.htmlFor = "ore-checkbox";
         label.textContent = "Generate Ore Deposits";
-        label.style.marginLeft = "8px";
+        label.className = "checkbox-label";
 
         oreCheckbox.appendChild(checkbox);
         oreCheckbox.appendChild(label);
@@ -535,19 +490,11 @@ class SeedGeneratorTool extends BaseTool {
 
         // Generation Controls section
         const controlsSection = document.createElement("div");
-        controlsSection.style.marginTop = "15px"; // Reduced from 20px
-        controlsSection.style.display = "flex";
-        controlsSection.style.flexDirection = "column";
-        controlsSection.style.gap = "10px";
-        controlsSection.style.position = "sticky"; // Make controls sticky
-        controlsSection.style.bottom = "0";
-        controlsSection.style.backgroundColor = "#2c2c2c";
-        controlsSection.style.paddingTop = "10px";
-        controlsSection.style.borderTop = "1px solid #444";
-        controlsSection.style.zIndex = "10";
+        controlsSection.className = "controls-section";
 
         // Clear Map checkbox
         const clearMapContainer = document.createElement("div");
+        clearMapContainer.className = "checkbox-container";
 
         const clearMapCheckbox = document.createElement("input");
         clearMapCheckbox.type = "checkbox";
@@ -560,62 +507,30 @@ class SeedGeneratorTool extends BaseTool {
         const clearMapLabel = document.createElement("label");
         clearMapLabel.htmlFor = "clear-map-checkbox";
         clearMapLabel.textContent = "Clear existing map before generation";
-        clearMapLabel.style.marginLeft = "8px";
+        clearMapLabel.className = "checkbox-label";
 
         clearMapContainer.appendChild(clearMapCheckbox);
         clearMapContainer.appendChild(clearMapLabel);
         controlsSection.appendChild(clearMapContainer);
 
-        // Screenshot Mode button
-        const screenshotButton = document.createElement("button");
-        screenshotButton.id = "screenshot-mode-button";
-        screenshotButton.textContent = "📷 Screenshot Mode";
-        screenshotButton.style.padding = "8px";
-        screenshotButton.style.backgroundColor = "#9C27B0";
-        screenshotButton.style.color = "white";
-        screenshotButton.style.border = "none";
-        screenshotButton.style.borderRadius = "4px";
-        screenshotButton.style.cursor = "pointer";
-        screenshotButton.style.fontWeight = "bold";
-        screenshotButton.style.marginBottom = "10px";
-        screenshotButton.style.transition = "background-color 0.3s";
+        /// COMMENTED OUT BECAUSE IT BREAKS UI STYLES
 
-        screenshotButton.addEventListener("mouseover", () => {
-            screenshotButton.style.backgroundColor = "#7B1FA2";
-        });
+        // // Screenshot Mode button
+        // const screenshotButton = document.createElement('button');
+        // screenshotButton.id = 'screenshot-mode-button';
+        // screenshotButton.textContent = '📷 Screenshot Mode';
+        // screenshotButton.className = 'screenshot-button';
+        // screenshotButton.addEventListener('click', () => {
+        //   this.enterScreenshotMode();
+        // });
 
-        screenshotButton.addEventListener("mouseout", () => {
-            screenshotButton.style.backgroundColor = "#9C27B0";
-        });
-
-        screenshotButton.addEventListener("click", () => {
-            this.enterScreenshotMode();
-        });
-
-        controlsSection.appendChild(screenshotButton);
+        // controlsSection.appendChild(screenshotButton);
 
         // Generate button
         const generateButton = document.createElement("button");
         generateButton.id = "generate-button";
         generateButton.textContent = "Generate World";
-        generateButton.style.padding = "12px";
-        generateButton.style.backgroundColor = "#4CAF50";
-        generateButton.style.color = "white";
-        generateButton.style.border = "none";
-        generateButton.style.borderRadius = "4px";
-        generateButton.style.cursor = "pointer";
-        generateButton.style.fontWeight = "bold";
-        generateButton.style.fontSize = "16px";
-        generateButton.style.transition = "background-color 0.3s";
-
-        generateButton.addEventListener("mouseover", () => {
-            generateButton.style.backgroundColor = "#45a049";
-        });
-
-        generateButton.addEventListener("mouseout", () => {
-            generateButton.style.backgroundColor = "#4CAF50";
-        });
-
+        generateButton.className = "generate-button";
         generateButton.addEventListener("click", () => {
             this.generateWorldFromSeed(this.generationOptions);
         });
@@ -625,26 +540,19 @@ class SeedGeneratorTool extends BaseTool {
         // Progress bar container
         const progressContainer = document.createElement("div");
         progressContainer.id = "progress-container";
-        progressContainer.style.display = "none";
-        progressContainer.style.marginTop = "15px";
+        progressContainer.className = "progress-container";
 
         const progressLabel = document.createElement("div");
         progressLabel.id = "progress-label";
         progressLabel.textContent = "Generating world...";
-        progressLabel.style.marginBottom = "5px";
+        progressLabel.className = "progress-label";
 
         const progressBarOuter = document.createElement("div");
-        progressBarOuter.style.width = "100%";
-        progressBarOuter.style.backgroundColor = "#444";
-        progressBarOuter.style.borderRadius = "4px";
-        progressBarOuter.style.overflow = "hidden";
+        progressBarOuter.className = "progress-bar-outer";
 
         const progressBarInner = document.createElement("div");
         progressBarInner.id = "progress-bar";
-        progressBarInner.style.width = "0%";
-        progressBarInner.style.height = "20px";
-        progressBarInner.style.backgroundColor = "#4CAF50";
-        progressBarInner.style.transition = "width 0.2s";
+        progressBarInner.className = "progress-bar-inner";
 
         progressBarOuter.appendChild(progressBarInner);
         progressContainer.appendChild(progressLabel);
@@ -675,13 +583,15 @@ class SeedGeneratorTool extends BaseTool {
      */
     createFormSection(title) {
         const section = document.createElement("div");
-        section.style.marginBottom = "10px"; // Reduced from 15px
+        section.className = "form-section";
 
         const sectionTitle = document.createElement("div");
         sectionTitle.textContent = title;
-        sectionTitle.style.fontWeight = "bold";
-        sectionTitle.style.marginBottom = "6px"; // Reduced from 8px
-        sectionTitle.style.fontSize = "14px";
+        if (title === "Seed Value") {
+            sectionTitle.className = "section-title-top";
+        } else {
+            sectionTitle.className = "section-title";
+        }
 
         section.appendChild(sectionTitle);
         return section;
@@ -699,7 +609,7 @@ class SeedGeneratorTool extends BaseTool {
         input.min = min;
         input.max = max;
         input.step = step;
-        this.applyInputStyles(input);
+        input.className = "generator-input";
         return input;
     }
 
@@ -708,21 +618,19 @@ class SeedGeneratorTool extends BaseTool {
      */
     createSlider(id, label, defaultValue, min, max, step, onChange) {
         const container = document.createElement("div");
-        container.style.marginBottom = "8px"; // Reduced from 12px
+        container.className = "slider-container";
 
         const labelContainer = document.createElement("div");
-        labelContainer.style.display = "flex";
-        labelContainer.style.justifyContent = "space-between";
-        labelContainer.style.marginBottom = "3px"; // Reduced from 5px
+        labelContainer.className = "slider-label-container";
 
         const sliderLabel = document.createElement("label");
         sliderLabel.htmlFor = id;
         sliderLabel.textContent = label;
-        sliderLabel.style.fontSize = "14px";
+        sliderLabel.className = "slider-label";
 
         const valueDisplay = document.createElement("span");
         valueDisplay.textContent = defaultValue;
-        valueDisplay.style.fontFamily = "monospace";
+        valueDisplay.className = "slider-value";
 
         labelContainer.appendChild(sliderLabel);
         labelContainer.appendChild(valueDisplay);
@@ -734,8 +642,7 @@ class SeedGeneratorTool extends BaseTool {
         slider.max = max;
         slider.step = step;
         slider.value = defaultValue;
-        slider.style.width = "100%";
-        slider.style.accentColor = "#4CAF50";
+        slider.className = "generator-slider";
 
         slider.addEventListener("input", () => {
             valueDisplay.textContent = slider.value;
@@ -749,47 +656,12 @@ class SeedGeneratorTool extends BaseTool {
     }
 
     /**
-     * Apply consistent styling to input elements
-     */
-    applyInputStyles(input) {
-        input.style.padding = "8px";
-        input.style.border = "1px solid #444";
-        input.style.borderRadius = "4px";
-        input.style.backgroundColor = "#333";
-        input.style.color = "#fff";
-        input.style.width = "100%";
-        input.style.boxSizing = "border-box";
-    }
-
-    /**
-     * Apply consistent styling to button elements
-     */
-    applyButtonStyles(button) {
-        button.style.padding = "8px";
-        button.style.border = "1px solid #444";
-        button.style.borderRadius = "4px";
-        button.style.backgroundColor = "#333";
-        button.style.color = "#fff";
-        button.style.cursor = "pointer";
-        button.style.transition = "background-color 0.2s";
-
-        button.addEventListener("mouseover", () => {
-            button.style.backgroundColor = "#444";
-        });
-
-        button.addEventListener("mouseout", () => {
-            button.style.backgroundColor = "#333";
-        });
-    }
-
-    /**
      * Show the progress UI and hide generation controls
      */
     showProgressUI() {
         if (!this.uiElements || !this.uiElements.progressContainer) return;
 
         this.uiElements.generateButton.disabled = true;
-        this.uiElements.generateButton.style.backgroundColor = "#666";
         this.uiElements.progressContainer.style.display = "block";
     }
 
@@ -810,7 +682,6 @@ class SeedGeneratorTool extends BaseTool {
         if (!this.uiElements || !this.uiElements.progressContainer) return;
 
         this.uiElements.generateButton.disabled = false;
-        this.uiElements.generateButton.style.backgroundColor = "#4CAF50";
         this.uiElements.progressContainer.style.display = "none";
     }
 
@@ -823,13 +694,13 @@ class SeedGeneratorTool extends BaseTool {
         if (error && this.uiElements && this.uiElements.progressLabel) {
             this.uiElements.progressLabel.textContent =
                 "Error generating world!";
-            this.uiElements.progressLabel.style.color = "red";
+            this.uiElements.progressLabel.classList.add("error-label");
             this.uiElements.progressContainer.style.display = "block";
 
             // Hide error message after 3 seconds
             setTimeout(() => {
                 this.uiElements.progressContainer.style.display = "none";
-                this.uiElements.progressLabel.style.color = "";
+                this.uiElements.progressLabel.classList.remove("error-label");
             }, 3000);
         }
     }
@@ -1022,48 +893,12 @@ class SeedGeneratorTool extends BaseTool {
         // Create a container for the button
         const container = document.createElement("div");
         container.id = "restore-ui-button-container";
-        container.style.position = "fixed";
-        container.style.bottom = "20px";
-        container.style.right = "20px";
-        container.style.zIndex = "10000"; // Ensure it's above everything
 
         // Create floating button
         const button = document.createElement("button");
         button.id = "restore-ui-button";
         button.innerHTML = "🔍 Show UI";
         button.title = "Exit Screenshot Mode";
-
-        // Style the button
-        Object.assign(button.style, {
-            width: "auto",
-            minWidth: "80px",
-            height: "40px",
-            padding: "0 15px",
-            borderRadius: "20px",
-            backgroundColor: "rgba(76, 175, 80, 0.9)",
-            color: "white",
-            border: "2px solid white",
-            fontSize: "15px",
-            fontWeight: "bold",
-            cursor: "pointer",
-            zIndex: "10000",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "background-color 0.2s, transform 0.2s",
-        });
-
-        // Add hover effects
-        button.addEventListener("mouseover", () => {
-            button.style.backgroundColor = "rgba(76, 175, 80, 1)";
-            button.style.transform = "scale(1.05)";
-        });
-
-        button.addEventListener("mouseout", () => {
-            button.style.backgroundColor = "rgba(76, 175, 80, 0.9)";
-            button.style.transform = "scale(1)";
-        });
 
         // Add click handler to restore UI
         button.addEventListener("click", () => {
@@ -1112,6 +947,48 @@ class SeedGeneratorTool extends BaseTool {
         }
 
         super.dispose();
+    }
+
+    /**
+     * Add temperature slider to the UI
+     */
+    createTemperatureSlider() {
+        const container = document.createElement("div");
+        container.className = "slider-container";
+        container.id = "temperature-slider-container";
+
+        const labelContainer = document.createElement("div");
+        labelContainer.className = "slider-label-container";
+
+        const label = document.createElement("label");
+        label.htmlFor = "temperature-slider";
+        label.textContent = "Temperature";
+        label.className = "slider-label";
+
+        const valueDisplay = document.createElement("span");
+        valueDisplay.textContent = `${this.generationOptions.temperature}`;
+        valueDisplay.className = "slider-value";
+
+        labelContainer.appendChild(label);
+        labelContainer.appendChild(valueDisplay);
+
+        const slider = document.createElement("input");
+        slider.id = "temperature-slider";
+        slider.type = "range";
+        slider.min = "0";
+        slider.max = "100";
+        slider.value = this.generationOptions.temperature;
+        slider.className = "generator-slider";
+
+        slider.addEventListener("input", (e) => {
+            this.generationOptions.temperature = parseInt(e.target.value);
+            valueDisplay.textContent = `${this.generationOptions.temperature}`;
+        });
+
+        container.appendChild(labelContainer);
+        container.appendChild(slider);
+
+        return container;
     }
 
     /**
@@ -1461,53 +1338,6 @@ class SeedGeneratorTool extends BaseTool {
         } catch (error) {
             console.error("Error force saving terrain:", error);
         }
-    }
-
-    /**
-     * Add temperature slider to the UI
-     */
-    createTemperatureSlider() {
-        const container = document.createElement("div");
-        container.className = "slider-container";
-        container.id = "temperature-slider-container";
-        container.style.marginBottom = "8px";
-
-        const labelContainer = document.createElement("div");
-        labelContainer.style.display = "flex";
-        labelContainer.style.justifyContent = "space-between";
-        labelContainer.style.marginBottom = "3px";
-
-        const label = document.createElement("label");
-        label.htmlFor = "temperature-slider";
-        label.textContent = "Temperature";
-        label.style.fontSize = "14px";
-
-        const valueDisplay = document.createElement("span");
-        valueDisplay.textContent = `${this.generationOptions.temperature}`;
-        valueDisplay.style.fontFamily = "monospace";
-
-        labelContainer.appendChild(label);
-        labelContainer.appendChild(valueDisplay);
-
-        const slider = document.createElement("input");
-        slider.id = "temperature-slider";
-        slider.type = "range";
-        slider.min = "0";
-        slider.max = "100";
-        slider.value = this.generationOptions.temperature;
-        slider.className = "slider";
-        slider.style.width = "100%";
-        slider.style.accentColor = "#4CAF50";
-
-        slider.addEventListener("input", (e) => {
-            this.generationOptions.temperature = parseInt(e.target.value);
-            valueDisplay.textContent = `${this.generationOptions.temperature}`;
-        });
-
-        container.appendChild(labelContainer);
-        container.appendChild(slider);
-
-        return container;
     }
 }
 

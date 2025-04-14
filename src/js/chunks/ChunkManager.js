@@ -22,7 +22,7 @@ class ChunkManager {
         this._chunkRemeshOptions = new Map();
         this._scene = scene;
         this._chunkMeshManager = new ChunkMeshManager();
-        this._viewDistance = 64;
+        this._viewDistance = 128;
         this._viewDistanceEnabled = true;
         this._blockTypeCache = new Map();
         this._isBulkLoading = false; // Flag to indicate if we're in a bulk loading operation
@@ -405,7 +405,9 @@ class ChunkManager {
         const chunksToProcess = sortedChunks.slice(0, MINIMUM_VISIBLE_CHUNKS);
         for (const { chunk, distance } of chunksToProcess) {
             console.log(
-                `Forcing mesh for chunk ${chunk.chunkId} at distance ${distance.toFixed(1)}`
+                `Forcing mesh for chunk ${
+                    chunk.chunkId
+                } at distance ${distance.toFixed(1)}`
             );
 
             // Make sure this chunk is in the render queue with high priority
@@ -484,7 +486,11 @@ class ChunkManager {
             const batchChunks = deferredChunks.slice(processedCount, endIndex);
 
             console.log(
-                `Processing batch ${Math.floor(processedCount / BATCH_SIZE) + 1}: ${batchChunks.length} chunks (${processedCount + 1}-${endIndex} of ${deferredChunks.length})`
+                `Processing batch ${
+                    Math.floor(processedCount / BATCH_SIZE) + 1
+                }: ${batchChunks.length} chunks (${
+                    processedCount + 1
+                }-${endIndex} of ${deferredChunks.length})`
             );
 
             // Add these chunks to the render queue
@@ -552,7 +558,9 @@ class ChunkManager {
                 const totalElapsed = (now - this._meshBuildStartTime) / 1000;
                 const rate = this._meshBuildCount / totalElapsed;
                 console.log(
-                    `Built ${this._meshBuildCount} chunk meshes at ${rate.toFixed(1)} meshes/sec`
+                    `Built ${
+                        this._meshBuildCount
+                    } chunk meshes at ${rate.toFixed(1)} meshes/sec`
                 );
             }
         }
@@ -593,7 +601,9 @@ class ChunkManager {
                 // meshes that need updating, or if it has only one block (is new)
                 if (!hasExistingMeshes && !isFirstBlockInChunk) {
                     console.log(
-                        `Deferred mesh creation for distant chunk ${chunk.chunkId} at distance ${distance.toFixed(1)}`
+                        `Deferred mesh creation for distant chunk ${
+                            chunk.chunkId
+                        } at distance ${distance.toFixed(1)}`
                     );
                     return; // Skip mesh creation for now
                 }
@@ -677,7 +687,9 @@ class ChunkManager {
         for (let x = -radius; x <= radius; x++) {
             for (let y = -radius; y <= radius; y++) {
                 for (let z = -radius; z <= radius; z++) {
-                    const cacheKey = `${globalCoordinate.x + x},${globalCoordinate.y + y},${globalCoordinate.z + z}`;
+                    const cacheKey = `${globalCoordinate.x + x},${
+                        globalCoordinate.y + y
+                    },${globalCoordinate.z + z}`;
                     if (this._blockTypeCache.has(cacheKey)) {
                         this._blockTypeCache.delete(cacheKey);
                         if (shouldLog) entriesCleared++;

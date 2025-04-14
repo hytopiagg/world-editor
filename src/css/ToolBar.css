@@ -97,8 +97,8 @@ button {
 }
 
 .import-export-button label {
-    font-size: 14px;
-    cursor: pointer;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .import-export-button input[type="file"] {

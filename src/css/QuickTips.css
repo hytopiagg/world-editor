@@ -5,6 +5,13 @@
     display: flex;
     justify-content: center;
     z-index: 1000;
+    opacity: 1; /* Start fully visible */
+    transition: opacity 0.5s ease-in-out; /* Add transition */
+}
+
+/* Style for when the container is fading out */
+.quick-tips-container.fading {
+    opacity: 0;
 }
 
 .quick-tips {

@@ -32,11 +32,12 @@ body {
 
 /* Body-specific styles */
 body {
-    margin: 0;
-    font-family: "Inter", sans-serif;
-    font-weight: 400;
-    font-size: 14px;
-    color: white;
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  text-shadow: 0 1px 3px #00000079;
+  color: white;
 }
 
 a {
@@ -45,14 +46,13 @@ a {
 
 /* Global Button Styles */
 button {
-    background-color: transparent;
-    border: none;
-    font-size: 16px;
-    border-radius: 5px;
-    padding: 8px 15px;
-    cursor: pointer;
-    color: white;
-    font-weight: bold;
+  background-color: transparent;
+  border: none;
+  font-size: 16px;
+  border-radius: 5px;
+  padding: 8px 15px;
+  cursor: pointer;
+  color: white;
 }
 
 button:hover {
@@ -220,13 +220,6 @@ button.selected {
 
 .camera-control-button.active svg {
     color: white;
-}
-
-.camera-control-button.save-button {
-    font-size: 1.3em;
-    padding: 12px;
-    margin-right: 10px;
-    margin-bottom: 10px;
 }
 
 .camera-buttons {

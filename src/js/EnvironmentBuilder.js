@@ -9,6 +9,7 @@ import {
     forwardRef,
 } from "react";
 import { DatabaseManager, STORES } from "./DatabaseManager";
+import { MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 
 export const environmentModels = (() => {
     try {
@@ -277,8 +278,8 @@ const EnvironmentBuilder = (
             }
         });
 
-        // Set a large initial capacity
-        const initialCapacity = 1000; // Adjust as needed based on your expected maximum
+        // Set initial capacity to the maximum allowed
+        const initialCapacity = MAX_ENVIRONMENT_OBJECTS;
 
         const instancedMeshArray = [];
         for (const { material, geometries } of geometriesByMaterial.values()) {
@@ -864,9 +865,9 @@ const EnvironmentBuilder = (
         const currentCapacity =
             instancedData.meshes[0]?.instanceMatrix.count || 0;
 
-        if (totalNeededInstances > currentCapacity) {
+        if (totalNeededInstances > MAX_ENVIRONMENT_OBJECTS) {
             alert(
-                "Maximum Environment Objects Exceeded! Please clear the environment and try again."
+                `Maximum Environment Objects (${MAX_ENVIRONMENT_OBJECTS}) Exceeded! Please clear the environment and try again.`
             );
             return;
         }

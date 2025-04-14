@@ -20,6 +20,7 @@ import {
     FaBorderAll,
     FaSeedling,
     FaRobot,
+    FaSave,
 } from "react-icons/fa";
 import Tooltip from "../components/Tooltip";
 import { DatabaseManager, STORES } from "../DatabaseManager";
@@ -47,6 +48,7 @@ const ToolBar = ({
     environmentBuilderRef,
     toggleAIAssistant,
     isAIAssistantVisible,
+    setIsSaving,
 }) => {
     const [newGridSize, setNewGridSize] = useState(100);
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
@@ -729,7 +731,7 @@ const ToolBar = ({
                     <div className="control-label">Shape Tools</div>
                 </div>
 
-                <div className="control-group contol-group-end">
+                <div className="control-group">
                     <div className="control-button-wrapper">
                         <Tooltip text="Change grid size">
                             <button
@@ -788,6 +790,28 @@ const ToolBar = ({
                         </Tooltip>
                     </div>
                     <div className="control-label">Map Tools</div>
+                </div>
+                <div className="control-group contol-group-end">
+                    <div className="control-button-wrapper">
+                        <Tooltip text="Save terrain (Ctrl+S)">
+                            <button
+                                onClick={() => {
+                                    // Use the setIsSaving prop here
+                                    setIsSaving(true);
+                                    // Then call the actual save function
+                                    if (terrainBuilderRef.current) {
+                                        terrainBuilderRef.current.saveTerrainManually();
+                                    }
+                                    // Set a fallback timer to clear the saving state if something goes wrong
+                                    setTimeout(() => setIsSaving(false), 5000);
+                                }}
+                                className="control-button"
+                            >
+                                <FaSave />
+                            </button>
+                        </Tooltip>
+                    </div>
+                    <div className="control-label">Save</div>
                 </div>
             </div>
 

@@ -12,7 +12,7 @@ const DebugInfo = ({
     const [maxFrameTime, setMaxFrameTime] = useState(0);
     const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
     const [selectionDistance, setSelectionDistance] = useState(128);
-    const [viewDistance, setViewDistance] = useState(64);
+    const [viewDistance, setViewDistance] = useState(128);
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
 
     const frameTimesRef = useRef([]);
@@ -150,8 +150,8 @@ const DebugInfo = ({
                             fps < 30
                                 ? "fps-low"
                                 : fps < 50
-                                  ? "fps-medium"
-                                  : "fps-high"
+                                ? "fps-medium"
+                                : "fps-high"
                         }
                     >
                         {fps}
@@ -167,8 +167,8 @@ const DebugInfo = ({
                             frameTime > 33
                                 ? "fps-low"
                                 : frameTime > 20
-                                  ? "fps-medium"
-                                  : "fps-high"
+                                ? "fps-medium"
+                                : "fps-high"
                         }
                     >
                         {frameTime.toFixed(1)}ms
@@ -184,8 +184,8 @@ const DebugInfo = ({
                             maxFrameTime > 100
                                 ? "fps-low"
                                 : maxFrameTime > 50
-                                  ? "fps-medium"
-                                  : "fps-high"
+                                ? "fps-medium"
+                                : "fps-high"
                         }
                     >
                         {maxFrameTime.toFixed(1)}ms
@@ -241,7 +241,7 @@ const DebugInfo = ({
                     onClick={togglePerformanceDetails}
                     style={{ cursor: "pointer" }}
                 >
-                    Performance {showPerformanceDetails ? "▼" : "►"}
+                    Performance Settings {showPerformanceDetails ? "▼" : "►"}
                 </span>
 
                 {showPerformanceDetails && (
@@ -252,7 +252,7 @@ const DebugInfo = ({
                                 checked={autoSaveEnabled}
                                 onChange={handleAutoSaveToggle}
                             />
-                            Auto-Save (5 min)
+                            Enable Auto-Save (5 min)
                         </label>
 
                         <div className="slider-container">

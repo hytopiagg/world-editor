@@ -20,7 +20,7 @@ class ChunkSystem {
         this._chunkManager = new ChunkManager(scene);
         this._initialized = false;
         this._options = {
-            viewDistance: options.viewDistance || 64,
+            viewDistance: options.viewDistance || 128,
             viewDistanceEnabled:
                 options.viewDistanceEnabled !== undefined
                     ? options.viewDistanceEnabled
@@ -291,7 +291,11 @@ class ChunkSystem {
                             if (oy !== 0 && !isNearYBoundary) continue;
                             if (oz !== 0 && !isNearZBoundary) continue;
 
-                            const neighborChunkId = `${originX + ox * CHUNK_SIZE},${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE}`;
+                            const neighborChunkId = `${
+                                originX + ox * CHUNK_SIZE
+                            },${originY + oy * CHUNK_SIZE},${
+                                originZ + oz * CHUNK_SIZE
+                            }`;
 
                             // Add to set of chunks to update
                             chunksToUpdate.add(neighborChunkId);
@@ -402,7 +406,11 @@ class ChunkSystem {
                             if (oy !== 0 && !isNearYBoundary) continue;
                             if (oz !== 0 && !isNearZBoundary) continue;
 
-                            const neighborChunkId = `${originX + ox * CHUNK_SIZE},${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE}`;
+                            const neighborChunkId = `${
+                                originX + ox * CHUNK_SIZE
+                            },${originY + oy * CHUNK_SIZE},${
+                                originZ + oz * CHUNK_SIZE
+                            }`;
 
                             // Add to set of chunks to update
                             chunksToUpdate.add(neighborChunkId);
@@ -650,7 +658,9 @@ class ChunkSystem {
         }
 
         console.log(
-            `Setting ChunkSystem bulk loading mode to: ${isLoading ? "ON" : "OFF"}`
+            `Setting ChunkSystem bulk loading mode to: ${
+                isLoading ? "ON" : "OFF"
+            }`
         );
         this._chunkManager.setBulkLoadingMode(isLoading, priorityDistance);
     }
@@ -668,7 +678,9 @@ class ChunkSystem {
 
         const skipNeighbors = options.skipNeighbors === true;
         console.log(
-            `ChunkSystem: Forcing update for ${chunkKeys.length} chunks${skipNeighbors ? " (skipping neighbors)" : ""}`
+            `ChunkSystem: Forcing update for ${chunkKeys.length} chunks${
+                skipNeighbors ? " (skipping neighbors)" : ""
+            }`
         );
 
         // Keep track of chunks we're already updating to avoid duplication

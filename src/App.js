@@ -435,35 +435,10 @@ function App() {
                 currentBlockType={currentBlockType}
                 toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
                 isAIAssistantVisible={isAIAssistantVisible}
+                setIsSaving={setIsSaving}
             />
 
             <div className="camera-controls-wrapper">
-                <Tooltip text="Save terrain (Ctrl+S)">
-                    <button
-                        onClick={() => {
-                            // Set saving state directly for immediate feedback
-                            setIsSaving(true);
-                            // Then call the actual save function
-                            if (terrainBuilderRef.current) {
-                                terrainBuilderRef.current
-                                    .saveTerrainManually()
-                                    .finally(() => {
-                                        // Ensure saving state is cleared
-                                        setIsSaving(false);
-                                    });
-                            }
-                        }}
-                        className="camera-control-button save-button"
-                        disabled={isSaving}
-                    >
-                        {isSaving ? (
-                            <div className="mini-spinner"></div>
-                        ) : (
-                            <FaSave />
-                        )}
-                    </button>
-                </Tooltip>
-
                 <div className="camera-buttons">
                     <Tooltip text="Reset camera position">
                         <button
