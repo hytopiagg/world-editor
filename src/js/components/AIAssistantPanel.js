@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from "react";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
+import "../../css/AIAssistantPanel.css";
 
 const AIAssistantPanel = ({
     getAvailableBlocks,
@@ -84,137 +85,59 @@ const AIAssistantPanel = ({
         return null;
     }
 
-    // Basic styling - can be improved
-    const panelStyle = {
-        position: "absolute",
-        top: "400px",
-        right: "20px",
-        width: "300px",
-        padding: "15px",
-        background: "rgba(40, 40, 40, 0.9)",
-        border: "1px solid #555",
-        borderRadius: "8px",
-        color: "white",
-        zIndex: 100, // Ensure it's above other UI elements
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-    };
-
-    const textareaStyle = {
-        width: "100%",
-        minHeight: "80px",
-        background: "#333",
-        color: "white",
-        border: "1px solid #666",
-        borderRadius: "4px",
-        padding: "5px",
-        boxSizing: "border-box", // Include padding in width
-    };
-
-    const buttonStyle = {
-        padding: "8px 15px",
-        background: "#007bff",
-        color: "white",
-        border: "none",
-        borderRadius: "4px",
-        cursor: "pointer",
-        opacity: isLoading ? 0.6 : 1,
-    };
-
-    const errorStyle = {
-        color: "#ffcccc",
-        fontSize: "0.9em",
-        marginTop: "5px",
-    };
-
-    // Added styles for history
-    const historyListStyle = {
-        marginTop: "15px",
-        maxHeight: "150px", // Limit height and make scrollable
-        overflowY: "auto",
-        borderTop: "1px solid #555",
-        paddingTop: "10px",
-    };
-
-    const historyItemStyle = {
-        background: "#444",
-        padding: "5px 8px",
-        marginBottom: "5px",
-        borderRadius: "3px",
-        cursor: "pointer",
-        fontSize: "0.9em",
-        whiteSpace: "nowrap", // Prevent wrapping
-        overflow: "hidden", // Hide overflow
-        textOverflow: "ellipsis", // Add ellipsis if text is too long
-    };
-
-    const historyItemHoverStyle = {
-        // Style for hover effect
-        background: "#555",
-    };
-
     return (
-        <div style={panelStyle}>
+        <div className="ai-assistant-panel">
             <h4>AI Building Assistant</h4>
             <textarea
-                style={textareaStyle}
+                className="ai-assistant-textarea"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Describe what you want to build (e.g., 'a small stone hut', 'a 5 block high brick tower')"
                 disabled={isLoading}
             />
             <button
-                style={buttonStyle}
+                className="ai-assistant-button"
                 onClick={handleGenerate}
                 disabled={isLoading || !prompt.trim()}
             >
                 {isLoading ? "Generating..." : "Generate Structure"}
             </button>
-            {error && <div style={errorStyle}>{error}</div>}
+            {error && <div className="ai-assistant-error">{error}</div>}
 
-            {/* Added HCaptcha Component */}
-            <div style={{ marginTop: "10px" }}>
-                <HCaptcha
-                    ref={hCaptchaRef}
-                    sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY}
-                    onVerify={(token) => {
-                        setHCaptchaToken(token);
-                        setCaptchaError(null);
-                    }}
-                    onExpire={() => {
-                        setHCaptchaToken(null);
-                        setCaptchaError(
-                            "CAPTCHA expired. Please verify again."
-                        );
-                    }}
-                    onError={(err) => {
-                        setHCaptchaToken(null);
-                        setCaptchaError(`CAPTCHA error: ${err}`);
-                    }}
-                />
-            </div>
-            {captchaError && <div style={errorStyle}>{captchaError}</div>}
+            {/* Added HCaptcha Component - Wrapped for styling */}
+            {/* <div className="ai-assistant-captcha-container"> */}
+            <HCaptcha
+                ref={hCaptchaRef}
+                sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY}
+                size="compact"
+                onVerify={(token) => {
+                    setHCaptchaToken(token);
+                    setCaptchaError(null);
+                }}
+                onExpire={() => {
+                    setHCaptchaToken(null);
+                    setCaptchaError("CAPTCHA expired. Please verify again.");
+                }}
+                onError={(err) => {
+                    setHCaptchaToken(null);
+                    setCaptchaError(`CAPTCHA error: ${err}`);
+                }}
+            />
+            {/* </div> */}
+            {captchaError && (
+                <div className="ai-assistant-error">{captchaError}</div>
+            )}
 
             {/* Added History Section */}
             {generationHistory.length > 0 && (
-                <div style={historyListStyle}>
+                <div className="ai-assistant-history-list">
                     <h5>History:</h5>
                     {generationHistory.map((entry, index) => (
                         <div
-                            key={index} // Using index as key is okay here since list order changes predictably
-                            style={historyItemStyle}
-                            // Add hover effect inline for simplicity
-                            onMouseEnter={(e) =>
-                                (e.currentTarget.style.background =
-                                    historyItemHoverStyle.background)
-                            }
-                            onMouseLeave={(e) =>
-                                (e.currentTarget.style.background =
-                                    historyItemStyle.background)
-                            }
+                            key={index}
+                            className="ai-assistant-history-item"
                             onClick={() => loadAISchematic(entry.schematic)}
-                            title={`Load: ${entry.prompt}`} // Tooltip shows full prompt
+                            title={`Load: ${entry.prompt}`}
                         >
                             {entry.prompt}
                         </div>

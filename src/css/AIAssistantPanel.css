@@ -1,0 +1,122 @@
+/* src/js/components/AIAssistantPanel.css */
+
+.ai-assistant-panel {
+    position: absolute;
+    top: 400px; /* Will adjust this later for responsiveness */
+    right: 20px; /* Will adjust this later */
+    width: 300px; /* Will adjust this later */
+    padding: 15px;
+    background: rgba(40, 40, 40, 0.9);
+    border: 1px solid #555;
+    border-radius: 8px;
+    color: white;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-sizing: border-box; /* Ensure padding is included in width */
+}
+
+.ai-assistant-textarea {
+    width: 100%;
+    min-height: 80px;
+    background: #333;
+    color: white;
+    border: 1px solid #666;
+    border-radius: 4px;
+    padding: 5px;
+    box-sizing: border-box; /* Include padding in width */
+    resize: vertical; /* Allow vertical resize */
+}
+
+.ai-assistant-button {
+    padding: 8px 15px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.2s ease-in-out; /* Smooth transition */
+}
+
+.ai-assistant-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.ai-assistant-error {
+    color: #ffcccc;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+.ai-assistant-history-list {
+    margin-top: 15px;
+    max-height: 150px; /* Limit height and make scrollable */
+    overflow-y: auto;
+    border-top: 1px solid #555;
+    padding-top: 10px;
+}
+
+.ai-assistant-history-item {
+    background: #444;
+    padding: 5px 8px;
+    margin-bottom: 5px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.9em;
+    white-space: nowrap; /* Prevent wrapping */
+    overflow: hidden; /* Hide overflow */
+    text-overflow: ellipsis; /* Add ellipsis if text is too long */
+    transition: background-color 0.2s ease-in-out; /* Smooth transition */
+}
+
+.ai-assistant-history-item:hover {
+    background: #555;
+}
+
+/* Captcha Container Styling */
+.ai-assistant-captcha-container {
+    margin-top: 10px;
+    /* min-width: 304px; /* REMOVED - Let container shrink */
+    display: flex;
+    justify-content: center; /* Center captcha if container is wider */
+    width: 100%; /* Ensure container takes available width */
+    overflow: hidden; /* Hide potential overflow */
+}
+
+/* Style the hCaptcha iframe directly if needed (e.g., for scaling) */
+.ai-assistant-captcha-container > div {
+    /* This targets the div hCaptcha injects */
+    /* max-width: 100%; /* REMOVED - We set width/scale directly */
+    /* overflow: hidden; /* Moved to container */
+}
+
+/* Basic Responsiveness */
+@media (max-width: 600px) {
+    .ai-assistant-panel {
+        width: 90vw; /* Take up more width on small screens */
+        max-width: 350px; /* But not too much */
+        right: 5vw; /* Center it a bit more */
+        top: auto; /* Remove fixed top */
+        bottom: 20px; /* Stick to bottom */
+    }
+
+    /* Scale captcha container on smaller screens if it overflows */
+    .ai-assistant-captcha-container {
+        /* width: 100%; /* Already set above */
+        /* overflow: hidden; /* REMOVING - Might clip compact view */
+        /* Explicitly set height to match scaled content */
+        /* height: calc(78px * 0.9); /* REMOVED - No longer needed for compact */
+        min-height: 144px; /* Add min-height for compact captcha */
+    }
+
+    /* Target the actual captcha iframe container */
+    .ai-assistant-captcha-container > div {
+        /* REMOVED Styles related to scaling normal size */
+        /* width: 304px; */
+        /* height: 78px; */
+        /* transform: scale(0.9); */
+        /* transform-origin: 0 0; */
+    }
+} 
