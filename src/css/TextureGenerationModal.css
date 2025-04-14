@@ -292,3 +292,101 @@
     margin-top: 0; /* Remove extra space above if it directly follows hCaptcha */
     margin-bottom: 15px;
 }
+
+/* Responsive Adjustments */
+
+@media (max-width: 768px) {
+    .modal-content.texture-editor-modal {
+        max-width: 95vw; /* Allow more width on smaller screens */
+        padding: 20px;
+    }
+
+    .editor-area {
+        flex-direction: column; /* Stack tools and canvas vertically */
+        align-items: center; /* Center items when stacked */
+    }
+
+    .editor-tools {
+        flex-direction: row; /* Arrange tools horizontally */
+        flex-wrap: wrap; /* Allow wrapping if space is limited */
+        justify-content: center; /* Center tools horizontally */
+        gap: 10px; /* Reduce gap */
+        width: 100%; /* Take full width */
+    }
+
+    .editor-tools > * { /* Target direct children of editor-tools */
+        margin-bottom: 10px; /* Add some spacing below wrapped items */
+    }
+
+    .editor-canvas-container {
+        width: 100%; /* Ensure canvas container takes full width */
+        margin-top: 20px; /* Add space between tools and canvas */
+    }
+
+    /* Ensure canvas itself scales if needed, maintaining aspect ratio */
+    .pixel-editor-canvas {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .generation-controls {
+        flex-direction: column; /* Stack prompt and button */
+        align-items: stretch; /* Make children full width */
+    }
+
+    .generation-controls .generate-button,
+    .generation-controls .login-button {
+        width: 100%; /* Make button full width */
+    }
+
+    .modal-header {
+        flex-direction: column; /* Stack title and close button */
+        align-items: center; /* Center header items */
+        text-align: center;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+    }
+
+    .modal-header h2 {
+        margin-bottom: 10px; /* Space below title */
+    }
+
+    .header-buttons {
+        margin-left: 0; /* Remove left margin when stacked */
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-content {
+        padding: 15px;
+    }
+
+    .modal-content h2 {
+        font-size: 1.3rem;
+    }
+
+    .generation-controls .prompt-input,
+    .generation-controls .generate-button,
+    .generation-controls .login-button {
+        font-size: 0.9rem;
+    }
+
+    .editor-tools {
+        gap: 8px;
+    }
+
+    .tool-button {
+        padding: 6px; /* Slightly smaller tool buttons */
+        font-size: 1rem;
+    }
+
+    .undo-redo-buttons button {
+        padding: 6px;
+        font-size: 1rem;
+    }
+
+    /* Adjust ColorPalette for small screens if necessary */
+    /* .color-palette {
+        grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
+    } */
+}
