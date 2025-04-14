@@ -1,99 +1,99 @@
 /* Global Styles */
 * {
-  -webkit-user-drag: none;
+    -webkit-user-drag: none;
 }
 
 /* Controls Container */
 .controls-container {
-  width: 100%;
-  min-width: 1300px;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  padding-bottom: 20px;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  background-color: transparent;
+    width: 100%;
+    min-width: 1300px;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    padding-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    background-color: transparent;
 }
 
 .control-label {
-  position: absolute;
-  font-size: 12px;
-  font-weight: bold;
-  text-align: center;
-  bottom: 110%;
-  text-shadow: 0 0 2px #000000;
-  width: 100%;
-  white-space: nowrap;
+    position: absolute;
+    font-size: 12px;
+    font-weight: bold;
+    text-align: center;
+    bottom: 110%;
+    text-shadow: 0 0 2px #000000;
+    width: 100%;
+    white-space: nowrap;
 }
 
 .camera-angle-slider .control-label {
-  bottom: auto;
-  top: -25px;
-  left: 50%;
-  transform: translateX(-50%);
+    bottom: auto;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
 .control-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 8px;
-  background-color: rgba(13, 13, 13, 0.7);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  border-left: 1px solid rgba(241, 241, 241, 0.15);
-  padding-left: 15px;
-  padding-right: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 8px;
+    background-color: rgba(13, 13, 13, 0.7);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border-left: 1px solid rgba(241, 241, 241, 0.15);
+    padding-left: 15px;
+    padding-right: 15px;
 }
 
-.contol-group-start{
-  border-radius: 12px 0 0 12px;
-  padding-left: 8px;
+.contol-group-start {
+    border-radius: 12px 0 0 12px;
+    padding-left: 8px;
 }
 
-.contol-group-end{
-  border-radius: 0 12px 12px 0;
-  padding-right: 8px;
+.contol-group-end {
+    border-radius: 0 12px 12px 0;
+    padding-right: 8px;
 }
 .control-button-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
 }
 
 .control-divider-vertical {
-  width: 1px;
-  height: 20px;
-  background-color: rgba(241, 241, 241, 0.15);
-  margin: 0 8px;
+    width: 1px;
+    height: 20px;
+    background-color: rgba(241, 241, 241, 0.15);
+    margin: 0 8px;
 }
 
 /* Button Styles */
 .control-button {
-  margin: 0 2px;
-  padding: 6px;
-  border-radius: 8px;
-  border: 1px solid rgba(241, 241, 241, 0.15);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 33px;
-  height: 33px;
+    margin: 0 2px;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 33px;
+    height: 33px;
 }
 
 button {
-  border-radius: 5px;
-  padding: 8px 15px;
+    border-radius: 5px;
+    padding: 8px 15px;
 }
 
 .import-export-button {
-  width: 90px;
+    width: 90px;
 }
 
 .import-export-button label {
@@ -102,242 +102,242 @@ button {
 }
 
 .import-export-button input[type="file"] {
-  display: none;
+    display: none;
 }
 
 /* Modal Styles */
 .modal,
 .modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 100;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
 }
 
 .modal-content {
-  border-radius: 10px;
-  width: 400px;
-  padding: 30px;
-  background-color: rgba(13, 13, 13, 0.7);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px); /* For Safari support */
+    border-radius: 10px;
+    width: 400px;
+    padding: 30px;
+    background-color: rgba(13, 13, 13, 0.7);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px); /* For Safari support */
 }
 
 .modal-title {
-  margin-bottom: 15px;
+    margin-bottom: 15px;
 }
 
 .modal-description {
-  margin-bottom: 30px;
-  text-align: center;
-  width: 100%;
-  font-size: 14px;
-  color: #adadad;
-  text-align: left;
+    margin-bottom: 30px;
+    text-align: center;
+    width: 100%;
+    font-size: 14px;
+    color: #adadad;
+    text-align: left;
 }
 
 .modal-input {
-  margin-bottom: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .modal-input label {
-  flex: 0 0 40%;
-  text-align: left;
+    flex: 0 0 40%;
+    text-align: left;
 }
 
 .modal-input input {
-  flex: 0 0 55%;
-  padding: 6px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(241, 241, 241, 0.15);
-  background-color: rgba(30, 30, 30, 0.7);
-  color: #fff;
+    flex: 0 0 55%;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+    background-color: rgba(30, 30, 30, 0.7);
+    color: #fff;
 }
 
 /* Improve the range slider container */
 .modal-input div {
-  flex: 0 0 55%;
-  display: flex;
-  align-items: left;
-  justify-content: left;
-  width: 100%;
+    flex: 0 0 55%;
+    display: flex;
+    align-items: left;
+    justify-content: left;
+    width: 100%;
 }
 
 /* Make the slider labels smaller and more compact */
 .modal-input div span {
-  font-size: 11px;
-  color: #adadad;
-  white-space: nowrap;
-  flex: 0 0 auto;
+    font-size: 11px;
+    color: #adadad;
+    white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 /* Adjust the range slider itself */
 .modal-input input[type="range"] {
-  flex: 1;
-  width: 40px;
-  margin: 0 5px;
-  height: 5px;
-  -webkit-appearance: none;
-  background: rgba(241, 241, 241, 0.3);
-  border-radius: 5px;
-  outline: none;
+    flex: 1;
+    width: 40px;
+    margin: 0 5px;
+    height: 5px;
+    -webkit-appearance: none;
+    background: rgba(241, 241, 241, 0.3);
+    border-radius: 5px;
+    outline: none;
 }
 
 /* Style the range slider thumb */
 .modal-input input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: #ffffff;
-  cursor: pointer;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
 }
 
 .modal-input input[type="range"]::-moz-range-thumb {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: #ffffff;
-  cursor: pointer;
-  border: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    border: none;
 }
 
 /* Checkbox wrapper needs special handling */
 .checkbox-input-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
 }
 
 .checkbox-input-wrapper label {
-  flex: 0 0 70%;
+    flex: 0 0 70%;
 }
 
 .checkbox-input-wrapper input[type="checkbox"] {
-  flex: 0 0 20%;
-  height: 18px;
-  width: 18px;
+    flex: 0 0 20%;
+    height: 18px;
+    width: 18px;
 }
 
 .modal-buttons button {
-  width: 40%;
-  border: 1px solid rgba(241, 241, 241, 0.15);
-  margin:10px;
-  margin-top: 20px;
+    width: 40%;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+    margin: 10px;
+    margin-top: 20px;
 }
 
 /* Helper Classes & Controls */
 
 .placement-size-controls {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
 .placement-size-controls span {
-  min-width: 20px;
-  text-align: center;
+    min-width: 20px;
+    text-align: center;
 }
 
 /* Input Groups */
 .dimension-inputs,
 .grid-size-input,
 .terrain-inputs {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 15px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 15px 0;
 }
 
 .dimension-inputs label,
 .grid-size-input label,
 .terrain-inputs label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
 }
 
 .dimension-inputs input,
 .grid-size-input input,
 .terrain-inputs input {
-  padding: 5px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
 }
 
 /* Camera Controls */
 .camera-angle-slider {
-  position: relative;
-  height: 100px;
-  width: 30px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: rgba(13, 13, 13, 0.7);
-  padding: 5px;
-  border-radius: 5px;
-  margin-top: 10px;
+    position: relative;
+    height: 100px;
+    width: 30px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(13, 13, 13, 0.7);
+    padding: 5px;
+    border-radius: 5px;
+    margin-top: 10px;
 }
 
 .vertical-slider {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  height: 100%;
-  width: 8px;
-  -webkit-appearance: none;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  outline: none;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    height: 100%;
+    width: 8px;
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    outline: none;
 }
 
 .vertical-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: white;
-  cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
 }
 
 .vertical-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: white;
-  cursor: pointer;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
 }
 
 .control-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 /* Modal image styles */
 .modal-image-container {
-  width: 100%;
-  margin-bottom: 15px;
-  border-radius: 8px;
-  overflow: hidden;
+    width: 100%;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .modal-image {
-  width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 8px;
-  object-fit: cover;
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 8px;
+    object-fit: cover;
 }

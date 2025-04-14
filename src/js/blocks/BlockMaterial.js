@@ -1,97 +1,97 @@
 // BlockMaterial.js
 // Manages materials for blocks
 
-import * as THREE from 'three';
+import * as THREE from "three";
 
 /**
  * Singleton class for managing block materials
  */
 class BlockMaterial {
-  constructor() {
-    this._defaultMaterial = null;
-    this._liquidMaterial = null;
-  }
+    constructor() {
+        this._defaultMaterial = null;
+        this._liquidMaterial = null;
+    }
 
-  /**
-   * Get the singleton instance
-   * @returns {BlockMaterial} The singleton instance
-   */
-  static get instance() {
-    if (!this._instance) {
-      this._instance = new BlockMaterial();
+    /**
+     * Get the singleton instance
+     * @returns {BlockMaterial} The singleton instance
+     */
+    static get instance() {
+        if (!this._instance) {
+            this._instance = new BlockMaterial();
+        }
+        return this._instance;
     }
-    return this._instance;
-  }
 
-  /**
-   * Get the default material for solid blocks
-   * @returns {THREE.MeshPhongMaterial} The default material
-   */
-  get defaultMaterial() {
-    if (!this._defaultMaterial) {
-      // Create a new material if it doesn't exist
-      this._defaultMaterial = new THREE.MeshPhongMaterial({
-        map: null, // Will be set by TextureAtlas
-        side: THREE.FrontSide,
-        vertexColors: true,
-        transparent: true,
-        alphaTest: 0.1,
-        shininess: 0,
-        specular: 0x000000,
-      });
+    /**
+     * Get the default material for solid blocks
+     * @returns {THREE.MeshPhongMaterial} The default material
+     */
+    get defaultMaterial() {
+        if (!this._defaultMaterial) {
+            // Create a new material if it doesn't exist
+            this._defaultMaterial = new THREE.MeshPhongMaterial({
+                map: null, // Will be set by TextureAtlas
+                side: THREE.FrontSide,
+                vertexColors: true,
+                transparent: true,
+                alphaTest: 0.1,
+                shininess: 0,
+                specular: 0x000000,
+            });
+        }
+        return this._defaultMaterial;
     }
-    return this._defaultMaterial;
-  }
 
-  /**
-   * Set the texture atlas for the default material
-   * @param {THREE.Texture} textureAtlas - The texture atlas
-   */
-  setTextureAtlas(textureAtlas) {
-    // Configure nearest neighbor filtering for pixelated look
-    if (textureAtlas) {
-      // Disable mipmaps since we want crisp pixels
-      textureAtlas.generateMipmaps = false;
-      
-      // Use nearest neighbor filtering
-      textureAtlas.minFilter = THREE.NearestFilter;
-      textureAtlas.magFilter = THREE.NearestFilter;
-      
-      // Disable anisotropic filtering
-      textureAtlas.anisotropy = 1;
-      
-      // Set wrapS and wrapT to clamp to edge to prevent texture bleeding
-      textureAtlas.wrapS = THREE.ClampToEdgeWrapping;
-      textureAtlas.wrapT = THREE.ClampToEdgeWrapping;
-      
-      // Force texture update
-      textureAtlas.needsUpdate = true;
-    }
-    
-    if (this._defaultMaterial) {
-      this._defaultMaterial.map = textureAtlas;
-      this._defaultMaterial.needsUpdate = true;
-    }
-    
-    if (this._liquidMaterial) {
-      this._liquidMaterial.uniforms.textureAtlas.value = textureAtlas;
-    }
-  }
+    /**
+     * Set the texture atlas for the default material
+     * @param {THREE.Texture} textureAtlas - The texture atlas
+     */
+    setTextureAtlas(textureAtlas) {
+        // Configure nearest neighbor filtering for pixelated look
+        if (textureAtlas) {
+            // Disable mipmaps since we want crisp pixels
+            textureAtlas.generateMipmaps = false;
 
-	/**
-	* Get the material for liquid blocks
-	* @returns {THREE.ShaderMaterial} The liquid material
-	*/
-	get liquidMaterial() {
-		if (!this._liquidMaterial) {
-			// Create a new shader material for liquids
-			this._liquidMaterial = new THREE.ShaderMaterial({
-				uniforms: {
-					textureAtlas: { value: null },
-					time: { value: 0 },
-          filter: { value: THREE.NearestFilter }
-				},
-				vertexShader: `
+            // Use nearest neighbor filtering
+            textureAtlas.minFilter = THREE.NearestFilter;
+            textureAtlas.magFilter = THREE.NearestFilter;
+
+            // Disable anisotropic filtering
+            textureAtlas.anisotropy = 1;
+
+            // Set wrapS and wrapT to clamp to edge to prevent texture bleeding
+            textureAtlas.wrapS = THREE.ClampToEdgeWrapping;
+            textureAtlas.wrapT = THREE.ClampToEdgeWrapping;
+
+            // Force texture update
+            textureAtlas.needsUpdate = true;
+        }
+
+        if (this._defaultMaterial) {
+            this._defaultMaterial.map = textureAtlas;
+            this._defaultMaterial.needsUpdate = true;
+        }
+
+        if (this._liquidMaterial) {
+            this._liquidMaterial.uniforms.textureAtlas.value = textureAtlas;
+        }
+    }
+
+    /**
+     * Get the material for liquid blocks
+     * @returns {THREE.ShaderMaterial} The liquid material
+     */
+    get liquidMaterial() {
+        if (!this._liquidMaterial) {
+            // Create a new shader material for liquids
+            this._liquidMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    textureAtlas: { value: null },
+                    time: { value: 0 },
+                    filter: { value: THREE.NearestFilter },
+                },
+                vertexShader: `
           varying vec2 vUv;
           varying vec3 vPosition;
           varying vec3 vNormal;
@@ -130,7 +130,7 @@ class BlockMaterial {
             gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
           }
         `,
-				fragmentShader: `
+                fragmentShader: `
           uniform sampler2D textureAtlas;
           uniform float time;
           
@@ -172,23 +172,23 @@ class BlockMaterial {
             gl_FragColor = vec4(finalColor, alpha);
           }
         `,
-				transparent: true,
-				side: THREE.DoubleSide
-			});
-			
-			// Disable mipmapping features for shader material
-			this._liquidMaterial.extensions = {
-				derivatives: false,
-				fragDepth: false,
-				drawBuffers: false,
-				shaderTextureLOD: false
-			};
-		}
-		return this._liquidMaterial;
-	}
+                transparent: true,
+                side: THREE.DoubleSide,
+            });
+
+            // Disable mipmapping features for shader material
+            this._liquidMaterial.extensions = {
+                derivatives: false,
+                fragDepth: false,
+                drawBuffers: false,
+                shaderTextureLOD: false,
+            };
+        }
+        return this._liquidMaterial;
+    }
 }
 
 // Initialize the singleton instance
 BlockMaterial._instance = null;
 
-export default BlockMaterial; 
+export default BlockMaterial;

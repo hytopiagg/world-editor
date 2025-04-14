@@ -24,10 +24,11 @@
     background-color: rgba(13, 13, 13, 0.4);
     color: #ffffff;
     border-radius: 10px;
-    text-shadow: -1px -1px 0 rgba(0, 0, 0, 0.1),
-                 1px -1px 0 rgba(0, 0, 0, 0.1),
-                 -1px 1px 0 rgba(0, 0, 0, 0.1),
-                 1px 1px 0 rgba(0, 0, 0, 0.1);
+    text-shadow:
+        -1px -1px 0 rgba(0, 0, 0, 0.1),
+        1px -1px 0 rgba(0, 0, 0, 0.1),
+        -1px 1px 0 rgba(0, 0, 0, 0.1),
+        1px 1px 0 rgba(0, 0, 0, 0.1);
     z-index: 1000;
     padding-left: 20px;
     padding-right: 20px;
@@ -51,7 +52,7 @@
 }
 
 .tip-text {
-    font-family: 'Inter', sans-serif;
+    font-family: "Inter", sans-serif;
     flex: 1;
     overflow-wrap: break-word;
     word-wrap: break-word;

@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import '../../css/QuickTips.css';
-import { FaTimes } from 'react-icons/fa';
-import QuickTipsManager from './QuickTipsManager';
+import { useState, useEffect, useRef } from "react";
+import "../../css/QuickTips.css";
+import { FaTimes } from "react-icons/fa";
+import QuickTipsManager from "./QuickTipsManager";
 
 const QuickTips = () => {
     const [isVisible, setIsVisible] = useState(true);
@@ -45,17 +45,32 @@ const QuickTips = () => {
         }
         setIsVisible(!isVisible);
         setIsFading(false);
-    }
+    };
 
-    const containerClassName = `quick-tips-container ${isFading ? 'fading' : ''}`;
+    const containerClassName = `quick-tips-container ${
+        isFading ? "fading" : ""
+    }`;
 
     return (
         isVisible && (
             <div className={containerClassName}>
                 <div className="quick-tips">
                     <p className="tip-title">Quick Tips:</p>
-                    <p className="tip-text">{tipText ? tipText : <span><b>W</b>, <b>A</b>, <b>S</b>, <b>D</b> to move, <b>SHIFT</b> to fly down, <b>SPACE</b> to fly up. <b>Right-click</b> to rotate camera.</span>}</p>
-                    <div className="tip-close-button" onClick={toggleVisibility}>
+                    <p className="tip-text">
+                        {tipText ? (
+                            tipText
+                        ) : (
+                            <span>
+                                <b>W</b>, <b>A</b>, <b>S</b>, <b>D</b> to move,{" "}
+                                <b>SHIFT</b> to fly down, <b>SPACE</b> to fly
+                                up. <b>Right-click</b> to rotate camera.
+                            </span>
+                        )}
+                    </p>
+                    <div
+                        className="tip-close-button"
+                        onClick={toggleVisibility}
+                    >
                         <FaTimes />
                     </div>
                 </div>

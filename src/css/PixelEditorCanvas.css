@@ -1,0 +1,11 @@
+.pixel-editor-canvas {
+    border: 1px solid #555;
+    cursor: crosshair; /* Default cursor */
+    /* You might want specific cursors based on the selected tool */
+    background-color: #fff; /* Fallback background */
+    /* The checkerboard pattern will be drawn via canvas API */
+    touch-action: none; /* Prevent scrolling on touch devices */
+    image-rendering: pixelated; /* Ensure crisp pixels when scaled */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}

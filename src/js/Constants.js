@@ -9,4 +9,3 @@ export const UNDO_THRESHOLD = 60;
 
 /// maximums
 export const MAX_ENVIRONMENT_OBJECTS = 5000;
-

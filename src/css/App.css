@@ -1,33 +1,33 @@
 /* ==========================================================================
    Base Layout Styles
    ========================================================================== */
-  
+
 .App {
-  text-align: center;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  background-color: #9bcbe8;
+    text-align: center;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    background-color: #9bcbe8;
 }
 
 .canvas-container {
-  flex: 1;
-  margin-left: 0;
-  overflow: hidden;
-  cursor: default;
+    flex: 1;
+    margin-left: 0;
+    overflow: hidden;
+    cursor: default;
 }
 
 /* Set base dimensions and overflow for both html and body */
 html,
 body {
-  min-width: 1300px !important;
-  min-height: 872px !important;
-  overflow: hidden;
+    min-width: 1300px !important;
+    min-height: 872px !important;
+    overflow: hidden;
 }
 
 /* Body-specific styles */
@@ -41,7 +41,7 @@ body {
 }
 
 a {
-  cursor: pointer;
+    cursor: pointer;
 }
 
 /* Global Button Styles */
@@ -56,25 +56,29 @@ button {
 }
 
 button:hover {
-  background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.2);
 }
 
 button.selected {
-  background: #0084FF;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-  border: none;
+    background: #0084ff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    border: none;
 }
 
 .vignette-gradient {
-  width: 100%;
-  height: 200px;
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0));
-  mix-blend-mode: overlay;
-  z-index: 10;
-  pointer-events: none;
+    width: 100%;
+    height: 200px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.8),
+        rgba(0, 0, 0, 0)
+    );
+    mix-blend-mode: overlay;
+    z-index: 10;
+    pointer-events: none;
 }
 
 /* ==========================================================================
@@ -83,32 +87,32 @@ button.selected {
 
 /* Debug Info Panel */
 .debug-info {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  background-color: rgba(13,13,13,0.7);
-  color: white;
-  padding: 15px;
-  font-family: monospace;
-  font-size: 12px;
-  z-index: 1000;
-  width: 200px;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(13, 13, 13, 0.7);
+    color: white;
+    padding: 15px;
+    font-family: monospace;
+    font-size: 12px;
+    z-index: 1000;
+    width: 200px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
 }
 
 .debug-info p {
-  margin: 5px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    margin: 5px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* First, disable dragging globally */
 * {
-  -webkit-user-drag: none;
+    -webkit-user-drag: none;
 }
 
 /* ==========================================================================
@@ -116,232 +120,249 @@ button.selected {
    ========================================================================== */
 
 .App-logo {
-  height: 40vmin;
-  pointer-events: none;
+    height: 40vmin;
+    pointer-events: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+    .App-logo {
+        animation: App-logo-spin infinite 20s linear;
+    }
 }
 
 .App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+    background-color: #282c34;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(10px + 2vmin);
+    color: white;
 }
 
 .App-link {
-  color: #61dafb;
+    color: #61dafb;
 }
 
 /* Add this new style for the Hytopia logo */
 .hytopia-logo-wrapper {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  width: 200px; /* Adjust the size as needed */
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-  -webkit-user-drag: none;
-  pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 200px; /* Adjust the size as needed */
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    -webkit-user-drag: none;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
 .hytopia-logo-wrapper img {
-  width: 100%;
-  object-fit: contain;
+    width: 100%;
+    object-fit: contain;
 }
 
 .hytopia-version-text {
-  font-size: 12px;
-  color: rgb(255, 255, 255);
-  margin-top: 5px;
+    font-size: 12px;
+    color: rgb(255, 255, 255);
+    margin-top: 5px;
 }
 
 .camera-controls-wrapper {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  z-index: 1000;
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    z-index: 1000;
 }
 
 .camera-control-button {
-  margin: 0 5px;
-  padding: 10px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  background: linear-gradient(to bottom, rgba(230, 243, 255, 0.7), rgba(179, 217, 255, 0.7));
-  transition: all 0.3s ease;
-  outline: 2px solid rgba(0, 0, 0, 0.2);
+    margin: 0 5px;
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background: linear-gradient(
+        to bottom,
+        rgba(230, 243, 255, 0.7),
+        rgba(179, 217, 255, 0.7)
+    );
+    transition: all 0.3s ease;
+    outline: 2px solid rgba(0, 0, 0, 0.2);
 }
 
 .camera-control-button:hover {
-  background: linear-gradient(to bottom, rgba(209, 232, 255, 0.8), rgba(153, 204, 255, 0.8));
-  outline: 2px solid rgba(0, 0, 0, 0.3);
+    background: linear-gradient(
+        to bottom,
+        rgba(209, 232, 255, 0.8),
+        rgba(153, 204, 255, 0.8)
+    );
+    outline: 2px solid rgba(0, 0, 0, 0.3);
 }
 
 .camera-control-button.active {
-  background: linear-gradient(to bottom, rgba(52, 152, 219, 0.8), rgba(41, 128, 185, 0.8));
-  outline: 2px solid rgba(0, 0, 0, 0.4);
+    background: linear-gradient(
+        to bottom,
+        rgba(52, 152, 219, 0.8),
+        rgba(41, 128, 185, 0.8)
+    );
+    outline: 2px solid rgba(0, 0, 0, 0.4);
 }
 
 .camera-control-button svg {
-  color: #333;
+    color: #333;
 }
 
 .camera-control-button.active svg {
-  color: white;
+    color: white;
 }
 
 .camera-buttons {
-  display: flex;
-  flex-direction: column;
-  margin-right: 10px;
+    display: flex;
+    flex-direction: column;
+    margin-right: 10px;
 }
 
 .camera-buttons .camera-control-button {
-  margin-bottom: 10px;
+    margin-bottom: 10px;
 }
 
 .checkbox-input-wrapper {
-  width: 100%;
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction:row;
-  margin: 10px 0;
+    width: 100%;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: row;
+    margin: 10px 0;
 }
 
 .checkbox-input-wrapper label {
-  margin-right: 8px;
+    margin-right: 8px;
 }
 
 .checkbox-input-wrapper input[type="checkbox"] {
-  margin-top: 7px;
+    margin-top: 7px;
 }
 
 /* Add these new styles */
 .scale-select {
-  padding: 5px;
-  border-radius: 5px;
-  background: white;
-  border: 1px solid #ccc;
-  cursor: pointer;
-  font-size: 12px;
-  width: 70px;
+    padding: 5px;
+    border-radius: 5px;
+    background: white;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    font-size: 12px;
+    width: 70px;
 }
 
 .scale-select:hover {
-  background: #f5f5f5;
+    background: #f5f5f5;
 }
 
 .under-construction-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: #1a1a1ae1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #1a1a1ae1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
 }
 
-
 .loading-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: #1a1a1a;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
 }
 
 .loading-logo {
-  width: 400px;
-  margin-bottom: 20px;
+    width: 400px;
+    margin-bottom: 20px;
 }
 
 .loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 5px solid #333;
-  border-top: 5px solid #fff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 20px;
+    width: 50px;
+    height: 50px;
+    border: 5px solid #333;
+    border-top: 5px solid #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
 }
 
 .loading-text {
-  color: #fff;
-  font-size: 1.2rem;
+    color: #fff;
+    font-size: 1.2rem;
 }
 
 .version-text {
-  position: absolute;
-  bottom: 50px;
-  color: #545454;
-  font-size: 20px;
+    position: absolute;
+    bottom: 50px;
+    color: #545454;
+    font-size: 20px;
 }
 
-
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .under-construction-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.9);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
 }
 
 .under-construction-content {
-  text-align: center;
-  color: white;
-  padding: 2rem;
+    text-align: center;
+    color: white;
+    padding: 2rem;
 }
 
 .under-construction-content h2 {
-  margin: 1rem 0;
-  color: #f0f0f0;
+    margin: 1rem 0;
+    color: #f0f0f0;
 }
 
 .under-construction-content p {
-  margin: 0.5rem 0;
-  color: #cccccc;
+    margin: 0.5rem 0;
+    color: #cccccc;
 }
 
 /* Saving indicator animation */
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
-
