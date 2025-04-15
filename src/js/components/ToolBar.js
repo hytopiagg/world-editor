@@ -645,19 +645,6 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Brush Tool - Click to place/erase blocks. Press 1/2 to adjust size. Press 3 to toggle shape (square/circle). Press 4 to toggle flat/3D mode. Hold Ctrl to erase.">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("brush");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${
-                                    activeTool === "brush" ? "selected" : ""
-                                }`}
-                            >
-                                <FaPaintBrush />
-                            </button>
-                        </Tooltip>
                         <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. q cancels">
                             <button
                                 onClick={() => {
