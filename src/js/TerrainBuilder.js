@@ -3173,8 +3173,6 @@ function TerrainBuilder(
 
     // Add key event handlers to delegate to tools
     const handleKeyDown = (event) => {
-        // cameraManager.handleKeyDown(event); // CameraManager adds its own listener
-
         // Add keyboard shortcut for Brush tool - 'B' key
         if (event.key === "b" || event.key === "B") {
             // Toggle brush tool (activate if not active, deactivate if active)
@@ -3197,22 +3195,21 @@ function TerrainBuilder(
     };
 
     const handleKeyUp = (event) => {
-        // cameraManager.handleKeyUp(event); // CameraManager adds its own listener
-        // ... existing keyup logic for tools ...
+        if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
+            toolManagerRef.current.handleKeyUp(event);
+        }
     };
 
-    // Update useEffect for key listeners - remove isInputDisabled dependency and the listeners themselves
-    // CameraManager handles its own listeners now.
+    // Update useEffect to add key event listeners
     useEffect(() => {
-        // Tool-specific key listeners can remain if needed, or be moved to ToolManager
-        // For now, let's assume ToolManager handles its own input or uses CameraManager events
-        // window.addEventListener('keydown', handleKeyDown);
-        // window.addEventListener('keyup', handleKeyUp);
-        // return () => {
-        // 	window.removeEventListener('keydown', handleKeyDown);
-        // 	window.removeEventListener('keyup', handleKeyUp);
-        // };
-    }, []); // Empty dependency array is fine now
+        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keyup", handleKeyUp);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+        };
+    }, []);
 
     // Add mouse button tracking for fail-safe detection
     useEffect(() => {

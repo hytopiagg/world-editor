@@ -103,6 +103,7 @@ class GroundTool extends BaseTool {
                 environment: { added: [], removed: [] },
             };
         }
+        return true; // Indicate successful activation
     }
 
     onDeactivate() {
