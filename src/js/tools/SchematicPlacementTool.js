@@ -187,6 +187,8 @@ class SchematicPlacementTool extends BaseTool {
 
         const basePosition = this.previewPositionRef.current;
         const addedBlocks = {};
+        const removedBlocks = {};
+        const terrain = this.terrainRef.current;
 
         console.log(
             `Placing schematic at base position: ${basePosition.x},${basePosition.y},${basePosition.z}`
@@ -205,18 +207,41 @@ class SchematicPlacementTool extends BaseTool {
                 basePosition.z + relZ + this.anchorOffset.z
             );
             const worldPosStr = `${worldX},${worldY},${worldZ}`;
+
+            if (terrain[worldPosStr]) {
+                removedBlocks[worldPosStr] = terrain[worldPosStr];
+            }
+
             addedBlocks[worldPosStr] = blockId;
         }
 
-        console.log("Applying schematic changes:", addedBlocks);
+        console.log("Applying schematic changes:", {
+            added: addedBlocks,
+            removed: removedBlocks,
+        });
 
         // Call the TerrainBuilder function copied to the instance
         if (this.updateTerrainForUndoRedo) {
             this.updateTerrainForUndoRedo(
                 addedBlocks,
-                {},
-                "ai-schematic" // Source for logging/tracking
+                removedBlocks,
+                "ai-schematic"
             );
+
+            if (this.undoRedoManager && this.undoRedoManager.current) {
+                const changes = {
+                    terrain: { added: addedBlocks, removed: removedBlocks },
+                    environment: { added: [], removed: [] },
+                };
+                this.undoRedoManager.current.saveUndo(changes);
+                console.log(
+                    "[Schematic Tool] Saved placement action to undo stack."
+                );
+            } else {
+                console.warn(
+                    "[Schematic Tool] UndoRedoManager not available, cannot save undo state."
+                );
+            }
         } else {
             console.error(
                 "updateTerrainForUndoRedo function not found on this tool instance!"
