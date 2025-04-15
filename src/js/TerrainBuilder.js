@@ -38,7 +38,6 @@ import {
 import {
     ToolManager,
     WallTool,
-    BrushTool,
     GroundTool,
     PipeTool,
     SchematicPlacementTool, // Import the new tool
@@ -1090,12 +1089,6 @@ function TerrainBuilder(
             if (modeRef.current === "add") {
                 // Get current time for placement delay
                 const now = performance.now();
-
-                // Check if enough time has passed since the last placement
-                if (now - lastPlacementTimeRef.current < 100) {
-                    // 100ms delay
-                    return; // Exit if the delay hasn't passed
-                }
 
                 // Get all positions to place blocks at based on placement size
                 const positions = getPlacementPositions(
@@ -2396,10 +2389,6 @@ function TerrainBuilder(
         const wallTool = new WallTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("wall", wallTool);
 
-        // Register the new BrushTool
-        const brushTool = new BrushTool(terrainBuilderProps);
-        toolManagerRef.current.registerTool("brush", brushTool);
-
         // Register the new GroundTool
         const groundTool = new GroundTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("ground", groundTool);
@@ -2727,7 +2716,7 @@ function TerrainBuilder(
         updateSpatialHashForBlocks, // Expose for external spatial hash updates
         fastUpdateBlock, // Ultra-optimized function for drag operations
         updateDebugInfo, // Expose debug info updates for tools
-        forceChunkUpdate, // Direct chunk updating for tools like BrushTool
+        forceChunkUpdate, // Direct chunk updating for tools
         forceRefreshAllChunks, // Force refresh of all chunks
         updateGridSize, // Expose for updating grid size when importing maps
 
@@ -2976,7 +2965,7 @@ function TerrainBuilder(
             });
         },
         // Add a new public method to force a complete rebuild of the spatial hash grid
-        // This method can be called by tools like BrushTool when they need to ensure
+        // This method can be called by tools  when they need to ensure
         // the spatial hash is completely up to date after operation
         forceRebuildSpatialHash: (options = {}) => {
             //console.log("TerrainBuilder: Forcing complete rebuild of spatial hash grid");
@@ -3173,21 +3162,6 @@ function TerrainBuilder(
 
     // Add key event handlers to delegate to tools
     const handleKeyDown = (event) => {
-        // Add keyboard shortcut for Brush tool - 'B' key
-        if (event.key === "b" || event.key === "B") {
-            // Toggle brush tool (activate if not active, deactivate if active)
-            const activeTool = toolManagerRef.current?.getActiveTool();
-            if (activeTool && activeTool.name === "BrushTool") {
-                // Tool is already active, deactivate it
-                toolManagerRef.current?.activateTool(null);
-            } else {
-                // Activate the brush tool
-                toolManagerRef.current?.activateTool("brush");
-            }
-            // Don't propagate the event further
-            return;
-        }
-
         // Forward event to active tool
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             toolManagerRef.current.handleKeyDown(event);
