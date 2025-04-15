@@ -119,13 +119,9 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     });
                     setTextureObjects(newTextureObjects); // Update state with all textures initialized
                     setIsLoading(false);
-                    // Update undo/redo state after textures are loaded
-                    setTimeout(() => {
-                        if (pixelCanvasRef.current) {
-                            setCanUndo(pixelCanvasRef.current.canUndo);
-                            setCanRedo(pixelCanvasRef.current.canRedo);
-                        }
-                    }, 0);
+                    // Reset undo/redo state since we have new textures
+                    setCanUndo(false);
+                    setCanRedo(false);
                 };
                 img.onerror = () => {
                     console.error("Failed to load generated image");
@@ -202,29 +198,40 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             }
 
             // Force a re-render of the modal to ensure BlockPreview3D gets the update signal
-            // (Even though texture object references don't change, this ensures parent re-renders)
             setTextureObjects((prev) => ({ ...prev }));
-
-            // Update availability state after the update finishes
-            setTimeout(() => {
-                if (pixelCanvasRef.current) {
-                    setCanUndo(pixelCanvasRef.current.canUndo);
-                    setCanRedo(pixelCanvasRef.current.canRedo);
-                }
-            }, 0);
         },
         [textureObjects] // Keep dependency on textureObjects
     );
 
-    // Update undo/redo state when selected face changes (as history resets)
+    // Update undo/redo state when the canvas notifies us
+    // This is the dedicated callback for the canvas to update our state
+    const handleHistoryChange = useCallback((canUndoNow, canRedoNow) => {
+        console.log("TextureGenerationModal: History changed:", {
+            canUndoNow,
+            canRedoNow,
+        });
+        setCanUndo(canUndoNow);
+        setCanRedo(canRedoNow);
+    }, []);
+
+    // Effect to set up the notification handler for the canvas ref
     useEffect(() => {
-        setTimeout(() => {
-            if (pixelCanvasRef.current) {
-                setCanUndo(pixelCanvasRef.current.canUndo);
-                setCanRedo(pixelCanvasRef.current.canRedo);
-            }
-        }, 0);
-    }, [selectedFace]);
+        if (pixelCanvasRef.current) {
+            // Attach our handler to the canvas's notifyHistoryChanged method
+            const originalNotify = pixelCanvasRef.current.notifyHistoryChanged;
+            pixelCanvasRef.current.notifyHistoryChanged = (
+                canUndoNow,
+                canRedoNow
+            ) => {
+                // Call the original method if it exists
+                if (originalNotify) {
+                    originalNotify(canUndoNow, canRedoNow);
+                }
+                // Update our state
+                handleHistoryChange(canUndoNow, canRedoNow);
+            };
+        }
+    }, [pixelCanvasRef.current, handleHistoryChange]);
 
     const handleSelectFace = (face) => {
         console.log("Selected face:", face);
@@ -265,26 +272,16 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
     // Undo/Redo Handlers
     const handleUndo = () => {
+        console.log("Undo");
         if (pixelCanvasRef.current?.undo) {
+            console.log("Calling undo");
             pixelCanvasRef.current.undo();
-            setTimeout(() => {
-                if (pixelCanvasRef.current) {
-                    setCanUndo(pixelCanvasRef.current.canUndo);
-                    setCanRedo(pixelCanvasRef.current.canRedo);
-                }
-            }, 0);
         }
     };
 
     const handleRedo = () => {
         if (pixelCanvasRef.current?.redo) {
             pixelCanvasRef.current.redo();
-            setTimeout(() => {
-                if (pixelCanvasRef.current) {
-                    setCanUndo(pixelCanvasRef.current.canUndo);
-                    setCanRedo(pixelCanvasRef.current.canRedo);
-                }
-            }, 0);
         }
     };
 

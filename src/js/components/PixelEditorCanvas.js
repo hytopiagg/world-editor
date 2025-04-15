@@ -117,9 +117,13 @@ const PixelEditorCanvas = forwardRef(
         ref // Receive ref from parent
     ) => {
         const canvasRef = useRef(null);
-        // internalImageDataRef no longer needed, history is the source of truth
         const [isDrawing, setIsDrawing] = useState(false);
         const pixelSize = canvasSize / GRID_SIZE;
+
+        // Add ref to store the initial image state when drawing begins
+        const startImageDataRef = useRef(null);
+        // Add ref to track current drawing state without pushing to history
+        const currentDrawingRef = useRef(null);
 
         // History state
         const [history, setHistory] = useState([]);
@@ -135,10 +139,23 @@ const PixelEditorCanvas = forwardRef(
 
         // Function to draw the visual canvas based on currentImageData
         const drawVisualCanvas = useCallback(() => {
+            console.log(
+                "PixelEditorCanvas: Drawing canvas with historyIndex:",
+                historyIndex
+            );
             const displayCanvas = canvasRef.current;
             const ctx = displayCanvas?.getContext("2d");
-            const imgData = currentImageData; // Use current state from history
+            // Use current drawing data if available (during active drawing), otherwise use history
+            const imgData = currentDrawingRef.current || currentImageData;
             if (!ctx) return;
+
+            console.log(
+                "PixelEditorCanvas: Current image data present:",
+                !!imgData
+            );
+
+            // Force clear the canvas first to ensure we're starting fresh
+            ctx.clearRect(0, 0, canvasSize, canvasSize);
 
             // Draw checkerboard background
             ctx.fillStyle = DEFAULT_BG_COLOR;
@@ -174,6 +191,20 @@ const PixelEditorCanvas = forwardRef(
 
             // *** Draw the pixel data LAST (on top of the grid) ***
             if (imgData) {
+                // Check if we have non-transparent pixels in the image data
+                let hasVisiblePixels = false;
+                let pixelCount = 0;
+                for (let i = 0; i < imgData.data.length; i += 4) {
+                    if (imgData.data[i + 3] > 0) {
+                        // If alpha channel > 0
+                        pixelCount++;
+                        hasVisiblePixels = true;
+                    }
+                }
+                console.log(
+                    `PixelEditorCanvas: Image has ${pixelCount} visible pixels`
+                );
+
                 const offscreenCanvas = document.createElement("canvas");
                 offscreenCanvas.width = GRID_SIZE;
                 offscreenCanvas.height = GRID_SIZE;
@@ -190,12 +221,20 @@ const PixelEditorCanvas = forwardRef(
                         canvasSize,
                         canvasSize
                     );
+                    console.log("PixelEditorCanvas: Drew image data to canvas");
+                } else {
+                    console.error(
+                        "PixelEditorCanvas: Could not get offscreen context"
+                    );
                 }
+            } else {
+                console.warn("PixelEditorCanvas: No image data to draw");
             }
-        }, [canvasSize, pixelSize, currentImageData]);
+        }, [canvasSize, pixelSize, currentImageData, historyIndex]);
 
         // Effect to initialize history from texture object
         useEffect(() => {
+            console.log("PixelEditorCanvas: Initializing from texture object");
             const displayCanvas = canvasRef.current;
             const ctx = displayCanvas?.getContext("2d");
             let initialImageData = null;
@@ -213,6 +252,9 @@ const PixelEditorCanvas = forwardRef(
                                 0,
                                 GRID_SIZE,
                                 GRID_SIZE
+                            );
+                            console.log(
+                                "PixelEditorCanvas: Got ImageData from texture"
                             );
                         } else {
                             throw new Error(
@@ -234,14 +276,58 @@ const PixelEditorCanvas = forwardRef(
 
             if (!initialImageData && ctx) {
                 initialImageData = ctx.createImageData(GRID_SIZE, GRID_SIZE);
+                console.log("PixelEditorCanvas: Created new empty ImageData");
+            }
+
+            // Check if we're already in history mode and have changes
+            if (initialImageData && history.length > 0) {
+                console.log(
+                    "PixelEditorCanvas: Re-initialization while history exists",
+                    {
+                        historyLength: history.length,
+                        currentIndex: historyIndex,
+                    }
+                );
+                // Compare with current state
+                if (historyIndex >= 0 && history[historyIndex]) {
+                    let isDifferent = false;
+                    for (
+                        let i = 0;
+                        i < history[historyIndex].data.length;
+                        i++
+                    ) {
+                        if (
+                            history[historyIndex].data[i] !==
+                            initialImageData.data[i]
+                        ) {
+                            isDifferent = true;
+                            console.log(
+                                "PixelEditorCanvas: Texture changed externally!"
+                            );
+                            break;
+                        }
+                    }
+                    console.log(
+                        "PixelEditorCanvas: Texture differs from current state:",
+                        isDifferent
+                    );
+                }
             }
 
             if (initialImageData) {
-                setHistory([initialImageData]); // Start history with the initial state
+                // For fresh textures, set historyIndex to 0 to disable undo initially
+                const initialState = [initialImageData];
+                setHistory(initialState);
                 setHistoryIndex(0);
+                console.log("PixelEditorCanvas: History initialized", {
+                    historyLength: initialState.length,
+                    initialIndex: 0,
+                    canUndo: false,
+                });
             } else {
                 setHistory([]); // Reset history if initialization failed
                 setHistoryIndex(-1);
+                console.warn("PixelEditorCanvas: Failed to initialize history");
             }
         }, [initialTextureObject]); // Depend only on the texture object itself for init
 
@@ -252,25 +338,68 @@ const PixelEditorCanvas = forwardRef(
 
         // Helper to add a new state to history
         const pushHistory = (newImageData) => {
-            setHistory((prevHistory) => {
-                const nextHistory = prevHistory.slice(0, historyIndex + 1); // Discard redo states
-                nextHistory.push(newImageData);
-                // Limit history size
-                if (nextHistory.length > MAX_HISTORY) {
-                    return nextHistory.slice(nextHistory.length - MAX_HISTORY);
+            // Check if the new state is different from the current state
+            let isDifferent = true;
+            if (historyIndex >= 0 && history[historyIndex]) {
+                isDifferent = false;
+                for (let i = 0; i < history[historyIndex].data.length; i++) {
+                    if (
+                        history[historyIndex].data[i] !== newImageData.data[i]
+                    ) {
+                        isDifferent = true;
+                        break;
+                    }
                 }
-                return nextHistory;
-            });
-            // Calculate the new index based on the potentially sliced history
-            const limitedHistoryLength = Math.min(
-                history.slice(0, historyIndex + 1).length + 1,
-                MAX_HISTORY
-            );
-            setHistoryIndex(limitedHistoryLength - 1);
+            }
 
-            // Update the external texture via callback
-            if (onPixelUpdate) {
-                onPixelUpdate(selectedFace, newImageData);
+            // Only push if there's an actual change
+            if (isDifferent) {
+                console.log(
+                    "PixelEditorCanvas: Pushing new history state - states differ"
+                );
+
+                // Use functional update for history to prevent race conditions
+                setHistory((prevHistory) => {
+                    // Discard redo states
+                    const nextHistory = prevHistory.slice(0, historyIndex + 1);
+                    nextHistory.push(newImageData);
+
+                    // Limit history size if needed
+                    const resultHistory =
+                        nextHistory.length > MAX_HISTORY
+                            ? nextHistory.slice(
+                                  nextHistory.length - MAX_HISTORY
+                              )
+                            : nextHistory;
+
+                    return resultHistory;
+                });
+
+                // Update history index with functional update to avoid race conditions
+                setHistoryIndex((prevIndex) => {
+                    const newIndex = Math.min(prevIndex + 1, MAX_HISTORY - 1);
+
+                    // Update external texture via callback
+                    if (onPixelUpdate) {
+                        onPixelUpdate(selectedFace, newImageData);
+                    }
+
+                    // IMPORTANT: Manually notify parent of undo/redo state change
+                    if (
+                        ref.current &&
+                        typeof ref.current.notifyHistoryChanged === "function"
+                    ) {
+                        const canUndo = newIndex > 0;
+                        const canRedo = false; // Just pushed state, no redo available
+                        ref.current.notifyHistoryChanged(canUndo, canRedo);
+                    }
+
+                    return newIndex;
+                });
+            } else {
+                console.log(
+                    "PixelEditorCanvas: Not pushing history - no difference detected"
+                );
             }
         };
 
@@ -298,115 +427,317 @@ const PixelEditorCanvas = forwardRef(
             imgData.data[index + 3] = colorRgba.a * 255;
         };
 
-        // Perform draw action: modify a *copy* and push to history
-        const performDrawAction = (coords, isFinalAction = false) => {
-            if (!coords || !currentImageData) return;
+        // Perform draw action without pushing to history (for active drawing)
+        const performDrawAction = (coords) => {
+            if (!coords || !currentDrawingRef.current) return;
             const { x, y } = coords;
 
-            // Create a mutable copy of the current state ONLY if needed
-            let nextImageData = null;
             let changed = false;
 
-            const ensureMutableCopy = () => {
-                if (!nextImageData) {
-                    // Create a new ImageData by copying the current one's data
-                    nextImageData = new ImageData(
-                        new Uint8ClampedArray(currentImageData.data),
-                        GRID_SIZE,
-                        GRID_SIZE
-                    );
-                }
-            };
-
             if (selectedTool === TOOLS.PENCIL) {
-                ensureMutableCopy();
                 const colorRgba = { ...hexToRgb(selectedColor), a: 1 };
-                updateImageDataPixel(nextImageData, x, y, colorRgba);
+                updateImageDataPixel(
+                    currentDrawingRef.current,
+                    x,
+                    y,
+                    colorRgba
+                );
                 changed = true;
             } else if (selectedTool === TOOLS.ERASER) {
-                ensureMutableCopy();
-                updateImageDataPixel(nextImageData, x, y, ERASER_COLOR_RGBA);
+                updateImageDataPixel(
+                    currentDrawingRef.current,
+                    x,
+                    y,
+                    ERASER_COLOR_RGBA
+                );
                 changed = true;
-            } else if (selectedTool === TOOLS.FILL && isFinalAction) {
-                // Only fill on final action (e.g., mouse up)
-                ensureMutableCopy();
+            } else if (selectedTool === TOOLS.FILL) {
                 const colorRgba =
                     selectedColor === ERASER_STYLE
                         ? ERASER_COLOR_RGBA
                         : { ...hexToRgb(selectedColor), a: 1 };
-                changed = floodFillInternal(nextImageData, x, y, colorRgba); // Flood fill modifies the copy
+                changed = floodFillInternal(
+                    currentDrawingRef.current,
+                    x,
+                    y,
+                    colorRgba
+                );
             }
 
-            // If something changed, push the modified copy to history
-            if (changed && nextImageData) {
-                pushHistory(nextImageData);
+            // If something changed, update canvas for immediate feedback
+            if (changed) {
+                const displayCanvas = canvasRef.current;
+                if (displayCanvas) {
+                    const ctx = displayCanvas.getContext("2d");
+                    if (ctx && selectedTool === TOOLS.PENCIL) {
+                        // For pencil, we can optimize by just updating the specific pixel
+                        const colorStyle = selectedColor;
+                        ctx.fillStyle = colorStyle;
+                        ctx.fillRect(
+                            x * pixelSize,
+                            y * pixelSize,
+                            pixelSize,
+                            pixelSize
+                        );
+                    } else if (ctx && selectedTool === TOOLS.ERASER) {
+                        // For eraser, clear the specific pixel
+                        ctx.clearRect(
+                            x * pixelSize,
+                            y * pixelSize,
+                            pixelSize,
+                            pixelSize
+                        );
+                        // Redraw the checkerboard for this pixel
+                        if ((x + y) % 2 === 0) {
+                            ctx.fillStyle = "#e0e0e0";
+                        } else {
+                            ctx.fillStyle = DEFAULT_BG_COLOR;
+                        }
+                        ctx.fillRect(
+                            x * pixelSize,
+                            y * pixelSize,
+                            pixelSize,
+                            pixelSize
+                        );
+                    } else {
+                        // For fill and other tools, redraw the entire canvas
+                        drawVisualCanvas();
+                    }
+                }
             }
         };
 
-        // Mouse Handlers
+        // Mouse Handlers - Rewritten to batch drawing operations
         const handleMouseDown = (e) => {
             const coords = getCoords(e);
-            if (!coords) return;
+            if (!coords || !currentImageData) return;
+
+            // Save the starting snapshot before drawing
+            startImageDataRef.current = new ImageData(
+                new Uint8ClampedArray(currentImageData.data),
+                GRID_SIZE,
+                GRID_SIZE
+            );
+
+            // Create a working copy for the current drawing session
+            currentDrawingRef.current = new ImageData(
+                new Uint8ClampedArray(currentImageData.data),
+                GRID_SIZE,
+                GRID_SIZE
+            );
+
             setIsDrawing(true);
-            performDrawAction(coords, selectedTool === TOOLS.FILL); // Fill acts on down/up
+
+            // Perform the initial draw action without pushing to history
+            performDrawAction(coords);
+
+            // Special handling for fill tool (commit immediately)
+            if (selectedTool === TOOLS.FILL) {
+                handleMouseUp();
+            }
         };
 
         const handleMouseMove = (e) => {
             if (!isDrawing) return;
+
             const coords = getCoords(e);
-            // Only pencil/eraser draw continuously on drag
             if (
                 coords &&
                 (selectedTool === TOOLS.PENCIL || selectedTool === TOOLS.ERASER)
             ) {
-                performDrawAction(coords);
+                performDrawAction(coords); // Draw for visual feedback only
             }
         };
 
         const handleMouseUp = () => {
-            if (isDrawing) {
-                setIsDrawing(false);
-                // Potentially commit final state for tools that need it?
-                // Currently handled by pushing history on each change.
+            if (!isDrawing) return;
+            setIsDrawing(false);
+
+            // If we don't have both refs, we can't complete the operation
+            if (!startImageDataRef.current || !currentDrawingRef.current)
+                return;
+
+            // Compare start snapshot with final state to check if changes occurred
+            let changed = false;
+            const startData = startImageDataRef.current.data;
+            const finalData = currentDrawingRef.current.data;
+
+            for (let i = 0; i < startData.length; i++) {
+                if (startData[i] !== finalData[i]) {
+                    changed = true;
+                    break;
+                }
             }
+
+            // If changes were made, push the final state to history
+            if (changed) {
+                const finalImageData = new ImageData(
+                    new Uint8ClampedArray(currentDrawingRef.current.data),
+                    GRID_SIZE,
+                    GRID_SIZE
+                );
+
+                pushHistory(finalImageData);
+            }
+
+            // Clear the drawing refs
+            startImageDataRef.current = null;
+            currentDrawingRef.current = null;
         };
 
         const handleMouseLeave = () => {
+            // Treat mouse leave as mouse up to commit any changes
             if (isDrawing) {
-                setIsDrawing(false);
+                handleMouseUp();
             }
         };
 
         // --- Undo/Redo Logic ---
         const undo = () => {
+            console.log("PixelEditorCanvas: Undo");
             if (historyIndex > 0) {
+                console.log(
+                    "PixelEditorCanvas: Undo: historyIndex > 0",
+                    historyIndex
+                );
                 const newIndex = historyIndex - 1;
+                console.log("PixelEditorCanvas: Undo: newIndex", newIndex);
+
+                // DEBUG: Check if the states actually differ
+                if (history[historyIndex] && history[newIndex]) {
+                    let diff = false;
+                    for (
+                        let i = 0;
+                        i < history[historyIndex].data.length;
+                        i++
+                    ) {
+                        if (
+                            history[historyIndex].data[i] !==
+                            history[newIndex].data[i]
+                        ) {
+                            diff = true;
+                            console.log(
+                                `PixelEditorCanvas: Undo: Found difference at index ${i}:`,
+                                history[historyIndex].data[i],
+                                "->",
+                                history[newIndex].data[i]
+                            );
+                            break;
+                        }
+                    }
+                    console.log("PixelEditorCanvas: States differ:", diff);
+                }
+
                 setHistoryIndex(newIndex);
+                console.log(
+                    "PixelEditorCanvas: After undo, canUndo should be:",
+                    newIndex > 0
+                );
+
                 // Update external texture
                 if (onPixelUpdate && history[newIndex]) {
+                    console.log(
+                        "PixelEditorCanvas: Undo: onPixelUpdate",
+                        selectedFace,
+                        history[newIndex]
+                    );
                     onPixelUpdate(selectedFace, history[newIndex]);
                 }
+
+                // Directly notify parent of change in undo/redo state
+                if (
+                    ref.current &&
+                    typeof ref.current.notifyHistoryChanged === "function"
+                ) {
+                    const canUndo = newIndex > 0;
+                    const canRedo = newIndex < history.length - 1;
+                    ref.current.notifyHistoryChanged(canUndo, canRedo);
+                }
+            } else {
+                console.log(
+                    "PixelEditorCanvas: Cannot undo - at beginning of history"
+                );
             }
         };
 
         const redo = () => {
+            console.log("PixelEditorCanvas: Redo");
             if (historyIndex < history.length - 1) {
                 const newIndex = historyIndex + 1;
+                console.log("PixelEditorCanvas: Redo: newIndex", newIndex);
+
                 setHistoryIndex(newIndex);
+                console.log(
+                    "PixelEditorCanvas: After redo, canRedo should be:",
+                    newIndex < history.length - 1
+                );
+
                 // Update external texture
                 if (onPixelUpdate && history[newIndex]) {
+                    console.log(
+                        "PixelEditorCanvas: Redo: onPixelUpdate",
+                        selectedFace,
+                        history[newIndex]
+                    );
                     onPixelUpdate(selectedFace, history[newIndex]);
                 }
+
+                // Directly notify parent of change in undo/redo state
+                if (
+                    ref.current &&
+                    typeof ref.current.notifyHistoryChanged === "function"
+                ) {
+                    const canUndo = newIndex > 0;
+                    const canRedo = newIndex < history.length - 1;
+                    ref.current.notifyHistoryChanged(canUndo, canRedo);
+                }
+            } else {
+                console.log(
+                    "PixelEditorCanvas: Cannot redo - at end of history"
+                );
             }
         };
 
         // Expose undo/redo via ref
-        useImperativeHandle(ref, () => ({
-            undo,
-            redo,
-            canUndo: historyIndex > 0,
-            canRedo: historyIndex < history.length - 1,
-        }));
+        useImperativeHandle(
+            ref,
+            () => {
+                const canUndo = historyIndex > 0;
+                const canRedo = historyIndex < history.length - 1;
+                console.log("PixelEditorCanvas: Updating imperative handle:", {
+                    canUndo,
+                    canRedo,
+                    historyIndex,
+                    historyLength: history.length,
+                });
+
+                // Create an object with history state that won't change between renders
+                const historyState = {
+                    canUndo,
+                    canRedo,
+                    historyIndex,
+                    historyLength: history.length,
+                };
+
+                return {
+                    undo,
+                    redo,
+                    canUndo,
+                    canRedo,
+                    // Direct mechanism for the parent to get the current history state
+                    getHistoryState: () => historyState,
+                    // Method to notify the parent of history changes
+                    notifyHistoryChanged: (canUndoNow, canRedoNow) => {
+                        console.log(
+                            "PixelEditorCanvas: Notifying parent of history change:",
+                            { canUndoNow, canRedoNow }
+                        );
+                        // This is a method the parent component can call to update
+                    },
+                };
+            },
+            [historyIndex, history.length]
+        );
 
         return (
             <canvas
