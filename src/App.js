@@ -22,6 +22,7 @@ import { processCustomBlock } from "./js/managers/BlockTypesManager";
 import { refreshBlockTools } from "./js/components/BlockToolsSidebar";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { STORES } from "./js/DatabaseManager";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -99,23 +100,6 @@ function App() {
             loadSavedToolSelection();
         }
     }, [pageIsLoaded]);
-
-    // Check if terrain is saving
-    useEffect(() => {
-        const checkSavingStatus = () => {
-            if (terrainBuilderRef.current) {
-                const savingState = terrainBuilderRef.current.isSaving;
-                if (savingState !== isSaving) {
-                    console.log("Saving state changed:", savingState);
-                    setIsSaving(savingState);
-                }
-            }
-        };
-
-        // Check every 100ms
-        const interval = setInterval(checkSavingStatus, 100);
-        return () => clearInterval(interval);
-    }, [isSaving]);
 
     // Add Ctrl+S hotkey for saving
     useEffect(() => {
@@ -258,6 +242,24 @@ function App() {
             // Process the new texture as a custom block
             await processCustomBlock(newBlockData);
             console.log("Custom block processed:", newBlockData.name);
+
+            // Save updated custom blocks to DB
+            try {
+                const updatedCustomBlocks = getCustomBlocks(); // Get the latest list including the new one
+                await DatabaseManager.saveData(
+                    STORES.CUSTOM_BLOCKS,
+                    "blocks",
+                    updatedCustomBlocks
+                );
+                console.log(
+                    "[App] Saved updated custom blocks to DB after texture generation."
+                );
+            } catch (dbError) {
+                console.error(
+                    "[App] Error saving custom blocks after texture generation:",
+                    dbError
+                );
+            }
 
             // Refresh the block tools sidebar to show the new block
             refreshBlockTools();

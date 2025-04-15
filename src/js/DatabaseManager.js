@@ -9,11 +9,12 @@ export const STORES = {
     CUSTOM_MODELS: "custom-models",
     UNDO: "undo-states",
     REDO: "redo-states",
+    SCHEMATICS: "ai-schematics",
 };
 
 export class DatabaseManager {
     static DB_NAME = "hytopia-world-editor-" + version;
-    static DB_VERSION = 1; // Incremented version number
+    static DB_VERSION = 2; // Incremented version number
     static dbConnection = null; // Add static property to store connection
 
     static async openDB() {
@@ -71,43 +72,64 @@ export class DatabaseManager {
     }
 
     static async getData(storeName, key) {
-        try {
-            const db = await this.getConnection();
-            return new Promise((resolve, reject) => {
-                try {
-                    const transaction = db.transaction(storeName, "readonly");
-                    const store = transaction.objectStore(storeName);
-                    const request = store.get(key);
+        // console.log(`[DB] Getting data for key '${key}' from store '${storeName}'`);
+        const db = await this.getDBConnection();
+        return new Promise((resolve, reject) => {
+            try {
+                const tx = db.transaction(storeName, "readonly");
+                const store = tx.objectStore(storeName);
 
-                    request.onerror = (event) => {
+                // <<< Special handling for loading the entire terrain store
+                if (storeName === STORES.TERRAIN && key === "current") {
+                    const terrainData = {};
+                    const cursorRequest = store.openCursor();
+
+                    cursorRequest.onsuccess = (event) => {
+                        const cursor = event.target.result;
+                        if (cursor) {
+                            // Assuming the key is the coordinate string and value is the block ID
+                            terrainData[cursor.key] = cursor.value;
+                            cursor.continue();
+                        } else {
+                            // No more entries
+                            console.log(
+                                `[DB] Reconstructed terrain data with ${
+                                    Object.keys(terrainData).length
+                                } blocks from store '${storeName}'`
+                            );
+                            resolve(terrainData);
+                        }
+                    };
+                    cursorRequest.onerror = (event) => {
                         console.error(
-                            `Error retrieving data from ${storeName} with key ${key}:`,
+                            `[DB] Error reading terrain store with cursor:`,
                             event.target.error
                         );
-                        resolve(null); // Return null instead of rejecting
+                        reject(event.target.error);
                     };
-
+                } else {
+                    // <<< Original logic for other stores/keys
+                    const request = store.get(key);
                     request.onsuccess = () => {
-                        // Always return a valid value even if result is undefined
-                        resolve(
-                            request.result !== undefined ? request.result : null
-                        );
+                        // console.log(`[DB] Successfully retrieved data for key '${key}' from store '${storeName}':`, request.result);
+                        resolve(request.result);
                     };
-                } catch (innerError) {
-                    console.error(
-                        `Exception during read transaction for ${storeName}:`,
-                        innerError
-                    );
-                    resolve(null); // Return null instead of rejecting
+                    request.onerror = (event) => {
+                        console.error(
+                            `[DB] Error getting data for key '${key}' from store '${storeName}':`,
+                            event.target.error
+                        );
+                        reject(event.target.error);
+                    };
                 }
-            });
-        } catch (error) {
-            console.error(
-                `Error accessing store ${storeName} for reading:`,
-                error
-            );
-            return null; // Return null instead of throwing
-        }
+            } catch (error) {
+                console.error(
+                    `[DB] Exception during getData transaction for key '${key}' in store '${storeName}':`,
+                    error
+                );
+                reject(error);
+            }
+        });
     }
 
     static async deleteData(storeName, key) {
@@ -204,7 +226,9 @@ export class DatabaseManager {
                     await this.clearStore(storeName);
                     clearedStores++;
                     console.log(
-                        `Cleared store ${storeName} (${clearedStores}/${Object.values(STORES).length})`
+                        `Cleared store ${storeName} (${clearedStores}/${
+                            Object.values(STORES).length
+                        })`
                     );
                 } catch (storeError) {
                     console.error(
@@ -216,7 +240,9 @@ export class DatabaseManager {
             }
 
             console.log(
-                `Database clearing complete. Cleared ${clearedStores}/${Object.values(STORES).length} stores.`
+                `Database clearing complete. Cleared ${clearedStores}/${
+                    Object.values(STORES).length
+                } stores.`
             );
 
             // Remove any beforeunload handlers temporarily to prevent them from running

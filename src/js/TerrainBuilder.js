@@ -368,8 +368,7 @@ function TerrainBuilder(
         // Make it async
         // Skip if database is being cleared
         if (window.IS_DATABASE_CLEARING) {
-            console.log("Database is being cleared, skipping terrain save");
-            return;
+            return false;
         }
 
         // Skip if no changes to save
@@ -381,8 +380,7 @@ function TerrainBuilder(
                 Object.keys(pendingChangesRef.current.terrain.removed || {})
                     .length === 0)
         ) {
-            // console.log("No pending changes to save.");
-            return;
+            return true;
         }
 
         // Capture the changes to save
@@ -391,10 +389,7 @@ function TerrainBuilder(
         // Reset pending changes immediately *before* starting the async save
         resetPendingChanges();
 
-        console.log("Efficiently saving terrain changes:", changesToSave);
-
         try {
-            // Get a write transaction
             const db = await DatabaseManager.getDBConnection();
             const tx = db.transaction(STORES.TERRAIN, "readwrite");
             const store = tx.objectStore(STORES.TERRAIN);
@@ -434,11 +429,6 @@ function TerrainBuilder(
                         });
                     })
                 );
-                console.log(
-                    `Added/Updated ${
-                        Object.keys(changesToSave.added).length
-                    } blocks in DB`
-                );
             }
 
             // Complete the transaction
@@ -446,13 +436,13 @@ function TerrainBuilder(
                 tx.oncomplete = resolve;
                 tx.onerror = reject;
             });
-
-            console.log("Efficient terrain save completed successfully.");
             lastSaveTimeRef.current = Date.now(); // Update last save time
+            return true;
         } catch (error) {
             console.error("Error during efficient terrain save:", error);
             // IMPORTANT: Restore pending changes if save failed
             pendingChangesRef.current.terrain = changesToSave;
+            return false;
         }
     };
 
@@ -1123,6 +1113,7 @@ function TerrainBuilder(
                 // Only update if blocks were actually placed
                 if (blockWasPlaced) {
                     importedUpdateTerrainBlocks(addedBlocks, {});
+                    trackTerrainChanges(addedBlocks, {}); // <<< Add this line
 
                     // Explicitly update the spatial hash for collisions with force option
                     const addedBlocksArray = Object.entries(addedBlocks).map(
@@ -1190,6 +1181,7 @@ function TerrainBuilder(
                 // Only proceed if blocks were actually removed
                 if (blockWasRemoved) {
                     importedUpdateTerrainBlocks({}, removedBlocks);
+                    trackTerrainChanges({}, removedBlocks); // <<< Add this line
 
                     // Explicitly update the spatial hash for collisions with force option
                     const removedBlocksArray = Object.entries(
@@ -2243,14 +2235,34 @@ function TerrainBuilder(
                     }
 
                     // Load terrain from IndexedDB
+                    console.log(
+                        "[Load] Attempting to load terrain from IndexedDB..."
+                    ); // <<< Add log
                     return DatabaseManager.getData(STORES.TERRAIN, "current");
                 })
                 .then((savedTerrain) => {
                     if (!mounted) return;
 
+                    // <<< Add log for loaded terrain data
+                    console.log(
+                        "[Load] Terrain data retrieved from DB:",
+                        savedTerrain
+                            ? `(${Object.keys(savedTerrain).length} blocks)`
+                            : "null"
+                    );
+                    // <<< Optional detailed log (can be large): console.log('[Load] Full savedTerrain:', JSON.stringify(savedTerrain));
+
                     if (savedTerrain) {
                         terrainRef.current = savedTerrain;
-                        console.log("Terrain loaded from IndexedDB");
+                        console.log(
+                            "[Load] Terrain loaded from IndexedDB into terrainRef.current"
+                        );
+                        // <<< Add log for terrainRef state
+                        console.log(
+                            "[Load] terrainRef.current block count after assignment:",
+                            Object.keys(terrainRef.current).length
+                        );
+
                         totalBlocksRef.current = Object.keys(
                             terrainRef.current
                         ).length;
@@ -2313,6 +2325,11 @@ function TerrainBuilder(
                                 console.log(
                                     "Textures preloaded, updating terrain chunks..."
                                 );
+                                // <<< Add log before calling updateTerrainChunks
+                                console.log(
+                                    "[Load] Calling updateTerrainChunks with terrainRef.current block count:",
+                                    Object.keys(terrainRef.current).length
+                                );
                                 updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
 
                                 // Process chunks to ensure everything is visible
@@ -2336,16 +2353,27 @@ function TerrainBuilder(
                                     error
                                 );
                                 // Still update terrain and show page even if there was an error
+                                console.warn(
+                                    "[Load] Error during texture preload, proceeding with terrain update."
+                                ); // <<< Add log
+                                console.log(
+                                    "[Load] Calling updateTerrainChunks (after texture error) with terrainRef.current block count:",
+                                    Object.keys(terrainRef.current).length
+                                ); // <<< Add log
                                 updateTerrainChunks(terrainRef.current);
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);
                             }
                         }, 100);
                     } else {
-                        console.log("No terrain found in IndexedDB");
+                        console.log("[Load] No terrain found in IndexedDB");
                         // Initialize with empty terrain
                         terrainRef.current = {};
                         totalBlocksRef.current = 0;
+                        // <<< Add log for empty terrainRef state
+                        console.log(
+                            "[Load] Initialized terrainRef.current as empty."
+                        );
                     }
 
                     setPageIsLoaded(true);
@@ -3371,6 +3399,7 @@ function TerrainBuilder(
         source = "undo/redo"
     ) => {
         console.time(`updateTerrainForUndoRedo-${source}`);
+        trackTerrainChanges(addedBlocks, removedBlocks); // <<< Add this line
 
         // Validate input
         addedBlocks = addedBlocks || {};

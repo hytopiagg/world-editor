@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import "../../css/AIAssistantPanel.css";
 
@@ -14,6 +14,67 @@ const AIAssistantPanel = ({
     const [hCaptchaToken, setHCaptchaToken] = useState(null);
     const [captchaError, setCaptchaError] = useState(null);
     const hCaptchaRef = useRef(null);
+
+    // <<< Add useEffect to load saved schematics >>>
+    useEffect(() => {
+        const loadSavedSchematics = async () => {
+            try {
+                const { DatabaseManager, STORES } = await import(
+                    "../DatabaseManager"
+                );
+                // We need to iterate like terrain since keys are prompts
+                const db = await DatabaseManager.getDBConnection();
+                const tx = db.transaction(STORES.SCHEMATICS, "readonly");
+                const store = tx.objectStore(STORES.SCHEMATICS);
+                const cursorRequest = store.openCursor();
+                const loadedHistory = [];
+
+                cursorRequest.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        // key is the prompt, value is the schematic
+                        loadedHistory.push({
+                            prompt: cursor.key,
+                            schematic: cursor.value,
+                        });
+                        cursor.continue();
+                    } else {
+                        // Done iterating
+                        if (loadedHistory.length > 0) {
+                            // Sort by timestamp if available, or just keep load order
+                            // Assuming schematic object *might* have a timestamp later
+                            loadedHistory.sort(
+                                (a, b) =>
+                                    (b.schematic.timestamp || 0) -
+                                    (a.schematic.timestamp || 0)
+                            );
+                            setGenerationHistory(loadedHistory);
+                            console.log(
+                                `[AI Panel] Loaded ${loadedHistory.length} saved schematics.`
+                            );
+                        }
+                    }
+                };
+                cursorRequest.onerror = (event) => {
+                    console.error(
+                        "[AI Panel] Error reading schematics store with cursor:",
+                        event.target.error
+                    );
+                };
+            } catch (err) {
+                console.error(
+                    "[AI Panel] Error loading saved schematics:",
+                    err
+                );
+            }
+        };
+
+        if (isVisible) {
+            // Only load when panel becomes visible
+            loadSavedSchematics();
+        }
+    }, [isVisible]); // Re-load if visibility changes
+    // <<< End useEffect >>>
 
     const handleGenerate = useCallback(async () => {
         if (!prompt.trim() || isLoading) return;
@@ -66,6 +127,30 @@ const AIAssistantPanel = ({
                 ]);
 
                 loadAISchematic(schematic);
+
+                // <<< Add saving logic >>>
+                try {
+                    // Import DatabaseManager and STORES if not already imported
+                    const { DatabaseManager, STORES } = await import(
+                        "../DatabaseManager"
+                    );
+                    // Use prompt as key for now, might overwrite duplicates
+                    await DatabaseManager.saveData(
+                        STORES.SCHEMATICS,
+                        prompt,
+                        schematic
+                    );
+                    console.log(
+                        `[AI Panel] Saved schematic for prompt: "${prompt}"`
+                    );
+                } catch (dbError) {
+                    console.error(
+                        "[AI Panel] Error saving schematic to DB:",
+                        dbError
+                    );
+                    // Optionally inform the user of the save error?
+                }
+                // <<< End saving logic >>>
             } else {
                 setError("AI could not generate a structure for this prompt.");
             }

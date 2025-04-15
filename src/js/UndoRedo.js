@@ -444,7 +444,9 @@ function UndoRedoManager(
                         );
 
                         console.log(
-                            `Will remove ${Object.keys(removedBlocks).length} blocks from the terrain`
+                            `Will remove ${
+                                Object.keys(removedBlocks).length
+                            } blocks from the terrain`
                         );
 
                         // Update database directly for removed blocks (batch delete)
@@ -482,7 +484,9 @@ function UndoRedoManager(
                                 });
 
                                 console.log(
-                                    `Successfully deleted ${Object.keys(removedBlocks).length} blocks directly from DB`
+                                    `Successfully deleted ${
+                                        Object.keys(removedBlocks).length
+                                    } blocks directly from DB`
                                 );
                             } catch (dbError) {
                                 console.error(
@@ -506,7 +510,9 @@ function UndoRedoManager(
                         );
 
                         console.log(
-                            `Will add back ${Object.keys(addedBlocks).length} blocks to the terrain`
+                            `Will add back ${
+                                Object.keys(addedBlocks).length
+                            } blocks to the terrain`
                         );
 
                         // Update database directly for added blocks (batch put)
@@ -547,7 +553,9 @@ function UndoRedoManager(
                                 });
 
                                 console.log(
-                                    `Successfully added ${Object.keys(addedBlocks).length} blocks directly to DB`
+                                    `Successfully added ${
+                                        Object.keys(addedBlocks).length
+                                    } blocks directly to DB`
                                 );
                             } catch (dbError) {
                                 console.error(
@@ -563,7 +571,11 @@ function UndoRedoManager(
                     }
 
                     console.log(
-                        `Selectively updating terrain: ${Object.keys(addedBlocks).length} additions, ${Object.keys(removedBlocks).length} removals`
+                        `Selectively updating terrain: ${
+                            Object.keys(addedBlocks).length
+                        } additions, ${
+                            Object.keys(removedBlocks).length
+                        } removals`
                     );
 
                     // Update terrain directly using optimized function for undo/redo
@@ -690,16 +702,19 @@ function UndoRedoManager(
                     const addedBlocks = {};
                     const removedBlocks = {};
 
-                    // Re-add blocks that were originally added
-                    if (redoneChanges.terrain.added) {
-                        Object.entries(redoneChanges.terrain.added).forEach(
+                    // Blocks to ADD back (were removed in the original schematic placement)
+                    // These are stored in the .removed property of the redo state
+                    if (redoneChanges.terrain.removed) {
+                        Object.entries(redoneChanges.terrain.removed).forEach(
                             ([posKey, blockId]) => {
                                 addedBlocks[posKey] = blockId;
                             }
                         );
 
                         console.log(
-                            `Will add ${Object.keys(addedBlocks).length} blocks to the terrain`
+                            `[Redo] Will ADD ${
+                                Object.keys(addedBlocks).length
+                            } blocks (originally removed)`
                         );
 
                         // Update database directly for added blocks (batch put)
@@ -740,7 +755,9 @@ function UndoRedoManager(
                                 });
 
                                 console.log(
-                                    `Successfully added ${Object.keys(addedBlocks).length} blocks directly to DB`
+                                    `[Redo DB] Successfully ADDED ${
+                                        Object.keys(addedBlocks).length
+                                    } blocks directly to DB`
                                 );
                             } catch (dbError) {
                                 console.error(
@@ -755,17 +772,21 @@ function UndoRedoManager(
                         }
                     }
 
-                    // Re-remove blocks that were originally removed
-                    if (redoneChanges.terrain.removed) {
-                        Object.keys(redoneChanges.terrain.removed).forEach(
+                    // Blocks to REMOVE (were added in the original schematic placement)
+                    // These are stored in the .added property of the redo state
+                    if (redoneChanges.terrain.added) {
+                        Object.keys(redoneChanges.terrain.added).forEach(
                             (posKey) => {
+                                // Store the ID for the updateTerrainForUndoRedo call
                                 removedBlocks[posKey] =
-                                    redoneChanges.terrain.removed[posKey];
+                                    redoneChanges.terrain.added[posKey];
                             }
                         );
 
                         console.log(
-                            `Will remove ${Object.keys(removedBlocks).length} blocks from the terrain`
+                            `[Redo] Will REMOVE ${
+                                Object.keys(removedBlocks).length
+                            } blocks (originally added)`
                         );
 
                         // Update database directly for removed blocks (batch delete)
@@ -803,7 +824,9 @@ function UndoRedoManager(
                                 });
 
                                 console.log(
-                                    `Successfully deleted ${Object.keys(removedBlocks).length} blocks directly from DB`
+                                    `[Redo DB] Successfully DELETED ${
+                                        Object.keys(removedBlocks).length
+                                    } blocks directly from DB`
                                 );
                             } catch (dbError) {
                                 console.error(
@@ -819,7 +842,11 @@ function UndoRedoManager(
                     }
 
                     console.log(
-                        `Selectively updating terrain: ${Object.keys(addedBlocks).length} additions, ${Object.keys(removedBlocks).length} removals`
+                        `Selectively updating terrain: ${
+                            Object.keys(addedBlocks).length
+                        } additions, ${
+                            Object.keys(removedBlocks).length
+                        } removals`
                     );
 
                     // Update terrain directly using optimized function for undo/redo

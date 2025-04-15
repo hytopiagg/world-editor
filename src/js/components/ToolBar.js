@@ -782,15 +782,15 @@ const ToolBar = ({
                     <div className="control-button-wrapper">
                         <Tooltip text="Save terrain (Ctrl+S)">
                             <button
-                                onClick={() => {
-                                    // Use the setIsSaving prop here
+                                onClick={async () => {
                                     setIsSaving(true);
-                                    // Then call the actual save function
-                                    if (terrainBuilderRef.current) {
-                                        terrainBuilderRef.current.saveTerrainManually();
+                                    try {
+                                        if (terrainBuilderRef.current) {
+                                            await terrainBuilderRef.current.saveTerrainManually();
+                                        }
+                                    } finally {
+                                        setIsSaving(false);
                                     }
-                                    // Set a fallback timer to clear the saving state if something goes wrong
-                                    setTimeout(() => setIsSaving(false), 5000);
                                 }}
                                 className="control-button"
                             >
