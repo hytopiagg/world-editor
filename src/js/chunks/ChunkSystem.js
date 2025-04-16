@@ -157,7 +157,12 @@ class ChunkSystem {
             return;
         }
 
-        const chunks = [];
+        console.log("updateFromTerrainData()");
+        console.log(Object.keys(terrainData));
+
+        console.log(Object.keys(terrainData)[111700]);
+
+        let chunks = [];
         const chunkBlocks = new Map();
 
         // Group blocks by chunk
@@ -194,6 +199,28 @@ class ChunkSystem {
                 blocks,
             });
         }
+
+        // Check for chunks with NaN coordinates
+        const validChunks = [];
+        for (const chunk of chunks) {
+            const { originCoordinate } = chunk;
+            if (
+                isNaN(originCoordinate.x) ||
+                isNaN(originCoordinate.y) ||
+                isNaN(originCoordinate.z)
+            ) {
+                console.warn(
+                    `Skipping chunk with NaN coordinates: ${JSON.stringify(
+                        originCoordinate
+                    )}`
+                );
+            } else {
+                validChunks.push(chunk);
+            }
+        }
+
+        // Replace the original chunks array with the filtered one
+        chunks = validChunks;
 
         // Update chunks in the chunk manager
         this._chunkManager.updateChunks(chunks);
