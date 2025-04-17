@@ -1899,73 +1899,90 @@ function TerrainBuilder(
     const clearMap = () => {
         console.log("Clearing map...");
 
-        // Remove all blocks from the terrain object
-        terrainRef.current = {};
-        totalBlocksRef.current = 0;
+        // Set database clearing flag to prevent other operations during clear
+        window.IS_DATABASE_CLEARING = true;
 
-        // Send total blocks count to parent component
-        if (sendTotalBlocks) {
-            sendTotalBlocks(0);
-        }
+        try {
+            // Remove all blocks from the terrain object
+            terrainRef.current = {};
+            totalBlocksRef.current = 0;
 
-        // Clear all chunks from the system
-        console.log("Clearing chunks from the chunk system...");
-        clearChunks();
+            // Send total blocks count to parent component
+            if (sendTotalBlocks) {
+                sendTotalBlocks(0);
+            }
 
-        // Clear spatial grid for raycasting
-        if (spatialGridManagerRef.current) {
-            console.log("Clearing spatial grid manager...");
-            spatialGridManagerRef.current.clear();
+            // Clear all chunks from the system
+            console.log("Clearing chunks from the chunk system...");
+            clearChunks();
 
-            // Reset the firstLoadCompleted flag to ensure it gets initialized for the next terrain
-            firstLoadCompletedRef.current = false;
-        }
+            // Clear spatial grid for raycasting
+            if (spatialGridManagerRef.current) {
+                console.log("Clearing spatial grid manager...");
+                spatialGridManagerRef.current.clear();
+                firstLoadCompletedRef.current = false; // Reset spatial hash init flag
+            }
 
-        // Also clear environment objects if available
-        if (environmentBuilderRef?.current?.clearEnvironments) {
-            console.log("Clearing environment objects...");
-            environmentBuilderRef.current.clearEnvironments();
-        }
+            // Clear environment objects
+            if (environmentBuilderRef?.current?.clearEnvironments) {
+                console.log("Clearing environment objects...");
+                environmentBuilderRef.current.clearEnvironments(); // Should also handle its own DB persistence
+            }
 
-        // Reset placement state
-        isPlacingRef.current = false;
-        recentlyPlacedBlocksRef.current = new Set();
+            // Reset placement state
+            isPlacingRef.current = false;
+            recentlyPlacedBlocksRef.current = new Set();
 
-        // Reset pending changes
-        pendingChangesRef.current = { added: {}, removed: {} };
+            // IMPORTANT: Clear pending changes *before* clearing the database
+            resetPendingChanges(); // Reset all pending changes first
 
-        // Reset undo/redo stack
-        if (undoRedoManager) {
-            console.log("Clearing undo/redo history...");
-            // Use DatabaseManager directly instead of non-existent clearHistory method
-            import("./DatabaseManager")
-                .then(({ DatabaseManager, STORES }) => {
-                    // Clear undo and redo stacks
-                    DatabaseManager.saveData(STORES.UNDO, "states", []);
-                    DatabaseManager.saveData(STORES.REDO, "states", []);
-                    console.log("Undo/redo history cleared");
+            // Clear undo/redo stacks in the database
+            console.log("Clearing undo/redo history in DB...");
+            const clearUndoRedo = async () => {
+                try {
+                    await DatabaseManager.saveData(STORES.UNDO, "states", []);
+                    await DatabaseManager.saveData(STORES.REDO, "states", []);
+                    console.log("Undo/redo history cleared in DB");
+                    // Optionally, reset in-memory state if the manager holds it
+                    if (undoRedoManager?.current?.clearHistory) {
+                        undoRedoManager.current.clearHistory();
+                        console.log("In-memory undo/redo history cleared");
+                    }
+                } catch (error) {
+                    console.error("Failed to clear undo/redo history:", error);
+                    // Don't stop the whole clear process for this
+                }
+            };
+            clearUndoRedo(); // Call async clear
+
+            // Update debug info
+            updateDebugInfo();
+
+            // --- MODIFICATION START ---
+            // Clear the entire TERRAIN object store in the database
+            console.log("Clearing the terrain object store in database...");
+            DatabaseManager.clearStore(STORES.TERRAIN)
+                .then(() => {
+                    console.log("Terrain object store cleared successfully.");
+                    // Reset pending changes again just in case something happened between the last reset and now
+                    resetPendingChanges();
+                    lastSaveTimeRef.current = Date.now(); // Update last save time
                 })
                 .catch((error) => {
-                    console.error("Failed to clear undo/redo history:", error);
+                    console.error("Error clearing terrain store:", error);
+                    // Handle error appropriately, maybe alert user
                 });
+            // --- MODIFICATION END ---
+
+            console.log("Map clear initiated successfully.");
+        } catch (error) {
+            console.error("Error during clearMap operation:", error);
+            // Handle error (e.g., show alert)
+        } finally {
+            // Ensure the flag is always reset
+            window.IS_DATABASE_CLEARING = false;
+            console.log("Database clearing flag reset.");
         }
-
-        // Update debug info
-        updateDebugInfo();
-
-        // Force scene update
-        if (scene) {
-            console.log("Forcing scene update...");
-            scene.updateMatrixWorld(true);
-            // Don't need to call render directly - the animation loop will handle it
-        }
-
-        // Save empty terrain to database
-        console.log("Saving empty terrain to database...");
-        efficientTerrainSave();
-
-        console.log("Map cleared successfully");
-        resetPendingChanges();
     };
 
     // Function to initialize spatial hash once after map is loaded

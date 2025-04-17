@@ -214,7 +214,9 @@ class Chunk {
             options && options.added && options.added.length > 0;
         const hasRemovedBlocks =
             options && options.removed && options.removed.length > 0;
-        const perfId = `buildMeshes-${this.chunkId}${skipNeighbors ? "-fast" : ""}`;
+        const perfId = `buildMeshes-${this.chunkId}${
+            skipNeighbors ? "-fast" : ""
+        }`;
 
         // If the chunk hasn't changed and we're not forcing a rebuild, skip the mesh build
         // Never skip if we have explicit added/removed blocks
