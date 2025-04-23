@@ -12,7 +12,7 @@
 
 .block-tools-sidebar {
   position: absolute;
-  width: 332px;
+  width: 343px;
   background-color: rgba(13, 13, 13, 0.8);
   padding: 15px;
   border-radius: 12px;
@@ -21,7 +21,7 @@
   flex-direction: column;
   min-height: 450px;
   height: 70%;
-  max-height: 70%;
+  max-height: 870px;
   overflow: hidden;
   pointer-events: all;
   backdrop-filter: blur(3px);
