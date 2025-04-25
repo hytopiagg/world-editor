@@ -261,8 +261,23 @@ const BlockToolsSidebar = ({
         const confirmMessage = `Deleting "${blockType.name}" will replace any instances of this block with an error texture. Are you sure you want to proceed?`;
 
         if (window.confirm(confirmMessage)) {
-            // Just pass the ID of the block to remove
+            // 1) Remove from the in-memory array
             removeCustomBlock(blockType.id);
+            // 2) Update our React state so the UI re-renders
+            setCustomBlocks(getCustomBlocks());
+            // 3) Persist the updated list back to your store
+            try {
+                await DatabaseManager.saveData(
+                    STORES.CUSTOM_BLOCKS,
+                    "blocks",
+                    getCustomBlocks()
+                );
+            } catch (err) {
+                console.error(
+                    "Error saving custom blocks after deletion:",
+                    err
+                );
+            }
 
             try {
                 // Update terrain to replace deleted block instances with error blocks
@@ -301,6 +316,9 @@ const BlockToolsSidebar = ({
                     error
                 );
             }
+
+            // Finally, re-fire the global refresh in case anything else needs it
+            refreshBlockTools();
         }
     };
 
