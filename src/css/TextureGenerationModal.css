@@ -17,7 +17,6 @@
     border-radius: 8px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
     width: 90%;
-    max-width: 500px; /* Let's keep this size for now */
     color: #e0e0e0; /* Light text */
     font-family: "Arial", sans-serif;
     display: flex; /* Use flexbox for overall layout */
@@ -25,21 +24,20 @@
 }
 
 .modal-close-button {
-    /* position: absolute; */
-    /* top: 10px; */
-    /* right: 15px; */
-    background: none;
+    background-color: #e74c3c; /* Red background */
     border: none;
-    font-size: 1.8rem;
-    color: #aaa;
+    border-radius: 4px;
+    font-size: 1rem;
+    color: white;
     cursor: pointer;
-    line-height: 1;
-    padding: 0 5px; /* Add slight padding */
+    padding: 8px 15px;
     margin-left: auto; /* Push to the right within header-buttons */
+    font-weight: bold;
+    transition: background-color 0.2s ease;
 }
 
 .modal-close-button:hover {
-    color: #fff;
+    background-color: #c0392b; /* Darker red on hover */
 }
 
 .modal-content h2 {
@@ -140,7 +138,7 @@
 
 /* Make modal wider for editor */
 .modal-content.texture-editor-modal {
-    max-width: 750px; /* Adjust as needed */
+    /* max-width: 750px; */ /* Adjust as needed */ /* Removed this line */
 }
 
 .modal-header {
@@ -228,8 +226,8 @@
 /* Editor Layout */
 .editor-area {
     display: flex;
-    gap: 20px;
-    margin-top: 20px;
+    justify-content: center; /* Center items horizontally */
+    gap: 20px; /* Add space between tools and canvas */
 }
 
 .editor-tools {
@@ -238,9 +236,30 @@
     gap: 15px;
 }
 
+/* New container for Preview and Face Selector */
+.preview-face-container {
+    display: flex;
+    flex-direction: row; /* Stack preview and selector side-by-side */
+    align-items: flex-start; /* Align items to the top */
+    gap: 10px; /* Space between preview and selector */
+    justify-content: center; /* Center items if space allows */
+}
+
+/* Adjust FaceSelector button styles for compactness */
+/* Assuming FaceSelector buttons have a common class or structure */
+/* You might need to adjust the selector based on FaceSelector.css */
+.face-selector button {
+    padding: 4px 8px; /* Reduced padding */
+    font-size: 0.8rem; /* Smaller font */
+    min-width: 50px; /* Adjust min-width if needed */
+}
+
+/* Adjust FaceSelector grid gap */
+.face-selector {
+    gap: 4px; /* Reduced gap between buttons */
+}
+
 .editor-canvas-container {
-    flex-grow: 1;
-    display: flex; /* Center canvas */
     justify-content: center;
     align-items: center;
 }
@@ -297,13 +316,17 @@
 
 @media (max-width: 768px) {
     .modal-content.texture-editor-modal {
-        max-width: 95vw; /* Allow more width on smaller screens */
+        /* max-width: 95vw; */ /* Allow more width on smaller screens */
+        width: 90vw; /* Set width directly */
         padding: 20px;
     }
 
     .editor-area {
         flex-direction: column; /* Stack tools and canvas vertically */
         align-items: center; /* Center items when stacked */
+        flex-grow: 1;
+        display: flex; /* Center canvas */
+        gap: 20px; /* Add vertical gap when stacked */
     }
 
     .editor-tools {
@@ -354,6 +377,14 @@
     .header-buttons {
         margin-left: 0; /* Remove left margin when stacked */
     }
+
+    /* Adjust preview/face layout for smaller screens */
+    .preview-face-container {
+        flex-direction: row; /* Side-by-side on smaller screens */
+        align-items: flex-start; /* Align to top */
+        justify-content: center; /* Center horizontally */
+        flex-wrap: wrap; /* Allow wrapping */
+    }
 }
 
 @media (max-width: 480px) {
@@ -389,4 +420,49 @@
     /* .color-palette {
         grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
     } */
+}
+
+/* Style the new generation section wrapper */
+.generation-section {
+    /* width: fit-content; Size to content */
+    max-width: 600px; /* Reduced max-width */
+    width: 100%;      /* Still allow it to take space up to max-width */
+    margin: 0 auto 20px auto; /* Center horizontally, add bottom margin */
+    display: flex;            /* Use flexbox */
+    flex-direction: column;   /* Stack children vertically */
+    align-items: stretch;     /* Make children fill width */
+    gap: 10px;                /* Add space between children */
+}
+
+/* Ensure controls container doesn't interfere */
+.generation-controls {
+    /* display: flex; */ /* Remove flex if previously added here */
+    /* gap: 10px; */
+    margin-bottom: 0; /* Remove bottom margin if any */
+    /* The textarea inside should already have width: 100% or flex-grow */
+}
+
+
+.generation-controls .prompt-input {
+    /* flex-grow: 1; */ /* May not be needed if parent handles width */
+    width: 100%; /* Explicitly set width */
+    box-sizing: border-box; /* Ensure padding doesn't add to width */
+    margin-bottom: 0; /* Reset margin */
+}
+
+.generate-button {
+    /* width: 100%; */ /* Should be handled by align-items: stretch now */
+    /* width: auto; */ /* Remove auto width if set */
+    box-sizing: border-box; /* Ensure padding doesn't add to width */
+    /* height: 40px; */ /* Keep height consistent if needed */
+}
+
+
+/* Adjust hCaptcha container */
+.hcaptcha-container {
+    /* display: flex; */ /* Remove flex if previously added */
+    /* justify-content: center; */ /* Remove centering, parent handles alignment */
+    margin: 0; /* Reset margins, parent gap handles spacing */
+    width: auto; /* Allow it to size naturally */
+    align-self: center; /* Center the captcha itself within the stretched space */
 }

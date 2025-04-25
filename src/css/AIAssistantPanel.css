@@ -2,7 +2,7 @@
 
 .ai-assistant-panel {
     position: absolute;
-    top: 400px; /* Will adjust this later for responsiveness */
+    top: 350px; /* Will adjust this later for responsiveness */
     right: 20px; /* Will adjust this later */
     width: 300px; /* Will adjust this later */
     padding: 15px;
@@ -51,11 +51,9 @@
 }
 
 .ai-assistant-history-list {
-    margin-top: 15px;
     max-height: 150px; /* Limit height and make scrollable */
     overflow-y: auto;
     border-top: 1px solid #555;
-    padding-top: 10px;
 }
 
 .ai-assistant-history-item {
