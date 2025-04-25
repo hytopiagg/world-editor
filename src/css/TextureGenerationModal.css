@@ -275,7 +275,32 @@
     margin-top: 20px;
     padding-top: 15px;
     border-top: 1px solid #444;
-    text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Ensure footer close button doesn't have extra auto margin */
+.modal-actions .modal-close-button {
+    margin-left: 0;
+}
+
+.texture-name-input {
+    padding: 8px 10px;
+    font-size: 0.9rem;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background-color: #333;
+    color: #e0e0e0;
+    min-width: 180px;
+    box-sizing: border-box;
+}
+
+.texture-name-input:focus {
+    outline: none;
+    border-color: #6a6aff;
+    box-shadow: 0 0 0 2px rgba(106, 106, 255, 0.3);
 }
 
 .use-texture-button {

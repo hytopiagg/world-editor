@@ -30,6 +30,7 @@ const createTexture = (size) => {
 
 const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     const [prompt, setPrompt] = useState("");
+    const [textureName, setTextureName] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     // State to hold the actual THREE.CanvasTexture objects
     const [textureObjects, setTextureObjects] = useState({});
@@ -149,6 +150,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         newTextureObjects[face] = texture;
                     });
                     setTextureObjects(newTextureObjects); // Update state with all textures initialized
+                    setTextureName(prompt); // Default texture name to prompt
                     setIsLoading(false);
                     // Reset undo/redo state since we have new textures
                     setCanUndo(false);
@@ -278,7 +280,10 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             }
 
             if (success) {
-                onTextureReady(exportData, prompt || "generated-texture");
+                onTextureReady(
+                    exportData,
+                    textureName.trim() || prompt || "generated-texture"
+                );
             }
         }
         handleClose();
@@ -409,11 +414,21 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     >
                         Close
                     </button>
+                    {/* Texture name input */}
+                    <input
+                        type="text"
+                        className="texture-name-input"
+                        placeholder="Texture name"
+                        value={textureName}
+                        onChange={(e) => setTextureName(e.target.value)}
+                    />
                     <button
                         className="use-texture-button"
                         onClick={handleUseTexture}
-                        disabled={Object.keys(textureObjects).length === 0} // Disable if no textures (e.g., during initial load/error)
-                        style={{ marginLeft: "15px" }}
+                        disabled={
+                            Object.keys(textureObjects).length === 0 ||
+                            !textureName.trim()
+                        }
                     >
                         Use Texture
                     </button>
