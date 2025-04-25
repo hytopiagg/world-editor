@@ -1,0 +1,110 @@
+/* src/js/components/CustomColorPicker.module.css */
+.inputContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 4px; /* Increased gap */
+    width: 110px; /* Slightly wider */
+    font-size: 13px; /* Slightly larger font */
+}
+
+.inputRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.label {
+    width: 20px; /* Wider label */
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--spectrum-alias-label-text-color, #555);
+}
+
+/* New wrapper to group input and buttons */
+.inputWrapper {
+    display: flex;
+    flex-grow: 1; /* Allow wrapper to grow */
+    position: relative; /* For positioning buttons */
+    align-items: center;
+}
+
+.numberInput,
+.hexInput {
+    /* flex-grow: 1; /* Input itself doesn't need to grow if wrapper does */
+    width: 100%; /* Fill the wrapper */
+    padding: 3px 5px;
+    /* Add padding-right to prevent text overlapping buttons */
+    padding-right: 20px; /* Adjust based on button width */
+    font-size: inherit;
+    border: 1px solid var(--spectrum-alias-border-color-default, #ccc);
+    border-radius: 3px;
+    background-color: var(--spectrum-alias-background-color-default, white);
+    color: white; /* Changed text color */
+    /* Ensure spinners are hidden if type="number" is kept */
+     -moz-appearance: textfield;
+}
+.numberInput::-webkit-outer-spin-button,
+.numberInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+
+/* Style for the container of the stepper buttons */
+.stepperButtons {
+    display: flex;
+    flex-direction: column;
+    position: absolute; /* Position over the input */
+    right: 1px;         /* Align to the right */
+    top: 1px;           /* Align top */
+    bottom: 1px;        /* Align bottom */
+    justify-content: center; /* Center buttons vertically */
+}
+
+/* Style for individual stepper buttons */
+.stepperButton {
+    background-color: #eee;
+    border: none;
+    /* border-left: 1px solid var(--spectrum-alias-border-color-default, #ccc); */
+    padding: 0 3px;
+    cursor: pointer;
+    font-size: 8px; /* Make arrows small */
+    line-height: 1; /* Adjust line height for vertical alignment */
+    height: 50%; /* Each button takes half the height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    box-sizing: border-box; /* Include padding/border in height */
+    border-radius: 0 2px 2px 0; /* Round corners slightly on right */
+}
+.stepperButton:first-child {
+    border-bottom: 1px solid #ccc;
+    border-radius: 0 2px 0 0;
+}
+.stepperButton:last-child {
+     border-radius: 0 0 2px 0;
+}
+
+
+.stepperButton:hover {
+    background-color: #ddd;
+}
+
+.stepperButton:active {
+    background-color: #ccc;
+}
+
+
+.hexInput {
+    font-family: monospace;
+     padding-right: 5px; /* Reset padding for hex input */
+     -moz-appearance: initial; /* Ensure hex doesn't hide anything */
+}
+
+
+.separator {
+    height: 1px;
+    background-color: var(--spectrum-alias-border-color-default, #ddd);
+    margin: 5px 0; /* Increased space around separator */
+} 

@@ -23,6 +23,7 @@ import { refreshBlockTools } from "./js/components/BlockToolsSidebar";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 import { STORES } from "./js/DatabaseManager";
+import { defaultTheme, Provider } from "@adobe/react-spectrum";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -63,7 +64,7 @@ function App() {
 
     // AI Assistant State
     const [currentSchematic, setCurrentSchematic] = useState(null);
-    const [isAIAssistantVisible, setIsAIAssistantVisible] = useState(true);
+    const [isAIAssistantVisible, setIsAIAssistantVisible] = useState(false);
 
     useEffect(() => {
         const loadSavedToolSelection = () => {
@@ -294,184 +295,190 @@ function App() {
     }, []);
 
     return (
-        <div className="App">
-            {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
+        <Provider theme={defaultTheme}>
+            <div className="App">
+                {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
 
-            {/* Loading Screen */}
-            {!pageIsLoaded && <LoadingScreen />}
+                {/* Loading Screen */}
+                {!pageIsLoaded && <LoadingScreen />}
 
-            {/* Global Loading Screen for heavy operations */}
-            <GlobalLoadingScreen />
+                {/* Global Loading Screen for heavy operations */}
+                <GlobalLoadingScreen />
 
-            {/* Hytopia Logo */}
-            <div className="hytopia-logo-wrapper">
-                <img src={hytopiaLogo} alt="Hytopia Logo" />
-                <p className="hytopia-version-text">
-                    World Editor Version {version}
-                </p>
-            </div>
+                {/* Hytopia Logo */}
+                <div className="hytopia-logo-wrapper">
+                    <img src={hytopiaLogo} alt="Hytopia Logo" />
+                    <p className="hytopia-version-text">
+                        World Editor Version {version}
+                    </p>
+                </div>
 
-            <QuickTips />
+                <QuickTips />
 
-            <UndoRedoManager
-                ref={undoRedoManagerRef}
-                terrainBuilderRef={terrainBuilderRef}
-                environmentBuilderRef={environmentBuilderRef}
-            />
+                <UndoRedoManager
+                    ref={undoRedoManagerRef}
+                    terrainBuilderRef={terrainBuilderRef}
+                    environmentBuilderRef={environmentBuilderRef}
+                />
 
-            <BlockToolsSidebar
-                onOpenTextureModal={() => setIsTextureModalOpen(true)}
-                terrainBuilderRef={terrainBuilderRef}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                setCurrentBlockType={setCurrentBlockType}
-                environmentBuilder={environmentBuilderRef.current}
-                onPlacementSettingsChange={setPlacementSettings}
-            />
+                <BlockToolsSidebar
+                    onOpenTextureModal={() => setIsTextureModalOpen(true)}
+                    terrainBuilderRef={terrainBuilderRef}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    setCurrentBlockType={setCurrentBlockType}
+                    environmentBuilder={environmentBuilderRef.current}
+                    onPlacementSettingsChange={setPlacementSettings}
+                />
 
-            {/* Texture Generation Modal */}
-            <TextureGenerationModal
-                isOpen={isTextureModalOpen}
-                onClose={() => setIsTextureModalOpen(false)}
-                onTextureReady={handleTextureReady}
-            />
+                {/* Texture Generation Modal */}
+                <TextureGenerationModal
+                    isOpen={isTextureModalOpen}
+                    onClose={() => setIsTextureModalOpen(false)}
+                    onTextureReady={handleTextureReady}
+                />
 
-            {/* AI Assistant Panel */}
-            <AIAssistantPanel
-                isVisible={isAIAssistantVisible}
-                getAvailableBlocks={handleGetAvailableBlocks}
-                loadAISchematic={handleLoadAISchematic}
-            />
+                {/* AI Assistant Panel */}
+                <AIAssistantPanel
+                    isVisible={isAIAssistantVisible}
+                    getAvailableBlocks={handleGetAvailableBlocks}
+                    loadAISchematic={handleLoadAISchematic}
+                />
 
-            <div className="vignette-gradient"></div>
+                <div className="vignette-gradient"></div>
 
-            {/* Saving indicator */}
-            {isSaving && (
-                <div
-                    style={{
-                        position: "fixed",
-                        bottom: "80px",
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        backgroundColor: "rgba(0, 0, 0, 0.8)",
-                        color: "white",
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        zIndex: 9999,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        boxShadow: "0 2px 10px rgba(0, 0, 0, 0.3)",
-                        fontFamily: "Arial, sans-serif",
-                        fontSize: "14px",
-                        fontWeight: "bold",
-                        pointerEvents: "none", // Ensure it doesn't interfere with clicks
-                    }}
-                >
+                {/* Saving indicator */}
+                {isSaving && (
                     <div
                         style={{
-                            width: "16px",
-                            height: "16px",
-                            borderRadius: "50%",
-                            border: "3px solid rgba(255, 255, 255, 0.3)",
-                            borderTopColor: "white",
-                            animation: "spin 1s linear infinite",
+                            position: "fixed",
+                            bottom: "80px",
+                            left: "50%",
+                            transform: "translateX(-50%)",
+                            backgroundColor: "rgba(0, 0, 0, 0.8)",
+                            color: "white",
+                            padding: "8px 16px",
+                            borderRadius: "4px",
+                            zIndex: 9999,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            boxShadow: "0 2px 10px rgba(0, 0, 0, 0.3)",
+                            fontFamily: "Arial, sans-serif",
+                            fontSize: "14px",
+                            fontWeight: "bold",
+                            pointerEvents: "none", // Ensure it doesn't interfere with clicks
                         }}
+                    >
+                        <div
+                            style={{
+                                width: "16px",
+                                height: "16px",
+                                borderRadius: "50%",
+                                border: "3px solid rgba(255, 255, 255, 0.3)",
+                                borderTopColor: "white",
+                                animation: "spin 1s linear infinite",
+                            }}
+                        />
+                        Saving...
+                    </div>
+                )}
+
+                <Canvas shadows className="canvas-container">
+                    <TerrainBuilder
+                        isInputDisabled={isTextureModalOpen}
+                        ref={terrainBuilderRef}
+                        blockToolsRef={blockToolsRef}
+                        currentBlockType={currentBlockType}
+                        mode={mode}
+                        setDebugInfo={setDebugInfo}
+                        sendTotalBlocks={setTotalBlocks}
+                        axisLockEnabled={axisLockEnabled}
+                        placementSize={placementSize}
+                        cameraReset={cameraReset}
+                        cameraAngle={cameraAngle}
+                        setPageIsLoaded={setPageIsLoaded}
+                        onSceneReady={(sceneObject) => setScene(sceneObject)}
+                        gridSize={gridSize}
+                        environmentBuilderRef={environmentBuilderRef}
+                        previewPositionToAppJS={setCurrentPreviewPosition}
+                        undoRedoManager={undoRedoManagerRef}
+                        clearAISchematic={handleClearAISchematic}
                     />
-                    Saving...
-                </div>
-            )}
+                    <EnvironmentBuilder
+                        ref={environmentBuilderRef}
+                        scene={scene}
+                        currentBlockType={currentBlockType}
+                        mode={mode}
+                        onTotalObjectsChange={setTotalEnvironmentObjects}
+                        placementSize={placementSize}
+                        previewPositionFromAppJS={currentPreviewPosition}
+                        placementSettings={placementSettings}
+                        undoRedoManager={undoRedoManagerRef}
+                    />
+                </Canvas>
 
-            <Canvas shadows className="canvas-container">
-                <TerrainBuilder
-                    isInputDisabled={isTextureModalOpen}
-                    ref={terrainBuilderRef}
-                    blockToolsRef={blockToolsRef}
-                    currentBlockType={currentBlockType}
-                    mode={mode}
-                    setDebugInfo={setDebugInfo}
-                    sendTotalBlocks={setTotalBlocks}
-                    axisLockEnabled={axisLockEnabled}
-                    placementSize={placementSize}
-                    cameraReset={cameraReset}
-                    cameraAngle={cameraAngle}
-                    setPageIsLoaded={setPageIsLoaded}
-                    onSceneReady={(sceneObject) => setScene(sceneObject)}
-                    gridSize={gridSize}
+                <DebugInfo
+                    debugInfo={debugInfo}
+                    totalBlocks={totalBlocks}
+                    totalEnvironmentObjects={totalEnvironmentObjects}
+                    terrainBuilderRef={terrainBuilderRef}
+                />
+
+                <ToolBar
+                    terrainBuilderRef={terrainBuilderRef}
                     environmentBuilderRef={environmentBuilderRef}
-                    previewPositionToAppJS={setCurrentPreviewPosition}
-                    undoRedoManager={undoRedoManagerRef}
-                    clearAISchematic={handleClearAISchematic}
-                />
-                <EnvironmentBuilder
-                    ref={environmentBuilderRef}
-                    scene={scene}
-                    currentBlockType={currentBlockType}
                     mode={mode}
-                    onTotalObjectsChange={setTotalEnvironmentObjects}
+                    handleModeChange={setMode}
+                    axisLockEnabled={axisLockEnabled}
+                    setAxisLockEnabled={setAxisLockEnabled}
                     placementSize={placementSize}
-                    previewPositionFromAppJS={currentPreviewPosition}
-                    placementSettings={placementSettings}
+                    setPlacementSize={setPlacementSize}
+                    setGridSize={setGridSize}
                     undoRedoManager={undoRedoManagerRef}
+                    currentBlockType={currentBlockType}
+                    toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
+                    isAIAssistantVisible={isAIAssistantVisible}
+                    setIsSaving={setIsSaving}
                 />
-            </Canvas>
 
-            <DebugInfo
-                debugInfo={debugInfo}
-                totalBlocks={totalBlocks}
-                totalEnvironmentObjects={totalEnvironmentObjects}
-                terrainBuilderRef={terrainBuilderRef}
-            />
-
-            <ToolBar
-                terrainBuilderRef={terrainBuilderRef}
-                environmentBuilderRef={environmentBuilderRef}
-                mode={mode}
-                handleModeChange={setMode}
-                axisLockEnabled={axisLockEnabled}
-                setAxisLockEnabled={setAxisLockEnabled}
-                placementSize={placementSize}
-                setPlacementSize={setPlacementSize}
-                setGridSize={setGridSize}
-                undoRedoManager={undoRedoManagerRef}
-                currentBlockType={currentBlockType}
-                toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
-                isAIAssistantVisible={isAIAssistantVisible}
-                setIsSaving={setIsSaving}
-            />
-
-            <div className="camera-controls-wrapper">
-                <div className="camera-buttons">
-                    <Tooltip text="Reset camera position">
-                        <button
-                            onClick={() => setCameraReset((prev) => !prev)}
-                            className="camera-control-button"
-                        >
-                            <FaCamera />
-                        </button>
-                    </Tooltip>
-                    <Tooltip text={isMuted ? "Unmute" : "Mute"}>
-                        <button
-                            onClick={toggleMute}
-                            className={`camera-control-button ${
-                                !isMuted ? "active" : ""
-                            }`}
-                        >
-                            <FaVolumeMute />
-                        </button>
-                    </Tooltip>
+                <div className="camera-controls-wrapper">
+                    <div className="camera-buttons">
+                        <Tooltip text="Reset camera position">
+                            <button
+                                onClick={() => setCameraReset((prev) => !prev)}
+                                className="camera-control-button"
+                            >
+                                <FaCamera />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text={isMuted ? "Unmute" : "Mute"}>
+                            <button
+                                onClick={toggleMute}
+                                className={`camera-control-button ${
+                                    !isMuted ? "active" : ""
+                                }`}
+                            >
+                                <FaVolumeMute />
+                            </button>
+                        </Tooltip>
+                    </div>
                 </div>
-            </div>
 
-            <button
-                className="toolbar-button"
-                onClick={async () => await DatabaseManager.clearDatabase()}
-                title="Clear Database"
-                style={{ position: "absolute", bottom: "10px", left: "10px" }}
-            >
-                <FaDatabase />
-            </button>
-        </div>
+                <button
+                    className="toolbar-button"
+                    onClick={async () => await DatabaseManager.clearDatabase()}
+                    title="Clear Database"
+                    style={{
+                        position: "absolute",
+                        bottom: "10px",
+                        left: "10px",
+                    }}
+                >
+                    <FaDatabase />
+                </button>
+            </div>
+        </Provider>
     );
 }
 

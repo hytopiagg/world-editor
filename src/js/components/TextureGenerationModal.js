@@ -3,7 +3,6 @@ import PropTypes from "prop-types";
 import { FaUndo, FaRedo } from "react-icons/fa";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import EditorToolbar, { TOOLS } from "./EditorToolbar";
-import ColorPalette from "./ColorPalette";
 import PixelEditorCanvas from "./PixelEditorCanvas";
 import BlockPreview3D from "./BlockPreview3D";
 import FaceSelector from "./FaceSelector";
@@ -12,6 +11,7 @@ import "../../css/BlockPreview3D.css"; // Import preview CSS
 import "../../css/FaceSelector.css"; // Import face selector CSS
 import "../../css/EditorToolbar.css"; // Ensure toolbar CSS is imported for button styles
 import * as THREE from "three"; // Import THREE
+import CustomColorPicker from "./ColorPicker";
 
 const FACES = ["all", "top", "bottom", "left", "right", "front", "back"];
 const GRID_SIZE = 24; // Ensure grid size is accessible here
@@ -30,6 +30,7 @@ const createTexture = (size) => {
 
 const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     const [prompt, setPrompt] = useState("");
+    const [textureName, setTextureName] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     // State to hold the actual THREE.CanvasTexture objects
     const [textureObjects, setTextureObjects] = useState({});
@@ -50,14 +51,45 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 
-    // Effect to dispose textures on unmount
+    // Effect to initialize textures when the modal opens
     useEffect(() => {
-        return () => {
+        if (isOpen) {
+            const initialTextures = {};
+            FACES.forEach((face) => {
+                initialTextures[face] = createTexture(GRID_SIZE);
+            });
+            setTextureObjects(initialTextures);
+            // Reset editor state when opening
+            setSelectedTool(TOOLS.PENCIL);
+            setSelectedColor("#000000");
+            setSelectedFace("all");
+            setCanUndo(false);
+            setCanRedo(false);
+            setError(null);
+            setCaptchaError(null);
+            setPrompt(""); // Clear prompt on open
+            // Reset captcha if needed
+            if (hCaptchaRef.current) {
+                hCaptchaRef.current.resetCaptcha();
+            }
+        } else {
+            // Clean up textures when modal closes
             Object.values(textureObjects).forEach((texture) =>
                 texture?.dispose()
             );
+            setTextureObjects({});
+        }
+
+        // Cleanup function for disposal when component unmounts or isOpen changes to false
+        return () => {
+            if (!isOpen) {
+                // Ensure cleanup happens if closed before unmount
+                Object.values(textureObjects).forEach((texture) =>
+                    texture?.dispose()
+                );
+            }
         };
-    }, [textureObjects]);
+    }, [isOpen]); // Depend only on isOpen
 
     const handleGenerate = async () => {
         if (!prompt.trim()) {
@@ -118,6 +150,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         newTextureObjects[face] = texture;
                     });
                     setTextureObjects(newTextureObjects); // Update state with all textures initialized
+                    setTextureName(prompt); // Default texture name to prompt
                     setIsLoading(false);
                     // Reset undo/redo state since we have new textures
                     setCanUndo(false);
@@ -126,12 +159,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 img.onerror = () => {
                     console.error("Failed to load generated image");
                     setError("Failed to load generated image.");
-                    // Initialize with empty textures on error?
-                    const errorTextures = {};
-                    FACES.forEach((face) => {
-                        errorTextures[face] = createTexture(GRID_SIZE);
-                    });
-                    setTextureObjects(errorTextures);
+                    // Don't re-initialize with empty textures on error, keep existing
                     setIsLoading(false);
                 };
                 img.src = imageDataUrl;
@@ -141,12 +169,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         } catch (err) {
             console.error("API Error:", err);
             setError(err.message || "Failed to generate texture.");
-            // Initialize with empty textures on error?
-            const errorTextures = {};
-            FACES.forEach((face) => {
-                errorTextures[face] = createTexture(GRID_SIZE);
-            });
-            setTextureObjects(errorTextures);
+            // Don't re-initialize with empty textures on error, keep existing
             setIsLoading(false);
         } finally {
             // Reset captcha token and potentially the widget after attempt
@@ -159,15 +182,8 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     };
 
     const handleClose = () => {
-        setPrompt("");
-        Object.values(textureObjects).forEach((texture) => texture?.dispose()); // Dispose textures
-        setTextureObjects({});
-        setError(null);
-        setIsLoading(false);
-        setSelectedTool(TOOLS.PENCIL);
-        setSelectedColor("#000000");
-        setSelectedFace("all");
-        onClose();
+        // Texture cleanup is handled by the useEffect hook when isOpen changes
+        onClose(); // Just call onClose, useEffect handles the rest
     };
 
     // Callback for PixelEditorCanvas to directly update a texture
@@ -264,7 +280,10 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             }
 
             if (success) {
-                onTextureReady(exportData, prompt || "generated-texture");
+                onTextureReady(
+                    exportData,
+                    textureName.trim() || prompt || "generated-texture"
+                );
             }
         }
         handleClose();
@@ -296,26 +315,20 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 {/* Top Bar: Title and Buttons */}
                 <div className="modal-header">
                     <h2>Create & Edit Texture</h2>
-                    {/* Group close and logout buttons */}
-                    <div className="header-buttons">
-                        <button
-                            className="modal-close-button"
-                            onClick={handleClose}
-                        >
-                            ×
-                        </button>
-                    </div>
                 </div>
-                {/* Generation Controls */}
-                <div className="generation-controls">
-                    <textarea
-                        className="prompt-input"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
-                        rows="2"
-                        disabled={isLoading} // Only disable based on loading state
-                    />
+                {/* Generation Section */}
+                <div className="generation-section">
+                    {/* Generation Controls */}
+                    <div className="generation-controls">
+                        <textarea
+                            className="prompt-input"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
+                            rows="2"
+                            disabled={isLoading} // Only disable based on loading state
+                        />
+                    </div>
                     {/* Show Generate button */}
                     <button
                         className="generate-button"
@@ -324,102 +337,102 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     >
                         {isLoading ? "Generating..." : "Generate"}
                     </button>
-                </div>
 
-                {/* hCaptcha Component */}
-                <div className="hcaptcha-container">
-                    <HCaptcha
-                        ref={hCaptchaRef}
-                        sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY} // Make sure this env var is set!
-                        onVerify={(token) => {
-                            setHCaptchaToken(token);
-                            setCaptchaError(null); // Clear error on successful verification
-                        }}
-                        onExpire={() => {
-                            setHCaptchaToken(null);
-                            setCaptchaError(
-                                "CAPTCHA expired. Please verify again."
-                            );
-                        }}
-                        onError={(err) => {
-                            setHCaptchaToken(null);
-                            setCaptchaError(`CAPTCHA error: ${err}`);
-                        }}
-                    />
-                </div>
-                {captchaError && (
-                    <div className="error-message captcha-error">
-                        {captchaError}
+                    {/* hCaptcha Component */}
+                    <div className="hcaptcha-container">
+                        <HCaptcha
+                            ref={hCaptchaRef}
+                            sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY} // Make sure this env var is set!
+                            onVerify={(token) => {
+                                setHCaptchaToken(token);
+                                setCaptchaError(null); // Clear error on successful verification
+                            }}
+                            onExpire={() => {
+                                setHCaptchaToken(null);
+                                setCaptchaError(
+                                    "CAPTCHA expired. Please verify again."
+                                );
+                            }}
+                            onError={(err) => {
+                                setHCaptchaToken(null);
+                                setCaptchaError(`CAPTCHA error: ${err}`);
+                            }}
+                        />
                     </div>
-                )}
-
+                    {captchaError && (
+                        <div className="error-message captcha-error">
+                            {captchaError}
+                        </div>
+                    )}
+                </div>{" "}
+                {/* End of generation-section */}
                 {isLoading && (
                     <div className="loading-indicator">Generating image...</div>
                 )}
                 {error && <div className="error-message">{error}</div>}
-
-                {/* Editor Section: Check if textureObjects has keys */}
-                {Object.keys(textureObjects).length > 0 && (
-                    <div className="editor-area">
-                        <div className="editor-tools">
-                            <EditorToolbar
-                                selectedTool={selectedTool}
-                                onSelectTool={setSelectedTool}
-                            />
-                            <div className="undo-redo-buttons">
-                                <button
-                                    onClick={handleUndo}
-                                    disabled={!canUndo}
-                                    title="Undo"
-                                    className="tool-button"
-                                >
-                                    <FaUndo />
-                                </button>
-                                <button
-                                    onClick={handleRedo}
-                                    disabled={!canRedo}
-                                    title="Redo"
-                                    className="tool-button"
-                                >
-                                    <FaRedo />
-                                </button>
-                            </div>
-                            <ColorPalette
-                                selectedColor={selectedColor}
-                                onSelectColor={setSelectedColor}
-                            />
+                {/* Editor Section: Render unconditionally now */}
+                <div className="editor-area">
+                    <div className="editor-tools">
+                        <EditorToolbar
+                            selectedTool={selectedTool}
+                            onSelectTool={setSelectedTool}
+                            onUndo={handleUndo}
+                            onRedo={handleRedo}
+                            canUndo={canUndo}
+                            canRedo={canRedo}
+                        />
+                        <CustomColorPicker
+                            selectedColor={selectedColor}
+                            onChange={setSelectedColor}
+                        />
+                        {/* New container for preview and face selector */}
+                        <div className="preview-face-container">
                             <BlockPreview3D textureObjects={textureObjects} />
                             <FaceSelector
                                 selectedFace={selectedFace}
                                 onSelectFace={handleSelectFace}
                             />
                         </div>
-                        <div className="editor-canvas-container">
-                            <PixelEditorCanvas
-                                ref={pixelCanvasRef}
-                                key={selectedFace}
-                                initialTextureObject={initialCanvasTexture}
-                                selectedTool={selectedTool}
-                                selectedColor={selectedColor}
-                                selectedFace={selectedFace}
-                                onPixelUpdate={handlePixelUpdate}
-                            />
-                        </div>
                     </div>
-                )}
-
-                {/* Action Button */}
-                {Object.keys(textureObjects).length > 0 && (
-                    <div className="modal-actions">
-                        <button
-                            className="use-texture-button"
-                            onClick={handleUseTexture}
-                            disabled={!Object.keys(textureObjects).length}
-                        >
-                            Use Texture
-                        </button>
+                    <div className="editor-canvas-container">
+                        <PixelEditorCanvas
+                            ref={pixelCanvasRef}
+                            key={selectedFace}
+                            initialTextureObject={initialCanvasTexture}
+                            selectedTool={selectedTool}
+                            selectedColor={selectedColor}
+                            selectedFace={selectedFace}
+                            onPixelUpdate={handlePixelUpdate}
+                        />
                     </div>
-                )}
+                </div>
+                {/* Action Button: Render unconditionally, disable based on texture presence */}
+                <div className="modal-actions">
+                    <button
+                        className="modal-close-button"
+                        onClick={handleClose}
+                    >
+                        Close
+                    </button>
+                    {/* Texture name input */}
+                    <input
+                        type="text"
+                        className="texture-name-input"
+                        placeholder="Texture name"
+                        value={textureName}
+                        onChange={(e) => setTextureName(e.target.value)}
+                    />
+                    <button
+                        className="use-texture-button"
+                        onClick={handleUseTexture}
+                        disabled={
+                            Object.keys(textureObjects).length === 0 ||
+                            !textureName.trim()
+                        }
+                    >
+                        Use Texture
+                    </button>
+                </div>
             </div>
         </div>
     );
