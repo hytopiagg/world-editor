@@ -36,6 +36,10 @@ import { processCustomBlock } from "./managers/BlockTypesManager";
 import { cameraMovementTracker } from "./managers/CameraMovementTracker";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
+import {
+    initializeMouseButtonTracking,
+    cleanupMouseButtonTracking,
+} from "./managers/MouseButtonManager";
 import { playPlaceSound } from "./Sound";
 import TerrainUndoRedoManager from "./TerrainUndoRedoManager";
 import {
@@ -1823,20 +1827,9 @@ function TerrainBuilder(
         };
     }, []);
     useEffect(() => {
-        window.mouseButtons = 0;
-        const updateMouseButtonsDown = (e) => {
-            window.mouseButtons |= 1 << e.button;
-        };
-        const updateMouseButtonsUp = (e) => {
-            window.mouseButtons &= ~(1 << e.button);
-        };
-        document.addEventListener("mousedown", updateMouseButtonsDown);
-        document.addEventListener("mouseup", updateMouseButtonsUp);
-        document.addEventListener("mouseleave", updateMouseButtonsUp); // Handle case when mouse leaves window
+        initializeMouseButtonTracking();
         return () => {
-            document.removeEventListener("mousedown", updateMouseButtonsDown);
-            document.removeEventListener("mouseup", updateMouseButtonsUp);
-            document.removeEventListener("mouseleave", updateMouseButtonsUp);
+            cleanupMouseButtonTracking();
         };
     }, []);
     useEffect(() => {
@@ -2245,6 +2238,5 @@ export {
     blockTypes,
     getBlockTypes,
     getCustomBlocks,
-    processCustomBlock
+    processCustomBlock,
 } from "./managers/BlockTypesManager";
-

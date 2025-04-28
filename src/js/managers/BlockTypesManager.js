@@ -64,9 +64,6 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         existingBlock.textureUri &&
         existingBlock.textureUri.startsWith("data:image/")
     ) {
-        console.log(
-            `Custom block ${blockId} (${existingBlock.name}) already exists with a loaded texture. Skipping import processing.`
-        );
         return blockTypesArray; // Skip processing
     }
 
@@ -78,11 +75,6 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         !finalTextureUri.startsWith("data:image/") &&
         !finalTextureUri.startsWith("./")
     ) {
-        console.log(
-            `Custom block ${blockId} has a placeholder URI: ${finalTextureUri}. Attempting to load from localStorage.`
-        );
-
-
         const storageKeys = [
             `block-texture-${blockId}`,
             `custom-block-${blockId}`,
@@ -93,9 +85,6 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
             const storedUri = localStorage.getItem(key);
             if (storedUri && storedUri.startsWith("data:image/")) {
                 foundDataUri = storedUri;
-                console.log(
-                    `Found data URI for block ${blockId} in localStorage key: ${key}`
-                );
                 break;
             }
         }
