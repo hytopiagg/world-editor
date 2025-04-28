@@ -8,10 +8,15 @@ import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
 import { isMuted, toggleMute } from "./js/Sound";
-import TerrainBuilder, { blockTypes, getCustomBlocks } from "./js/TerrainBuilder";
+import TerrainBuilder, {
+    blockTypes,
+    getCustomBlocks,
+} from "./js/TerrainBuilder";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
-import BlockToolsSidebar, { refreshBlockTools } from "./js/components/BlockToolsSidebar";
+import BlockToolsSidebar, {
+    refreshBlockTools,
+} from "./js/components/BlockToolsSidebar";
 import DebugInfo from "./js/components/DebugInfo";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import QuickTips from "./js/components/QuickTips";
@@ -153,6 +158,24 @@ function App() {
             });
         }
     }, [undoRedoManagerRef.current]);
+
+    // Add useEffect to load grid size from IndexedDB
+    useEffect(() => {
+        const loadGridSize = async () => {
+            try {
+                const savedGridSize = await DatabaseManager.getData(
+                    STORES.SETTINGS,
+                    "gridSize"
+                );
+                if (savedGridSize) {
+                    setGridSize(savedGridSize);
+                }
+            } catch (error) {
+                console.error("Error loading grid size from IndexedDB:", error);
+            }
+        };
+        loadGridSize();
+    }, []);
 
     const LoadingScreen = () => (
         <div className="loading-screen">

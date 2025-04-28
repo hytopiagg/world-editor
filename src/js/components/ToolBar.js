@@ -19,15 +19,12 @@ import {
     FaSeedling,
     FaSquare,
     FaTrash,
-    FaUndo
+    FaUndo,
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
 import Tooltip from "../components/Tooltip";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
-import {
-    exportMapFile,
-    importMap
-} from "../ImportExport";
+import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
 const ToolBar = ({
@@ -135,10 +132,8 @@ const ToolBar = ({
             Object.keys(terrainData).length
         );
 
-        console.log("Calling updateTerrainFromToolBar");
         if (terrainBuilderRef.current) {
             terrainBuilderRef.current.updateTerrainFromToolBar(terrainData);
-            console.log("updateTerrainFromToolBar called successfully");
         } else {
             console.error("terrainBuilderRef.current is null or undefined");
         }
@@ -168,14 +163,12 @@ const ToolBar = ({
         for (let x = 0; x < width; x++) {
             for (let y = 0; y < height; y++) {
                 for (let z = 0; z < length; z++) {
-
                     if (
                         x === 0 ||
                         x === width - 1 ||
                         z === 0 ||
                         z === length - 1
                     ) {
-
                         const position = {
                             x: startPos.x + x,
                             y: startPos.y + y,
@@ -194,7 +187,6 @@ const ToolBar = ({
         setShowBorderModal(false);
     };
     const handleClearMap = () => {
-
         if (activeTool) {
             terrainBuilderRef.current?.activateTool(null);
             setActiveTool(null);
@@ -235,26 +227,18 @@ const ToolBar = ({
 
         for (let x = 0; x < width; x++) {
             for (let z = 0; z < length; z++) {
-
                 const baseNoiseValue = baseNoiseMap[z * width + x];
-
-
 
                 let finalNoiseValue;
                 if (smoothingFactor > 3.0) {
-
                     finalNoiseValue = Math.pow(baseNoiseValue, 0.6);
                 } else if (smoothingFactor > 2.7) {
-
                     finalNoiseValue = Math.pow(baseNoiseValue, 0.8);
                 } else if (smoothingFactor > 2.5) {
-
                     finalNoiseValue = baseNoiseValue;
                 } else {
-
                     let neighborSum = 0;
                     let neighborCount = 0;
-
 
                     const radius = Math.floor(15 - smoothingFactor * 4);
                     for (
@@ -267,7 +251,6 @@ const ToolBar = ({
                             nz <= Math.min(length - 1, z + radius);
                             nz++
                         ) {
-
                             const dist = Math.sqrt(
                                 Math.pow(nx - x, 2) + Math.pow(nz - z, 2)
                             );
@@ -282,7 +265,6 @@ const ToolBar = ({
 
                     finalNoiseValue = neighborSum / neighborCount;
                 }
-
 
                 const terrainHeight = Math.max(
                     1,
@@ -317,24 +299,17 @@ const ToolBar = ({
     };
     const applyNewGridSize = async (newGridSize) => {
         if (newGridSize > 10) {
-
             setGridSize(newGridSize);
-
 
             if (
                 terrainBuilderRef.current &&
                 terrainBuilderRef.current.updateGridSize
             ) {
-                console.log(
-                    `ToolBar: Updating grid size to ${newGridSize} via terrainBuilderRef`
-                );
-                terrainBuilderRef.current.updateGridSize(newGridSize);
+                await terrainBuilderRef.current.updateGridSize(newGridSize);
             } else {
-
                 console.warn(
-                    "TerrainBuilder updateGridSize method not available, using fallback"
+                    "TerrainBuilder updateGridSize method not available"
                 );
-                localStorage.setItem("gridSize", newGridSize.toString());
             }
             setShowGridSizeModal(false);
         } else {
@@ -360,20 +335,16 @@ const ToolBar = ({
     const onMapFileSelected = (event) => {
         console.log("Map file selected:", event.target.files[0]);
         if (event.target.files && event.target.files[0]) {
-
             importMap(
                 event.target.files[0],
                 terrainBuilderRef,
                 environmentBuilderRef
             )
                 .then(() => {
-
-
                     event.target.value = "";
                     console.log("Reset file input after successful import");
                 })
                 .catch((error) => {
-
                     event.target.value = "";
                     console.error("Error during import:", error);
                 });
@@ -381,7 +352,6 @@ const ToolBar = ({
     };
 
     const handleModalOverlayClick = (e, setModalVisibility) => {
-
         if (e.target.className === "modal-overlay") {
             setModalVisibility(false);
         }
@@ -389,11 +359,9 @@ const ToolBar = ({
 
     const handleToolToggle = (toolName) => {
         if (activeTool === toolName) {
-
             terrainBuilderRef.current?.activateTool(null);
             setActiveTool(null);
         } else {
-
             const success = terrainBuilderRef.current?.activateTool(toolName);
             if (success) {
                 setActiveTool(toolName);
@@ -421,7 +389,6 @@ const ToolBar = ({
     };
 
     const handleModeChangeWithToolReset = (newMode) => {
-
         if (activeTool) {
             terrainBuilderRef.current?.activateTool(null);
             setActiveTool(null);
@@ -1082,7 +1049,6 @@ const ToolBar = ({
                                 "Minecraft map imported successfully:",
                                 result
                             );
-
                         }
                         setShowMinecraftImportModal(false);
                     }}

@@ -60,6 +60,7 @@ import {
     handleTerrainMouseUp,
     handleTerrainMouseDown,
 } from "./utils/TerrainMouseUtils";
+import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
 function optimizeRenderer(gl) {
     if (gl) {
@@ -554,51 +555,21 @@ function TerrainBuilder(
             isFirstBlockRef.current = false;
         }
     };
-    const getRaycastIntersection = () => {
-        if (!scene || !threeCamera || !threeRaycaster) return null;
-        const normalizedMouse = pointer.clone();
-        threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
-        let intersection = null;
-        if (
-            useSpatialHashRef.current &&
-            spatialGridManagerRef.current &&
-            spatialGridManagerRef.current.size > 0
-        ) {
-            intersection = getOptimizedRaycastIntersection(true); // Always prioritize blocks
-        } else {
-            const rayOrigin = threeRaycaster.ray.origin;
-            const rayDirection = threeRaycaster.ray.direction;
-            const target = new THREE.Vector3();
-            const intersectionDistance = rayOrigin.y / -rayDirection.y;
-            if (
-                intersectionDistance > 0 &&
-                intersectionDistance < selectionDistanceRef.current
-            ) {
-                target
-                    .copy(rayOrigin)
-                    .addScaledVector(rayDirection, intersectionDistance);
-                const gridSizeHalf = gridSizeRef.current / 2;
-                if (
-                    Math.abs(target.x) <= gridSizeHalf &&
-                    Math.abs(target.z) <= gridSizeHalf
-                ) {
-                    intersection = {
-                        point: target.clone(),
-                        normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
-                        block: {
-                            x: Math.floor(target.x),
-                            y: 0,
-                            z: Math.floor(target.z),
-                        },
-                        blockId: null, // No block here - it's the ground
-                        distance: intersectionDistance,
-                        isGroundPlane: true,
-                    };
-                }
-            }
-        }
-        return intersection;
-    };
+    const getRaycastIntersection = useCallback(() => {
+        return getTerrainRaycastIntersection(
+            scene,
+            threeCamera,
+            threeRaycaster,
+            pointer,
+            useSpatialHashRef,
+            spatialGridManagerRef,
+            gridSizeRef,
+            selectionDistanceRef,
+            recentlyPlacedBlocksRef,
+            isPlacingRef,
+            modeRef
+        );
+    }, [pointer, scene, threeCamera, threeRaycaster]);
     const updatePreviewPosition = () => {
         if (updatePreviewPosition.isProcessing) {
             return;
@@ -885,15 +856,37 @@ function TerrainBuilder(
             loadingManager.hideLoading();
         }
     };
-    const updateGridSize = (newGridSize) => {
+    const updateGridSize = async (newGridSize) => {
         if (gridRef.current) {
             let gridSizeToUse;
             if (newGridSize) {
                 gridSizeToUse = newGridSize;
-                localStorage.setItem("gridSize", gridSizeToUse.toString());
+                try {
+                    await DatabaseManager.saveData(
+                        STORES.SETTINGS,
+                        "gridSize",
+                        gridSizeToUse
+                    );
+                } catch (error) {
+                    console.error(
+                        "Error saving grid size to IndexedDB:",
+                        error
+                    );
+                }
             } else {
-                gridSizeToUse =
-                    parseInt(localStorage.getItem("gridSize"), 10) || 200; // Default to 200
+                try {
+                    gridSizeToUse =
+                        (await DatabaseManager.getData(
+                            STORES.SETTINGS,
+                            "gridSize"
+                        )) || 200;
+                } catch (error) {
+                    console.error(
+                        "Error loading grid size from IndexedDB:",
+                        error
+                    );
+                    gridSizeToUse = 200; // Default to 200 if there's an error
+                }
             }
             gridSizeRef.current = gridSizeToUse;
             if (gridRef.current.geometry) {
@@ -1708,6 +1701,7 @@ function TerrainBuilder(
             }
         },
     })); // This is the correct syntax with just one closing parenthesis
+
     useEffect(() => {
         const handleResize = () => {
             canvasRectRef.current = null; // Force recalculation on next update
@@ -1865,65 +1859,6 @@ function TerrainBuilder(
     };
     handleCameraMove.lastUpdateTime = 0;
 
-    const getOptimizedRaycastIntersection = (prioritizeBlocks = true) => {
-        if (!scene || !threeCamera || !threeRaycaster) return null;
-        const normalizedMouse = pointer.clone();
-        threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
-        let intersection = null;
-        if (
-            useSpatialHashRef.current &&
-            spatialGridManagerRef.current &&
-            spatialGridManagerRef.current.size > 0
-        ) {
-            const raycastOptions = {
-                maxDistance: selectionDistanceRef.current,
-                prioritizeBlocks,
-                gridSize: gridSizeRef.current,
-                recentlyPlacedBlocks: recentlyPlacedBlocksRef.current,
-                isPlacing: isPlacingRef.current,
-                mode: modeRef.current,
-                debug: true, // Enable debug logging for this call
-            };
-            const gridResult = spatialGridManagerRef.current.raycast(
-                threeRaycaster,
-                threeCamera,
-                raycastOptions
-            );
-            intersection = gridResult;
-        } else {
-            const rayOrigin = threeRaycaster.ray.origin;
-            const rayDirection = threeRaycaster.ray.direction;
-            const target = new THREE.Vector3();
-            const intersectionDistance = rayOrigin.y / -rayDirection.y;
-            if (
-                intersectionDistance > 0 &&
-                intersectionDistance < selectionDistanceRef.current
-            ) {
-                target
-                    .copy(rayOrigin)
-                    .addScaledVector(rayDirection, intersectionDistance);
-                const gridSizeHalf = gridSizeRef.current / 2;
-                if (
-                    Math.abs(target.x) <= gridSizeHalf &&
-                    Math.abs(target.z) <= gridSizeHalf
-                ) {
-                    intersection = {
-                        point: target.clone(),
-                        normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
-                        block: {
-                            x: Math.floor(target.x),
-                            y: 0,
-                            z: Math.floor(target.z),
-                        },
-                        blockId: null, // No block here - it's the ground
-                        distance: intersectionDistance,
-                        isGroundPlane: true,
-                    };
-                }
-            }
-        }
-        return intersection;
-    };
     useEffect(() => {
         const canvas = gl.domElement;
         if (!canvas) return;
