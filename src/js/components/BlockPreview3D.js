@@ -17,13 +17,11 @@ const PreviewCube = ({ textureObjects }) => {
         return FACE_ORDER.map((faceKey) => {
             const texture = textureObjects?.[faceKey] || fallbackTexture;
 
-            return new THREE.MeshStandardMaterial({
+            return new THREE.MeshPhongMaterial({
                 map: texture, // Use the texture object directly
                 side: THREE.FrontSide,
                 transparent: true,
                 alphaTest: 0.1,
-                roughness: 1,
-                metalness: 0,
                 color: texture ? 0xffffff : 0xcccccc,
             });
         });

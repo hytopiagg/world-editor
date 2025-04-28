@@ -5,7 +5,7 @@ import {
     ColorSlider,
     parseColor,
 } from "@adobe/react-spectrum";
-import styles from "./CustomColorPicker.module.css";
+import styles from "../../css/ColorPicker.module.css";
 
 // Helper component for number input
 const CustomNumberInput = ({
@@ -103,22 +103,6 @@ const CustomNumberInput = ({
                         MozAppearance: "textfield",
                     }}
                 />
-                <div className={styles.stepperButtons}>
-                    <button
-                        type="button"
-                        onClick={increment}
-                        className={styles.stepperButton}
-                    >
-                        ▲
-                    </button>
-                    <button
-                        type="button"
-                        onClick={decrement}
-                        className={styles.stepperButton}
-                    >
-                        ▼
-                    </button>
-                </div>
             </div>
         </div>
     );

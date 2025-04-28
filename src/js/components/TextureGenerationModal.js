@@ -9,7 +9,6 @@ import FaceSelector from "./FaceSelector";
 import "../../css/TextureGenerationModal.css"; // We'll create this CSS file next
 import "../../css/BlockPreview3D.css"; // Import preview CSS
 import "../../css/FaceSelector.css"; // Import face selector CSS
-import "../../css/EditorToolbar.css"; // Ensure toolbar CSS is imported for button styles
 import * as THREE from "three"; // Import THREE
 import CustomColorPicker from "./ColorPicker";
 

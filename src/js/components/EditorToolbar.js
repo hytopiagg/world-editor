@@ -7,7 +7,7 @@ import {
     FaUndo,
     FaRedo,
 } from "react-icons/fa"; // Using icons
-import "../../css/EditorToolbar.css"; // CSS for styling
+import "../../css/TextureGenerationModal.css"; // CSS for styling
 
 const TOOLS = {
     PENCIL: "pencil",

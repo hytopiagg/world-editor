@@ -122,9 +122,9 @@ button {
 
 .modal-content {
     border-radius: 10px;
-    width: 400px;
+    width: 30vw;
     padding: 30px;
-    background-color: rgba(13, 13, 13, 0.7);
+    background-color: rgba(13, 13, 13, 0.5);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px); /* For Safari support */
@@ -328,6 +328,8 @@ button {
 
 /* Modal image styles */
 .modal-image-container {
+    display: flex;
+    justify-content: center;
     width: 100%;
     margin-bottom: 15px;
     border-radius: 8px;

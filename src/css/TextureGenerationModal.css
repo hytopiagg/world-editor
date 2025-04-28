@@ -4,40 +4,25 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
-}
-
-.modal-content {
-    background-color: #2a2a2e; /* Dark background */
-    padding: 30px;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    width: 90%;
-    color: #e0e0e0; /* Light text */
-    font-family: "Arial", sans-serif;
-    display: flex; /* Use flexbox for overall layout */
-    flex-direction: column; /* Stack elements vertically */
+    z-index: 5000;
+    backdrop-filter: blur(3px); /* Match sidebar blur effect */
+    -webkit-backdrop-filter: blur(3px);
 }
 
 .modal-close-button {
-    background-color: #e74c3c; /* Red background */
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-    color: white;
-    cursor: pointer;
-    padding: 8px 15px;
-    margin-left: auto; /* Push to the right within header-buttons */
-    font-weight: bold;
-    transition: background-color 0.2s ease;
+    background-color: rgba(255, 107, 107, 0.8); /* Slightly transparent red */
 }
 
 .modal-close-button:hover {
-    background-color: #c0392b; /* Darker red on hover */
+    background-color: rgba(255, 70, 70, 0.9); /* Darker red on hover */
+}
+
+.texture-editor-modal {
+    width: 75%;
+    min-width: 1000px;
 }
 
 .modal-content h2 {
@@ -46,53 +31,55 @@
     color: #fff;
     text-align: center;
     font-size: 1.5rem;
+    font-weight: bold;
+    text-transform: uppercase; /* Match sidebar button text style */
 }
 
 .modal-body p {
     margin-bottom: 10px;
     font-size: 0.95rem;
+    color: rgba(241, 241, 241, 0.9); /* Match sidebar text color */
 }
 
 .prompt-input {
     width: 100%;
     padding: 10px;
     margin-bottom: 15px;
-    border: 1px solid #444;
-    border-radius: 4px;
-    background-color: #333;
-    color: #e0e0e0;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 8px; /* Match sidebar button radius */
+    color: #fff;
     font-size: 0.9rem;
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    box-sizing: border-box;
     resize: vertical;
     min-height: 60px;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .prompt-input:focus {
     outline: none;
-    border-color: #6a6aff;
-    box-shadow: 0 0 0 2px rgba(106, 106, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .generate-button {
     display: block;
     width: 100%;
     padding: 12px;
-    background-color: #6a6aff; /* A nice blue/purple */
+    background-color: #5a5aff; /* Match sidebar create-texture-button */
     color: white;
     border: none;
-    border-radius: 4px;
-    font-size: 1rem;
+    border-radius: 8px; /* Match sidebar button radius */
     font-weight: bold;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .generate-button:hover:not(:disabled) {
-    background-color: #5555dd;
+    background-color: #4a4add; /* Match sidebar button hover */
+    transform: scale(1.02); /* Slight scale effect */
 }
 
 .generate-button:disabled {
-    background-color: #555;
+    background-color: rgba(80, 80, 80, 0.5);
     cursor: not-allowed;
     opacity: 0.7;
 }
@@ -100,16 +87,16 @@
 .loading-indicator {
     text-align: center;
     margin-top: 20px;
-    color: #aaa;
+    color: rgba(241, 241, 241, 0.5); /* Match sidebar secondary text */
     font-style: italic;
 }
 
 .error-message {
-    color: #ff6b6b; /* Light red for errors */
+    color: #ff6b6b;
     background-color: rgba(255, 107, 107, 0.1);
     padding: 10px;
-    border: 1px solid #ff6b6b;
-    border-radius: 4px;
+    border: 1.5px solid rgba(255, 107, 107, 0.3); /* Match sidebar border style */
+    border-radius: 8px; /* Match sidebar button radius */
     margin-top: 15px;
     font-size: 0.9rem;
     text-align: center;
@@ -118,66 +105,67 @@
 .image-preview-container {
     margin-top: 25px;
     text-align: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 12px; /* Match sidebar container radius */
+    padding: 15px;
 }
 
 .image-preview-container h3 {
     margin-bottom: 15px;
-    color: #ccc;
+    color: rgba(241, 241, 241, 0.9);
     font-size: 1.1rem;
+    font-weight: bold;
 }
 
 .generated-image {
     max-width: 100%;
     height: auto;
-    border: 1px solid #555;
-    border-radius: 4px;
-    background-color: #444; /* Placeholder background */
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 8px; /* Match sidebar button radius */
     display: block;
     margin: 0 auto;
 }
 
-/* Make modal wider for editor */
-.modal-content.texture-editor-modal {
-    /* max-width: 750px; */ /* Adjust as needed */ /* Removed this line */
-}
-
 .modal-header {
     display: flex;
-    justify-content: space-between; /* Space between title and button group */
+    justify-content: space-between;
     align-items: center;
-    /* border-bottom: 1px solid #eee; */ /* Maybe remove border? */
     padding-bottom: 15px;
     margin-bottom: 15px;
-    width: 100%; /* Take full width */
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    width: 100%;
 }
 
 .modal-header h2 {
     margin: 0;
     font-size: 1.4em;
-    color: #e0e0e0; /* Light text */
-    flex-shrink: 0; /* Don't let title shrink */
+    color: #fff;
+    flex-shrink: 0;
+    text-transform: uppercase; /* Match sidebar text style */
 }
 
 .header-buttons {
     display: flex;
     align-items: center;
-    gap: 10px; /* Add some space between buttons */
-    margin-left: 20px; /* Add space between title and buttons */
+    gap: 10px;
+    margin-left: 20px;
 }
 
 .logout-button {
-    background-color: #f44336; /* Red background */
+    background-color: rgba(255, 107, 107, 0.8); /* Slightly transparent red */
     color: white;
     border: none;
     padding: 8px 15px;
-    border-radius: 4px;
+    border-radius: 8px; /* Match sidebar button radius */
     cursor: pointer;
     font-size: 0.9em;
-    transition: background-color 0.2s ease;
+    font-weight: bold;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .logout-button:hover {
-    background-color: #d32f2f; /* Darker red on hover */
+    background-color: rgba(255, 70, 70, 0.9); /* Darker red on hover */
+    transform: scale(1.05); /* Match sidebar hover effect */
 }
 
 .generation-controls {
@@ -188,37 +176,38 @@
 
 .generation-controls .prompt-input {
     flex-grow: 1;
-    margin-bottom: 0; /* Remove default margin */
-    height: auto; /* Adjust height */
-    min-height: 40px; /* Ensure minimum height */
+    margin-bottom: 0;
+    height: auto;
+    min-height: 40px;
 }
 
 .generation-controls .generate-button,
 .generation-controls .login-button {
     flex-shrink: 0;
-    width: auto; /* Adjust width */
-    padding: 10px 15px; /* Match input height roughly */
-    height: 40px; /* Match input height */
+    width: auto;
+    padding: 10px 15px;
+    height: 40px;
     box-sizing: border-box;
 }
 
-.login-button { /* Add styling for the login button */
-    background-color: #007bff; /* Blue for login */
+.login-button {
+    background-color: #5a5aff; /* Match sidebar create-texture-button */
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px; /* Match sidebar button radius */
     font-size: 1rem;
     font-weight: bold;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .login-button:hover:not(:disabled) {
-    background-color: #0056b3;
+    background-color: #4a4add; /* Match sidebar button hover */
+    transform: scale(1.05); /* Match sidebar hover effect */
 }
 
 .login-button:disabled {
-    background-color: #555;
+    background-color: rgba(80, 80, 80, 0.5);
     cursor: not-allowed;
     opacity: 0.7;
 }
@@ -226,62 +215,70 @@
 /* Editor Layout */
 .editor-area {
     display: flex;
-    justify-content: center; /* Center items horizontally */
-    gap: 20px; /* Add space between tools and canvas */
+    justify-content: center;
+    gap: 20px;
 }
 
 .editor-tools {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 12px; /* Match sidebar container radius */
+    padding: 20px;
 }
 
-/* New container for Preview and Face Selector */
+/* Preview and Face Selector */
 .preview-face-container {
     display: flex;
-    flex-direction: row; /* Stack preview and selector side-by-side */
-    align-items: flex-start; /* Align items to the top */
-    gap: 10px; /* Space between preview and selector */
-    justify-content: center; /* Center items if space allows */
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    justify-content: center;
 }
 
-/* Adjust FaceSelector button styles for compactness */
-/* Assuming FaceSelector buttons have a common class or structure */
-/* You might need to adjust the selector based on FaceSelector.css */
+/* FaceSelector button styles */
 .face-selector button {
-    padding: 4px 8px; /* Reduced padding */
-    font-size: 0.8rem; /* Smaller font */
-    min-width: 50px; /* Adjust min-width if needed */
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    min-width: 50px;
+    background-color: rgba(255, 255, 255, 0.1); /* Match sidebar button background */
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 8px; /* Match sidebar button radius */
+    color: #fff;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
-/* Adjust FaceSelector grid gap */
+.face-selector button:hover {
+    background-color: rgba(255, 255, 255, 0.2); /* Match sidebar button hover */
+    transform: scale(1.05); /* Match sidebar hover effect */
+}
+
+.face-selector button.selected {
+    background-color: rgba(241, 241, 241, 0.2); /* Match sidebar selected state */
+}
+
 .face-selector {
-    gap: 4px; /* Reduced gap between buttons */
+    gap: 4px;
 }
 
 .editor-canvas-container {
     justify-content: center;
     align-items: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 12px; /* Match sidebar container radius */
+    padding: 10px;
 }
-
-/* Make canvas slightly smaller by default if needed */
-/* .pixel-editor-canvas {
-  width: 480px;
-  height: 480px;
-} */
 
 /* Action buttons area */
 .modal-actions {
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px solid #444;
+    padding-top: 30px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
 }
 
-/* Ensure footer close button doesn't have extra auto margin */
 .modal-actions .modal-close-button {
     margin-left: 0;
 }
@@ -289,38 +286,38 @@
 .texture-name-input {
     padding: 8px 10px;
     font-size: 0.9rem;
-    border: 1px solid #555;
-    border-radius: 4px;
-    background-color: #333;
-    color: #e0e0e0;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 8px; /* Match sidebar button radius */
+    color: #fff;
     min-width: 180px;
     box-sizing: border-box;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .texture-name-input:focus {
     outline: none;
-    border-color: #6a6aff;
-    box-shadow: 0 0 0 2px rgba(106, 106, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .use-texture-button {
     padding: 10px 20px;
-    background-color: #4caf50; /* Green for action */
+    background-color: #4caf50; /* Keep green for action */
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px; /* Match sidebar button radius */
     font-size: 1rem;
     font-weight: bold;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .use-texture-button:hover:not(:disabled) {
     background-color: #45a049;
+    transform: scale(1.05); /* Match sidebar hover effect */
 }
 
 .use-texture-button:disabled {
-    background-color: #555;
+    background-color: rgba(80, 80, 80, 0.5);
     cursor: not-allowed;
     opacity: 0.7;
 }
@@ -333,12 +330,25 @@
 }
 
 .error-message.captcha-error {
-    margin-top: 0; /* Remove extra space above if it directly follows hCaptcha */
+    margin-top: 0;
     margin-bottom: 15px;
 }
 
-/* Responsive Adjustments */
+/* Generation section */
+.generation-section {
+    max-width: 600px;
+    width: 100%;
+    margin: 0 auto 20px auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 12px; /* Match sidebar container radius */
+    padding: 15px;
+}
 
+/* Responsive styles remain unchanged */
 @media (max-width: 768px) {
     .modal-content.texture-editor-modal {
         /* max-width: 95vw; */ /* Allow more width on smaller screens */
@@ -445,49 +455,59 @@
     /* .color-palette {
         grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
     } */
-}
 
-/* Style the new generation section wrapper */
-.generation-section {
-    /* width: fit-content; Size to content */
-    max-width: 600px; /* Reduced max-width */
-    width: 100%;      /* Still allow it to take space up to max-width */
-    margin: 0 auto 20px auto; /* Center horizontally, add bottom margin */
-    display: flex;            /* Use flexbox */
-    flex-direction: column;   /* Stack children vertically */
-    align-items: stretch;     /* Make children fill width */
-    gap: 10px;                /* Add space between children */
-}
-
-/* Ensure controls container doesn't interfere */
-.generation-controls {
-    /* display: flex; */ /* Remove flex if previously added here */
-    /* gap: 10px; */
-    margin-bottom: 0; /* Remove bottom margin if any */
-    /* The textarea inside should already have width: 100% or flex-grow */
-}
-
-
-.generation-controls .prompt-input {
-    /* flex-grow: 1; */ /* May not be needed if parent handles width */
-    width: 100%; /* Explicitly set width */
-    box-sizing: border-box; /* Ensure padding doesn't add to width */
-    margin-bottom: 0; /* Reset margin */
-}
-
-.generate-button {
-    /* width: 100%; */ /* Should be handled by align-items: stretch now */
-    /* width: auto; */ /* Remove auto width if set */
-    box-sizing: border-box; /* Ensure padding doesn't add to width */
-    /* height: 40px; */ /* Keep height consistent if needed */
-}
-
-
-/* Adjust hCaptcha container */
-.hcaptcha-container {
-    /* display: flex; */ /* Remove flex if previously added */
-    /* justify-content: center; */ /* Remove centering, parent handles alignment */
-    margin: 0; /* Reset margins, parent gap handles spacing */
-    width: auto; /* Allow it to size naturally */
-    align-self: center; /* Center the captcha itself within the stretched space */
+    .editor-toolbar {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+        padding: 8px;
+        background-color: #3a3a3e;
+        border-radius: 4px;
+    }
+    
+    .tool-button {
+        background-color: #4f4f54;
+        border: 1px solid #666;
+        color: #ccc;
+        padding: 8px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1.1rem; /* Make icons slightly larger */
+        line-height: 1;
+        transition:
+            background-color 0.2s,
+            border-color 0.2s;
+    }
+    
+    .tool-button:hover {
+        background-color: #5a5a60;
+        border-color: #888;
+    }
+    
+    .tool-button.active {
+        background-color: #6a6aff;
+        border-color: #8a8aff;
+        color: white;
+    }
+    
+    /* Container for undo/redo */
+    .undo-redo-buttons {
+        display: flex;
+        gap: 5px;
+        /* margin-bottom: 15px; */ /* Add margin if needed */
+    }
+    
+    .undo-redo-buttons .tool-button {
+        /* Use same style as other tool buttons */
+        flex-grow: 1; /* Make buttons fill space */
+    }
+    
+    .undo-redo-buttons .tool-button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        background-color: #4f4f54; /* Keep background consistent */
+        border-color: #666;
+        color: #888;
+    }
+    
 }
