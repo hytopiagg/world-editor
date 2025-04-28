@@ -466,10 +466,6 @@ export function useTerrainDataManager(props = {}) {
                     30
                 );
 
-                // Configuration for bulk loading (assuming configureChunkLoading is moved/available)
-                // await configureChunkLoading({ deferMeshBuilding: true, priorityDistance: 48, deferredBuildDelay: 5000 });
-                // if (getChunkSystem()) { getChunkSystem().setBulkLoadingMode(true, 48); }
-
                 // Trigger build update (needs buildUpdateTerrain function)
                 if (buildUpdateTerrain) {
                     await buildUpdateTerrain({
@@ -628,25 +624,6 @@ export function useTerrainDataManager(props = {}) {
                 terrainRef.current[posKey] = blockId;
             });
             totalBlocksRef.current = blockCount; // Update total blocks count
-
-            // Clear existing chunks (Needs getChunkSystem)
-            // loadingManager.updateLoading("Clearing existing terrain chunks...", 50);
-            // if (getChunkSystem()) {
-            //     getChunkSystem().reset();
-            // }
-
-            // Add blocks to chunk system (Needs getChunkSystem and loadAllChunks)
-            // const chunkSystem = getChunkSystem();
-            // if (chunkSystem) {
-            //     loadingManager.updateLoading(`Building terrain with ${blockCount} blocks...`, 60);
-            //     chunkSystem.updateFromTerrainData(blocks);
-            //     loadingManager.updateLoading("Processing terrain chunks...", 70);
-            //     await loadAllChunks(); // Needs loadAllChunks function
-            // }
-
-            // Initialize spatial hash (Needs initializeSpatialHash)
-            // loadingManager.updateLoading("Building spatial hash for collision detection...", 90);
-            // await initializeSpatialHash(true, false);
 
             loadingManager.updateLoading("Terrain refresh complete!", 100);
             setTimeout(() => {
