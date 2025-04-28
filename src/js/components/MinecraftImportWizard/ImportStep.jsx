@@ -13,7 +13,6 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
     const mappedBlockTypes = Object.values(blockMappings).filter(
         (m) => m.action !== "skip"
     ).length;
-    const skippedBlockTypes = blockTypeCount - mappedBlockTypes;
 
     const regionWidth = selectedRegion
         ? selectedRegion.maxX - selectedRegion.minX + 1

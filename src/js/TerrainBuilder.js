@@ -356,7 +356,6 @@ function TerrainBuilder(
         }
     }, [threeCamera]);
     const updateChunkSystemWithCamera = () => {
-        const shouldLog = false; //Date.now() % 2000 < 50; // Log roughly every 2 seconds for ~50ms window
         if (!currentCameraRef.current) {
             console.error(
                 "[updateChunkSystemWithCamera] Camera reference not available"
@@ -425,12 +424,10 @@ function TerrainBuilder(
         environment: { added: [], removed: [] },
     });
     const instancedMeshRef = useRef({});
-    const placementStartPosition = useRef(null);
     const shadowPlaneRef = useRef();
     const directionalLightRef = useRef();
     const terrainRef = useRef({});
     const gridRef = useRef();
-    const placementInitialPositionRef = useRef(null); // Add ref for initial placement position
     const mouseMoveAnimationRef = useRef(null);
     const isPlacingRef = useRef(false);
     const currentPlacingYRef = useRef(0);
@@ -452,8 +449,6 @@ function TerrainBuilder(
     const canvasRectRef = useRef(null);
     const tempVectorRef = useRef(new THREE.Vector3());
     const toolManagerRef = useRef(null);
-    const mouseDownTimestampRef = useRef(0);
-    const blockPlacementTimeoutRef = useRef(null);
     /**
      * Build or update the terrain mesh from the terrain data
      * @param {Object} options - Options for terrain update
@@ -495,9 +490,6 @@ function TerrainBuilder(
                     if (Object.keys(terrainRef.current).length === 0) {
                         const blockEntries = Object.entries(terrainBlocks);
                         const BATCH_SIZE = 10000;
-                        const totalBatches = Math.ceil(
-                            blockEntries.length / BATCH_SIZE
-                        );
                         const processBlockBatch = (startIdx, batchNum) => {
                             const endIdx = Math.min(
                                 startIdx + BATCH_SIZE,
@@ -974,7 +966,6 @@ function TerrainBuilder(
     };
     updatePreviewPosition.isProcessing = false;
     const handleMouseUp = (e) => {
-        const t0 = performance.now();
         const isToolActive =
             toolManagerRef.current && toolManagerRef.current.getActiveTool();
         if (isToolActive) {
@@ -1263,8 +1254,6 @@ function TerrainBuilder(
                 const cameraPos = camera.position;
                 const viewDistance = getViewDistance() || 64;
                 const visibleBlocks = {};
-                let totalBlocks = 0;
-                let visibleBlockCount = 0;
                 const getChunkOrigin = (pos) => {
                     const [x, y, z] = pos.split(",").map(Number);
                     const chunkSize = CHUNK_SIZE;
@@ -1276,7 +1265,6 @@ function TerrainBuilder(
                 };
                 Object.entries(terrainRef.current).forEach(
                     ([posKey, blockId]) => {
-                        totalBlocks++;
                         const origin = getChunkOrigin(posKey);
                         const distance = Math.sqrt(
                             Math.pow(
@@ -1294,7 +1282,6 @@ function TerrainBuilder(
                         );
                         if (distance <= viewDistance) {
                             visibleBlocks[posKey] = blockId;
-                            visibleBlockCount++;
                         }
                     }
                 );
@@ -1569,8 +1556,6 @@ function TerrainBuilder(
                 Object.values(toolManagerRef.current.tools).forEach((tool) => {
                     if (tool) {
                         tool.undoRedoManager = undoRedoManager;
-                        const toolGotManager =
-                            tool.undoRedoManager === undoRedoManager;
                     }
                 });
             } catch (error) {
@@ -2301,7 +2286,6 @@ function TerrainBuilder(
         optimizeRenderer(gl);
         cameraManager.initialize(threeCamera, orbitControlsRef.current);
         let frameId;
-        let lastTime = 0;
         let frameCount = 0;
         const animate = (time) => {
             frameId = requestAnimationFrame(animate);
@@ -2309,7 +2293,6 @@ function TerrainBuilder(
                 BlockMaterial.instance.liquidMaterial.uniforms.time.value =
                     (time / 1000) * 0.5;
             }
-            lastTime = time;
             if (isPlacingRef.current && frameCount % 30 === 0) {
                 if (!window.mouseButtons || !(window.mouseButtons & 1)) {
                     console.warn(

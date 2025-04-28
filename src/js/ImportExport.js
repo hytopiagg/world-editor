@@ -135,18 +135,13 @@ export const importMap = async (
 
                             const gridSize =
                                 Math.ceil(Math.max(width, length) / 16) * 16;
-                            console.log(
-                                `Map dimensions: ${width}x${length}, setting grid size to ${gridSize}`
-                            );
 
                             if (terrainBuilderRef.current.updateGridSize) {
                                 loadingManager.updateLoading(
                                     `Updating grid size to ${gridSize}...`,
                                     50
                                 );
-                                console.log(
-                                    `Calling updateGridSize with gridSize=${gridSize}`
-                                );
+
                                 terrainBuilderRef.current.updateGridSize(
                                     gridSize
                                 );
