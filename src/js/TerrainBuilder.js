@@ -37,6 +37,7 @@ import { cameraMovementTracker } from "./managers/CameraMovementTracker";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
 import { playPlaceSound } from "./Sound";
+import TerrainUndoRedoManager from "./TerrainUndoRedoManager";
 import {
     GroundTool,
     PipeTool,
@@ -49,7 +50,7 @@ import {
     configureChunkLoading,
     forceChunkUpdate,
     loadAllChunks,
-    setDeferredChunkMeshing
+    setDeferredChunkMeshing,
 } from "./utils/ChunkUtils"; // <<< Add this import
 
 function optimizeRenderer(gl) {
@@ -106,7 +107,6 @@ function TerrainBuilder(
             removed: [],
         },
     });
-    const initialSaveCompleteRef = useRef(false);
     const autoSaveIntervalRef = useRef(null);
     const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
     const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
@@ -222,6 +222,49 @@ function TerrainBuilder(
     const toolManagerRef = useRef(null);
     const disableSpatialHashUpdatesRef = useRef(false);
     const deferSpatialHashUpdatesRef = useRef(false);
+    const updateDebugInfo = () => {
+        setDebugInfo({
+            preview: previewPositionRef.current,
+            totalBlocks: totalBlocksRef.current,
+            isGroundPlane: previewIsGroundPlaneRef.current,
+        });
+        if (sendTotalBlocks) {
+            sendTotalBlocks(totalBlocksRef.current);
+        }
+    };
+    const updateSpatialHashForBlocks = (
+        addedBlocks = [],
+        removedBlocks = [],
+        options = {}
+    ) => {
+        return spatialHashUpdateManager.updateSpatialHashForBlocks(
+            spatialGridManagerRef.current,
+            addedBlocks,
+            removedBlocks,
+            options
+        );
+    };
+    const terrainUndoRedoManager = new TerrainUndoRedoManager({
+        terrainRef,
+        totalBlocksRef,
+        sendTotalBlocks,
+        updateDebugInfo,
+        importedUpdateTerrainBlocks,
+        updateSpatialHashForBlocks,
+        customBlocks,
+        BlockTextureAtlas,
+        undoRedoManager,
+    });
+    const updateTerrainForUndoRedo =
+        terrainUndoRedoManager.updateTerrainForUndoRedo.bind(
+            terrainUndoRedoManager
+        );
+    const trackTerrainChanges = terrainUndoRedoManager.trackTerrainChanges.bind(
+        terrainUndoRedoManager
+    );
+    const resetPendingChanges = terrainUndoRedoManager.resetPendingChanges.bind(
+        terrainUndoRedoManager
+    );
     /**
      * Build or update the terrain mesh from the terrain data
      * @param {Object} options - Options for terrain update
@@ -963,60 +1006,67 @@ function TerrainBuilder(
             }
         }
     };
-    const updateDebugInfo = () => {
-        setDebugInfo({
-            preview: previewPositionRef.current,
-            totalBlocks: totalBlocksRef.current,
-            isGroundPlane: previewIsGroundPlaneRef.current,
-        });
-        if (sendTotalBlocks) {
-            sendTotalBlocks(totalBlocksRef.current);
-        }
-    };
-    const clearMap = () => {
-        window.IS_DATABASE_CLEARING = true;
+
+    const clearMap = async () => {
         try {
-            terrainRef.current = {};
-            totalBlocksRef.current = 0;
-            if (sendTotalBlocks) {
-                sendTotalBlocks(0);
-            }
-            clearChunks();
-            if (spatialGridManagerRef.current) {
-                spatialGridManagerRef.current.clear();
-                firstLoadCompletedRef.current = false; // Reset spatial hash init flag
-            }
-            if (environmentBuilderRef?.current?.clearEnvironments) {
-                environmentBuilderRef.current.clearEnvironments(); // Should also handle its own DB persistence
-            }
-            isPlacingRef.current = false;
-            recentlyPlacedBlocksRef.current = new Set();
-            resetPendingChanges(); // Reset all pending changes first
-            const clearUndoRedo = async () => {
-                try {
-                    await DatabaseManager.saveData(STORES.UNDO, "states", []);
-                    await DatabaseManager.saveData(STORES.REDO, "states", []);
-                    if (undoRedoManager?.current?.clearHistory) {
-                        undoRedoManager.current.clearHistory();
-                    }
-                } catch (error) {
-                    console.error("Failed to clear undo/redo history:", error);
+            await terrainUndoRedoManager.clearUndoRedoHistory();
+            window.IS_DATABASE_CLEARING = true;
+            try {
+                terrainRef.current = {};
+                totalBlocksRef.current = 0;
+                if (sendTotalBlocks) {
+                    sendTotalBlocks(0);
                 }
-            };
-            clearUndoRedo(); // Call async clear
-            updateDebugInfo();
-            DatabaseManager.clearStore(STORES.TERRAIN)
-                .then(() => {
-                    resetPendingChanges();
-                    lastSaveTimeRef.current = Date.now(); // Update last save time
-                })
-                .catch((error) => {
-                    console.error("Error clearing terrain store:", error);
-                });
+                clearChunks();
+                if (spatialGridManagerRef.current) {
+                    spatialGridManagerRef.current.clear();
+                    firstLoadCompletedRef.current = false; // Reset spatial hash init flag
+                }
+                if (environmentBuilderRef?.current?.clearEnvironments) {
+                    environmentBuilderRef.current.clearEnvironments(); // Should also handle its own DB persistence
+                }
+                isPlacingRef.current = false;
+                recentlyPlacedBlocksRef.current = new Set();
+                resetPendingChanges(); // Reset all pending changes first
+                const clearUndoRedo = async () => {
+                    try {
+                        await DatabaseManager.saveData(
+                            STORES.UNDO,
+                            "states",
+                            []
+                        );
+                        await DatabaseManager.saveData(
+                            STORES.REDO,
+                            "states",
+                            []
+                        );
+                        if (undoRedoManager?.current?.clearHistory) {
+                            undoRedoManager.current.clearHistory();
+                        }
+                    } catch (error) {
+                        console.error(
+                            "Failed to clear undo/redo history:",
+                            error
+                        );
+                    }
+                };
+                clearUndoRedo(); // Call async clear
+                updateDebugInfo();
+                DatabaseManager.clearStore(STORES.TERRAIN)
+                    .then(() => {
+                        resetPendingChanges();
+                        lastSaveTimeRef.current = Date.now(); // Update last save time
+                    })
+                    .catch((error) => {
+                        console.error("Error clearing terrain store:", error);
+                    });
+            } catch (error) {
+                console.error("Error during clearMap operation:", error);
+            } finally {
+                window.IS_DATABASE_CLEARING = false;
+            }
         } catch (error) {
-            console.error("Error during clearMap operation:", error);
-        } finally {
-            window.IS_DATABASE_CLEARING = false;
+            console.error("Failed to clear map:", error);
         }
     };
     const initializeSpatialHash = async (
@@ -1892,92 +1942,29 @@ function TerrainBuilder(
         }
         console.timeEnd("updateTerrainBlocks");
     };
-    const updateTerrainForUndoRedo = (
-        addedBlocks,
-        removedBlocks,
-        source = "undo/redo"
-    ) => {
-        console.time(`updateTerrainForUndoRedo-${source}`);
-        trackTerrainChanges(addedBlocks, removedBlocks); // <<< Add this line
-        addedBlocks = addedBlocks || {};
-        removedBlocks = removedBlocks || {};
-        if (
-            Object.keys(addedBlocks).length === 0 &&
-            Object.keys(removedBlocks).length === 0
-        ) {
-            console.timeEnd(`updateTerrainForUndoRedo-${source}`);
+    const applyDeferredSpatialHashUpdates = async () => {
+        return spatialHashUpdateManager.applyDeferredSpatialHashUpdates(
+            spatialGridManagerRef.current
+        );
+    };
+    useEffect(() => {
+        cameraManager.setInputDisabled(isInputDisabled);
+    }, [isInputDisabled]);
+    const handleCameraMove = () => {
+        if (!threeCamera) return;
+        updateChunkSystemCamera(threeCamera);
+        loadNewChunksInViewDistance();
+        processChunkRenderQueue();
+    };
+    const loadNewChunksInViewDistance = () => {
+        const chunkSystem = getChunkSystem();
+        if (!chunkSystem || !threeCamera) {
             return;
         }
-        Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-            if (!isNaN(parseInt(blockId))) {
-                let dataUri = null;
-                if (customBlocks && customBlocks[blockId]) {
-                    dataUri = customBlocks[blockId].dataUri;
-                }
-                if (!dataUri && typeof localStorage !== "undefined") {
-                    const storageKeys = [
-                        `block-texture-${blockId}`,
-                        `custom-block-${blockId}`,
-                        `datauri-${blockId}`,
-                    ];
-                    for (const key of storageKeys) {
-                        const storedUri = localStorage.getItem(key);
-                        if (storedUri && storedUri.startsWith("data:image/")) {
-                            dataUri = storedUri;
-                            break;
-                        }
-                    }
-                }
-                if (dataUri && dataUri.startsWith("data:image/")) {
-                    localStorage.setItem(`block-texture-${blockId}`, dataUri);
-                    if (BlockTextureAtlas && BlockTextureAtlas.instance) {
-                        BlockTextureAtlas.instance
-                            .applyDataUriToAllFaces(blockId, dataUri)
-                            .catch((err) =>
-                                console.error(
-                                    `Error applying data URI to block ${blockId}:`,
-                                    err
-                                )
-                            );
-                    }
-                }
-            }
-        });
-        Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-            terrainRef.current[posKey] = blockId;
-        });
-        Object.entries(removedBlocks).forEach(([posKey]) => {
-            delete terrainRef.current[posKey];
-        });
-        totalBlocksRef.current = Object.keys(terrainRef.current).length;
-        if (sendTotalBlocks) {
-            sendTotalBlocks(totalBlocksRef.current);
-        }
-        updateDebugInfo();
-        importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
-        const addedBlocksArray = Object.entries(addedBlocks).map(
-            ([posKey, blockId]) => {
-                const [x, y, z] = posKey.split(",").map(Number);
-                return {
-                    id: blockId,
-                    position: [x, y, z],
-                };
-            }
-        );
-        const removedBlocksArray = Object.entries(removedBlocks).map(
-            ([posKey]) => {
-                const [x, y, z] = posKey.split(",").map(Number);
-                return {
-                    id: 0, // Use 0 for removed blocks
-                    position: [x, y, z],
-                };
-            }
-        );
-        updateSpatialHashForBlocks(addedBlocksArray, removedBlocksArray, {
-            force: true,
-        });
-        console.timeEnd(`updateTerrainForUndoRedo-${source}`);
+        processChunkRenderQueue();
     };
+    handleCameraMove.lastUpdateTime = 0;
+
     const getOptimizedRaycastIntersection = (prioritizeBlocks = true) => {
         if (!scene || !threeCamera || !threeRaycaster) return null;
         const normalizedMouse = pointer.clone();
@@ -2053,8 +2040,6 @@ function TerrainBuilder(
             canvas.removeEventListener("mouseup", handleCanvasMouseUp);
         };
     }, [gl, handleMouseDown, handleMouseUp]); // Add dependencies
-    const lastCameraPosition = new THREE.Vector3();
-    const lastCameraRotation = new THREE.Euler();
     useEffect(() => {
         optimizeRenderer(gl);
         cameraManager.initialize(threeCamera, orbitControlsRef.current);
@@ -2099,105 +2084,6 @@ function TerrainBuilder(
             cancelAnimationFrame(frameId);
         };
     }, [gl]);
-    const handleCameraMove = () => {
-        if (!threeCamera) return;
-        updateChunkSystemCamera(threeCamera);
-        loadNewChunksInViewDistance();
-        processChunkRenderQueue();
-    };
-    const loadNewChunksInViewDistance = () => {
-        const chunkSystem = getChunkSystem();
-        if (!chunkSystem || !threeCamera) {
-            return;
-        }
-        processChunkRenderQueue();
-    };
-    handleCameraMove.lastUpdateTime = 0;
-    const updateSpatialHashForBlocks = (
-        addedBlocks = [],
-        removedBlocks = [],
-        options = {}
-    ) => {
-        return spatialHashUpdateManager.updateSpatialHashForBlocks(
-            spatialGridManagerRef.current,
-            addedBlocks,
-            removedBlocks,
-            options
-        );
-    };
-    const applyDeferredSpatialHashUpdates = async () => {
-        return spatialHashUpdateManager.applyDeferredSpatialHashUpdates(
-            spatialGridManagerRef.current
-        );
-    };
-    useEffect(() => {
-        cameraManager.setInputDisabled(isInputDisabled);
-    }, [isInputDisabled]);
-    const trackTerrainChanges = (added = {}, removed = {}) => {
-        if (window.IS_DATABASE_CLEARING) {
-            return;
-        }
-        if (!pendingChangesRef.current) {
-            pendingChangesRef.current = {
-                terrain: {
-                    added: {},
-                    removed: {},
-                },
-                environment: {
-                    added: [],
-                    removed: [],
-                },
-            };
-        }
-        if (!pendingChangesRef.current.terrain) {
-            pendingChangesRef.current.terrain = {
-                added: {},
-                removed: {},
-            };
-        }
-        if (!pendingChangesRef.current.environment) {
-            pendingChangesRef.current.environment = {
-                added: [],
-                removed: [],
-            };
-        }
-        const safeAdded = added || {};
-        const safeRemoved = removed || {};
-        Object.entries(safeAdded).forEach(([key, value]) => {
-            if (pendingChangesRef.current?.terrain?.added) {
-                pendingChangesRef.current.terrain.added[key] = value;
-            }
-            if (
-                pendingChangesRef.current?.terrain?.removed &&
-                pendingChangesRef.current.terrain.removed[key]
-            ) {
-                delete pendingChangesRef.current.terrain.removed[key];
-            }
-        });
-        Object.entries(safeRemoved).forEach(([key, value]) => {
-            if (
-                pendingChangesRef.current?.terrain?.added &&
-                pendingChangesRef.current.terrain.added[key]
-            ) {
-                delete pendingChangesRef.current.terrain.added[key];
-            } else if (pendingChangesRef.current?.terrain?.removed) {
-                pendingChangesRef.current.terrain.removed[key] = value;
-            }
-        });
-    };
-
-    const resetPendingChanges = () => {
-        pendingChangesRef.current = {
-            terrain: {
-                added: {},
-                removed: {},
-            },
-            environment: {
-                added: [],
-                removed: [],
-            },
-        };
-    };
 
     const efficientTerrainSave = async () => {
         if (window.IS_DATABASE_CLEARING) {
