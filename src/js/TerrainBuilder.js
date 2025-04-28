@@ -1,31 +1,30 @@
-import React, {
-    useRef,
-    useEffect,
-    useState,
-    forwardRef,
-    useImperativeHandle,
-} from "react";
-import { useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
+import React, {
+    forwardRef,
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    useState,
+} from "react";
 import * as THREE from "three";
-import { playPlaceSound } from "./Sound";
 import { cameraManager } from "./Camera";
 import { DatabaseManager, STORES } from "./DatabaseManager";
+import { playPlaceSound } from "./Sound";
 // Replace old texture atlas and chunk imports with new ones
-import {
-    initChunkSystem,
-    updateTerrainChunks,
-    updateTerrainBlocks as importedUpdateTerrainBlocks,
-    processChunkRenderQueue,
-    getChunkSystem,
-    setChunkViewDistanceEnabled,
-    clearChunks,
-    updateChunkSystemCamera,
-    rebuildTextureAtlas,
-} from "./chunks/TerrainBuilderIntegration";
-import { loadingManager } from "./LoadingManager";
-import { meshesNeedsRefresh } from "./constants/performance";
 import BlockTextureAtlas from "./blocks/BlockTextureAtlas";
+import {
+    clearChunks,
+    getChunkSystem,
+    updateTerrainBlocks as importedUpdateTerrainBlocks,
+    initChunkSystem,
+    processChunkRenderQueue,
+    rebuildTextureAtlas,
+    updateChunkSystemCamera,
+    updateTerrainChunks,
+} from "./chunks/TerrainBuilderIntegration";
+import { meshesNeedsRefresh } from "./constants/performance";
+import { loadingManager } from "./LoadingManager";
 
 import {
     CHUNK_SIZE,
@@ -36,19 +35,19 @@ import {
 
 // Import tools
 import {
-    ToolManager,
-    WallTool,
     GroundTool,
     PipeTool,
-    SchematicPlacementTool, // Import the new tool
+    SchematicPlacementTool,
+    ToolManager,
+    WallTool,
 } from "./tools";
 import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorTool import
 
 // Import chunk utility functions
-import { SpatialGridManager } from "./managers/SpatialGridManager";
-import { processCustomBlock } from "./managers/BlockTypesManager";
-import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
 import BlockMaterial from "./blocks/BlockMaterial"; // Add this import
+import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
+import { processCustomBlock } from "./managers/BlockTypesManager";
+import { SpatialGridManager } from "./managers/SpatialGridManager";
 
 // Function to optimize rendering performance
 function optimizeRenderer(gl) {
@@ -135,11 +134,6 @@ function TerrainBuilder(
 
             // Only set up the interval if auto-save is enabled
             if (isAutoSaveEnabledRef.current) {
-                console.log(
-                    `Auto-save enabled with interval: ${
-                        AUTO_SAVE_INTERVAL / 1000
-                    } seconds`
-                );
                 autoSaveIntervalRef.current = setInterval(() => {
                     // Only save if there are pending changes
                     if (
@@ -148,12 +142,9 @@ function TerrainBuilder(
                         Object.keys(pendingChangesRef.current.terrain.removed)
                             .length > 0
                     ) {
-                        console.log("Auto-saving terrain...");
                         efficientTerrainSave();
                     }
                 }, AUTO_SAVE_INTERVAL);
-            } else {
-                console.log("Auto-save is disabled");
             }
         };
 
@@ -178,15 +169,11 @@ function TerrainBuilder(
         const handleBeforeUnload = (event) => {
             // Skip save if database is being cleared
             if (window.IS_DATABASE_CLEARING) {
-                console.log(
-                    "Database is being cleared, skipping unsaved changes check"
-                );
                 return;
             }
 
             // Skip if pendingChangesRef or its current property is null/undefined
             if (!pendingChangesRef || !pendingChangesRef.current) {
-                console.log("No pending changes ref available");
                 return;
             }
 
@@ -216,7 +203,6 @@ function TerrainBuilder(
         const handlePopState = (event) => {
             // Check if this is after a cancel action from beforeunload
             if (reloadJustPrevented) {
-                console.log("Detected popstate after reload prevention");
                 event.preventDefault();
 
                 // Reset the flag
@@ -236,17 +222,9 @@ function TerrainBuilder(
                 const reloadAttempted =
                     localStorage.getItem("reload_attempted") === "true";
                 if (reloadAttempted) {
-                    console.log(
-                        "Page became visible again after reload attempt"
-                    );
-                    // Clear the flag
                     localStorage.removeItem("reload_attempted");
-                    // If we have a reload prevention flag, this means the user canceled
                     if (reloadJustPrevented) {
                         reloadJustPrevented = false;
-                        console.log(
-                            "User canceled reload, restoring history state"
-                        );
                         // Restore history state
                         window.history.pushState(
                             null,
@@ -282,7 +260,6 @@ function TerrainBuilder(
     const trackTerrainChanges = (added = {}, removed = {}) => {
         // Skip if the database is being cleared
         if (window.IS_DATABASE_CLEARING) {
-            console.log("Database is being cleared, skipping tracking changes");
             return;
         }
 
@@ -408,11 +385,6 @@ function TerrainBuilder(
                         });
                     })
                 );
-                console.log(
-                    `Deleted ${
-                        Object.keys(changesToSave.removed).length
-                    } blocks from DB`
-                );
             }
 
             // Apply additions/updates
@@ -448,17 +420,12 @@ function TerrainBuilder(
 
     // Initialize the incremental terrain save system
     useEffect(() => {
-        console.log("Initializing incremental terrain save system");
         // Reset initial save flag to ensure we save a baseline
         initialSaveCompleteRef.current = false;
         // Clear pending changes
         pendingChangesRef.current = { added: {}, removed: {} };
         // Set the last save time to now to prevent immediate saving on startup
         lastSaveTimeRef.current = Date.now();
-        console.log(
-            "Last save time initialized to:",
-            new Date(lastSaveTimeRef.current).toLocaleTimeString()
-        );
 
         // Attempt to load and validate terrain data
         const validateTerrain = async () => {
@@ -468,17 +435,7 @@ function TerrainBuilder(
                     "current"
                 );
                 if (terrain && Object.keys(terrain).length > 0) {
-                    console.log(
-                        `Loaded existing terrain with ${
-                            Object.keys(terrain).length
-                        } blocks`
-                    );
-                    // We already have terrain data, mark as initialized
                     initialSaveCompleteRef.current = true;
-                } else {
-                    console.log(
-                        "No existing terrain found, will create baseline on first save"
-                    );
                 }
             } catch (err) {
                 console.error("Error validating terrain data:", err);
@@ -559,15 +516,6 @@ function TerrainBuilder(
         chunkSystem.setViewDistance(currentViewDistance);
         chunkSystem.setViewDistanceEnabled(true);
 
-        if (shouldLog) {
-            console.log(
-                "[updateChunkSystemWithCamera] Updated view distance:",
-                currentViewDistance,
-                "Camera position:",
-                camera.position.toArray().map((v) => v.toFixed(2))
-            );
-        }
-
         // Process chunks with updated camera reference
         processChunkRenderQueue();
 
@@ -586,10 +534,6 @@ function TerrainBuilder(
 
     // Add a debug function to force refresh all chunks
     const forceRefreshAllChunks = () => {
-        console.log(
-            "[Debug] Forcing refresh of all chunks based on camera position"
-        );
-
         const camera = currentCameraRef.current;
         if (!camera) {
             console.error("[Debug] No camera reference available");
@@ -721,18 +665,12 @@ function TerrainBuilder(
 
             // Check if terrain is empty
             if (Object.keys(terrainBlocks).length === 0) {
-                console.log("No terrain blocks to build");
                 console.timeEnd("buildUpdateTerrain");
                 return;
             }
 
             // Configure chunk loading with provided options
             const deferMeshBuilding = options.deferMeshBuilding !== false;
-            console.log(
-                `Building terrain with ${
-                    Object.keys(terrainBlocks).length
-                } blocks (defer: ${deferMeshBuilding})`
-            );
 
             // Configure chunk loading behavior
             configureChunkLoading({
@@ -759,10 +697,6 @@ function TerrainBuilder(
                             blockEntries.length / BATCH_SIZE
                         );
 
-                        console.log(
-                            `Adding ${blockEntries.length} blocks to terrainRef in ${totalBatches} batches`
-                        );
-
                         // Start adding blocks in background
                         const processBlockBatch = (startIdx, batchNum) => {
                             const endIdx = Math.min(
@@ -779,27 +713,11 @@ function TerrainBuilder(
                                     blockId;
                             });
 
-                            // Log progress occasionally
-                            if (
-                                batchNum % 5 === 0 ||
-                                batchNum === totalBatches - 1
-                            ) {
-                                console.log(
-                                    `Added batch ${
-                                        batchNum + 1
-                                    }/${totalBatches} to terrainRef`
-                                );
-                            }
-
                             // Schedule next batch if there are more
                             if (endIdx < blockEntries.length) {
                                 setTimeout(() => {
                                     processBlockBatch(endIdx, batchNum + 1);
                                 }, 50); // 50ms delay to avoid blocking UI
-                            } else {
-                                console.log(
-                                    `Finished adding all ${blockEntries.length} blocks to terrainRef`
-                                );
                             }
                         };
 
@@ -920,9 +838,6 @@ function TerrainBuilder(
     };
 
     /// Placement and Modification Functions ///
-    /// Placement and Modification Functions ///
-    /// Placement and Modification Functions ///
-    /// Placement and Modification Functions ///
 
     // Handle pointer/mouse down
     const handleMouseDown = (e) => {
@@ -971,10 +886,6 @@ function TerrainBuilder(
 
                 if (groundPoint) {
                     rawPlacementAnchorRef.current.copy(groundPoint);
-                    console.log(
-                        "Set initial ground anchor:",
-                        groundPoint.toArray()
-                    );
                 } else {
                     console.warn(
                         "Initial ground plane raycast failed on mousedown. Cannot set raw placement anchor."
@@ -985,12 +896,6 @@ function TerrainBuilder(
 
                 recentlyPlacedBlocksRef.current.clear();
                 placedBlockCountRef.current = 0;
-
-                // Store initial position for axis lock
-                if (axisLockEnabledRef.current) {
-                    // placementStartPosition.current =
-                    //     previewPositionRef.current.clone();
-                }
 
                 // Reset the placement changes tracker
                 placementChangesRef.current = {
@@ -1032,26 +937,7 @@ function TerrainBuilder(
                                 modeRef.current
                             );
 
-                        // In remove mode, handle removed objects
-                        if (
-                            modeRef.current === "remove" &&
-                            result?.length > 0
-                        ) {
-                            console.log(
-                                `Removed ${result.length} environment objects`
-                            );
-                            // No need to track these in placementChangesRef as the environment builder
-                            // already handles undo/redo for environment objects
-                        }
-                        // In add mode, handle added objects
-                        else if (
-                            modeRef.current === "add" &&
-                            result?.length > 0
-                        ) {
-                            console.log(
-                                "Environment objects placed:",
-                                result.length
-                            );
+                        if (modeRef.current === "add" && result?.length > 0) {
                             // Track added environment objects in the placementChangesRef for undo/redo support
                             if (placementChangesRef.current) {
                                 placementChangesRef.current.environment.added =
@@ -1461,7 +1347,6 @@ function TerrainBuilder(
                     } else {
                         // After first block, apply normal threshold logic
                         // Optional: Log ground distance check
-                        // console.log(`Ground Distance Check: Moved=${groundDistanceMoved.toFixed(4)}, Threshold=${THRESHOLD_FOR_PLACING}`);
                         if (groundDistanceMoved < THRESHOLD_FOR_PLACING) {
                             // Raw ground projection hasn't moved enough since last placement trigger.
                             shouldUpdatePreview = false;
@@ -1505,7 +1390,6 @@ function TerrainBuilder(
                     hitGround
                 ) {
                     rawPlacementAnchorRef.current.copy(currentGroundPoint); // Reset the raw ground anchor
-                    // console.log("Updated ground anchor:", currentGroundPoint.toArray());
                 }
             }
 
@@ -1556,10 +1440,6 @@ function TerrainBuilder(
             // Stop placing blocks
             isPlacingRef.current = false;
 
-            console.log(
-                `handleMouseUp: Placed ${placedBlockCountRef.current} blocks`
-            );
-
             // Only update the spatial grid if blocks were placed
             if (placedBlockCountRef.current > 0) {
                 // Update only the newly placed blocks instead of rebuilding entire grid
@@ -1589,11 +1469,6 @@ function TerrainBuilder(
                         (placementChangesRef.current.environment.removed || [])
                             .length > 0)
                 ) {
-                    console.log(
-                        "Saving changes to undo stack:",
-                        placementChangesRef.current
-                    );
-
                     // Try direct undoRedoManager.current access
                     if (undoRedoManager?.current?.saveUndo) {
                         undoRedoManager.current.saveUndo(
@@ -1623,21 +1498,11 @@ function TerrainBuilder(
                         }
                     }
                 }
-
                 // Reset the block counter
                 placedBlockCountRef.current = 0;
             }
-
             // Clear recently placed blocks
             recentlyPlacedBlocksRef.current.clear();
-        }
-
-        // Log performance
-        const duration = performance.now() - t0;
-        if (duration > 5) {
-            console.log(
-                `handleMouseUp processing took ${duration.toFixed(2)}ms`
-            );
         }
     };
 
@@ -1690,9 +1555,6 @@ function TerrainBuilder(
         // Calculate grid size from terrain dimensions
         if (terrainData && Object.keys(terrainData).length > 0) {
             const totalBlocks = Object.keys(terrainData).length;
-            console.log(
-                `Importing Minecraft map with ${totalBlocks.toLocaleString()} blocks...`
-            );
             loadingManager.updateLoading(
                 `Processing ${totalBlocks.toLocaleString()} blocks...`,
                 5
@@ -1719,10 +1581,6 @@ function TerrainBuilder(
             // Use the larger dimension for the grid size (rounded up to nearest multiple of 16)
             const gridSize = Math.ceil(Math.max(width, length) / 16) * 16;
 
-            console.log(
-                `Map dimensions: ${width}x${length}, updating grid size to ${gridSize}`
-            );
-
             // Update the grid size
             updateGridSize(gridSize);
         }
@@ -1735,14 +1593,9 @@ function TerrainBuilder(
 
         // For imports, we'll save to database immediately and not mark as unsaved
         if (terrainData) {
-            console.log("Importing map and saving to database");
-
             // First save to database
             DatabaseManager.saveData(STORES.TERRAIN, "current", terrainData)
                 .then(() => {
-                    console.log(
-                        "Imported terrain saved to database successfully"
-                    );
                     // Clear any pending changes to prevent unsaved changes warning
                     pendingChangesRef.current = {
                         terrain: { added: {}, removed: {} },
@@ -1818,7 +1671,6 @@ function TerrainBuilder(
                                 loadingManager.hideLoading();
                                 // Update debug info
                                 updateDebugInfo();
-                                console.log("Minecraft map import complete!");
                             }, 500);
                         } catch (error) {
                             console.error("Error during map import:", error);
@@ -1875,10 +1727,6 @@ function TerrainBuilder(
                 );
                 shadowPlaneRef.current.position.set(0.5, -0.5, 0.5);
             }
-
-            console.log(
-                `Grid size updated to: ${gridSizeToUse}x${gridSizeToUse}`
-            );
         }
     };
 
@@ -1897,8 +1745,6 @@ function TerrainBuilder(
 
     // Clear the terrain
     const clearMap = () => {
-        console.log("Clearing map...");
-
         // Set database clearing flag to prevent other operations during clear
         window.IS_DATABASE_CLEARING = true;
 
@@ -1913,19 +1759,16 @@ function TerrainBuilder(
             }
 
             // Clear all chunks from the system
-            console.log("Clearing chunks from the chunk system...");
             clearChunks();
 
             // Clear spatial grid for raycasting
             if (spatialGridManagerRef.current) {
-                console.log("Clearing spatial grid manager...");
                 spatialGridManagerRef.current.clear();
                 firstLoadCompletedRef.current = false; // Reset spatial hash init flag
             }
 
             // Clear environment objects
             if (environmentBuilderRef?.current?.clearEnvironments) {
-                console.log("Clearing environment objects...");
                 environmentBuilderRef.current.clearEnvironments(); // Should also handle its own DB persistence
             }
 
@@ -1937,16 +1780,13 @@ function TerrainBuilder(
             resetPendingChanges(); // Reset all pending changes first
 
             // Clear undo/redo stacks in the database
-            console.log("Clearing undo/redo history in DB...");
             const clearUndoRedo = async () => {
                 try {
                     await DatabaseManager.saveData(STORES.UNDO, "states", []);
                     await DatabaseManager.saveData(STORES.REDO, "states", []);
-                    console.log("Undo/redo history cleared in DB");
                     // Optionally, reset in-memory state if the manager holds it
                     if (undoRedoManager?.current?.clearHistory) {
                         undoRedoManager.current.clearHistory();
-                        console.log("In-memory undo/redo history cleared");
                     }
                 } catch (error) {
                     console.error("Failed to clear undo/redo history:", error);
@@ -1958,12 +1798,9 @@ function TerrainBuilder(
             // Update debug info
             updateDebugInfo();
 
-            // --- MODIFICATION START ---
             // Clear the entire TERRAIN object store in the database
-            console.log("Clearing the terrain object store in database...");
             DatabaseManager.clearStore(STORES.TERRAIN)
                 .then(() => {
-                    console.log("Terrain object store cleared successfully.");
                     // Reset pending changes again just in case something happened between the last reset and now
                     resetPendingChanges();
                     lastSaveTimeRef.current = Date.now(); // Update last save time
@@ -1972,16 +1809,12 @@ function TerrainBuilder(
                     console.error("Error clearing terrain store:", error);
                     // Handle error appropriately, maybe alert user
                 });
-            // --- MODIFICATION END ---
-
-            console.log("Map clear initiated successfully.");
         } catch (error) {
             console.error("Error during clearMap operation:", error);
             // Handle error (e.g., show alert)
         } finally {
             // Ensure the flag is always reset
             window.IS_DATABASE_CLEARING = false;
-            console.log("Database clearing flag reset.");
         }
     };
 
@@ -1991,7 +1824,6 @@ function TerrainBuilder(
         visibleOnly = false
     ) => {
         if (!forceUpdate && firstLoadCompletedRef.current) {
-            console.log("Spatial hash already initialized, skipping");
             return Promise.resolve();
         }
 
@@ -2002,12 +1834,6 @@ function TerrainBuilder(
             return Promise.resolve();
         }
 
-        console.log(
-            `Initializing spatial hash${
-                visibleOnly ? " with visible blocks only" : ""
-            }...`
-        );
-
         // If using visible only mode, filter blocks to those in visible chunks
         if (visibleOnly && terrainRef.current) {
             const chunkSystem = getChunkSystem();
@@ -2016,12 +1842,6 @@ function TerrainBuilder(
                 const camera = chunkSystem._scene.camera;
                 const cameraPos = camera.position;
                 const viewDistance = getViewDistance() || 64;
-
-                console.log(
-                    `Filtering blocks for spatial hash to only those within ${viewDistance} blocks of camera at ${cameraPos.x.toFixed(
-                        1
-                    )},${cameraPos.y.toFixed(1)},${cameraPos.z.toFixed(1)}`
-                );
 
                 // Create a reduced set of blocks for the spatial hash
                 const visibleBlocks = {};
@@ -2071,22 +1891,12 @@ function TerrainBuilder(
                     }
                 );
 
-                console.log(
-                    `Filtered spatial hash blocks: ${visibleBlockCount} out of ${totalBlocks} blocks (${Math.round(
-                        (visibleBlockCount / totalBlocks) * 100
-                    )}%)`
-                );
-
                 // Update with filtered blocks
                 spatialGridManagerRef.current.updateFromTerrain(visibleBlocks);
 
                 // Schedule a full update later
-                console.log(
-                    "Scheduling full spatial hash update in the background"
-                );
                 setTimeout(() => {
                     if (spatialGridManagerRef.current) {
-                        console.log("Performing full spatial hash update");
                         spatialGridManagerRef.current.updateFromTerrain(
                             terrainRef.current
                         );
@@ -2096,9 +1906,6 @@ function TerrainBuilder(
                 return Promise.resolve();
             }
         }
-
-        // Continue with normal initialization
-        console.log("Initializing spatial hash with all terrain blocks...");
 
         try {
             await spatialGridManagerRef.current.updateFromTerrain(
@@ -2210,24 +2017,13 @@ function TerrainBuilder(
 
             // Initialize the new chunk system instead of the texture atlas
             if (scene) {
-                console.log(
-                    "Initializing chunk system with view distance:",
-                    getViewDistance()
-                );
                 // Initialize the chunk system with the scene and view distance
                 initChunkSystem(scene, {
                     viewDistance: getViewDistance(),
                     viewDistanceEnabled: true,
-                })
-                    .then(() => {
-                        console.log("Chunk system initialized successfully");
-                    })
-                    .catch((error) => {
-                        console.error(
-                            "Error initializing chunk system:",
-                            error
-                        );
-                    });
+                }).catch((error) => {
+                    console.error("Error initializing chunk system:", error);
+                });
             }
 
             meshesInitializedRef.current = true;
@@ -2247,38 +2043,16 @@ function TerrainBuilder(
                                 detail: { blocks: customBlocksData },
                             })
                         );
-
-                        // No need to initialize texture atlas here, it's done in the chunk system
                     }
 
                     // Load terrain from IndexedDB
-                    console.log(
-                        "[Load] Attempting to load terrain from IndexedDB..."
-                    ); // <<< Add log
                     return DatabaseManager.getData(STORES.TERRAIN, "current");
                 })
                 .then((savedTerrain) => {
                     if (!mounted) return;
 
-                    // <<< Add log for loaded terrain data
-                    console.log(
-                        "[Load] Terrain data retrieved from DB:",
-                        savedTerrain
-                            ? `(${Object.keys(savedTerrain).length} blocks)`
-                            : "null"
-                    );
-                    // <<< Optional detailed log (can be large): console.log('[Load] Full savedTerrain:', JSON.stringify(savedTerrain));
-
                     if (savedTerrain) {
                         terrainRef.current = savedTerrain;
-                        console.log(
-                            "[Load] Terrain loaded from IndexedDB into terrainRef.current"
-                        );
-                        // <<< Add log for terrainRef state
-                        console.log(
-                            "[Load] terrainRef.current block count after assignment:",
-                            Object.keys(terrainRef.current).length
-                        );
 
                         totalBlocksRef.current = Object.keys(
                             terrainRef.current
@@ -2286,9 +2060,6 @@ function TerrainBuilder(
 
                         // Don't mark loaded terrain as having unsaved changes
                         pendingChangesRef.current = { added: {}, removed: {} };
-                        console.log(
-                            "Loaded terrain marked as saved - no unsaved changes"
-                        );
 
                         // Show a loading message while we preload all textures
                         loadingManager.showLoading(
@@ -2298,20 +2069,12 @@ function TerrainBuilder(
                         // Preload textures for all block types actually used in the terrain
                         setTimeout(async () => {
                             try {
-                                console.log(
-                                    "Preloading textures for ALL blocks in terrain..."
-                                );
-
                                 // Create a set of unique block IDs used in the terrain
                                 const usedBlockIds = new Set();
                                 Object.values(terrainRef.current).forEach(
                                     (blockId) => {
                                         usedBlockIds.add(parseInt(blockId));
                                     }
-                                );
-
-                                console.log(
-                                    `Found ${usedBlockIds.size} unique block types in terrain`
                                 );
 
                                 // Mark each used block type as essential to ensure its textures are loaded
@@ -2339,14 +2102,6 @@ function TerrainBuilder(
                                 await rebuildTextureAtlas();
 
                                 // Update the chunk system with the loaded terrain only AFTER textures are loaded
-                                console.log(
-                                    "Textures preloaded, updating terrain chunks..."
-                                );
-                                // <<< Add log before calling updateTerrainChunks
-                                console.log(
-                                    "[Load] Calling updateTerrainChunks with terrainRef.current block count:",
-                                    Object.keys(terrainRef.current).length
-                                );
                                 updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
 
                                 // Process chunks to ensure everything is visible
@@ -2369,13 +2124,8 @@ function TerrainBuilder(
                                     "Error preloading textures:",
                                     error
                                 );
-                                // Still update terrain and show page even if there was an error
                                 console.warn(
                                     "[Load] Error during texture preload, proceeding with terrain update."
-                                ); // <<< Add log
-                                console.log(
-                                    "[Load] Calling updateTerrainChunks (after texture error) with terrainRef.current block count:",
-                                    Object.keys(terrainRef.current).length
                                 ); // <<< Add log
                                 updateTerrainChunks(terrainRef.current);
                                 loadingManager.hideLoading();
@@ -2383,14 +2133,8 @@ function TerrainBuilder(
                             }
                         }, 100);
                     } else {
-                        console.log("[Load] No terrain found in IndexedDB");
-                        // Initialize with empty terrain
                         terrainRef.current = {};
                         totalBlocksRef.current = 0;
-                        // <<< Add log for empty terrainRef state
-                        console.log(
-                            "[Load] Initialized terrainRef.current as empty."
-                        );
                     }
 
                     setPageIsLoaded(true);
@@ -2496,7 +2240,6 @@ function TerrainBuilder(
                 Object.keys(window.fullTerrainDataRef).length >
                     Object.keys(terrainRef.current).length
             ) {
-                console.log("Performing periodic check for chunks to load");
                 loadNewChunksInViewDistance();
             } else if (
                 window.fullTerrainDataRef &&
@@ -2505,16 +2248,12 @@ function TerrainBuilder(
                     Object.keys(terrainRef.current).length
             ) {
                 // All chunks loaded, clear the interval
-                console.log("All chunks loaded, clearing periodic check");
                 clearInterval(window.chunkLoadCheckInterval);
             }
         }, 3000); // Check every 3 seconds
 
         // Return cleanup function
         return () => {
-            console.log(
-                "TerrainBuilder component unmounting, cleaning up resources"
-            );
             mounted = false;
 
             // Clean up any chunk-related timers
@@ -2584,7 +2323,6 @@ function TerrainBuilder(
     // effect to refresh meshes when the meshesNeedsRefresh flag is true
     useEffect(() => {
         if (meshesNeedsRefresh.value) {
-            console.log("Refreshing instance meshes due to new custom blocks");
             buildUpdateTerrain();
             meshesNeedsRefresh.value = false;
         }
@@ -2675,29 +2413,21 @@ function TerrainBuilder(
 
     // Function to manually save the terrain (can be called from parent or UI)
     const saveTerrainManually = () => {
-        console.log("Manual save requested...");
         return efficientTerrainSave();
     };
 
     // Helper function to enable/disable auto-save
     const setAutoSaveEnabled = (enabled) => {
-        console.log(`Auto-save being ${enabled ? "enabled" : "disabled"}`);
         isAutoSaveEnabledRef.current = enabled;
 
         // Clear existing interval
         if (autoSaveIntervalRef.current) {
-            console.log("Clearing existing auto-save interval");
             clearInterval(autoSaveIntervalRef.current);
             autoSaveIntervalRef.current = null;
         }
 
         // Re-establish interval if enabled
         if (enabled) {
-            console.log(
-                `Auto-save enabled with interval: ${
-                    AUTO_SAVE_INTERVAL / 1000
-                } seconds`
-            );
             autoSaveIntervalRef.current = setInterval(() => {
                 // Only save if there are pending changes and not in the middle of an operation
                 if (
@@ -2707,7 +2437,6 @@ function TerrainBuilder(
                         Object.keys(pendingChangesRef.current.terrain.removed)
                             .length > 0)
                 ) {
-                    console.log("Auto-saving terrain...");
                     efficientTerrainSave();
                 }
             }, AUTO_SAVE_INTERVAL);
@@ -2720,33 +2449,12 @@ function TerrainBuilder(
                     Object.keys(pendingChangesRef.current.terrain.removed)
                         .length > 0)
             ) {
-                console.log("Immediate save after enabling auto-save...");
                 efficientTerrainSave();
             }
-        } else {
-            console.log("Auto-save disabled");
         }
 
         return enabled;
     };
-
-    /*
-	// Helper function to clear all terrain data
-	const clearTerrain = () => {
-		if (terrainRef.current && Object.keys(terrainRef.current).length > 0) {
-			terrainRef.current = {};
-			console.log("Terrain cleared");
-		}
-		resetPendingChanges();
-	};
-
-	// Helper function to get block key from coordinates
-	const getBlockKey = (coord) => {
-		if (!coord) return null;
-		return `${coord.x},${coord.y},${coord.z}`;
-	};
-
-	*/
 
     // Expose buildUpdateTerrain and clearMap via ref
     useImperativeHandle(ref, () => ({
@@ -2792,11 +2500,6 @@ function TerrainBuilder(
         // API for managing deferred spatial hash updates
         deferSpatialHashUpdates: (defer) => {
             deferSpatialHashUpdatesRef.current = defer;
-            console.log(
-                `Spatial hash updates are now ${
-                    defer ? "deferred" : "immediate"
-                }`
-            );
             // If we're turning off deferred updates, apply any pending updates
             if (
                 !defer &&
@@ -2818,10 +2521,6 @@ function TerrainBuilder(
 
         // Methods for view distance handling
         setViewDistance: (distance) => {
-            console.log(
-                `Setting view distance to ${distance} from component ref`
-            );
-
             // Import setViewDistance from terrain constants
             const { setViewDistance } = require("./constants/terrain");
 
@@ -2834,9 +2533,6 @@ function TerrainBuilder(
                 chunkSystem.setViewDistance(distance);
             }
 
-            // Always force a complete refresh when view distance changes
-            console.log("[setViewDistance] Forcing complete chunk refresh");
-
             forceRefreshAllChunks();
 
             return true;
@@ -2848,27 +2544,8 @@ function TerrainBuilder(
             return getViewDistance();
         },
 
-        /*
-		// Toggle view distance culling
-		toggleViewDistanceCulling: (enabled) => {
-			console.log(`${enabled ? 'Enabling' : 'Disabling'} view distance culling`);
-			
-			const chunkSystem = getChunkSystem();
-			if (chunkSystem) {
-				setChunkViewDistanceEnabled(enabled);
-				
-				// Force refresh chunks to apply the change
-				forceRefreshAllChunks();
-				return true;
-			}
-			
-			return false;
-		},
-		*/
-
         // Configure the auto-save interval (in milliseconds)
         setAutoSaveInterval: (intervalMs) => {
-            console.log(`Setting auto-save interval to ${intervalMs}ms`);
             // Clear existing interval
             if (autoSaveIntervalRef.current) {
                 clearInterval(autoSaveIntervalRef.current);
@@ -2886,10 +2563,6 @@ function TerrainBuilder(
                                 pendingChangesRef.current.terrain.removed
                             ).length > 0)
                     ) {
-                        console.log(
-                            `Auto-saving terrain (interval: ${intervalMs}ms)...`
-                        );
-
                         efficientTerrainSave();
                     }
                 }, intervalMs);
@@ -2920,8 +2593,6 @@ function TerrainBuilder(
          * Force a DB reload of terrain and then rebuild it
          */
         async refreshTerrainFromDB() {
-            console.log("=== REFRESHING TERRAIN FROM DATABASE ===");
-
             // Always show loading screen for terrain refresh
             loadingManager.showLoading("Loading terrain data...", 0);
 
@@ -2937,14 +2608,12 @@ function TerrainBuilder(
                         "current"
                     );
                     if (!blocks || Object.keys(blocks).length === 0) {
-                        console.log("No blocks found in database");
                         loadingManager.hideLoading();
                         resolve(false);
                         return;
                     }
 
                     const blockCount = Object.keys(blocks).length;
-                    console.log(`Loaded ${blockCount} blocks from database`);
                     loadingManager.updateLoading(
                         `Processing ${blockCount} blocks...`,
                         30
@@ -2971,9 +2640,6 @@ function TerrainBuilder(
                         loadingManager.updateLoading(
                             `Building terrain with ${blockCount} blocks...`,
                             60
-                        );
-                        console.log(
-                            `Adding ${blockCount} blocks to chunk system all at once`
                         );
                         chunkSystem.updateFromTerrainData(blocks);
 
@@ -3013,8 +2679,6 @@ function TerrainBuilder(
         // This method can be called by tools  when they need to ensure
         // the spatial hash is completely up to date after operation
         forceRebuildSpatialHash: (options = {}) => {
-            //console.log("TerrainBuilder: Forcing complete rebuild of spatial hash grid");
-
             // Skip if spatial grid manager isn't available
             if (!spatialGridManagerRef.current) {
                 console.warn(
@@ -3043,7 +2707,6 @@ function TerrainBuilder(
                 }
 
                 const totalBlocks = Object.keys(terrainData).length;
-                //console.log(`TerrainBuilder: Found ${totalBlocks} terrain blocks to process`);
 
                 // Show loading screen if requested and there are many blocks
                 const showLoading =
@@ -3088,7 +2751,6 @@ function TerrainBuilder(
                 }
 
                 const chunkKeys = Object.keys(blocksByChunk);
-                //console.log(`TerrainBuilder: Organized blocks into ${chunkKeys.length} chunks`);
 
                 if (chunkKeys.length === 0) {
                     console.warn(
@@ -3161,8 +2823,6 @@ function TerrainBuilder(
                     for (let i = 0; i < totalBatches; i++) {
                         await processBatch(i);
                     }
-
-                    //console.log(`TerrainBuilder: Completed spatial hash rebuild with ${totalBlocks} blocks in ${totalBatches} batches`);
 
                     // Force mesh updates only for affected chunks to avoid unnecessary work
                     if (
@@ -3345,10 +3005,6 @@ function TerrainBuilder(
                 Object.keys(pendingChangesRef.current.terrain.removed || {})
                     .length > 0)
         ) {
-            console.log(
-                "Saving changes to undo stack:",
-                pendingChangesRef.current
-            );
             if (undoRedoManager?.current?.saveUndo) {
                 undoRedoManager.current.saveUndo(pendingChangesRef.current);
             }
@@ -3758,69 +3414,6 @@ function TerrainBuilder(
                 } = require("./chunks/TerrainBuilderIntegration");
                 forceUpdateChunkVisibility();
             }
-
-            /*
-			// Set camera moving state
-			if (isCameraMoving) {
-				cameraMoving.current = true;
-				
-				// Clear any existing timeout
-				if (cameraMovementTimeout.current) {
-					clearTimeout(cameraMovementTimeout.current);
-				}
-				
-				// Set timeout to detect when camera stops moving
-				cameraMovementTimeout.current = setTimeout(() => {
-					cameraMoving.current = false;
-					console.log("[Animation] Camera stopped moving");
-					
-					// Force a full update when camera stops
-					updateChunkSystemWithCamera();
-					// Force a second update after a short delay to ensure chunks are properly visible
-					setTimeout(() => {
-						updateChunkSystemWithCamera();
-						//updateVisibleChunks();
-					}, 50);
-				}, 100); // Reduced from 150ms to 100ms for faster response
-			}
-			
-			
-			// Only update if enough time has passed (throttle updates)
-			if (delta > 16 && shouldRunHeavyOperations) { // ~60fps max and only every 2nd frame
-				// Throttle chunk updates during camera movement
-				if (cameraMoving.current) {
-					// Decrease throttle during camera movement (update more frequently)
-					chunkUpdateThrottle.current++;
-					if (chunkUpdateThrottle.current >= 2) { // Reduced from 3 to 2 for more frequent updates
-						//updateVisibleChunks();
-						chunkUpdateThrottle.current = 0;
-					}
-					
-					// Skip spatial hash updates completely during camera movement
-				} else if (frameCount % 5 === 0) { // Reduced from 10 to 5 for more frequent updates when camera is still
-					// Normal updates when camera is still, but less frequent
-					//updateVisibleChunks();
-					
-					// Extremely infrequent spatial hash updates (only once every ~5 seconds)
-					if (frameCount % 300 === 0) {
-						// Don't update spatial hash in the animation loop at all
-						// This should only happen on explicit user actions or when the map is first loaded
-					}
-				}
-				
-				// Only update shadows periodically and even less frequently
-				if (frameCount % 30 === 0) {
-					if (gl && gl.shadowMap) {
-						gl.shadowMap.needsUpdate = true;
-					}
-					
-					// Force shadow maps to update occasionally
-					if (directionalLightRef.current) {
-						directionalLightRef.current.shadow.needsUpdate = true;
-					}
-				}
-			}
-				*/
         };
 
         // Start the animation loop
@@ -3891,9 +3484,6 @@ function TerrainBuilder(
 
         // If we're currently in bulk loading mode, just collect updates for later processing
         if (deferSpatialHashUpdatesRef.current && !options.force) {
-            console.log(
-                `Deferring spatial hash update for ${validAddedBlocks.length} added and ${validRemovedBlocks.length} removed blocks`
-            );
             // Collect updates to apply later
             pendingSpatialHashUpdatesRef.current.added.push(
                 ...validAddedBlocks
@@ -4179,10 +3769,6 @@ function TerrainBuilder(
                     }
                 );
 
-                console.log(
-                    `Filtered blocks for spatial hash update: ${filteredAddedBlocks.length}/${validAddedBlocks.length} added, ${filteredRemovedBlocks.length}/${validRemovedBlocks.length} removed`
-                );
-
                 // Only update if there are blocks to process
                 if (
                     filteredAddedBlocks.length > 0 ||
@@ -4225,10 +3811,6 @@ function TerrainBuilder(
         ) {
             return;
         }
-
-        console.log(
-            `Applying deferred spatial hash updates: ${pendingSpatialHashUpdatesRef.current.added.length} added and ${pendingSpatialHashUpdatesRef.current.removed.length} removed blocks`
-        );
 
         const added = [...pendingSpatialHashUpdatesRef.current.added];
         const removed = [...pendingSpatialHashUpdatesRef.current.removed];
@@ -4352,9 +3934,9 @@ export default forwardRef(TerrainBuilder);
 // Export block types and related functions
 export {
     blockTypes,
+    getBlockTypes,
     getCustomBlocks,
     processCustomBlock,
-    getBlockTypes,
 } from "./managers/BlockTypesManager";
 // Add a method to explicitly set deferred chunk meshing mode
 const setDeferredChunkMeshing = (defer) => {
@@ -4365,8 +3947,6 @@ const setDeferredChunkMeshing = (defer) => {
         );
         return false;
     }
-
-    console.log(`${defer ? "Enabling" : "Disabling"} deferred chunk meshing`);
 
     // If enabling, use a more conservative priority distance to ensure at least some content is visible
     // Calculate a reasonable priority distance based on view distance
@@ -4381,7 +3961,6 @@ const setDeferredChunkMeshing = (defer) => {
         chunkSystem.forceUpdateChunkVisibility(false);
     }
 
-    console.log(`Using priority distance of ${priorityDistance} blocks`);
     chunkSystem.setBulkLoadingMode(defer, priorityDistance);
 
     return true;
@@ -4398,8 +3977,6 @@ const forceChunkUpdate = (chunkKeys, options = {}) => {
     if (!chunkSystem || chunkKeys.length === 0) {
         return;
     }
-
-    //console.log(`TerrainBuilder: Forcing update for ${chunkKeys.length} chunks${options.skipNeighbors ? ' (skipping neighbors)' : ''}`);
 
     // Pass the chunk keys to the chunk system for direct update
     chunkSystem.forceUpdateChunks(chunkKeys, options);
@@ -4419,12 +3996,6 @@ const forceChunkUpdateByOrigin = (chunkOrigin, options = {}) => {
     }
 
     const skipNeighbors = options.skipNeighbors === true;
-    console.log(
-        `Forcing update for chunk at [${chunkOrigin.join(",")}]${
-            skipNeighbors ? " (skipping neighbors)" : ""
-        }`
-    );
-
     const chunkId = `${chunkOrigin[0]},${chunkOrigin[1]},${chunkOrigin[2]}`;
     chunkSystem.forceUpdateChunks([chunkId], { skipNeighbors });
 };
@@ -4449,23 +4020,11 @@ const configureChunkLoading = (options = {}) => {
     const deferMeshBuilding = options.deferMeshBuilding !== false;
     const priorityDistance =
         options.priorityDistance || Math.max(32, getViewDistance() * 0.33);
-    const deferredBuildDelay = options.deferredBuildDelay || 5000;
-
-    console.log(`Configuring chunk loading:
-    - Defer mesh building: ${deferMeshBuilding}
-    - Priority distance: ${priorityDistance} blocks
-    - Deferred build delay: ${deferredBuildDelay}ms`);
 
     // Enable bulk loading mode if deferred mesh building is enabled
     if (deferMeshBuilding) {
         // Enable bulk loading mode - only chunks within priorityDistance of camera get immediate meshes
         chunkSystem.setBulkLoadingMode(true, priorityDistance);
-
-        // No longer disable bulk loading mode automatically
-        // This way chunks will only be built when they enter the camera view distance
-        console.log(
-            `Bulk loading mode enabled permanently - chunks will only build when within ${priorityDistance} blocks of camera`
-        );
     } else {
         // Disable bulk loading mode if deferred mesh building is disabled
         chunkSystem.setBulkLoadingMode(false);
@@ -4476,17 +4035,15 @@ const configureChunkLoading = (options = {}) => {
 
 // Fix the exports to only include module-level functions
 export {
-    setDeferredChunkMeshing,
+    configureChunkLoading,
     forceChunkUpdate,
     forceChunkUpdateByOrigin,
-    configureChunkLoading,
     loadAllChunks,
+    setDeferredChunkMeshing,
 };
 
 // Utility function to force loading of all chunks at once
 const loadAllChunks = async () => {
-    console.log("Loading chunks prioritized by camera distance...");
-
     const chunkSystem = getChunkSystem();
     if (!chunkSystem) {
         console.warn("No chunk system available for loading chunks");
@@ -4504,15 +4061,9 @@ const loadAllChunks = async () => {
 
     // Get camera position
     const cameraPos = camera.position;
-    console.log(
-        `Prioritizing chunks around camera at (${cameraPos.x.toFixed(
-            1
-        )}, ${cameraPos.y.toFixed(1)}, ${cameraPos.z.toFixed(1)})`
-    );
 
     // Get all chunk IDs that exist in the system
     const chunkIds = Array.from(chunkSystem._chunkManager._chunks.keys());
-    console.log(`Found ${chunkIds.length} chunks to process`);
 
     // Calculate distances from camera for each chunk
     const chunksWithDistances = chunkIds.map((chunkId) => {
@@ -4535,11 +4086,8 @@ const loadAllChunks = async () => {
     // Sort chunks by distance to camera (closest first)
     chunksWithDistances.sort((a, b) => a.distance - b.distance);
 
-    console.log(`Processing chunks in order of distance to camera`);
-
     // Process chunks in batches from closest to farthest
     const BATCH_SIZE = 50;
-    let processedCount = 0;
 
     // Process all chunks in distance-sorted batches
     for (let i = 0; i < chunksWithDistances.length; i += BATCH_SIZE) {
@@ -4560,25 +4108,6 @@ const loadAllChunks = async () => {
         // Process the render queue to build these chunks immediately
         chunkSystem.processRenderQueue(true); // true = prioritize by camera distance
 
-        // Update the processed count
-        processedCount += batch.length;
-
-        // Log progress periodically
-        if (
-            i === 0 ||
-            processedCount % 100 === 0 ||
-            i + BATCH_SIZE >= chunksWithDistances.length
-        ) {
-            console.log(
-                `Processed ${processedCount}/${
-                    chunksWithDistances.length
-                } chunks (${(
-                    (processedCount / chunksWithDistances.length) *
-                    100
-                ).toFixed(1)}%)`
-            );
-        }
-
         // Allow a short delay for UI updates between batches
         if (i + BATCH_SIZE < chunksWithDistances.length) {
             await new Promise((resolve) => setTimeout(resolve, 10));
@@ -4588,6 +4117,5 @@ const loadAllChunks = async () => {
     // Final render queue processing to catch any remaining chunks
     chunkSystem.processRenderQueue(true);
 
-    console.log("Finished loading all chunks prioritized by camera distance");
     return true;
 };
