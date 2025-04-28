@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useCallback, useRef, useEffect, useState } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { playPlaceSound } from "./Sound";
@@ -421,7 +421,7 @@ export function useTerrainInteractionManager(props = {}) {
     };
 
     // --- Mouse Event Handlers --- //
-    const handleMouseDown = (e) => {
+    const handleMouseDown = useCallback((e) => {
         const isToolActive = toolManagerRef.current?.getActiveTool();
         if (isToolActive) {
             const intersection = getRaycastIntersection();
@@ -468,9 +468,9 @@ export function useTerrainInteractionManager(props = {}) {
             }
             playPlaceSound();
         }
-    };
+    }, [toolManagerRef, getRaycastIntersection, threeRaycaster.ray, updatePreviewPosition, handleBlockPlacement]);
 
-    const handleMouseUp = (e) => {
+    const handleMouseUp = useCallback((e) => {
         const t0 = performance.now();
         const isToolActive = toolManagerRef.current?.getActiveTool();
         if (isToolActive) {
@@ -524,21 +524,21 @@ export function useTerrainInteractionManager(props = {}) {
             console.log(
                 `handleMouseUp processing took ${duration.toFixed(2)}ms`
             );
-    };
+    }, [toolManagerRef, getRaycastIntersection, undoRedoManager]);
 
     // --- Keyboard Event Handlers --- //
-    const handleKeyDown = (event) => {
+    const handleKeyDown = useCallback((event) => {
         if (toolManagerRef.current?.getActiveTool()) {
             toolManagerRef.current.handleKeyDown(event);
         }
         // Add default key handlers if needed
-    };
-    const handleKeyUp = (event) => {
+    }, [toolManagerRef]);
+    const handleKeyUp = useCallback((event) => {
         if (toolManagerRef.current?.getActiveTool()) {
             toolManagerRef.current.handleKeyUp(event);
         }
         // Add default key handlers if needed
-    };
+    }, [toolManagerRef]);
 
     // --- Effects --- //
     // Update preview position on mouse move (throttled with rAF)
