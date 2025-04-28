@@ -616,7 +616,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                     </div>
-                    <div className="control-label">Shape Tools</div>
+                    <div className="control-label">Generative Tools</div>
                 </div>
                 <div className="control-group">
                     <div className="control-button-wrapper">
