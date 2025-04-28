@@ -2,6 +2,7 @@ import { OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import React, {
     forwardRef,
+    useCallback,
     useEffect,
     useImperativeHandle,
     useRef,
@@ -973,7 +974,7 @@ function TerrainBuilder(
         updatePreviewPosition.isProcessing = false;
     };
     updatePreviewPosition.isProcessing = false;
-    const handleMouseUp = (e) => {
+    const handleMouseUp = useCallback((e) => {
         const isToolActive =
             toolManagerRef.current && toolManagerRef.current.getActiveTool();
         if (isToolActive) {
@@ -1044,7 +1045,7 @@ function TerrainBuilder(
             }
             recentlyPlacedBlocksRef.current.clear();
         }
-    };
+    }, [getRaycastIntersection, undoRedoManager, ref]);
     const getPlacementPositions = (centerPos, placementSize) => {
         const positions = [];
         positions.push({ ...centerPos });
