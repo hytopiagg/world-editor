@@ -521,91 +521,190 @@ const BlockToolsSidebar = ({
         }
         /// process environment objects next
         else if (activeTab === "environment") {
-            const gltfFiles = files.filter((file) =>
-                file.name.endsWith(".gltf")
+            const modelFiles = files.filter(
+                (file) =>
+                    file.name.endsWith(".gltf") || file.name.endsWith(".glb")
             );
 
-            if (gltfFiles.length > 0) {
-                for (const file of gltfFiles) {
-                    const fileName = file.name.replace(/\.[^/.]+$/, "");
+            if (modelFiles.length > 0) {
+                const existingModels =
+                    (await DatabaseManager.getData(
+                        STORES.CUSTOM_MODELS,
+                        "models"
+                    )) || [];
+                const existingModelNames = new Set(
+                    environmentModels.map((m) => m.name.toLowerCase())
+                );
+                const newModelsForDB = [];
+                const newModelsForUI = [];
+                const duplicateFileNames = new Set();
+                const processedFileNames = new Set(); // Track names within the current batch
 
-                    if (
-                        environmentModels.some(
-                            (model) =>
-                                model.name.toLowerCase() ===
-                                fileName.toLowerCase()
-                        )
-                    ) {
-                        alert(
-                            `A model named "${fileName}" already exists. Please rename the file and try again.`
-                        );
-                        continue;
-                    }
+                // 1. Read all files and check for duplicates
+                const fileReadPromises = modelFiles.map((file) => {
+                    return new Promise((resolve, reject) => {
+                        const fileName = file.name.replace(/\.[^/.]+$/, "");
+                        const lowerCaseFileName = fileName.toLowerCase();
 
-                    const reader = new FileReader();
-                    reader.onload = async () => {
+                        if (existingModelNames.has(lowerCaseFileName)) {
+                            duplicateFileNames.add(fileName);
+                            console.warn(
+                                `Duplicate model skipped: ${fileName} (already exists)`
+                            );
+                            reject(new Error(`Duplicate model: ${fileName}`)); // Reject to skip processing
+                            return;
+                        }
+                        if (processedFileNames.has(lowerCaseFileName)) {
+                            duplicateFileNames.add(fileName);
+                            console.warn(
+                                `Duplicate model skipped: ${fileName} (in current batch)`
+                            );
+                            reject(
+                                new Error(
+                                    `Duplicate model in batch: ${fileName}`
+                                )
+                            ); // Reject to skip processing
+                            return;
+                        }
+                        processedFileNames.add(lowerCaseFileName); // Add to batch tracking
+
+                        const reader = new FileReader();
+                        reader.onload = () =>
+                            resolve({ file, fileName, data: reader.result });
+                        reader.onerror = (error) => reject(error);
+                        reader.readAsArrayBuffer(file);
+                    });
+                });
+
+                // Use Promise.allSettled to handle potential errors for individual files
+                const results = await Promise.allSettled(fileReadPromises);
+
+                // Alert about all duplicates found at once
+                if (duplicateFileNames.size > 0) {
+                    alert(
+                        `The following model names already exist or were duplicated in the drop:\n- ${Array.from(
+                            duplicateFileNames
+                        ).join(
+                            "\n- "
+                        )}\n\nPlease rename the files and try again.`
+                    );
+                }
+
+                // 2. Process successfully read, non-duplicate files
+                results.forEach((result) => {
+                    if (result.status === "fulfilled") {
+                        const { file, fileName, data } = result.value;
+
                         try {
-                            const existingModels =
-                                (await DatabaseManager.getData(
-                                    STORES.CUSTOM_MODELS,
-                                    "models"
-                                )) || [];
-                            const modelData = {
+                            // Prepare data for IndexedDB
+                            const modelDataForDB = {
                                 name: fileName,
-                                data: reader.result,
+                                data: data, // Store ArrayBuffer
                                 timestamp: Date.now(),
                             };
+                            newModelsForDB.push(modelDataForDB);
 
-                            const updatedModels = [
-                                ...existingModels,
-                                modelData,
-                            ];
-                            await DatabaseManager.saveData(
-                                STORES.CUSTOM_MODELS,
-                                "models",
-                                updatedModels
-                            );
-
-                            const blob = new Blob([reader.result], {
-                                type: "model/gltf+json",
-                            });
+                            // Create Blob URL and prepare data for UI state
+                            const blob = new Blob([data], {
+                                type: file.type || "model/gltf-binary",
+                            }); // Use file.type or default for glb
                             const fileUrl = URL.createObjectURL(blob);
 
                             const newEnvironmentModel = {
                                 id:
                                     Math.max(
+                                        0, // Start from 0 if no custom models exist yet
                                         ...environmentModels
                                             .filter((model) => model.isCustom)
                                             .map((model) => model.id),
-                                        199
-                                    ) + 1,
+                                        299 // Ensure IDs start after default range
+                                    ) +
+                                    1 +
+                                    newModelsForUI.length, // Increment ID based on successful additions
                                 name: fileName,
                                 modelUrl: fileUrl,
                                 isEnvironment: true,
                                 isCustom: true,
-                                animations: ["idle"],
+                                animations: ["idle"], // Default animation assumption
                             };
-
-                            environmentModels.push(newEnvironmentModel);
-
-                            if (environmentBuilder) {
-                                await environmentBuilder.current.loadModel(
-                                    newEnvironmentModel.modelUrl
-                                );
-                                console.log(
-                                    `Custom model ${newEnvironmentModel.name} added and loaded.`
-                                );
-                            }
+                            newModelsForUI.push(newEnvironmentModel);
                         } catch (error) {
                             console.error(
                                 `Error processing model ${fileName}:`,
                                 error
                             );
+                            // Optionally alert the user about specific file processing errors
                         }
-                    };
-                    reader.readAsArrayBuffer(file);
+                    } else {
+                        // Log errors for files that failed to read or were duplicates
+                        console.error(
+                            "Failed to process a model file:",
+                            result.reason?.message || result.reason
+                        );
+                    }
+                });
+
+                // 3. Update Database and UI if new models were successfully processed
+                if (newModelsForDB.length > 0) {
+                    try {
+                        // Combine existing and new models for DB
+                        const updatedModelsForDB = [
+                            ...existingModels,
+                            ...newModelsForDB,
+                        ];
+                        // Save all new models to DB at once
+                        await DatabaseManager.saveData(
+                            STORES.CUSTOM_MODELS,
+                            "models",
+                            updatedModelsForDB
+                        );
+                        console.log(
+                            `Saved ${newModelsForDB.length} new models to DB.`
+                        );
+
+                        // Update UI state
+                        environmentModels.push(...newModelsForUI);
+
+                        // Load new models into the environment (optional: could be done selectively)
+                        if (environmentBuilder && environmentBuilder.current) {
+                            for (const model of newModelsForUI) {
+                                try {
+                                    await environmentBuilder.current.loadModel(
+                                        model.modelUrl
+                                    );
+                                    console.log(
+                                        `Custom model ${model.name} added and loaded.`
+                                    );
+                                } catch (loadError) {
+                                    console.error(
+                                        `Error loading model ${model.name} into environment:`,
+                                        loadError
+                                    );
+                                }
+                            }
+                        }
+
+                        // Refresh the sidebar UI
+                        refreshBlockTools();
+                    } catch (error) {
+                        console.error(
+                            "Error saving or loading new models:",
+                            error
+                        );
+                        alert(
+                            "An error occurred while saving or loading the new models. Check the console for details."
+                        );
+                        // Consider reverting UI changes if save fails?
+                    }
+                } else if (
+                    duplicateFileNames.size === 0 &&
+                    modelFiles.length > 0
+                ) {
+                    // Handle cases where files were dropped, but none were valid (e.g., all failed to read)
+                    alert(
+                        "Could not process any of the dropped model files. Check the console for errors."
+                    );
                 }
-                refreshBlockTools();
             }
         }
     };
