@@ -9,7 +9,9 @@ import React, {
     useState,
 } from "react";
 import * as THREE from "three";
+import BlockMaterial from "./blocks/BlockMaterial"; // Add this import
 import BlockTextureAtlas from "./blocks/BlockTextureAtlas";
+import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
 import { cameraManager } from "./Camera";
 import {
     clearChunks,
@@ -22,15 +24,19 @@ import {
     updateTerrainChunks,
 } from "./chunks/TerrainBuilderIntegration";
 import { meshesNeedsRefresh } from "./constants/performance";
-import { DatabaseManager, STORES } from "./DatabaseManager";
-import { loadingManager } from "./LoadingManager";
-import { playPlaceSound } from "./Sound";
 import {
     CHUNK_SIZE,
     getViewDistance,
     MAX_SELECTION_DISTANCE,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
+import { DatabaseManager, STORES } from "./DatabaseManager";
+import { loadingManager } from "./LoadingManager";
+import { processCustomBlock } from "./managers/BlockTypesManager";
+import { cameraMovementTracker } from "./managers/CameraMovementTracker";
+import { SpatialGridManager } from "./managers/SpatialGridManager";
+import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
+import { playPlaceSound } from "./Sound";
 import {
     GroundTool,
     PipeTool,
@@ -39,16 +45,11 @@ import {
     WallTool,
 } from "./tools";
 import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorTool import
-import BlockMaterial from "./blocks/BlockMaterial"; // Add this import
-import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
-import { processCustomBlock } from "./managers/BlockTypesManager";
-import { SpatialGridManager } from "./managers/SpatialGridManager";
 import {
     configureChunkLoading,
     forceChunkUpdate,
-    forceChunkUpdateByOrigin,
     loadAllChunks,
-    setDeferredChunkMeshing,
+    setDeferredChunkMeshing
 } from "./utils/ChunkUtils"; // <<< Add this import
 
 function optimizeRenderer(gl) {
@@ -85,12 +86,14 @@ function TerrainBuilder(
     },
     ref
 ) {
-    const spatialHashUpdateQueuedRef = useRef(false);
-    const spatialHashLastUpdateRef = useRef(0);
-    const disableSpatialHashUpdatesRef = useRef(false); // Flag to completely disable spatial hash updates
-    const deferSpatialHashUpdatesRef = useRef(false); // Flag to defer spatial hash updates during loading
-    const pendingSpatialHashUpdatesRef = useRef({ added: [], removed: [] }); // Store deferred updates
-    const firstLoadCompletedRef = useRef(false); // Flag to track if the first load is complete
+    const spatialGridManagerRef = useRef(
+        new SpatialGridManager(loadingManager)
+    );
+    const orbitControlsRef = useRef(null);
+    const frustumRef = useRef(new THREE.Frustum());
+    const meshesInitializedRef = useRef(false);
+    const useSpatialHashRef = useRef(true);
+    const totalBlocksRef = useRef(0);
     const cameraRef = useRef(null);
     const lastSaveTimeRef = useRef(Date.now()); // Initialize with current time to prevent immediate save on load
     const pendingChangesRef = useRef({
@@ -107,249 +110,8 @@ function TerrainBuilder(
     const autoSaveIntervalRef = useRef(null);
     const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
     const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
-    const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
-    useEffect(() => {
-        const setupAutoSave = () => {
-            if (autoSaveIntervalRef.current) {
-                clearInterval(autoSaveIntervalRef.current);
-                autoSaveIntervalRef.current = null;
-            }
-            if (isAutoSaveEnabledRef.current) {
-                autoSaveIntervalRef.current = setInterval(() => {
-                    if (
-                        Object.keys(pendingChangesRef.current.terrain.added)
-                            .length > 0 ||
-                        Object.keys(pendingChangesRef.current.terrain.removed)
-                            .length > 0
-                    ) {
-                        efficientTerrainSave();
-                    }
-                }, AUTO_SAVE_INTERVAL);
-            }
-        };
-        setupAutoSave();
-        return () => {
-            if (autoSaveIntervalRef.current) {
-                clearInterval(autoSaveIntervalRef.current);
-            }
-        };
-    }, []); // Empty dependency array means this runs once on mount
-    useEffect(() => {
-        let reloadJustPrevented = false;
-        const currentUrl = window.location.href;
-        const handleBeforeUnload = (event) => {
-            if (window.IS_DATABASE_CLEARING) {
-                return;
-            }
-            if (!pendingChangesRef || !pendingChangesRef.current) {
-                return;
-            }
-            const hasTerrainChanges =
-                pendingChangesRef.current.terrain &&
-                (Object.keys(pendingChangesRef.current.terrain.added || {})
-                    .length > 0 ||
-                    Object.keys(pendingChangesRef.current.terrain.removed || {})
-                        .length > 0);
-            if (hasTerrainChanges) {
-                localStorage.setItem("reload_attempted", "true");
-                reloadJustPrevented = true;
-                event.preventDefault();
-                event.returnValue =
-                    "You have unsaved changes. Are you sure you want to leave?";
-                return event.returnValue;
-            }
-        };
-        const handlePopState = (event) => {
-            if (reloadJustPrevented) {
-                event.preventDefault();
-                reloadJustPrevented = false;
-                window.history.pushState(null, document.title, currentUrl);
-                return false;
-            }
-        };
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === "visible") {
-                const reloadAttempted =
-                    localStorage.getItem("reload_attempted") === "true";
-                if (reloadAttempted) {
-                    localStorage.removeItem("reload_attempted");
-                    if (reloadJustPrevented) {
-                        reloadJustPrevented = false;
-                        window.history.pushState(
-                            null,
-                            document.title,
-                            currentUrl
-                        );
-                    }
-                }
-            }
-        };
-        window.addEventListener("beforeunload", handleBeforeUnload);
-        window.addEventListener("popstate", handlePopState);
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        window.history.pushState(null, document.title, currentUrl);
-        localStorage.removeItem("reload_attempted");
-        return () => {
-            window.removeEventListener("beforeunload", handleBeforeUnload);
-            window.removeEventListener("popstate", handlePopState);
-            document.removeEventListener(
-                "visibilitychange",
-                handleVisibilityChange
-            );
-        };
-    }, []);
-    const trackTerrainChanges = (added = {}, removed = {}) => {
-        if (window.IS_DATABASE_CLEARING) {
-            return;
-        }
-        if (!pendingChangesRef.current) {
-            pendingChangesRef.current = {
-                terrain: {
-                    added: {},
-                    removed: {},
-                },
-                environment: {
-                    added: [],
-                    removed: [],
-                },
-            };
-        }
-        if (!pendingChangesRef.current.terrain) {
-            pendingChangesRef.current.terrain = {
-                added: {},
-                removed: {},
-            };
-        }
-        if (!pendingChangesRef.current.environment) {
-            pendingChangesRef.current.environment = {
-                added: [],
-                removed: [],
-            };
-        }
-        const safeAdded = added || {};
-        const safeRemoved = removed || {};
-        Object.entries(safeAdded).forEach(([key, value]) => {
-            if (pendingChangesRef.current?.terrain?.added) {
-                pendingChangesRef.current.terrain.added[key] = value;
-            }
-            if (
-                pendingChangesRef.current?.terrain?.removed &&
-                pendingChangesRef.current.terrain.removed[key]
-            ) {
-                delete pendingChangesRef.current.terrain.removed[key];
-            }
-        });
-        Object.entries(safeRemoved).forEach(([key, value]) => {
-            if (
-                pendingChangesRef.current?.terrain?.added &&
-                pendingChangesRef.current.terrain.added[key]
-            ) {
-                delete pendingChangesRef.current.terrain.added[key];
-            } else if (pendingChangesRef.current?.terrain?.removed) {
-                pendingChangesRef.current.terrain.removed[key] = value;
-            }
-        });
-    };
-    const resetPendingChanges = () => {
-        pendingChangesRef.current = {
-            terrain: {
-                added: {},
-                removed: {},
-            },
-            environment: {
-                added: [],
-                removed: [],
-            },
-        };
-    };
-    const efficientTerrainSave = async () => {
-        if (window.IS_DATABASE_CLEARING) {
-            return false;
-        }
-        if (
-            !pendingChangesRef.current ||
-            !pendingChangesRef.current.terrain ||
-            (Object.keys(pendingChangesRef.current.terrain.added || {})
-                .length === 0 &&
-                Object.keys(pendingChangesRef.current.terrain.removed || {})
-                    .length === 0)
-        ) {
-            return true;
-        }
-        const changesToSave = { ...pendingChangesRef.current.terrain };
-        resetPendingChanges();
-        try {
-            const db = await DatabaseManager.getDBConnection();
-            const tx = db.transaction(STORES.TERRAIN, "readwrite");
-            const store = tx.objectStore(STORES.TERRAIN);
-            if (
-                changesToSave.removed &&
-                Object.keys(changesToSave.removed).length > 0
-            ) {
-                await Promise.all(
-                    Object.keys(changesToSave.removed).map((key) => {
-                        const deleteRequest = store.delete(`${key}`);
-                        return new Promise((resolve, reject) => {
-                            deleteRequest.onsuccess = resolve;
-                            deleteRequest.onerror = reject;
-                        });
-                    })
-                );
-            }
-            if (
-                changesToSave.added &&
-                Object.keys(changesToSave.added).length > 0
-            ) {
-                await Promise.all(
-                    Object.entries(changesToSave.added).map(([key, value]) => {
-                        const putRequest = store.put(value, key);
-                        return new Promise((resolve, reject) => {
-                            putRequest.onsuccess = resolve;
-                            putRequest.onerror = reject;
-                        });
-                    })
-                );
-            }
-            await new Promise((resolve, reject) => {
-                tx.oncomplete = resolve;
-                tx.onerror = reject;
-            });
-            lastSaveTimeRef.current = Date.now(); // Update last save time
-            return true;
-        } catch (error) {
-            console.error("Error during efficient terrain save:", error);
-            pendingChangesRef.current.terrain = changesToSave;
-            return false;
-        }
-    };
-    useEffect(() => {
-        initialSaveCompleteRef.current = false;
-        pendingChangesRef.current = { added: {}, removed: {} };
-        lastSaveTimeRef.current = Date.now();
-        const validateTerrain = async () => {
-            try {
-                const terrain = await DatabaseManager.getData(
-                    STORES.TERRAIN,
-                    "current"
-                );
-                if (terrain && Object.keys(terrain).length > 0) {
-                    initialSaveCompleteRef.current = true;
-                }
-            } catch (err) {
-                console.error("Error validating terrain data:", err);
-            }
-        };
-        validateTerrain();
-    }, []);
-    const spatialGridManagerRef = useRef(
-        new SpatialGridManager(loadingManager)
-    );
-    const orbitControlsRef = useRef(null);
-    const frustumRef = useRef(new THREE.Frustum());
-    const meshesInitializedRef = useRef(false);
-    const cameraMoving = useRef(false);
-    const useSpatialHashRef = useRef(true);
-    const totalBlocksRef = useRef(0);
+    const gridSizeRef = useRef(16);
+    const firstLoadCompletedRef = useRef(false);
     const {
         scene,
         camera: threeCamera,
@@ -458,6 +220,8 @@ function TerrainBuilder(
     const canvasRectRef = useRef(null);
     const tempVectorRef = useRef(new THREE.Vector3());
     const toolManagerRef = useRef(null);
+    const disableSpatialHashUpdatesRef = useRef(false);
+    const deferSpatialHashUpdatesRef = useRef(false);
     /**
      * Build or update the terrain mesh from the terrain data
      * @param {Object} options - Options for terrain update
@@ -974,78 +738,90 @@ function TerrainBuilder(
         updatePreviewPosition.isProcessing = false;
     };
     updatePreviewPosition.isProcessing = false;
-    const handleMouseUp = useCallback((e) => {
-        const isToolActive =
-            toolManagerRef.current && toolManagerRef.current.getActiveTool();
-        if (isToolActive) {
-            const intersection = getRaycastIntersection();
-            if (intersection) {
-                const mouseEvent = {
-                    ...e,
-                    normal: intersection.normal,
-                };
-                toolManagerRef.current.handleMouseUp(
-                    mouseEvent,
-                    intersection.point,
-                    e.button
-                );
-                return;
-            }
-        }
-        if (isPlacingRef.current) {
-            isPlacingRef.current = false;
-            if (placedBlockCountRef.current > 0) {
-                if (spatialGridManagerRef.current) {
-                    const addedBlocks = Array.from(
-                        recentlyPlacedBlocksRef.current
-                    ).map((posKey) => {
-                        return [posKey, terrainRef.current[posKey]];
-                    });
-                    spatialGridManagerRef.current.updateBlocks(addedBlocks, []);
+    const handleMouseUp = useCallback(
+        (e) => {
+            const isToolActive =
+                toolManagerRef.current &&
+                toolManagerRef.current.getActiveTool();
+            if (isToolActive) {
+                const intersection = getRaycastIntersection();
+                if (intersection) {
+                    const mouseEvent = {
+                        ...e,
+                        normal: intersection.normal,
+                    };
+                    toolManagerRef.current.handleMouseUp(
+                        mouseEvent,
+                        intersection.point,
+                        e.button
+                    );
+                    return;
                 }
-                if (
-                    placementChangesRef.current &&
-                    (Object.keys(
-                        placementChangesRef.current.terrain.added || {}
-                    ).length > 0 ||
-                        Object.keys(
-                            placementChangesRef.current.terrain.removed || {}
+            }
+            if (isPlacingRef.current) {
+                isPlacingRef.current = false;
+                if (placedBlockCountRef.current > 0) {
+                    if (spatialGridManagerRef.current) {
+                        const addedBlocks = Array.from(
+                            recentlyPlacedBlocksRef.current
+                        ).map((posKey) => {
+                            return [posKey, terrainRef.current[posKey]];
+                        });
+                        spatialGridManagerRef.current.updateBlocks(
+                            addedBlocks,
+                            []
+                        );
+                    }
+                    if (
+                        placementChangesRef.current &&
+                        (Object.keys(
+                            placementChangesRef.current.terrain.added || {}
                         ).length > 0 ||
-                        (placementChangesRef.current.environment.added || [])
-                            .length > 0 ||
-                        (placementChangesRef.current.environment.removed || [])
-                            .length > 0)
-                ) {
-                    if (undoRedoManager?.current?.saveUndo) {
-                        undoRedoManager.current.saveUndo(
-                            placementChangesRef.current
-                        );
-                    } else {
-                        console.warn(
-                            "No direct access to saveUndo function, trying fallbacks"
-                        );
-                        const tempRef = ref?.current;
-                        if (
-                            tempRef &&
-                            tempRef.undoRedoManager &&
-                            tempRef.undoRedoManager.current &&
-                            tempRef.undoRedoManager.current.saveUndo
-                        ) {
-                            tempRef.undoRedoManager.current.saveUndo(
+                            Object.keys(
+                                placementChangesRef.current.terrain.removed ||
+                                    {}
+                            ).length > 0 ||
+                            (
+                                placementChangesRef.current.environment.added ||
+                                []
+                            ).length > 0 ||
+                            (
+                                placementChangesRef.current.environment
+                                    .removed || []
+                            ).length > 0)
+                    ) {
+                        if (undoRedoManager?.current?.saveUndo) {
+                            undoRedoManager.current.saveUndo(
                                 placementChangesRef.current
                             );
                         } else {
-                            console.error(
-                                "Could not find a way to save undo state, changes won't be tracked for undo/redo"
+                            console.warn(
+                                "No direct access to saveUndo function, trying fallbacks"
                             );
+                            const tempRef = ref?.current;
+                            if (
+                                tempRef &&
+                                tempRef.undoRedoManager &&
+                                tempRef.undoRedoManager.current &&
+                                tempRef.undoRedoManager.current.saveUndo
+                            ) {
+                                tempRef.undoRedoManager.current.saveUndo(
+                                    placementChangesRef.current
+                                );
+                            } else {
+                                console.error(
+                                    "Could not find a way to save undo state, changes won't be tracked for undo/redo"
+                                );
+                            }
                         }
                     }
+                    placedBlockCountRef.current = 0;
                 }
-                placedBlockCountRef.current = 0;
+                recentlyPlacedBlocksRef.current.clear();
             }
-            recentlyPlacedBlocksRef.current.clear();
-        }
-    }, [getRaycastIntersection, undoRedoManager, ref]);
+        },
+        [getRaycastIntersection, undoRedoManager, ref]
+    );
     const getPlacementPositions = (centerPos, placementSize) => {
         const positions = [];
         positions.push({ ...centerPos });
@@ -1724,24 +1500,12 @@ function TerrainBuilder(
         },
         setDeferredChunkMeshing,
         deferSpatialHashUpdates: (defer) => {
-            deferSpatialHashUpdatesRef.current = defer;
-            if (
-                !defer &&
-                pendingSpatialHashUpdatesRef.current &&
-                pendingSpatialHashUpdatesRef.current.added.length +
-                    pendingSpatialHashUpdatesRef.current.removed.length >
-                    0
-            ) {
-                return applyDeferredSpatialHashUpdates();
-            }
-            return Promise.resolve();
+            return spatialHashUpdateManager.setDeferSpatialHashUpdates(defer);
         },
         applyDeferredSpatialHashUpdates,
-        isPendingSpatialHashUpdates: () =>
-            pendingSpatialHashUpdatesRef.current &&
-            pendingSpatialHashUpdatesRef.current.added.length +
-                pendingSpatialHashUpdatesRef.current.removed.length >
-                0,
+        isPendingSpatialHashUpdates: () => {
+            return spatialHashUpdateManager.isPendingSpatialHashUpdates();
+        },
         setViewDistance: (distance) => {
             const { setViewDistance } = require("./constants/terrain");
             setViewDistance(distance);
@@ -2319,28 +2083,7 @@ function TerrainBuilder(
                 console.warn("[Animation] Current camera reference is not set");
                 currentCameraRef.current = threeCamera;
             }
-            const posX = threeCamera.position.x;
-            const posY = threeCamera.position.y;
-            const posZ = threeCamera.position.z;
-            const rotX = threeCamera.rotation.x;
-            const rotY = threeCamera.rotation.y;
-            const rotZ = threeCamera.rotation.z;
-            const positionChanged =
-                Math.abs(posX - lastCameraPosition.x) > 0.01 ||
-                Math.abs(posY - lastCameraPosition.y) > 0.01 ||
-                Math.abs(posZ - lastCameraPosition.z) > 0.01;
-            const rotationChanged =
-                Math.abs(rotX - lastCameraRotation.x) > 0.01 ||
-                Math.abs(rotY - lastCameraRotation.y) > 0.01 ||
-                Math.abs(rotZ - lastCameraRotation.z) > 0.01;
-            const isCameraMoving = positionChanged || rotationChanged;
-            cameraMoving.current = isCameraMoving;
-            lastCameraPosition.x = posX;
-            lastCameraPosition.y = posY;
-            lastCameraPosition.z = posZ;
-            lastCameraRotation.x = rotX;
-            lastCameraRotation.y = rotY;
-            lastCameraRotation.z = rotZ;
+            cameraMovementTracker.updateCameraMovement(threeCamera);
             if (frameCount % 5 === 0) {
                 updateChunkSystemWithCamera();
             }
@@ -2375,293 +2118,148 @@ function TerrainBuilder(
         removedBlocks = [],
         options = {}
     ) => {
-        if (disableSpatialHashUpdatesRef.current) {
-            return;
-        }
-        if (!spatialGridManagerRef.current) {
-            return;
-        }
-        const validAddedBlocks = Array.isArray(addedBlocks) ? addedBlocks : [];
-        const validRemovedBlocks = Array.isArray(removedBlocks)
-            ? removedBlocks
-            : [];
-        if (validAddedBlocks.length === 0 && validRemovedBlocks.length === 0) {
-            return;
-        }
-        if (deferSpatialHashUpdatesRef.current && !options.force) {
-            pendingSpatialHashUpdatesRef.current.added.push(
-                ...validAddedBlocks
-            );
-            pendingSpatialHashUpdatesRef.current.removed.push(
-                ...validRemovedBlocks
-            );
-            return;
-        }
-        if (
-            !options.force &&
-            (validAddedBlocks.length > 100 || validRemovedBlocks.length > 100)
-        ) {
-            return;
-        }
-        const now = performance.now();
-        if (now - spatialHashLastUpdateRef.current < 1000 && !options.force) {
-            if (
-                validAddedBlocks.length + validRemovedBlocks.length <= 10 &&
-                !spatialHashUpdateQueuedRef.current
-            ) {
-                spatialHashUpdateQueuedRef.current = true;
-                setTimeout(() => {
-                    if (
-                        spatialGridManagerRef.current &&
-                        !spatialGridManagerRef.current.isProcessing
-                    ) {
-                        try {
-                            const camera = cameraRef.current;
-                            if (camera && !options.force) {
-                                spatialGridManagerRef.current.updateFrustumCache(
-                                    camera,
-                                    getViewDistance()
-                                );
-                                const filteredAddedBlocks =
-                                    validAddedBlocks.filter((block) => {
-                                        if (!block || typeof block !== "object")
-                                            return false;
-                                        let x, y, z;
-                                        if (Array.isArray(block.position)) {
-                                            [x, y, z] = block.position;
-                                        } else if (
-                                            block.x !== undefined &&
-                                            block.y !== undefined &&
-                                            block.z !== undefined
-                                        ) {
-                                            x = block.x;
-                                            y = block.y;
-                                            z = block.z;
-                                        } else if (typeof block === "string") {
-                                            [x, y, z] = block
-                                                .split(",")
-                                                .map(Number);
-                                        } else {
-                                            return false;
-                                        }
-                                        const chunkX = Math.floor(
-                                            x / CHUNK_SIZE
-                                        );
-                                        const chunkY = Math.floor(
-                                            y / CHUNK_SIZE
-                                        );
-                                        const chunkZ = Math.floor(
-                                            z / CHUNK_SIZE
-                                        );
-                                        const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
-                                        return spatialGridManagerRef.current.chunksInFrustum.has(
-                                            chunkKey
-                                        );
-                                    });
-                                const filteredRemovedBlocks =
-                                    validRemovedBlocks.filter((block) => {
-                                        if (!block) return false;
-                                        let x, y, z;
-                                        if (
-                                            typeof block === "object" &&
-                                            Array.isArray(block.position)
-                                        ) {
-                                            [x, y, z] = block.position;
-                                        } else if (
-                                            typeof block === "object" &&
-                                            block.x !== undefined &&
-                                            block.y !== undefined &&
-                                            block.z !== undefined
-                                        ) {
-                                            x = block.x;
-                                            y = block.y;
-                                            z = block.z;
-                                        } else if (typeof block === "string") {
-                                            [x, y, z] = block
-                                                .split(",")
-                                                .map(Number);
-                                        } else {
-                                            return false;
-                                        }
-                                        const chunkX = Math.floor(
-                                            x / CHUNK_SIZE
-                                        );
-                                        const chunkY = Math.floor(
-                                            y / CHUNK_SIZE
-                                        );
-                                        const chunkZ = Math.floor(
-                                            z / CHUNK_SIZE
-                                        );
-                                        const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
-                                        return spatialGridManagerRef.current.chunksInFrustum.has(
-                                            chunkKey
-                                        );
-                                    });
-                                if (
-                                    filteredAddedBlocks.length > 0 ||
-                                    filteredRemovedBlocks.length > 0
-                                ) {
-                                    spatialGridManagerRef.current.updateBlocks(
-                                        filteredAddedBlocks,
-                                        filteredRemovedBlocks,
-                                        {
-                                            showLoadingScreen: false,
-                                            silent: true,
-                                            skipIfBusy: true,
-                                        }
-                                    );
-                                }
-                            } else {
-                                spatialGridManagerRef.current.updateBlocks(
-                                    validAddedBlocks,
-                                    validRemovedBlocks,
-                                    {
-                                        showLoadingScreen: false,
-                                        silent: true,
-                                        skipIfBusy: true,
-                                    }
-                                );
-                            }
-                        } catch (e) {
-                            console.error("Error updating spatial hash:", e);
-                        }
-                    }
-                    setTimeout(() => {
-                        spatialHashUpdateQueuedRef.current = false;
-                    }, 1000);
-                }, 1000);
-            }
-            return;
-        }
-        spatialHashLastUpdateRef.current = now;
-        if (cameraMoving.current && !options.force) {
-            return;
-        }
-        try {
-            if (
-                options.force ||
-                validAddedBlocks.length > 1000 ||
-                validRemovedBlocks.length > 1000
-            ) {
-                spatialGridManagerRef.current.updateBlocks(
-                    validAddedBlocks,
-                    validRemovedBlocks,
-                    {
-                        showLoadingScreen: options.force ? true : false,
-                        silent: options.force ? false : true,
-                        skipIfBusy: options.force ? false : true,
-                    }
-                );
-                return;
-            }
-            const camera = cameraRef.current;
-            if (camera) {
-                spatialGridManagerRef.current.updateFrustumCache(
-                    camera,
-                    getViewDistance()
-                );
-                const filteredAddedBlocks = validAddedBlocks.filter((block) => {
-                    if (!block || typeof block !== "object") return false;
-                    let x, y, z;
-                    if (Array.isArray(block.position)) {
-                        [x, y, z] = block.position;
-                    } else if (
-                        block.x !== undefined &&
-                        block.y !== undefined &&
-                        block.z !== undefined
-                    ) {
-                        x = block.x;
-                        y = block.y;
-                        z = block.z;
-                    } else if (typeof block === "string") {
-                        [x, y, z] = block.split(",").map(Number);
-                    } else {
-                        return false;
-                    }
-                    const chunkX = Math.floor(x / CHUNK_SIZE);
-                    const chunkY = Math.floor(y / CHUNK_SIZE);
-                    const chunkZ = Math.floor(z / CHUNK_SIZE);
-                    const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
-                    return spatialGridManagerRef.current.chunksInFrustum.has(
-                        chunkKey
-                    );
-                });
-                const filteredRemovedBlocks = validRemovedBlocks.filter(
-                    (block) => {
-                        if (!block) return false;
-                        let x, y, z;
-                        if (
-                            typeof block === "object" &&
-                            Array.isArray(block.position)
-                        ) {
-                            [x, y, z] = block.position;
-                        } else if (
-                            typeof block === "object" &&
-                            block.x !== undefined &&
-                            block.y !== undefined &&
-                            block.z !== undefined
-                        ) {
-                            x = block.x;
-                            y = block.y;
-                            z = block.z;
-                        } else if (typeof block === "string") {
-                            [x, y, z] = block.split(",").map(Number);
-                        } else {
-                            return false;
-                        }
-                        const chunkX = Math.floor(x / CHUNK_SIZE);
-                        const chunkY = Math.floor(y / CHUNK_SIZE);
-                        const chunkZ = Math.floor(z / CHUNK_SIZE);
-                        const chunkKey = `${chunkX},${chunkY},${chunkZ}`;
-                        return spatialGridManagerRef.current.chunksInFrustum.has(
-                            chunkKey
-                        );
-                    }
-                );
-                if (
-                    filteredAddedBlocks.length > 0 ||
-                    filteredRemovedBlocks.length > 0
-                ) {
-                    spatialGridManagerRef.current.updateBlocks(
-                        filteredAddedBlocks,
-                        filteredRemovedBlocks,
-                        {
-                            showLoadingScreen: false,
-                            silent: true,
-                            skipIfBusy: true,
-                        }
-                    );
-                }
-            } else {
-                spatialGridManagerRef.current.updateBlocks(
-                    validAddedBlocks,
-                    validRemovedBlocks,
-                    {
-                        showLoadingScreen: options.force ? true : false,
-                        silent: options.force ? false : true,
-                        skipIfBusy: options.force ? false : true,
-                    }
-                );
-            }
-        } catch (e) {
-            console.error("Error updating spatial hash:", e);
-        }
+        return spatialHashUpdateManager.updateSpatialHashForBlocks(
+            spatialGridManagerRef.current,
+            addedBlocks,
+            removedBlocks,
+            options
+        );
     };
     const applyDeferredSpatialHashUpdates = async () => {
-        if (
-            pendingSpatialHashUpdatesRef.current.added.length === 0 &&
-            pendingSpatialHashUpdatesRef.current.removed.length === 0
-        ) {
-            return;
-        }
-        const added = [...pendingSpatialHashUpdatesRef.current.added];
-        const removed = [...pendingSpatialHashUpdatesRef.current.removed];
-        pendingSpatialHashUpdatesRef.current = { added: [], removed: [] };
-        return updateSpatialHashForBlocks(added, removed, { force: true });
+        return spatialHashUpdateManager.applyDeferredSpatialHashUpdates(
+            spatialGridManagerRef.current
+        );
     };
     useEffect(() => {
         cameraManager.setInputDisabled(isInputDisabled);
     }, [isInputDisabled]);
+    const trackTerrainChanges = (added = {}, removed = {}) => {
+        if (window.IS_DATABASE_CLEARING) {
+            return;
+        }
+        if (!pendingChangesRef.current) {
+            pendingChangesRef.current = {
+                terrain: {
+                    added: {},
+                    removed: {},
+                },
+                environment: {
+                    added: [],
+                    removed: [],
+                },
+            };
+        }
+        if (!pendingChangesRef.current.terrain) {
+            pendingChangesRef.current.terrain = {
+                added: {},
+                removed: {},
+            };
+        }
+        if (!pendingChangesRef.current.environment) {
+            pendingChangesRef.current.environment = {
+                added: [],
+                removed: [],
+            };
+        }
+        const safeAdded = added || {};
+        const safeRemoved = removed || {};
+        Object.entries(safeAdded).forEach(([key, value]) => {
+            if (pendingChangesRef.current?.terrain?.added) {
+                pendingChangesRef.current.terrain.added[key] = value;
+            }
+            if (
+                pendingChangesRef.current?.terrain?.removed &&
+                pendingChangesRef.current.terrain.removed[key]
+            ) {
+                delete pendingChangesRef.current.terrain.removed[key];
+            }
+        });
+        Object.entries(safeRemoved).forEach(([key, value]) => {
+            if (
+                pendingChangesRef.current?.terrain?.added &&
+                pendingChangesRef.current.terrain.added[key]
+            ) {
+                delete pendingChangesRef.current.terrain.added[key];
+            } else if (pendingChangesRef.current?.terrain?.removed) {
+                pendingChangesRef.current.terrain.removed[key] = value;
+            }
+        });
+    };
+
+    const resetPendingChanges = () => {
+        pendingChangesRef.current = {
+            terrain: {
+                added: {},
+                removed: {},
+            },
+            environment: {
+                added: [],
+                removed: [],
+            },
+        };
+    };
+
+    const efficientTerrainSave = async () => {
+        if (window.IS_DATABASE_CLEARING) {
+            return false;
+        }
+        if (
+            !pendingChangesRef.current ||
+            !pendingChangesRef.current.terrain ||
+            (Object.keys(pendingChangesRef.current.terrain.added || {})
+                .length === 0 &&
+                Object.keys(pendingChangesRef.current.terrain.removed || {})
+                    .length === 0)
+        ) {
+            return true;
+        }
+        const changesToSave = { ...pendingChangesRef.current.terrain };
+        resetPendingChanges();
+        try {
+            const db = await DatabaseManager.getDBConnection();
+            const tx = db.transaction(STORES.TERRAIN, "readwrite");
+            const store = tx.objectStore(STORES.TERRAIN);
+            if (
+                changesToSave.removed &&
+                Object.keys(changesToSave.removed).length > 0
+            ) {
+                await Promise.all(
+                    Object.keys(changesToSave.removed).map((key) => {
+                        const deleteRequest = store.delete(`${key}`);
+                        return new Promise((resolve, reject) => {
+                            deleteRequest.onsuccess = resolve;
+                            deleteRequest.onerror = reject;
+                        });
+                    })
+                );
+            }
+            if (
+                changesToSave.added &&
+                Object.keys(changesToSave.added).length > 0
+            ) {
+                await Promise.all(
+                    Object.entries(changesToSave.added).map(([key, value]) => {
+                        const putRequest = store.put(value, key);
+                        return new Promise((resolve, reject) => {
+                            putRequest.onsuccess = resolve;
+                            putRequest.onerror = reject;
+                        });
+                    })
+                );
+            }
+            await new Promise((resolve, reject) => {
+                tx.oncomplete = resolve;
+                tx.onerror = reject;
+            });
+            lastSaveTimeRef.current = Date.now(); // Update last save time
+            return true;
+        } catch (error) {
+            console.error("Error during efficient terrain save:", error);
+            pendingChangesRef.current.terrain = changesToSave;
+            return false;
+        }
+    };
+
     return (
         <>
             <OrbitControls
@@ -2761,5 +2359,6 @@ export {
     blockTypes,
     getBlockTypes,
     getCustomBlocks,
-    processCustomBlock,
+    processCustomBlock
 } from "./managers/BlockTypesManager";
+
