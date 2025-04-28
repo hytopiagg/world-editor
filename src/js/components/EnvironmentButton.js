@@ -8,22 +8,19 @@ import { FaTrash } from "react-icons/fa";
 import { DatabaseManager, STORES } from "../DatabaseManager";
 import "../../css/BlockToolsSidebar.css";
 
-// Add this new component for the 3D preview
 const ModelPreview = ({ modelUrl, onRenderComplete }) => {
     const { scene } = useGLTF(modelUrl);
-
     React.useEffect(() => {
-        // Clone the scene to avoid modifying the cached original
+
         const clonedScene = scene.clone();
 
-        // Signal that the render is complete after the first frame
         return () => {
             if (onRenderComplete) {
                 requestAnimationFrame(() => {
                     onRenderComplete();
                 });
             }
-            // Properly dispose of the cloned scene
+
             clonedScene.traverse((object) => {
                 if (object.geometry) {
                     object.geometry.dispose();
@@ -36,15 +33,12 @@ const ModelPreview = ({ modelUrl, onRenderComplete }) => {
         };
     }, [onRenderComplete, scene]);
 
-    // Calculate bounding box of the model
     const bbox = new THREE.Box3().setFromObject(scene);
     const center = bbox.getCenter(new THREE.Vector3());
     const size = bbox.getSize(new THREE.Vector3());
 
-    // Calculate scale to fit the view
     const maxDim = Math.max(size.x, size.y, size.z);
     const fitScale = 2.1 / maxDim; // Adjust this value to change how much of the canvas the model fills
-
     return (
         <primitive
             object={scene.clone()}
@@ -59,13 +53,11 @@ const ModelPreview = ({ modelUrl, onRenderComplete }) => {
     );
 };
 
-// Add static counter and queue management
 const MAX_SIMULTANEOUS_RENDERS = 1; // Only render one at a time
 let activeRenders = 0;
 let renderQueue = [];
-
 const startNextRender = () => {
-    // Add a small delay before starting the next render
+
     setTimeout(() => {
         if (
             renderQueue.length > 0 &&
@@ -77,24 +69,20 @@ const startNextRender = () => {
         }
     }, 1); // 100ms delay between renders
 };
-
 const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
     const [imageUrl, setImageUrl] = React.useState(null);
     const [showCanvas, setShowCanvas] = React.useState(false);
     const [isQueued, setIsQueued] = React.useState(false);
-
     const getCacheKey = useCallback(() => {
         if (envType.modelUrl.startsWith("blob:")) {
-            // For custom models, use just the filename
+
             return envType.name;
         }
-        // For default models, use the relative path from the public folder
+
         return envType.modelUrl.replace(/^\//, "");
     }, [envType.modelUrl, envType.name]);
-
     useEffect(() => {
         if (!envType) return;
-
         const loadCachedImage = async () => {
             const cacheKey = getCacheKey();
             try {
@@ -116,19 +104,15 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
             }
             return false;
         };
-
         const startRender = () => {
             setShowCanvas(true);
             setIsQueued(false);
         };
 
-        // Add this check to prevent unnecessary re-renders
         if (!imageUrl && !showCanvas && !isQueued) {
             let mounted = true; // Add mounted flag
-
             loadCachedImage().then((hasCache) => {
                 if (!mounted) return; // Check if still mounted
-
                 if (!hasCache) {
                     setIsQueued(true);
                     if (activeRenders < MAX_SIMULTANEOUS_RENDERS) {
@@ -140,7 +124,6 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
                 }
             });
 
-            // Cleanup function
             return () => {
                 mounted = false; // Set mounted to false on cleanup
                 if (isQueued) {
@@ -151,12 +134,10 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
             };
         }
     }, [imageUrl, showCanvas, isQueued, envType, getCacheKey]);
-
     if (!envType) {
         console.log("EnvironmentButton: envType is null");
         return null;
     }
-
     const handleRenderComplete = () => {
         const canvas = document.querySelector(
             `#preview-${envType.name} canvas`
@@ -165,10 +146,8 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
             try {
                 const url = canvas.toDataURL("image/png");
                 setImageUrl(url);
-
                 const cacheKey = getCacheKey();
                 console.log("Saving preview to cache with key:", cacheKey);
-
                 DatabaseManager.saveData(STORES.PREVIEWS, cacheKey, url)
                     .then(() =>
                         console.log(
@@ -185,7 +164,7 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
                     });
             } catch (error) {
                 console.warn("Failed to capture canvas content:", error);
-                // If we fail to capture the canvas, try again later
+
                 setTimeout(() => {
                     activeRenders--;
                     setShowCanvas(true);
@@ -195,7 +174,6 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
             setShowCanvas(false);
             activeRenders--;
 
-            // Clean up WebGL context if possible, but don't throw errors if not supported
             try {
                 const gl =
                     canvas.getContext("webgl2") || canvas.getContext("webgl");
@@ -203,13 +181,11 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
                     gl.getExtension("WEBGL_lose_context").loseContext();
                 }
             } catch (error) {
-                // Silently ignore if the extension isn't supported
-            }
 
+            }
             startNextRender();
         }
     };
-
     return (
         <Tooltip text={envType.name}>
             <button
@@ -265,5 +241,4 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
         </Tooltip>
     );
 };
-
 export default EnvironmentButton;

@@ -7,7 +7,6 @@ import {
 } from "@adobe/react-spectrum";
 import styles from "./CustomColorPicker.module.css";
 
-// Helper component for number input
 const CustomNumberInput = ({
     label,
     value,
@@ -27,7 +26,6 @@ const CustomNumberInput = ({
         onChange(newValue);
     };
 
-    // Basic formatting (can be expanded)
     let displayValue = value;
     if (formatOptions?.style === "percent") {
         displayValue = (value / 100).toLocaleString(undefined, {
@@ -38,11 +36,9 @@ const CustomNumberInput = ({
         displayValue = value.toFixed(formatOptions?.maximumFractionDigits ?? 0);
     }
 
-    // For direct input, don't format immediately
     const [inputValue, setInputValue] = useState(() =>
         value.toFixed(formatOptions?.maximumFractionDigits ?? 0)
     ); // Initial state from prop
-
     useEffect(() => {
         const propValueFormatted = value.toFixed(
             formatOptions?.maximumFractionDigits ?? 0
@@ -51,11 +47,9 @@ const CustomNumberInput = ({
             setInputValue(propValueFormatted);
         }
     }, [value, formatOptions]);
-
     const handleInputChange = (e) => {
         setInputValue(e.target.value);
     };
-
     const handleBlur = (e) => {
         let numericValue = parseFloat(e.target.value);
         if (isNaN(numericValue)) {
@@ -68,7 +62,6 @@ const CustomNumberInput = ({
             numericValue.toFixed(formatOptions?.maximumFractionDigits ?? 0)
         );
     };
-
     const increment = () => {
         const newValue = Math.min(max, value + step);
         onChange(newValue);
@@ -76,7 +69,6 @@ const CustomNumberInput = ({
             newValue.toFixed(formatOptions?.maximumFractionDigits ?? 0)
         );
     };
-
     const decrement = () => {
         const newValue = Math.max(min, value - step);
         onChange(newValue);
@@ -84,7 +76,6 @@ const CustomNumberInput = ({
             newValue.toFixed(formatOptions?.maximumFractionDigits ?? 0)
         );
     };
-
     return (
         <div className={styles.inputRow} style={width ? { width } : {}}>
             <label className={styles.label}>{label}</label>
@@ -124,18 +115,14 @@ const CustomNumberInput = ({
     );
 };
 
-// Helper component for hex input
 const CustomHexInput = ({ label, value, onChange }) => {
     const [hexValue, setHexValue] = useState(value.toString("hex"));
-
     useEffect(() => {
         setHexValue(value.toString("hex"));
     }, [value]);
-
     const handleChange = (e) => {
         let input = e.target.value;
         setHexValue(input); // Allow typing
-
         try {
             if (
                 input.startsWith("#") &&
@@ -151,11 +138,10 @@ const CustomHexInput = ({ label, value, onChange }) => {
                 onChange(newColor.toFormat("hsb"));
             }
         } catch (error) {
-            // Invalid color input
+
             console.warn("Invalid hex color", input);
         }
     };
-
     const handleBlur = (e) => {
         let input = e.target.value;
         try {
@@ -169,7 +155,6 @@ const CustomHexInput = ({ label, value, onChange }) => {
             console.warn("Invalid hex color on blur, reverting", input);
         }
     };
-
     return (
         <div className={styles.inputRow}>
             <label className={styles.label}>{label}</label>
@@ -185,7 +170,6 @@ const CustomHexInput = ({ label, value, onChange }) => {
         </div>
     );
 };
-
 /**
  * A Spectrum-style picker with custom inputs
  * • 2-D SV box
@@ -201,28 +185,24 @@ export default function CustomColorPicker({ value, onChange }) {
     const [colorObj, setColorObj] = useState(() =>
         parseColor(value || "#000000").toFormat("hsb")
     );
-
     useEffect(() => {
         const newHex = colorObj.toString("hex");
-        // Only call onChange if the hex value actually changed to avoid loops
+
         if (newHex !== value) {
             onChange(newHex);
         }
     }, [colorObj, onChange, value]); // Added value dependency
 
-    // Effect 2: Sync internal state ONLY when 'value' prop changes externally
     const syncColor = useMemo(
         () => parseColor(value || "#000000").toFormat("hsb"),
         [value]
     );
-
     useEffect(() => {
         if (syncColor.toString("hsb") !== colorObj.toString("hsb")) {
             setColorObj(syncColor);
         }
     }, [syncColor]);
 
-    // --- Input change handlers ---
     const handleHueChange = useCallback(
         (h) => setColorObj(colorObj.withChannelValue("hue", h)),
         [colorObj]
@@ -235,7 +215,6 @@ export default function CustomColorPicker({ value, onChange }) {
         (b) => setColorObj(colorObj.withChannelValue("brightness", b)),
         [colorObj]
     );
-
     const handleRedChange = useCallback(
         (r) => {
             const rgbColor = colorObj
@@ -263,12 +242,10 @@ export default function CustomColorPicker({ value, onChange }) {
         },
         [colorObj]
     );
-
     const handleHexChange = useCallback((newColor) => {
-        // Already in HSB format from CustomHexInput's onChange logic
+
         setColorObj(newColor);
     }, []);
-
     return (
         <Flex direction="row" gap="size-150" alignItems="flex-start">
             {/* SV square – saturation (x) × brightness (y) in HSB space  */}
@@ -280,7 +257,6 @@ export default function CustomColorPicker({ value, onChange }) {
                 height="size-1000" // Adjust size as needed
                 width="size-1200" // Adjust size as needed
             />
-
             {/* vertical hue slider */}
             <ColorSlider
                 channel="hue"
@@ -289,7 +265,6 @@ export default function CustomColorPicker({ value, onChange }) {
                 onChange={setColorObj}
                 height="calc(var(--spectrum-global-dimension-size-1000) + 2 * var(--spectrum-global-dimension-size-10))" // Match height of ColorArea + input padding/margins roughly
             />
-
             {/* Container for Custom Inputs */}
             <div className={styles.inputContainer}>
                 <CustomNumberInput

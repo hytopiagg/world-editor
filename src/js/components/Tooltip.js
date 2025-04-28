@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
-
 const Tooltip = ({ children, text }) => {
     const [isVisible, setIsVisible] = useState(false);
     const [mousePosition, setMousePosition] = useState({
@@ -10,14 +9,12 @@ const Tooltip = ({ children, text }) => {
     });
     const [tooltipWidth, setTooltipWidth] = useState(0);
     const tooltipRef = useRef(null);
-
     useEffect(() => {
         if (isVisible && tooltipRef.current) {
             setTooltipWidth(tooltipRef.current.offsetWidth);
         }
     }, [isVisible]);
 
-    /// sets initial position when mouse enters the component
     const handleMouseEnter = (e) => {
         const screenWidth = window.innerWidth;
         const isRightSide = e.clientX > screenWidth / 2;
@@ -28,11 +25,9 @@ const Tooltip = ({ children, text }) => {
         });
         setIsVisible(true);
     };
-
     const handleMouseLeave = (e) => {
         setIsVisible(false);
     };
-
     const handleMouseMove = (e) => {
         if (!isVisible) return;
         const screenWidth = window.innerWidth;
@@ -44,29 +39,23 @@ const Tooltip = ({ children, text }) => {
         });
     };
 
-    // Render tooltip content with portal
     const renderTooltip = () => {
         if (!isVisible) return null;
 
-        // Get screen dimensions
         const screenHeight = window.innerHeight;
         const screenWidth = window.innerWidth;
 
-        // Check proximity to edges
         const isNearTop = mousePosition.y < 100;
         const isNearBottom = mousePosition.y > screenHeight - 100;
         const isNearLeft = mousePosition.x < 100;
         const isNearRight = mousePosition.x > screenWidth - 100;
 
-        // Determine if tooltip should be above or below cursor
         const isAboveCursor = isNearBottom;
 
-        // Determine vertical position
         const verticalPosition = isAboveCursor
             ? { top: `${mousePosition.y - 60}px` } // Position above cursor if near bottom
             : { top: `${mousePosition.y + 30}px` }; // Position below cursor otherwise
 
-        // Determine horizontal position
         let horizontalPosition;
         if (isNearLeft) {
             horizontalPosition = { left: `${mousePosition.x + 10}px` };
@@ -80,22 +69,19 @@ const Tooltip = ({ children, text }) => {
             };
         }
 
-        // Calculate arrow position
         let arrowPosition;
         if (isNearLeft) {
-            // Arrow should be at the left side
+
             arrowPosition = { left: "15px" };
         } else if (isNearRight) {
-            // Arrow should be at the right side
+
             arrowPosition = { right: "15px" };
         } else {
-            // Arrow should be centered
+
             arrowPosition = { left: "50%", transform: "translateX(-50%)" };
         }
 
-        // Define background color for reuse
         const bgColor = "rgba(13, 13, 13, 0.7)";
-
         return ReactDOM.createPortal(
             <div
                 ref={tooltipRef}
@@ -142,7 +128,6 @@ const Tooltip = ({ children, text }) => {
             document.body
         );
     };
-
     return (
         <div
             onMouseEnter={handleMouseEnter}
@@ -154,5 +139,4 @@ const Tooltip = ({ children, text }) => {
         </div>
     );
 };
-
 export default Tooltip;

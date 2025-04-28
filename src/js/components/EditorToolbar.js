@@ -8,13 +8,11 @@ import {
     FaRedo,
 } from "react-icons/fa"; // Using icons
 import "../../css/EditorToolbar.css"; // CSS for styling
-
 const TOOLS = {
     PENCIL: "pencil",
     ERASER: "eraser",
     FILL: "fill",
 };
-
 const EditorToolbar = ({
     selectedTool,
     onSelectTool,
@@ -71,12 +69,10 @@ const EditorToolbar = ({
         </div>
     );
 };
-
 EditorToolbar.propTypes = {
     selectedTool: PropTypes.string.isRequired,
     onSelectTool: PropTypes.func.isRequired,
 };
 
-// Export TOOLS constant as well if needed elsewhere
 export { TOOLS };
 export default EditorToolbar;

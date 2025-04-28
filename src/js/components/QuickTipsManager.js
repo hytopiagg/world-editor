@@ -4,20 +4,18 @@
  * This manager allows setting and getting the current tool tip text
  * from anywhere in the application without complex React state management.
  */
-
 class QuickTipsManager {
     static listeners = [];
     static currentTip = QuickTipsManager.defaultTip;
     static defaultTip =
         "Move the camera with W, A, S, D. Right click to rotate. Middle click to drag-move.";
-
     /**
      * Set the current tool tip text
      * @param {string} tipText - The tooltip text to display
      */
     static setToolTip(tipText) {
         QuickTipsManager.currentTip = tipText;
-        // Notify all listeners
+
         QuickTipsManager.listeners.forEach((listener) => {
             try {
                 listener(tipText);
@@ -28,7 +26,7 @@ class QuickTipsManager {
     }
     static setToDefaultTip() {
         QuickTipsManager.currentTip = QuickTipsManager.defaultTip;
-        // Notify all listeners
+
         QuickTipsManager.listeners.forEach((listener) => {
             try {
                 listener(QuickTipsManager.defaultTip);
@@ -37,7 +35,6 @@ class QuickTipsManager {
             }
         });
     }
-
     /**
      * Get the current tool tip text
      * @returns {string} The current tooltip text
@@ -45,7 +42,6 @@ class QuickTipsManager {
     static getToolTip() {
         return QuickTipsManager.currentTip;
     }
-
     /**
      * Add a listener function to be called when the tip changes
      * @param {Function} listener - Function to call with the new tip text
@@ -55,7 +51,6 @@ class QuickTipsManager {
             QuickTipsManager.listeners.push(listener);
         }
     }
-
     /**
      * Remove a previously added listener
      * @param {Function} listener - The listener to remove
@@ -66,5 +61,4 @@ class QuickTipsManager {
         );
     }
 }
-
 export default QuickTipsManager;

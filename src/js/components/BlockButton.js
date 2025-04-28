@@ -2,7 +2,6 @@ import React from "react";
 import { FaTrash, FaDownload } from "react-icons/fa";
 import Tooltip from "./Tooltip";
 import { playUIClick } from "../Sound";
-
 const BlockButton = ({
     blockType,
     isSelected,
@@ -18,22 +17,19 @@ const BlockButton = ({
         ) {
             return "./assets/blocks/error.png";
         }
-
         if (blockType.isCustom) {
-            // Handle both base64 and filename cases
+
             return blockType.textureUri.startsWith("data:")
                 ? blockType.textureUri
                 : `/${blockType.textureUri}`;
         }
         return `/${blockType.textureUri}`;
     };
-
     const isMissingTexture =
         !blockType.textureUri ||
         blockType.textureUri.includes("error.png") ||
         blockType.hasMissingTexture ||
         (blockType.isMultiTexture && !blockType.sideTextures["+y"]);
-
     return (
         <Tooltip text={blockType.name}>
             <button
@@ -111,5 +107,4 @@ const BlockButton = ({
         </Tooltip>
     );
 };
-
 export default React.memo(BlockButton);

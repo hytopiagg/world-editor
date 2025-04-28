@@ -1,9 +1,7 @@
-// BlockConstants.js
-// Constants and types for block-related operations
+
 
 import * as THREE from "three";
 
-// Block face enum
 export const BlockFaceEnum = {
     left: 0,
     right: 1,
@@ -13,7 +11,6 @@ export const BlockFaceEnum = {
     back: 5,
 };
 
-// Block face axes
 export const BlockFaceAxes = {
     left: "-x",
     right: "+x",
@@ -23,16 +20,12 @@ export const BlockFaceAxes = {
     back: "-z",
 };
 
-// Block face types
 export const BlockFaces = Object.keys(BlockFaceEnum);
 
-// Default block AO intensity
 export const DEFAULT_BLOCK_AO_INTENSITY = [0, 0.3, 0.5, 0.7];
 
-// Default block color (RGBA)
 export const DEFAULT_BLOCK_COLOR = [1.0, 1.0, 1.0, 1.0];
 
-// Default block face normals
 export const DEFAULT_BLOCK_FACE_NORMALS = {
     left: [-1, 0, 0],
     right: [1, 0, 0],
@@ -42,12 +35,11 @@ export const DEFAULT_BLOCK_FACE_NORMALS = {
     back: [0, 0, -1],
 };
 
-// Default block face geometries
 export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
     left: {
         normal: DEFAULT_BLOCK_FACE_NORMALS.left,
         vertices: [
-            // top left
+
             {
                 pos: [0, 1, 0],
                 uv: [0, 1],
@@ -57,7 +49,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, -0.5, -0.5],
                 },
             },
-            // bottom left
+
             {
                 pos: [0, 0, 0],
                 uv: [0, 0],
@@ -67,7 +59,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, -0.5, -0.5],
                 },
             },
-            // top right
+
             {
                 pos: [0, 1, 1],
                 uv: [1, 1],
@@ -77,7 +69,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, -0.5, 0.5],
                 },
             },
-            // bottom right
+
             {
                 pos: [0, 0, 1],
                 uv: [1, 0],
@@ -92,7 +84,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
     right: {
         normal: DEFAULT_BLOCK_FACE_NORMALS.right,
         vertices: [
-            // top left
+
             {
                 pos: [1, 1, 1],
                 uv: [0, 1],
@@ -102,7 +94,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, -0.5, 0.5],
                 },
             },
-            // bottom left
+
             {
                 pos: [1, 0, 1],
                 uv: [0, 0],
@@ -112,7 +104,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, -0.5, 0.5],
                 },
             },
-            // top right
+
             {
                 pos: [1, 1, 0],
                 uv: [1, 1],
@@ -122,7 +114,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, -0.5, -0.5],
                 },
             },
-            // bottom right
+
             {
                 pos: [1, 0, 0],
                 uv: [1, 0],
@@ -137,7 +129,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
     top: {
         normal: DEFAULT_BLOCK_FACE_NORMALS.top,
         vertices: [
-            // bottom left
+
             {
                 pos: [0, 1, 1],
                 uv: [1, 1],
@@ -147,7 +139,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, 0.5, -0.5],
                 },
             },
-            // bottom right
+
             {
                 pos: [1, 1, 1],
                 uv: [0, 1],
@@ -157,7 +149,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, 0.5, -0.5],
                 },
             },
-            // top left
+
             {
                 pos: [0, 1, 0],
                 uv: [1, 0],
@@ -167,7 +159,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, 0.5, 0.5],
                 },
             },
-            // top right
+
             {
                 pos: [1, 1, 0],
                 uv: [0, 0],
@@ -182,7 +174,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
     bottom: {
         normal: DEFAULT_BLOCK_FACE_NORMALS.bottom,
         vertices: [
-            // top right
+
             {
                 pos: [1, 0, 1],
                 uv: [1, 0],
@@ -192,7 +184,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, -0.5, -0.5],
                 },
             },
-            // top left
+
             {
                 pos: [0, 0, 1],
                 uv: [0, 0],
@@ -202,7 +194,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, -0.5, 0.5],
                 },
             },
-            // bottom right
+
             {
                 pos: [1, 0, 0],
                 uv: [1, 1],
@@ -212,7 +204,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, -0.5, -0.5],
                 },
             },
-            // bottom left
+
             {
                 pos: [0, 0, 0],
                 uv: [0, 1],
@@ -227,7 +219,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
     front: {
         normal: DEFAULT_BLOCK_FACE_NORMALS.front,
         vertices: [
-            // bottom left
+
             {
                 pos: [0, 0, 1],
                 uv: [0, 0],
@@ -237,7 +229,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, -0.5, 0.5],
                 },
             },
-            // bottom right
+
             {
                 pos: [1, 0, 1],
                 uv: [1, 0],
@@ -247,7 +239,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, -0.5, 0.5],
                 },
             },
-            // top left
+
             {
                 pos: [0, 1, 1],
                 uv: [0, 1],
@@ -257,7 +249,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, 0.5, 0.5],
                 },
             },
-            // top right
+
             {
                 pos: [1, 1, 1],
                 uv: [1, 1],
@@ -272,7 +264,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
     back: {
         normal: DEFAULT_BLOCK_FACE_NORMALS.back,
         vertices: [
-            // bottom left
+
             {
                 pos: [1, 0, 0],
                 uv: [0, 0],
@@ -282,7 +274,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, -0.5, -0.5],
                 },
             },
-            // bottom right
+
             {
                 pos: [0, 0, 0],
                 uv: [1, 0],
@@ -292,7 +284,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [-0.5, -0.5, -0.5],
                 },
             },
-            // top left
+
             {
                 pos: [1, 1, 0],
                 uv: [0, 1],
@@ -302,7 +294,7 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
                     side2: [0.5, -0.5, -0.5],
                 },
             },
-            // top right
+
             {
                 pos: [0, 1, 0],
                 uv: [1, 1],
@@ -316,23 +308,19 @@ export const DEFAULT_BLOCK_FACE_GEOMETRIES = {
     },
 };
 
-// Default block neighbor offsets
 export const DEFAULT_BLOCK_NEIGHBOR_OFFSETS = [
     [0, 0, 0], // self
     [0, 1, 0], // top
     [0, -1, 0], // bottom
 
-    // left
     [-1, 0, 0], // left
     [-1, 1, 0], // top left
     [-1, -1, 0], // bottom left
 
-    // right
     [1, 0, 0], // right
     [1, 1, 0], // top right
     [1, -1, 0], // bottom right
 
-    // front
     [0, 0, 1], // front
     [0, 1, 1], // top front
     [0, -1, 1], // bottom front
@@ -343,7 +331,6 @@ export const DEFAULT_BLOCK_NEIGHBOR_OFFSETS = [
     [1, 1, 1], // top front right
     [1, -1, 1], // bottom front right
 
-    // back
     [0, 0, -1], // back
     [0, 1, -1], // top back
     [0, -1, -1], // bottom back

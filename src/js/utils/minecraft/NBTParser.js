@@ -1,7 +1,6 @@
 /* global BigInt */
 import pako from "pako";
 
-// NBT Tag Types
 const TAG_TYPES = {
     END: 0,
     BYTE: 1,
@@ -17,7 +16,6 @@ const TAG_TYPES = {
     INT_ARRAY: 11,
     LONG_ARRAY: 12,
 };
-
 export class NBTParser {
     constructor(buffer, littleEndian = false) {
         this.buffer = buffer;
@@ -26,7 +24,6 @@ export class NBTParser {
         this.littleEndian = littleEndian;
         this.textDecoder = new TextDecoder(); // Single reusable instance
     }
-
     static decompress(buffer) {
         try {
             const view = new DataView(buffer);
@@ -45,7 +42,6 @@ export class NBTParser {
             return buffer; // Fallback to raw buffer
         }
     }
-
     static parse(buffer, littleEndian = false) {
         const decompressedBuffer = this.decompress(buffer);
         const parser = new NBTParser(decompressedBuffer, littleEndian);
@@ -57,7 +53,6 @@ export class NBTParser {
             );
         }
     }
-
     parseCompound(skipNameCheck = false) {
         const result = {};
         if (!skipNameCheck) {
@@ -94,7 +89,6 @@ export class NBTParser {
         }
         return result;
     }
-
     parseTagValue(tagType) {
         switch (tagType) {
             case TAG_TYPES.BYTE:

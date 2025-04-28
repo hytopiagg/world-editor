@@ -4,19 +4,14 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Box } from "@react-three/drei";
 import * as THREE from "three";
 
-// Order expected by Box geometry: +X (right), -X (left), +Y (top), -Y (bottom), +Z (front), -Z (back)
 const FACE_ORDER = ["right", "left", "top", "bottom", "front", "back"];
-
 const PreviewCube = ({ textureObjects }) => {
     const meshRef = useRef();
 
-    // Memoize the array of materials using the passed texture objects
     const materials = useMemo(() => {
         const fallbackTexture = textureObjects?.all; // Get the actual fallback texture object
-
         return FACE_ORDER.map((faceKey) => {
             const texture = textureObjects?.[faceKey] || fallbackTexture;
-
             return new THREE.MeshStandardMaterial({
                 map: texture, // Use the texture object directly
                 side: THREE.FrontSide,
@@ -27,19 +22,16 @@ const PreviewCube = ({ textureObjects }) => {
                 color: texture ? 0xffffff : 0xcccccc,
             });
         });
-        // Depend on the textureObjects state itself
-    }, [textureObjects]);
 
+    }, [textureObjects]);
     return <Box ref={meshRef} args={[1, 1, 1]} material={materials} />;
 };
-
 PreviewCube.propTypes = {
-    // Expects { all: THREE.Texture, top: THREE.Texture, ... }
+
     textureObjects: PropTypes.object.isRequired,
 };
-
 const BlockPreview3D = ({ textureObjects }) => {
-    // Keying the canvas might not be strictly necessary now, but doesn't hurt
+
     const previewKey = useMemo(
         () =>
             Object.values(textureObjects)
@@ -47,7 +39,6 @@ const BlockPreview3D = ({ textureObjects }) => {
                 .join("-"),
         [textureObjects]
     );
-
     return (
         <div className="block-preview-3d-container">
             <Canvas
@@ -64,9 +55,7 @@ const BlockPreview3D = ({ textureObjects }) => {
                     shadow-mapSize-height={1024}
                 />
                 <directionalLight position={[-5, -5, -5]} intensity={0.3} />
-
                 <PreviewCube textureObjects={textureObjects} />
-
                 <OrbitControls
                     enableZoom={true}
                     enablePan={false}
@@ -81,9 +70,7 @@ const BlockPreview3D = ({ textureObjects }) => {
         </div>
     );
 };
-
 BlockPreview3D.propTypes = {
     textureObjects: PropTypes.object.isRequired,
 };
-
 export default BlockPreview3D;

@@ -1,6 +1,5 @@
 import React from "react";
 import hytopiaLogo from "../../images/Hytopia_Tiny.png";
-
 const UnderConstruction = () => {
     return (
         <div className="under-construction-overlay">
@@ -20,5 +19,4 @@ const UnderConstruction = () => {
         </div>
     );
 };
-
 export default UnderConstruction;

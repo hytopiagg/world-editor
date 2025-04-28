@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import "../../css/DebugInfo.css";
-
 const DebugInfo = ({
     debugInfo,
     totalBlocks,
@@ -14,24 +13,20 @@ const DebugInfo = ({
     const [selectionDistance, setSelectionDistance] = useState(128);
     const [viewDistance, setViewDistance] = useState(128);
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
-
     const frameTimesRef = useRef([]);
     const lastTimeRef = useRef(performance.now());
     const frameRef = useRef(null);
-
     useEffect(() => {
-        // Initialize values from TerrainBuilder on mount
+
         if (terrainBuilderRef && terrainBuilderRef.current) {
             if (terrainBuilderRef.current.getViewDistance) {
                 setViewDistance(terrainBuilderRef.current.getViewDistance());
             }
-
             if (terrainBuilderRef.current.getSelectionDistance) {
                 setSelectionDistance(
                     terrainBuilderRef.current.getSelectionDistance()
                 );
             }
-
             if (terrainBuilderRef.current.isAutoSaveEnabled) {
                 setAutoSaveEnabled(
                     terrainBuilderRef.current.isAutoSaveEnabled()
@@ -39,53 +34,42 @@ const DebugInfo = ({
             }
         }
 
-        // Start measuring FPS
         frameRef.current = requestAnimationFrame(measureFps);
-
         return () => {
             if (frameRef.current) {
                 cancelAnimationFrame(frameRef.current);
             }
         };
     }, [terrainBuilderRef]);
-
     const measureFps = () => {
         const now = performance.now();
         const delta = now - lastTimeRef.current;
         lastTimeRef.current = now;
 
-        // Skip very large deltas (e.g., when tab is inactive)
         if (delta < 1000) {
             frameTimesRef.current.push(delta);
 
-            // Keep last 60 frames for averaging
             if (frameTimesRef.current.length > 60) {
                 frameTimesRef.current.shift();
             }
 
-            // Calculate average frame time
             const avg =
                 frameTimesRef.current.reduce((sum, time) => sum + time, 0) /
                 frameTimesRef.current.length;
             const currentFps = Math.round(1000 / avg);
             const currentFrameTime = avg;
 
-            // Update max frame time
             if (currentFrameTime > maxFrameTime) {
                 setMaxFrameTime(currentFrameTime);
             }
-
             setFps(currentFps);
             setFrameTime(currentFrameTime);
         }
-
         frameRef.current = requestAnimationFrame(measureFps);
     };
-
     const handleSelectionDistanceChange = (e) => {
         const newValue = parseInt(e.target.value);
         setSelectionDistance(newValue);
-
         if (
             terrainBuilderRef &&
             terrainBuilderRef.current &&
@@ -94,17 +78,14 @@ const DebugInfo = ({
             terrainBuilderRef.current.setSelectionDistance(newValue);
         }
     };
-
     const handleViewDistanceChange = (e) => {
         const newValue = parseInt(e.target.value);
         setViewDistance(newValue);
 
-        // Clear any previous update timeout
         if (handleViewDistanceChange.timeoutId) {
             clearTimeout(handleViewDistanceChange.timeoutId);
         }
 
-        // Update the UI immediately but debounce the actual terrain update
         handleViewDistanceChange.timeoutId = setTimeout(() => {
             if (
                 terrainBuilderRef &&
@@ -116,13 +97,10 @@ const DebugInfo = ({
         }, 50); // Short delay for smoother slider movement
     };
 
-    // Initialize the timeout property
     handleViewDistanceChange.timeoutId = null;
-
     const handleAutoSaveToggle = (e) => {
         const newValue = e.target.checked;
         setAutoSaveEnabled(newValue);
-
         if (
             terrainBuilderRef &&
             terrainBuilderRef.current &&
@@ -131,15 +109,12 @@ const DebugInfo = ({
             terrainBuilderRef.current.toggleAutoSave(newValue);
         }
     };
-
     const togglePerformanceDetails = () => {
         setShowPerformanceDetails(!showPerformanceDetails);
     };
-
     const resetMaxFrameTime = () => {
         setMaxFrameTime(0);
     };
-
     return (
         <div className="debug-info">
             <div className="debug-row">
@@ -158,7 +133,6 @@ const DebugInfo = ({
                     </b>
                 </span>
             </div>
-
             <div className="debug-row">
                 <span className="debug-label">Frame Time:</span>
                 <span className="debug-value">
@@ -175,7 +149,6 @@ const DebugInfo = ({
                     </b>
                 </span>
             </div>
-
             <div className="debug-row">
                 <span className="debug-label">Max Frame:</span>
                 <span className="debug-value">
@@ -199,7 +172,6 @@ const DebugInfo = ({
                     </button>
                 </span>
             </div>
-
             <div className="single-line"></div>
             <div className="debug-row">
                 <span className="debug-label">Preview Position:</span>
@@ -225,7 +197,6 @@ const DebugInfo = ({
                     <b>{totalEnvironmentObjects}</b>
                 </span>
             </div>
-
             <div className="single-line"></div>
             <div className="debug-row">
                 <span className="debug-label">View Distance:</span>
@@ -233,7 +204,6 @@ const DebugInfo = ({
                     <b>{viewDistance}</b> blocks
                 </span>
             </div>
-
             <div className="single-line"></div>
             <div className="debug-row performance-settings">
                 <span
@@ -243,7 +213,6 @@ const DebugInfo = ({
                 >
                     Performance Settings {showPerformanceDetails ? "▼" : "►"}
                 </span>
-
                 {showPerformanceDetails && (
                     <div className="debug-value performance-toggles">
                         <label className="toggle-label">
@@ -254,7 +223,6 @@ const DebugInfo = ({
                             />
                             Enable Auto-Save (5 min)
                         </label>
-
                         <div className="slider-container">
                             <span className="slider-label">
                                 Selection Distance: {selectionDistance}
@@ -269,7 +237,6 @@ const DebugInfo = ({
                                 className="range-slider"
                             />
                         </div>
-
                         <div className="slider-container">
                             <span className="slider-label">
                                 View Distance: {viewDistance}
@@ -290,5 +257,4 @@ const DebugInfo = ({
         </div>
     );
 };
-
 export default DebugInfo;

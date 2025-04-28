@@ -3,7 +3,6 @@
  * Manages block types, custom blocks, and block operations for the terrain builder
  */
 
-// Initialize blockTypesArray
 let blockTypesArray = (() => {
     const textureContext = require.context(
         "../../../public/assets/blocks",
@@ -13,20 +12,17 @@ let blockTypesArray = (() => {
     const texturePaths = textureContext.keys();
     const blockMap = new Map();
     let idCounter = 1;
-
     texturePaths.forEach((path) => {
-        // Skip environment and error textures
+
         if (path.includes("environment") || path.includes("error")) {
             return;
         }
-
         const match = path.match(/^\.\/(.+?)(\/[+-][xyz])?\.png$/);
         if (match) {
             const [, fullName, side] = match;
             const parts = fullName.split("/");
             const blockName =
                 parts.length > 1 ? parts[0] : fullName.replace(/\.[^/.]+$/, "");
-
             if (!blockMap.has(blockName)) {
                 blockMap.set(blockName, {
                     id: idCounter++,
@@ -35,7 +31,6 @@ let blockTypesArray = (() => {
                     sideTextures: {},
                 });
             }
-
             if (side) {
                 const sideKey = side.slice(1);
                 blockMap.get(blockName).sideTextures[sideKey] =
@@ -43,7 +38,6 @@ let blockTypesArray = (() => {
             }
         }
     });
-
     return Array.from(blockMap.values()).map((block) => ({
         ...block,
         isMultiTexture: Object.keys(block.sideTextures).length > 0,
@@ -51,7 +45,6 @@ let blockTypesArray = (() => {
         hasMissingTexture: block.textureUri === "./assets/blocks/error.png",
     }));
 })();
-
 /**
  * Add or update a custom block
  * @param {Object} block - The block to add or update
@@ -62,12 +55,10 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
     const blockId = parseInt(block.id);
     const ERROR_TEXTURE_PATH = "./assets/blocks/error.png";
 
-    // 1. Check if block already exists
     const existingIndex = blockTypesArray.findIndex((b) => b.id === blockId);
     const existingBlock =
         existingIndex >= 0 ? blockTypesArray[existingIndex] : null;
 
-    // 2. Check if existing block already has a loaded texture (data URI)
     if (
         existingBlock &&
         existingBlock.textureUri &&
@@ -79,11 +70,9 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         return blockTypesArray; // Skip processing
     }
 
-    // 3. Determine the texture URI to use
     let finalTextureUri = block.textureUri;
     let needsRegistryUpdate = false;
 
-    // Check if the incoming URI is a placeholder path (not a data URI)
     if (
         finalTextureUri &&
         !finalTextureUri.startsWith("data:image/") &&
@@ -92,8 +81,8 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         console.log(
             `Custom block ${blockId} has a placeholder URI: ${finalTextureUri}. Attempting to load from localStorage.`
         );
-        // It's likely a placeholder path like 'blocks/custom/MyBlock.png'
-        // Attempt to load the actual data URI from localStorage
+
+
         const storageKeys = [
             `block-texture-${blockId}`,
             `custom-block-${blockId}`,
@@ -111,7 +100,6 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
             }
         }
 
-        // 4. Use error texture if not found in localStorage
         if (foundDataUri) {
             finalTextureUri = foundDataUri;
             needsRegistryUpdate = true; // We found the data, need to register it
@@ -120,14 +108,14 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
                 `Data URI for custom block ${blockId} (${block.name}) not found in localStorage. Using error texture.`
             );
             finalTextureUri = ERROR_TEXTURE_PATH;
-            // Even with error texture, we might need to register it if the block is new
+
             needsRegistryUpdate = !existingBlock;
         }
     } else if (finalTextureUri && finalTextureUri.startsWith("data:image/")) {
-        // It's an incoming data URI, likely from a file upload or direct creation
+
         needsRegistryUpdate = true;
     } else if (!finalTextureUri) {
-        // No texture URI provided at all
+
         console.warn(
             `No texture URI provided for custom block ${blockId} (${block.name}). Using error texture.`
         );
@@ -135,7 +123,6 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         needsRegistryUpdate = !existingBlock;
     }
 
-    // Set default id if needed (only for truly new blocks, not updates)
     if (!block.id && !existingBlock) {
         const highestId = blockTypesArray
             .filter((b) => b.id >= 100)
@@ -143,14 +130,13 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         block.id = highestId + 1;
     }
 
-    // Ensure the block has required properties
     const processedBlock = {
         ...block, // Keep incoming properties like isMultiTexture, sideTextures
         id: parseInt(block.id), // Use the potentially generated ID
         name: block.name || `Custom Block ${block.id}`,
         textureUri: finalTextureUri, // Use the determined URI (data, placeholder, or error)
         sideTextures: block.sideTextures || {},
-        // Recalculate isMultiTexture based on final sideTextures
+
         isMultiTexture:
             block.sideTextures && Object.keys(block.sideTextures).length > 0,
         isCustom: true,
@@ -158,14 +144,12 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
             !finalTextureUri || finalTextureUri === ERROR_TEXTURE_PATH,
     };
 
-    // Update or add the block in our local array
     if (existingIndex >= 0) {
         blockTypesArray[existingIndex] = processedBlock;
     } else {
         blockTypesArray.push(processedBlock);
     }
 
-    // Register the block texture in the BlockTypeRegistry if needed
     if (needsRegistryUpdate && finalTextureUri) {
         try {
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
@@ -209,10 +193,8 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         }
     }
 
-    // Return the updated array
     return [...blockTypesArray];
 };
-
 /**
  * Process multiple custom blocks in batch for better performance
  * @param {Array<Object>} blocks - Array of blocks to process
@@ -223,9 +205,8 @@ const batchProcessCustomBlocks = async (blocks) => {
         return blockTypesArray;
     }
 
-    // Process each block locally without rebuilding the atlas
     const processedBlocks = blocks.map((block) => {
-        // Add block to our local registry first
+
         processCustomBlock(block, true); // defer atlas rebuild
         return {
             blockId: block.id || parseInt(block.id),
@@ -234,10 +215,9 @@ const batchProcessCustomBlocks = async (blocks) => {
         };
     });
 
-    // If we have the batch registration function available, use it
     if (window.batchRegisterCustomTextures) {
         try {
-            // This will register all textures and only rebuild the atlas once
+
             await window.batchRegisterCustomTextures(
                 processedBlocks.map((pb) => ({
                     blockId: pb.blockId,
@@ -249,10 +229,8 @@ const batchProcessCustomBlocks = async (blocks) => {
             console.error("Error in batch registering custom textures:", error);
         }
     }
-
     return [...blockTypesArray];
 };
-
 /**
  * Place a custom block in the world
  * @param {number} blockId - The block ID to place
@@ -262,23 +240,20 @@ const batchProcessCustomBlocks = async (blocks) => {
  * @returns {Promise<boolean>} - Success status
  */
 const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
-    // Get the block from our registry
-    const block = getBlockById(blockId);
 
+    const block = getBlockById(blockId);
     if (!block) {
         console.error(`Block with ID ${blockId} not found`);
         return false;
     }
-
     try {
-        // Check if we have the createBlockAt helper function
+
         if (window.createBlockAt) {
             return await window.createBlockAt(blockId, x, y, z);
         }
-        // Alternative: Try to use terrainBuilderRef directly
+
         else if (window.terrainBuilderRef && window.terrainBuilderRef.current) {
             const terrainBuilder = window.terrainBuilderRef.current;
-
             if (terrainBuilder.fastUpdateBlock) {
                 terrainBuilder.fastUpdateBlock({ x, y, z }, blockId);
                 return true;
@@ -286,7 +261,6 @@ const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
                 const position = `${x},${y},${z}`;
                 const blocks = {};
                 blocks[position] = blockId;
-
                 terrainBuilder.updateTerrainBlocks(
                     blocks,
                     {},
@@ -296,7 +270,6 @@ const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
             } else if (terrainBuilder.buildUpdateTerrain) {
                 const blockData = {};
                 blockData[`${x},${y},${z}`] = blockId;
-
                 terrainBuilder.buildUpdateTerrain({ blocks: blockData });
                 return true;
             } else {
@@ -316,35 +289,29 @@ const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
         return false;
     }
 };
-
 /**
  * Remove a custom block by ID
  * @param {number} blockIdToRemove - The ID of the block to remove
  * @returns {Array} - The updated block types array
  */
 const removeCustomBlock = (blockIdToRemove) => {
-    // Ensure blockIdToRemove is a number
+
     const id = parseInt(blockIdToRemove);
 
-    // Only allow removing custom blocks (ID >= 100)
     if (id < 100) {
         console.warn("Cannot remove built-in blocks");
         return blockTypesArray;
     }
 
-    // Remove the block
     blockTypesArray = blockTypesArray.filter((block) => block.id !== id);
 
-    // Return the updated array
     return [...blockTypesArray];
 };
-
 /**
  * Get all block types
  * @returns {Array} - All block types
  */
 const getBlockTypes = () => blockTypesArray;
-
 /**
  * Get only custom blocks (ID >= 100)
  * @returns {Array} - Custom blocks
@@ -352,7 +319,6 @@ const getBlockTypes = () => blockTypesArray;
 const getCustomBlocks = () => {
     return blockTypesArray.filter((block) => block.id >= 100);
 };
-
 /**
  * Search blocks by name or ID
  * @param {string} query - Search query
@@ -360,17 +326,14 @@ const getCustomBlocks = () => {
  */
 const searchBlocks = (query) => {
     if (!query) return blockTypesArray;
-
     const lowerQuery = query.toLowerCase();
     const queryNum = parseInt(query);
-
     return blockTypesArray.filter(
         (block) =>
             block.name.toLowerCase().includes(lowerQuery) ||
             block.id === queryNum
     );
 };
-
 /**
  * Get a block by ID
  * @param {number} id - Block ID
@@ -379,7 +342,6 @@ const searchBlocks = (query) => {
 const getBlockById = (id) => {
     return blockTypesArray.find((block) => block.id === parseInt(id));
 };
-
 /**
  * Check if a block is a custom block
  * @param {number} id - Block ID
@@ -389,9 +351,7 @@ const isCustomBlock = (id) => {
     return parseInt(id) >= 100;
 };
 
-// Export a reference to the array for direct access when needed
 const blockTypes = blockTypesArray;
-
 export {
     blockTypes,
     blockTypesArray,
@@ -406,7 +366,6 @@ export {
     placeCustomBlock,
 };
 
-// Expose useful functions to the window object
 if (typeof window !== "undefined") {
     window.placeCustomBlock = placeCustomBlock;
     window.batchProcessCustomBlocks = batchProcessCustomBlocks;

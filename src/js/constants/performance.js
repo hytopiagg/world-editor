@@ -1,4 +1,4 @@
-// Performance settings
+
 export const PERFORMANCE_SETTINGS = {
     maxChunksPerFrame: 5,
     objectPooling: true,
@@ -6,7 +6,6 @@ export const PERFORMANCE_SETTINGS = {
     shadowDistance: 96,
 };
 
-// Texture Atlas settings
 export const TEXTURE_ATLAS_SETTINGS = {
     batchedChunkRebuilding: true,
     maxConcurrentChunkRebuilds: 64,
@@ -16,10 +15,8 @@ export const TEXTURE_ATLAS_SETTINGS = {
     useTextureAtlas: false,
 };
 
-// Flag to indicate that meshes need to be refreshed
 let _meshesNeedRefresh = false;
 
-// Create a meshesNeedsRefresh object that works as both property and function
 export const meshesNeedsRefresh = function (value) {
     if (value !== undefined) {
         _meshesNeedRefresh = Boolean(value);
@@ -27,7 +24,6 @@ export const meshesNeedsRefresh = function (value) {
     return _meshesNeedRefresh;
 };
 
-// Define a value property that can be set directly
 Object.defineProperty(meshesNeedsRefresh, "value", {
     get: function () {
         return _meshesNeedRefresh;
@@ -37,9 +33,7 @@ Object.defineProperty(meshesNeedsRefresh, "value", {
     },
 });
 
-// Texture atlas settings getters/setters
 export const getTextureAtlasSettings = () => TEXTURE_ATLAS_SETTINGS;
-
 export const setTextureAtlasSetting = (setting, value) => {
     if (setting in TEXTURE_ATLAS_SETTINGS) {
         TEXTURE_ATLAS_SETTINGS[setting] = value;

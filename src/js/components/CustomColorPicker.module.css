@@ -6,20 +6,17 @@
     width: 110px; /* Slightly wider */
     font-size: 13px; /* Slightly larger font */
 }
-
 .inputRow {
     display: flex;
     align-items: center;
     gap: 6px;
 }
-
 .label {
     width: 20px; /* Wider label */
     text-align: right;
     font-variant-numeric: tabular-nums;
     color: var(--spectrum-alias-label-text-color, #555);
 }
-
 /* New wrapper to group input and buttons */
 .inputWrapper {
     display: flex;
@@ -27,7 +24,6 @@
     position: relative; /* For positioning buttons */
     align-items: center;
 }
-
 .numberInput,
 .hexInput {
     /* flex-grow: 1; /* Input itself doesn't need to grow if wrapper does */
@@ -48,8 +44,6 @@
   -webkit-appearance: none;
   margin: 0;
 }
-
-
 /* Style for the container of the stepper buttons */
 .stepperButtons {
     display: flex;
@@ -60,7 +54,6 @@
     bottom: 1px;        /* Align bottom */
     justify-content: center; /* Center buttons vertically */
 }
-
 /* Style for individual stepper buttons */
 .stepperButton {
     background-color: #eee;
@@ -85,24 +78,17 @@
 .stepperButton:last-child {
      border-radius: 0 0 2px 0;
 }
-
-
 .stepperButton:hover {
     background-color: #ddd;
 }
-
 .stepperButton:active {
     background-color: #ccc;
 }
-
-
 .hexInput {
     font-family: monospace;
      padding-right: 5px; /* Reset padding for hex input */
      -moz-appearance: initial; /* Ensure hex doesn't hide anything */
 }
-
-
 .separator {
     height: 1px;
     background-color: var(--spectrum-alias-border-color-default, #ddd);

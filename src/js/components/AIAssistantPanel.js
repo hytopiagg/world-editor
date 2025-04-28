@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import "../../css/AIAssistantPanel.css";
-
 const AIAssistantPanel = ({
     getAvailableBlocks,
     loadAISchematic,
@@ -15,34 +14,32 @@ const AIAssistantPanel = ({
     const [captchaError, setCaptchaError] = useState(null);
     const hCaptchaRef = useRef(null);
 
-    // <<< Add useEffect to load saved schematics >>>
     useEffect(() => {
         const loadSavedSchematics = async () => {
             try {
                 const { DatabaseManager, STORES } = await import(
                     "../DatabaseManager"
                 );
-                // We need to iterate like terrain since keys are prompts
+
                 const db = await DatabaseManager.getDBConnection();
                 const tx = db.transaction(STORES.SCHEMATICS, "readonly");
                 const store = tx.objectStore(STORES.SCHEMATICS);
                 const cursorRequest = store.openCursor();
                 const loadedHistory = [];
-
                 cursorRequest.onsuccess = (event) => {
                     const cursor = event.target.result;
                     if (cursor) {
-                        // key is the prompt, value is the schematic
+
                         loadedHistory.push({
                             prompt: cursor.key,
                             schematic: cursor.value,
                         });
                         cursor.continue();
                     } else {
-                        // Done iterating
+
                         if (loadedHistory.length > 0) {
-                            // Sort by timestamp if available, or just keep load order
-                            // Assuming schematic object *might* have a timestamp later
+
+
                             loadedHistory.sort(
                                 (a, b) =>
                                     (b.schematic.timestamp || 0) -
@@ -68,33 +65,27 @@ const AIAssistantPanel = ({
                 );
             }
         };
-
         if (isVisible) {
-            // Only load when panel becomes visible
+
             loadSavedSchematics();
         }
     }, [isVisible]); // Re-load if visibility changes
-    // <<< End useEffect >>>
 
     const handleGenerate = useCallback(async () => {
         if (!prompt.trim() || isLoading) return;
-
         setIsLoading(true);
         setError(null);
         setCaptchaError(null);
-
         if (!hCaptchaToken) {
             setCaptchaError("Please complete the CAPTCHA verification.");
             setIsLoading(false);
             return;
         }
-
         try {
             const availableBlocks = await getAvailableBlocks();
             if (!availableBlocks || availableBlocks.length === 0) {
                 throw new Error("Could not retrieve available block types.");
             }
-
             const response = await fetch(
                 `${process.env.REACT_APP_API_URL}/generate_building`,
                 {
@@ -109,32 +100,27 @@ const AIAssistantPanel = ({
                     }),
                 }
             );
-
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(
                     errorData.error || "Failed to generate building"
                 );
             }
-
             const schematic = await response.json();
-
             if (schematic && Object.keys(schematic).length > 0) {
                 const newHistoryEntry = { prompt, schematic };
                 setGenerationHistory((prevHistory) => [
                     newHistoryEntry,
                     ...prevHistory,
                 ]);
-
                 loadAISchematic(schematic);
 
-                // <<< Add saving logic >>>
                 try {
-                    // Import DatabaseManager and STORES if not already imported
+
                     const { DatabaseManager, STORES } = await import(
                         "../DatabaseManager"
                     );
-                    // Use prompt as key for now, might overwrite duplicates
+
                     await DatabaseManager.saveData(
                         STORES.SCHEMATICS,
                         prompt,
@@ -148,9 +134,9 @@ const AIAssistantPanel = ({
                         "[AI Panel] Error saving schematic to DB:",
                         dbError
                     );
-                    // Optionally inform the user of the save error?
+
                 }
-                // <<< End saving logic >>>
+
             } else {
                 setError("AI could not generate a structure for this prompt.");
             }
@@ -165,11 +151,9 @@ const AIAssistantPanel = ({
             }
         }
     }, [prompt, isLoading, getAvailableBlocks, loadAISchematic, hCaptchaToken]);
-
     if (!isVisible) {
         return null;
     }
-
     return (
         <div className="ai-assistant-panel">
             <h4>AI Building Assistant</h4>
@@ -188,7 +172,6 @@ const AIAssistantPanel = ({
                 {isLoading ? "Generating..." : "Generate Structure"}
             </button>
             {error && <div className="ai-assistant-error">{error}</div>}
-
             {/* Added HCaptcha Component - Wrapped for styling */}
             {/* <div className="ai-assistant-captcha-container"> */}
             <HCaptcha
@@ -212,7 +195,6 @@ const AIAssistantPanel = ({
             {captchaError && (
                 <div className="ai-assistant-error">{captchaError}</div>
             )}
-
             {/* Added History Section */}
             {generationHistory.length > 0 && (
                 <div className="ai-assistant-history-list">
@@ -232,5 +214,4 @@ const AIAssistantPanel = ({
         </div>
     );
 };
-
 export default AIAssistantPanel;

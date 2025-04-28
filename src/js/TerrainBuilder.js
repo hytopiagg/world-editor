@@ -462,7 +462,6 @@ function TerrainBuilder(
      * @param {number} options.deferredBuildDelay - Delay in ms before building deferred chunks
      * @param {Object} options.blocks - Blocks to use (if not provided, uses terrainRef.current)
      */
-
     const buildUpdateTerrain = async (options = {}) => {
         console.time("buildUpdateTerrain");
         const useProvidedBlocks =
@@ -545,7 +544,6 @@ function TerrainBuilder(
             console.timeEnd("buildUpdateTerrain");
         }
     };
-
     const fastUpdateBlock = (position, blockId) => {
         if (!position) return;
         const x = Math.round(position[0] || position.x);
@@ -591,7 +589,6 @@ function TerrainBuilder(
             updateSpatialHashForBlocks(blockArray, [], { force: true });
         }
     };
-
     const handleMouseDown = (e) => {
         const isToolActive =
             toolManagerRef.current && toolManagerRef.current.getActiveTool();
@@ -645,7 +642,6 @@ function TerrainBuilder(
             }
         }
     };
-
     const handleBlockPlacement = () => {
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             return;
@@ -773,7 +769,6 @@ function TerrainBuilder(
             isFirstBlockRef.current = false;
         }
     };
-
     const getRaycastIntersection = () => {
         if (!scene || !threeCamera || !threeRaycaster) return null;
         const normalizedMouse = pointer.clone();
@@ -819,7 +814,6 @@ function TerrainBuilder(
         }
         return intersection;
     };
-
     const updatePreviewPosition = () => {
         if (updatePreviewPosition.isProcessing) {
             return;
@@ -978,9 +972,7 @@ function TerrainBuilder(
         }
         updatePreviewPosition.isProcessing = false;
     };
-
     updatePreviewPosition.isProcessing = false;
-    
     const handleMouseUp = (e) => {
         const t0 = performance.now();
         const isToolActive =
@@ -1054,7 +1046,6 @@ function TerrainBuilder(
             recentlyPlacedBlocksRef.current.clear();
         }
     };
-
     const getPlacementPositions = (centerPos, placementSize) => {
         const positions = [];
         positions.push({ ...centerPos });
@@ -1065,11 +1056,9 @@ function TerrainBuilder(
         }
         return positions;
     };
-
     const getCurrentTerrainData = () => {
         return terrainRef.current;
     };
-
     const updateTerrainFromToolBar = (terrainData) => {
         loadingManager.showLoading("Starting Minecraft map import...", 0);
         terrainRef.current = terrainData;
@@ -1166,7 +1155,6 @@ function TerrainBuilder(
             loadingManager.hideLoading();
         }
     };
-
     const updateGridSize = (newGridSize) => {
         if (gridRef.current) {
             let gridSizeToUse;
@@ -1199,7 +1187,6 @@ function TerrainBuilder(
             }
         }
     };
-
     const updateDebugInfo = () => {
         setDebugInfo({
             preview: previewPositionRef.current,
@@ -1210,7 +1197,6 @@ function TerrainBuilder(
             sendTotalBlocks(totalBlocksRef.current);
         }
     };
-
     const clearMap = () => {
         window.IS_DATABASE_CLEARING = true;
         try {
@@ -1257,7 +1243,6 @@ function TerrainBuilder(
             window.IS_DATABASE_CLEARING = false;
         }
     };
-
     const initializeSpatialHash = async (
         forceUpdate = false,
         visibleOnly = false
@@ -1334,7 +1319,6 @@ function TerrainBuilder(
         firstLoadCompletedRef.current = true;
         return Promise.resolve();
     };
-
     useEffect(() => {
         const handleMouseMove = () => {
             if (mouseMoveAnimationRef.current) {
@@ -1353,25 +1337,20 @@ function TerrainBuilder(
             }
         };
     }, []);
-
     useEffect(() => {
         if (cameraReset) {
             cameraManager.resetCamera();
         }
     }, [cameraReset]);
-
     useEffect(() => {
         cameraManager.handleSliderChange(cameraAngle);
     }, [cameraAngle]);
-
     useEffect(() => {
         axisLockEnabledRef.current = axisLockEnabled;
     }, [axisLockEnabled]);
-
     useEffect(() => {
         updateGridSize(gridSize);
     }, [gridSize]);
-
     useEffect(() => {
         if (threeCamera) {
             threeCamera.frustumCulled = false;
@@ -1384,7 +1363,6 @@ function TerrainBuilder(
             });
         }
     }, [threeCamera, scene]);
-
     useEffect(() => {
         let mounted = true;
         function initialize() {
@@ -1585,7 +1563,6 @@ function TerrainBuilder(
             }
         };
     }, [threeCamera, scene]);
-
     useEffect(() => {
         if (undoRedoManager?.current && toolManagerRef.current) {
             try {
@@ -1615,7 +1592,6 @@ function TerrainBuilder(
             }
         }
     }, [undoRedoManager?.current]);
-
     useEffect(() => {
         const currentInstancedMeshes = instancedMeshRef.current;
         return () => {
@@ -1634,26 +1610,21 @@ function TerrainBuilder(
             }
         };
     }, [scene]); // Can't include safeRemoveFromScene due to function order
-
     useEffect(() => {
         if (meshesNeedsRefresh.value) {
             buildUpdateTerrain();
             meshesNeedsRefresh.value = false;
         }
     }, [meshesNeedsRefresh.value]); // Use meshesNeedsRefresh.value in the dependency array
-
     useEffect(() => {
         currentBlockTypeRef.current = currentBlockType;
     }, [currentBlockType]);
-
     useEffect(() => {
         modeRef.current = mode;
     }, [mode]);
-
     useEffect(() => {
         placementSizeRef.current = placementSize;
     }, [placementSize]);
-
     useEffect(() => {
         if (!scene || !gl) return;
         const handleTextureAtlasUpdate = (event) => {
@@ -1690,17 +1661,14 @@ function TerrainBuilder(
             );
         };
     }, [scene, gl, threeCamera]);
-
     useEffect(() => {
         if (scene && onSceneReady) {
             onSceneReady(scene);
         }
     }, [scene, onSceneReady]);
-
     const saveTerrainManually = () => {
         return efficientTerrainSave();
     };
-
     const setAutoSaveEnabled = (enabled) => {
         isAutoSaveEnabledRef.current = enabled;
         if (autoSaveIntervalRef.current) {
@@ -1731,7 +1699,6 @@ function TerrainBuilder(
         }
         return enabled;
     };
-
     useImperativeHandle(ref, () => ({
         buildUpdateTerrain,
         updateTerrainFromToolBar,
@@ -2022,7 +1989,6 @@ function TerrainBuilder(
             }
         },
     })); // This is the correct syntax with just one closing parenthesis
-
     useEffect(() => {
         const handleResize = () => {
             canvasRectRef.current = null; // Force recalculation on next update
@@ -2030,19 +1996,16 @@ function TerrainBuilder(
         window.addEventListener("resize", handleResize);
         return () => window.removeEventListener("resize", handleResize);
     }, []);
-
     const handleKeyDown = (event) => {
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             toolManagerRef.current.handleKeyDown(event);
         }
     };
-
     const handleKeyUp = (event) => {
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             toolManagerRef.current.handleKeyUp(event);
         }
     };
-
     useEffect(() => {
         window.addEventListener("keydown", handleKeyDown);
         window.addEventListener("keyup", handleKeyUp);
@@ -2051,7 +2014,6 @@ function TerrainBuilder(
             window.removeEventListener("keyup", handleKeyUp);
         };
     }, []);
-
     useEffect(() => {
         window.mouseButtons = 0;
         const updateMouseButtonsDown = (e) => {
@@ -2069,7 +2031,6 @@ function TerrainBuilder(
             document.removeEventListener("mouseleave", updateMouseButtonsUp);
         };
     }, []);
-
     useEffect(() => {
         return () => {
             if (toolManagerRef.current) {
@@ -2078,7 +2039,6 @@ function TerrainBuilder(
             }
         };
     }, []);
-
     const updateTerrainBlocks = (addedBlocks, removedBlocks, options = {}) => {
         if (!addedBlocks && !removedBlocks) return;
         addedBlocks = addedBlocks || {};
@@ -2174,7 +2134,6 @@ function TerrainBuilder(
         }
         console.timeEnd("updateTerrainBlocks");
     };
-
     const updateTerrainForUndoRedo = (
         addedBlocks,
         removedBlocks,
@@ -2261,7 +2220,6 @@ function TerrainBuilder(
         });
         console.timeEnd(`updateTerrainForUndoRedo-${source}`);
     };
-
     const getOptimizedRaycastIntersection = (prioritizeBlocks = true) => {
         if (!scene || !threeCamera || !threeRaycaster) return null;
         const normalizedMouse = pointer.clone();
@@ -2321,7 +2279,6 @@ function TerrainBuilder(
         }
         return intersection;
     };
-
     useEffect(() => {
         const canvas = gl.domElement;
         if (!canvas) return;
@@ -2338,10 +2295,8 @@ function TerrainBuilder(
             canvas.removeEventListener("mouseup", handleCanvasMouseUp);
         };
     }, [gl, handleMouseDown, handleMouseUp]); // Add dependencies
-
     const lastCameraPosition = new THREE.Vector3();
     const lastCameraRotation = new THREE.Euler();
-
     useEffect(() => {
         optimizeRenderer(gl);
         cameraManager.initialize(threeCamera, orbitControlsRef.current);
@@ -2409,14 +2364,12 @@ function TerrainBuilder(
             cancelAnimationFrame(frameId);
         };
     }, [gl]);
-
     const handleCameraMove = () => {
         if (!threeCamera) return;
         updateChunkSystemCamera(threeCamera);
         loadNewChunksInViewDistance();
         processChunkRenderQueue();
     };
-
     const loadNewChunksInViewDistance = () => {
         const chunkSystem = getChunkSystem();
         if (!chunkSystem || !threeCamera) {
@@ -2424,9 +2377,7 @@ function TerrainBuilder(
         }
         processChunkRenderQueue();
     };
-
     handleCameraMove.lastUpdateTime = 0;
-
     const updateSpatialHashForBlocks = (
         addedBlocks = [],
         removedBlocks = [],
@@ -2704,7 +2655,6 @@ function TerrainBuilder(
             console.error("Error updating spatial hash:", e);
         }
     };
-
     const applyDeferredSpatialHashUpdates = async () => {
         if (
             pendingSpatialHashUpdatesRef.current.added.length === 0 &&
@@ -2717,11 +2667,9 @@ function TerrainBuilder(
         pendingSpatialHashUpdatesRef.current = { added: [], removed: [] };
         return updateSpatialHashForBlocks(added, removed, { force: true });
     };
-
     useEffect(() => {
         cameraManager.setInputDisabled(isInputDisabled);
     }, [isInputDisabled]);
-
     return (
         <>
             <OrbitControls
@@ -2816,9 +2764,7 @@ function TerrainBuilder(
         </>
     );
 }
-
 export default forwardRef(TerrainBuilder);
-
 export {
     blockTypes,
     getBlockTypes,
@@ -2841,7 +2787,6 @@ const setDeferredChunkMeshing = (defer) => {
     chunkSystem.setBulkLoadingMode(defer, priorityDistance);
     return true;
 };
-
 /**
  * Force an update for specific chunks by key
  * @param {Array<String>} chunkKeys - Array of chunk keys to update, e.g. ["32,48,0", "16,48,0"]
@@ -2855,7 +2800,6 @@ const forceChunkUpdate = (chunkKeys, options = {}) => {
     }
     chunkSystem.forceUpdateChunks(chunkKeys, options);
 };
-
 /**
  * Force update a chunk by its origin
  * @param {Array} chunkOrigin - Array with the chunk's origin coordinates [x, y, z]
@@ -2872,7 +2816,6 @@ const forceChunkUpdateByOrigin = (chunkOrigin, options = {}) => {
     const chunkId = `${chunkOrigin[0]},${chunkOrigin[1]},${chunkOrigin[2]}`;
     chunkSystem.forceUpdateChunks([chunkId], { skipNeighbors });
 };
-
 /**
  * Configure chunk loading behavior
  * @param {Object} options Configuration options
@@ -2898,7 +2841,6 @@ const configureChunkLoading = (options = {}) => {
     }
     return true;
 };
-
 export {
     configureChunkLoading,
     forceChunkUpdate,
@@ -2906,7 +2848,6 @@ export {
     loadAllChunks,
     setDeferredChunkMeshing,
 };
-
 const loadAllChunks = async () => {
     const chunkSystem = getChunkSystem();
     if (!chunkSystem) {

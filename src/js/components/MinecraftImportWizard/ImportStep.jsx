@@ -1,24 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { MinecraftToHytopiaConverter } from "../../utils/MinecraftToHytopiaConverter";
 import { processCustomBlock, getCustomBlocks } from "../../TerrainBuilder";
-
 const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
     const [importing, setImporting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState(null);
     const [error, setError] = useState(null);
 
-    // Get selectedRegion from worldData
     const selectedRegion = worldData?.selectedRegion;
 
-    // Count stats for display
     const blockTypeCount = Object.keys(blockMappings).length;
     const mappedBlockTypes = Object.values(blockMappings).filter(
         (m) => m.action !== "skip"
     ).length;
     const skippedBlockTypes = blockTypeCount - mappedBlockTypes;
 
-    // Calculate potential block count in the selected region
     const regionWidth = selectedRegion
         ? selectedRegion.maxX - selectedRegion.minX + 1
         : 0;
@@ -29,21 +25,17 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
         ? selectedRegion.maxZ - selectedRegion.minZ + 1
         : 0;
     const potentialBlockCount = regionWidth * regionHeight * regionDepth;
-
     useEffect(() => {
-        // Auto-start the import when this step is shown
+
         handleStartImport();
     }, []);
-
     const handleStartImport = async () => {
         if (importing) return;
-
         setImporting(true);
         setProgress(0);
         setError(null);
-
         try {
-            // Process any custom textures first (in parallel for efficiency)
+
             const customMappings = Object.entries(blockMappings)
                 .filter(([_, mapping]) => mapping.action === "custom")
                 .map(([blockType, mapping]) => ({
@@ -52,26 +44,23 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
                     textureUri: mapping.customTexture,
                     customTextureId: mapping.customTextureId,
                 }));
-
             if (customMappings.length > 0) {
                 console.log("Processing custom textures:", customMappings);
 
-                // Process custom textures in parallel for better performance
                 await Promise.all(
                     customMappings.map(async (mapping) => {
-                        // Only process if it has a texture URI
+
                         if (mapping.textureUri) {
-                            // Check if this custom texture already exists
+
                             const existingCustomBlocks = getCustomBlocks();
                             const existingBlock = existingCustomBlocks.find(
                                 (block) => block.id === mapping.customTextureId
                             );
-
                             if (!existingBlock) {
                                 console.log(
                                     `Processing custom texture for ${mapping.blockType}`
                                 );
-                                // Process the custom block to ensure it exists
+
                                 await processCustomBlock({
                                     id: mapping.customTextureId,
                                     name: mapping.name,
@@ -88,33 +77,26 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
                 );
             }
 
-            // Create converter with optimized settings
             const converter = new MinecraftToHytopiaConverter(
                 worldData,
                 worldData.selectedRegion,
                 blockMappings
             );
 
-            // Set progress callback to update both our component state and the loading manager
             converter.setProgressCallback((percent) => {
-                // Only update UI when progress changes significantly
+
                 if (percent - progress >= 2 || percent === 100) {
                     setProgress(percent);
                 }
             });
 
-            // Display a console time log for performance monitoring
             console.time("Minecraft map conversion");
 
-            // Start conversion
             const conversionResult = await converter.convert();
-
             console.timeEnd("Minecraft map conversion");
 
-            // Set result
             setResult(conversionResult);
 
-            // Call onImportComplete with result
             onImportComplete(conversionResult);
         } catch (err) {
             console.error("Import error:", err);
@@ -132,7 +114,6 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
         }
     };
 
-    // Helper function to format block names
     const formatBlockName = (mcBlockName) => {
         return mcBlockName
             .replace("minecraft:", "")
@@ -140,11 +121,9 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
             .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
             .join(" ");
     };
-
     return (
         <div className="import-step">
             <h3>Import Minecraft Map</h3>
-
             {/* Progress indicator - now at the top */}
             {importing && (
                 <div className="import-progress">
@@ -161,7 +140,6 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
                     </p>
                 </div>
             )}
-
             <div className="import-summary">
                 <p>
                     Selected region: {regionWidth}×{regionHeight}×{regionDepth}{" "}
@@ -176,7 +154,6 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
                     {potentialBlockCount.toLocaleString()}
                 </p>
             </div>
-
             {result && (
                 <div className="import-result">
                     <div className="success-message">
@@ -189,7 +166,6 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
                             blocks.
                         </p>
                     </div>
-
                     <div className="stats-container">
                         <h4>Import Statistics</h4>
                         <div className="stats-item">
@@ -233,7 +209,6 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
                             </div>
                         )}
                     </div>
-
                     <div className="world-bounds-info">
                         <h4>Map Placement in World</h4>
                         <p>
@@ -300,7 +275,6 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
                     </div>
                 </div>
             )}
-
             {error && (
                 <div className="error-message">
                     <h4>Import Failed</h4>
@@ -316,5 +290,4 @@ const ImportStep = ({ worldData, blockMappings, onImportComplete }) => {
         </div>
     );
 };
-
 export default ImportStep;

@@ -74,23 +74,18 @@ const ToolBar = ({
         clearMap: false,
     });
 
-    // Add state for undo/redo button availability
     const [canUndo, setCanUndo] = useState(true);
     const [canRedo, setCanRedo] = useState(false);
 
-    // Add state for active tool tracking
     const [activeTool, setActiveTool] = useState(null);
 
-    // Add state for Minecraft import modal
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
-
     let startPos = {
         x: 0,
         y: 0,
         z: 0,
     };
-
     const handleGenerateBlocks = () => {
         if (currentBlockType.id > 199) {
             alert(
@@ -98,15 +93,12 @@ const ToolBar = ({
             );
             return;
         }
-
         const { width, length, height } = dimensions;
 
-        // Validate dimensions
         if (width <= 0 || length <= 0 || height <= 0) {
             alert("Dimensions must be greater than 0");
             return;
         }
-
         console.log("Generating blocks with dimensions:", {
             width,
             length,
@@ -114,22 +106,18 @@ const ToolBar = ({
         });
         console.log("Current block type:", currentBlockType);
 
-        // Get current terrain data directly from TerrainBuilder
         const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
-
         console.log(
             "Initial terrain data count:",
             Object.keys(terrainData).length
         );
 
-        // Count how many blocks we're adding
         let blocksAdded = 0;
         startPos = {
             x: -width / 2,
             y: 0,
             z: -length / 2,
         };
-
         for (let x = 0; x < width; x++) {
             for (let y = 0; y < height; y++) {
                 for (let z = 0; z < length; z++) {
@@ -139,21 +127,18 @@ const ToolBar = ({
                         z: startPos.z + z,
                     };
 
-                    // Add block to terrain data
                     const key = `${position.x},${position.y},${position.z}`;
                     terrainData[key] = currentBlockType.id;
                     blocksAdded++;
                 }
             }
         }
-
         console.log(`Added ${blocksAdded} blocks to terrain data`);
         console.log(
             "Final terrain data count:",
             Object.keys(terrainData).length
         );
 
-        // Update terrain directly in TerrainBuilder
         console.log("Calling updateTerrainFromToolBar");
         if (terrainBuilderRef.current) {
             terrainBuilderRef.current.updateTerrainFromToolBar(terrainData);
@@ -161,10 +146,8 @@ const ToolBar = ({
         } else {
             console.error("terrainBuilderRef.current is null or undefined");
         }
-
         setShowDimensionsModal(false);
     };
-
     const handleGenerateBorder = () => {
         if (currentBlockType.id > 199) {
             alert(
@@ -172,36 +155,31 @@ const ToolBar = ({
             );
             return;
         }
-
         const { width, length, height } = borderDimensions;
 
-        // Validate dimensions
         if (width <= 0 || length <= 0 || height <= 0) {
             alert("Border dimensions must be greater than 0");
             return;
         }
-
         startPos = {
             x: -width / 2,
             y: 0,
             z: -length / 2,
         };
 
-        // Get current terrain data directly from TerrainBuilder
         const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
 
-        // Generate the border blocks
         for (let x = 0; x < width; x++) {
             for (let y = 0; y < height; y++) {
                 for (let z = 0; z < length; z++) {
-                    // Only add blocks that form the outer shell
+
                     if (
                         x === 0 ||
                         x === width - 1 ||
                         z === 0 ||
                         z === length - 1
                     ) {
-                        // Add blocks for all Y positions on outer edges
+
                         const position = {
                             x: startPos.x + x,
                             y: startPos.y + y,
@@ -214,22 +192,18 @@ const ToolBar = ({
             }
         }
 
-        // Update terrain directly in TerrainBuilder
         if (terrainBuilderRef.current) {
             terrainBuilderRef.current.updateTerrainFromToolBar(terrainData);
         }
-
         setShowBorderModal(false);
     };
-
     const handleClearMap = () => {
-        // Deactivate any active tool
+
         if (activeTool) {
             terrainBuilderRef.current?.activateTool(null);
             setActiveTool(null);
         }
 
-        // Confirm before clearing
         if (
             window.confirm(
                 "Are you sure you want to clear the map? This cannot be undone."
@@ -238,7 +212,6 @@ const ToolBar = ({
             terrainBuilderRef.current?.clearMap();
         }
     };
-
     const generateTerrain = () => {
         if (currentBlockType.id > 199) {
             alert(
@@ -247,14 +220,11 @@ const ToolBar = ({
             return;
         }
 
-        // Get current terrain data or start with empty object if clearing map
         let terrainData = terrainSettings.clearMap
             ? {}
             : terrainBuilderRef.current.getCurrentTerrainData();
-
         const { width, length, height, roughness } = terrainSettings;
 
-        // Generate base noise with fixed parameters
         const baseNoiseMap = generatePerlinNoise(width, length, {
             octaveCount: 4,
             amplitude: 1,
@@ -262,40 +232,34 @@ const ToolBar = ({
             scale: 0.1, // Base scale for all terrain types
         });
 
-        // Center the terrain around origin
         const startX = -Math.floor(width / 2);
         const startZ = -Math.floor(length / 2);
 
-        // Calculate smoothing factor (0 = roughest, 1 = smoothest)
         const smoothingFactor = roughness / 30; // Now 70 = smoothest (2.33), 100 = roughest (3.33)
 
-        // Generate terrain based on noise
         for (let x = 0; x < width; x++) {
             for (let z = 0; z < length; z++) {
-                // Get base noise value (0-1)
+
                 const baseNoiseValue = baseNoiseMap[z * width + x];
 
-                // Apply smoothing based on roughness setting
-                // For rough terrain: use the raw noise value with exaggeration
-                // For smooth terrain: apply averaging with neighbors
-                let finalNoiseValue;
 
+
+                let finalNoiseValue;
                 if (smoothingFactor > 3.0) {
-                    // Roughest terrain - exaggerate the noise to create more dramatic peaks and valleys
+
                     finalNoiseValue = Math.pow(baseNoiseValue, 0.6);
                 } else if (smoothingFactor > 2.7) {
-                    // Medium-rough terrain - slight exaggeration
+
                     finalNoiseValue = Math.pow(baseNoiseValue, 0.8);
                 } else if (smoothingFactor > 2.5) {
-                    // Medium terrain - use raw noise
+
                     finalNoiseValue = baseNoiseValue;
                 } else {
-                    // Smooth terrain - use neighborhood averaging
+
                     let neighborSum = 0;
                     let neighborCount = 0;
 
-                    // Sample neighboring points in a radius based on smoothness
-                    // Smoother = larger radius
+
                     const radius = Math.floor(15 - smoothingFactor * 4);
                     for (
                         let nx = Math.max(0, x - radius);
@@ -307,7 +271,7 @@ const ToolBar = ({
                             nz <= Math.min(length - 1, z + radius);
                             nz++
                         ) {
-                            // Weight by distance (closer points matter more)
+
                             const dist = Math.sqrt(
                                 Math.pow(nx - x, 2) + Math.pow(nz - z, 2)
                             );
@@ -320,42 +284,33 @@ const ToolBar = ({
                         }
                     }
 
-                    // Create smooth terrain
                     finalNoiseValue = neighborSum / neighborCount;
                 }
 
-                // FIX: Scale to desired height range (1 to max height)
-                // Map 0-1 to 1-height
+
                 const terrainHeight = Math.max(
                     1,
                     Math.floor(1 + finalNoiseValue * (height - 1))
                 );
 
-                // Place blocks from y=0 up to calculated height
                 for (let y = 0; y < terrainHeight; y++) {
                     const worldX = startX + x;
                     const worldZ = startZ + z;
-
                     const key = `${worldX},${y},${worldZ}`;
 
-                    // Use current block type for all blocks
                     terrainData[key] = currentBlockType.id;
                 }
             }
         }
-
         console.log(
             `Generated terrain: ${width}x${length} with height range 1-${height}, roughness: ${roughness}`
         );
 
-        // Update terrain directly in TerrainBuilder
         if (terrainBuilderRef.current) {
             terrainBuilderRef.current.updateTerrainFromToolBar(terrainData);
         }
-
         setShowTerrainModal(false);
     };
-
     const handleExportMap = () => {
         try {
             exportMapFile(terrainBuilderRef);
@@ -364,14 +319,12 @@ const ToolBar = ({
             alert("Error exporting map. Please try again.");
         }
     };
-
     const applyNewGridSize = async (newGridSize) => {
         if (newGridSize > 10) {
-            // Update App.js state with new grid size
+
             setGridSize(newGridSize);
 
-            // Use TerrainBuilder's updateGridSize method to ensure consistent behavior
-            // This will also update localStorage internally
+
             if (
                 terrainBuilderRef.current &&
                 terrainBuilderRef.current.updateGridSize
@@ -381,20 +334,18 @@ const ToolBar = ({
                 );
                 terrainBuilderRef.current.updateGridSize(newGridSize);
             } else {
-                // Fallback if the method is not available
+
                 console.warn(
                     "TerrainBuilder updateGridSize method not available, using fallback"
                 );
                 localStorage.setItem("gridSize", newGridSize.toString());
             }
-
             setShowGridSizeModal(false);
         } else {
             alert("Grid size must be greater than 10");
         }
     };
 
-    // Add effect to check undo/redo availability
     useEffect(() => {
         const checkUndoRedoAvailability = async () => {
             const undoStates =
@@ -404,64 +355,58 @@ const ToolBar = ({
             setCanUndo(undoStates.length > 0);
             setCanRedo(redoStates.length > 0);
         };
-
         checkUndoRedoAvailability();
-        // Set up an interval to check periodically
+
         const interval = setInterval(checkUndoRedoAvailability, 1000);
         return () => clearInterval(interval);
     }, []);
 
-    // Add console logs to debug import handlers
     const onMapFileSelected = (event) => {
         console.log("Map file selected:", event.target.files[0]);
         if (event.target.files && event.target.files[0]) {
-            // Import the file
+
             importMap(
                 event.target.files[0],
                 terrainBuilderRef,
                 environmentBuilderRef
             )
                 .then(() => {
-                    // Reset the file input value after successful import
-                    // This allows the same file to be imported again
+
+
                     event.target.value = "";
                     console.log("Reset file input after successful import");
                 })
                 .catch((error) => {
-                    // Also reset on error to allow retry
+
                     event.target.value = "";
                     console.error("Error during import:", error);
                 });
         }
     };
 
-    // Add a handler for modal overlay clicks
     const handleModalOverlayClick = (e, setModalVisibility) => {
-        // Only close if the click was directly on the overlay (not on the modal content)
+
         if (e.target.className === "modal-overlay") {
             setModalVisibility(false);
         }
     };
 
-    // Add function to toggle tools
     const handleToolToggle = (toolName) => {
         if (activeTool === toolName) {
-            // Deactivate the current tool
+
             terrainBuilderRef.current?.activateTool(null);
             setActiveTool(null);
         } else {
-            // Activate the requested tool
+
             const success = terrainBuilderRef.current?.activateTool(toolName);
             if (success) {
                 setActiveTool(toolName);
 
-                // Special handling for wall tool to ensure it has undoRedoManager
                 if (toolName === "wall" && undoRedoManager) {
                     console.log(
                         "ToolBar: Ensuring WallTool has undoRedoManager reference"
                     );
 
-                    // Get the tool and update its undoRedoManager reference
                     const wallTool =
                         terrainBuilderRef.current?.toolManagerRef?.current
                             ?.tools?.["wall"];
@@ -479,18 +424,15 @@ const ToolBar = ({
         }
     };
 
-    // Update handleModeChange to deactivate tools when switching modes
     const handleModeChangeWithToolReset = (newMode) => {
-        // Deactivate any active tool
+
         if (activeTool) {
             terrainBuilderRef.current?.activateTool(null);
             setActiveTool(null);
         }
 
-        // Call the original handleModeChange function
         handleModeChange(newMode);
     };
-
     return (
         <>
             <div className="controls-container">
@@ -538,7 +480,6 @@ const ToolBar = ({
                     </div>
                     <div className="control-label">Import</div>
                 </div>
-
                 <div className="control-group">
                     <div className="control-button-wrapper">
                         {!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
@@ -559,7 +500,6 @@ const ToolBar = ({
                     </div>
                     <div className="control-label">Export</div>
                 </div>
-
                 <div className="control-group">
                     <div className="control-button-wrapper">
                         <Tooltip text="Add blocks">
@@ -604,7 +544,6 @@ const ToolBar = ({
                                 {axisLockEnabled ? <FaLock /> : <FaLockOpen />}
                             </button>
                         </Tooltip>
-
                         <Tooltip text="Undo (Ctrl+Z)">
                             <button
                                 onClick={() =>
@@ -671,7 +610,6 @@ const ToolBar = ({
                                 <FaSquare />
                             </button>
                         </Tooltip>
-
                         <Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.">
                             <button
                                 onClick={() => {
@@ -717,7 +655,6 @@ const ToolBar = ({
                     </div>
                     <div className="control-label">Shape Tools</div>
                 </div>
-
                 <div className="control-group">
                     <div className="control-button-wrapper">
                         <Tooltip text="Change grid size">
@@ -801,7 +738,6 @@ const ToolBar = ({
                     <div className="control-label">Save</div>
                 </div>
             </div>
-
             {showDimensionsModal && (
                 <div
                     className="modal-overlay"
@@ -884,7 +820,6 @@ const ToolBar = ({
                     </div>
                 </div>
             )}
-
             {showGridSizeModal && (
                 <div
                     className="modal-overlay"
@@ -926,7 +861,6 @@ const ToolBar = ({
                     </div>
                 </div>
             )}
-
             {showBorderModal && (
                 <div
                     className="modal-overlay"
@@ -1011,7 +945,6 @@ const ToolBar = ({
                     </div>
                 </div>
             )}
-
             {showTerrainModal && (
                 <div
                     className="modal-overlay"
@@ -1143,7 +1076,6 @@ const ToolBar = ({
                     </div>
                 </div>
             )}
-
             {showMinecraftImportModal && (
                 <MinecraftImportWizard
                     isOpen={showMinecraftImportModal}
@@ -1154,7 +1086,7 @@ const ToolBar = ({
                                 "Minecraft map imported successfully:",
                                 result
                             );
-                            // The wizard already updates the terrain
+
                         }
                         setShowMinecraftImportModal(false);
                     }}
@@ -1164,5 +1096,4 @@ const ToolBar = ({
         </>
     );
 };
-
 export default ToolBar;

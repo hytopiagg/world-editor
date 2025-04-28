@@ -1,9 +1,7 @@
 import React from "react";
 import PropTypes from "prop-types";
 import "../../css/FaceSelector.css";
-
 const FACES = ["Top", "Bottom", "Left", "Right", "Front", "Back", "All"];
-
 const FaceSelector = ({ selectedFace, onSelectFace }) => {
     return (
         <div className="face-selector">
@@ -24,10 +22,8 @@ const FaceSelector = ({ selectedFace, onSelectFace }) => {
         </div>
     );
 };
-
 FaceSelector.propTypes = {
     selectedFace: PropTypes.string.isRequired,
     onSelectFace: PropTypes.func.isRequired,
 };
-
 export default FaceSelector;

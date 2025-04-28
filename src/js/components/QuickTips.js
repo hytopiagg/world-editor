@@ -2,13 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import "../../css/QuickTips.css";
 import { FaTimes } from "react-icons/fa";
 import QuickTipsManager from "./QuickTipsManager";
-
 const QuickTips = () => {
     const [isVisible, setIsVisible] = useState(true);
     const [tipText, setTipText] = useState(QuickTipsManager.getToolTip());
     const [isFading, setIsFading] = useState(false);
     const fadeTimeoutRef = useRef(null);
-
     const startFadeTimer = () => {
         if (fadeTimeoutRef.current) {
             clearTimeout(fadeTimeoutRef.current);
@@ -18,18 +16,14 @@ const QuickTips = () => {
             setIsFading(true);
         }, 10000);
     };
-
     useEffect(() => {
         startFadeTimer();
-
         const handleTipChange = (newTip) => {
             setTipText(newTip);
             setIsVisible(true);
             startFadeTimer();
         };
-
         QuickTipsManager.addListener(handleTipChange);
-
         return () => {
             if (fadeTimeoutRef.current) {
                 clearTimeout(fadeTimeoutRef.current);
@@ -37,7 +31,6 @@ const QuickTips = () => {
             QuickTipsManager.removeListener(handleTipChange);
         };
     }, [tipText]);
-
     const toggleVisibility = () => {
         if (fadeTimeoutRef.current) {
             clearTimeout(fadeTimeoutRef.current);
@@ -46,11 +39,9 @@ const QuickTips = () => {
         setIsVisible(!isVisible);
         setIsFading(false);
     };
-
     const containerClassName = `quick-tips-container ${
         isFading ? "fading" : ""
     }`;
-
     return (
         isVisible && (
             <div className={containerClassName}>
@@ -78,5 +69,4 @@ const QuickTips = () => {
         )
     );
 };
-
 export default QuickTips;
