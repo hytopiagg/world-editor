@@ -5,7 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { FaTrash } from "react-icons/fa";
-import { DatabaseManager, STORES } from "../DatabaseManager";
+import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import "../../css/BlockToolsSidebar.css";
 
 const ModelPreview = ({ modelUrl, onRenderComplete }) => {

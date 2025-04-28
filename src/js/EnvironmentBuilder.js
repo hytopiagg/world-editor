@@ -8,7 +8,7 @@ import {
     useImperativeHandle,
     forwardRef,
 } from "react";
-import { DatabaseManager, STORES } from "./DatabaseManager";
+import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 export const environmentModels = (() => {
     try {

@@ -1,38 +1,34 @@
-import React, { useState, useEffect } from "react";
+import { generatePerlinNoise } from "perlin-noise";
+import React, { useEffect, useState } from "react";
 import {
-    FaPlus,
-    FaMinus,
+    FaBorderAll,
+    FaBorderStyle,
+    FaCircle,
+    FaCube,
+    FaCubes,
+    FaDrawPolygon,
+    FaExpand,
     FaLock,
     FaLockOpen,
-    FaUndo,
-    FaRedo,
-    FaCircle,
-    FaPaintBrush,
-    FaDrawPolygon,
-    FaSquare,
-    FaCube,
-    FaBorderStyle,
+    FaMinus,
     FaMountain,
-    FaExpand,
-    FaTrash,
-    FaCubes,
-    FaDatabase,
-    FaBorderAll,
-    FaSeedling,
+    FaPlus,
+    FaRedo,
     FaRobot,
     FaSave,
+    FaSeedling,
+    FaSquare,
+    FaTrash,
+    FaUndo
 } from "react-icons/fa";
-import Tooltip from "../components/Tooltip";
-import { DatabaseManager, STORES } from "../DatabaseManager";
 import "../../css/ToolBar.css";
-import { generatePerlinNoise } from "perlin-noise";
+import Tooltip from "../components/Tooltip";
+import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
 import {
     exportMapFile,
-    exportFullAssetPack,
-    importMap,
-    importAssetPack,
+    importMap
 } from "../ImportExport";
-import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
+import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
 const ToolBar = ({
     terrainBuilderRef,

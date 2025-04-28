@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
-import { DatabaseManager, STORES } from "../DatabaseManager";
+import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { environmentModels } from "../EnvironmentBuilder";
 import {
     blockTypes,

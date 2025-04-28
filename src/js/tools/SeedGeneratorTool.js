@@ -1128,7 +1128,7 @@ class SeedGeneratorTool extends BaseTool {
             );
 
             const { DatabaseManager, STORES } = await import(
-                "../DatabaseManager"
+                "../managers/DatabaseManager"
             );
 
             await DatabaseManager.saveData(

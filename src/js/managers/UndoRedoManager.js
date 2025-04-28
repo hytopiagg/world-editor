@@ -1,12 +1,8 @@
 import React, {
-    useImperativeHandle,
-    useRef,
-    forwardRef,
-    useEffect,
+    useImperativeHandle
 } from "react";
+import { MIN_UNDO_STATES } from "../Constants";
 import { DatabaseManager, STORES } from "./DatabaseManager";
-import { MIN_UNDO_STATES, UNDO_THRESHOLD } from "./Constants";
-import { loadingManager } from "./LoadingManager";
 function UndoRedoManager(
     { terrainBuilderRef, environmentBuilderRef, children },
     ref

@@ -18,7 +18,7 @@ const AIAssistantPanel = ({
         const loadSavedSchematics = async () => {
             try {
                 const { DatabaseManager, STORES } = await import(
-                    "../DatabaseManager"
+                    "../managers/DatabaseManager"
                 );
 
                 const db = await DatabaseManager.getDBConnection();
@@ -118,7 +118,7 @@ const AIAssistantPanel = ({
                 try {
 
                     const { DatabaseManager, STORES } = await import(
-                        "../DatabaseManager"
+                        "../managers/DatabaseManager"
                     );
 
                     await DatabaseManager.saveData(

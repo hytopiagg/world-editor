@@ -4,7 +4,7 @@ import {
     getHytopiaBlocks,
 } from "../../utils/minecraft/BlockMapper";
 import { getCustomBlocks, processCustomBlock } from "../../TerrainBuilder";
-import { loadingManager } from "../../LoadingManager";
+import { loadingManager } from "../../managers/LoadingManager";
 
 const customTextureLibraryStyles = `
   .custom-texture-library {

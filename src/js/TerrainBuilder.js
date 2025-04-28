@@ -30,8 +30,8 @@ import {
     MAX_SELECTION_DISTANCE,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
-import { DatabaseManager, STORES } from "./DatabaseManager";
-import { loadingManager } from "./LoadingManager";
+import { DatabaseManager, STORES } from "./managers/DatabaseManager";
+import { loadingManager } from "./managers/LoadingManager";
 import { processCustomBlock } from "./managers/BlockTypesManager";
 import { cameraMovementTracker } from "./managers/CameraMovementTracker";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
@@ -41,7 +41,7 @@ import {
     cleanupMouseButtonTracking,
 } from "./managers/MouseButtonManager";
 import { playPlaceSound } from "./Sound";
-import TerrainUndoRedoManager from "./TerrainUndoRedoManager";
+import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
 import {
     GroundTool,
     PipeTool,

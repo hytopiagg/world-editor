@@ -1,4 +1,4 @@
-import { version } from "./Constants";
+import { version } from "../Constants";
 export const STORES = {
     TERRAIN: "terrain",
     ENVIRONMENT: "environment",

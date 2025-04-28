@@ -3,7 +3,7 @@ import "../../../css/MinecraftImport.css";
 import UploadStep from "./UploadStep";
 import BlockTypeMapper from "./BlockTypeMapper";
 import ImportStep from "./ImportStep";
-import { loadingManager } from "../../LoadingManager";
+import { loadingManager } from "../../managers/LoadingManager";
 
 const ALL_STEPS = [
     { id: "selectWorld", title: "Select World", mainStep: "upload" },

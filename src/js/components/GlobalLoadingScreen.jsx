@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { loadingManager } from "../LoadingManager";
+import React, { useEffect, useState } from "react";
+import "../../css/GlobalLoadingScreen.css";
 import hytopiaLogo from "../../images/hytopia_logo_white.png";
 import { version } from "../Constants";
-import "../../css/GlobalLoadingScreen.css";
+import { loadingManager } from "../managers/LoadingManager";
 const GlobalLoadingScreen = () => {
     const [loadingState, setLoadingState] = useState({
         isLoading: false,

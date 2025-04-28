@@ -1,9 +1,9 @@
-import { DatabaseManager, STORES } from "./DatabaseManager";
+import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { getBlockTypes, processCustomBlock } from "./TerrainBuilder";
 import { environmentModels } from "./EnvironmentBuilder";
 import * as THREE from "three";
 import { version } from "./Constants";
-import { loadingManager } from "./LoadingManager";
+import { loadingManager } from "./managers/LoadingManager";
 export const importMap = async (
     file,
     terrainBuilderRef,

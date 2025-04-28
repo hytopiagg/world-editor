@@ -1,14 +1,13 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+    FaCheck,
     FaCloudUploadAlt,
     FaCog,
-    FaMapMarkedAlt,
-    FaCheck,
-    FaTimes,
+    FaTimes
 } from "react-icons/fa";
-import WorldMapSelector from "./WorldMapSelector";
+import { loadingManager } from "../../managers/LoadingManager";
 import FrontViewSelector from "./FrontViewSelector";
-import { loadingManager } from "../../LoadingManager";
+import WorldMapSelector from "./WorldMapSelector";
 
 const createWorker = () => {
     return new Worker(
