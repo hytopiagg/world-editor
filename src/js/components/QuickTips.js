@@ -54,7 +54,8 @@ const QuickTips = () => {
                             <span>
                                 <b>W</b>, <b>A</b>, <b>S</b>, <b>D</b> to move,{" "}
                                 <b>SHIFT</b> to fly down, <b>SPACE</b> to fly
-                                up. <b>Right-click</b> to rotate camera.
+                                up. <b>Right-click</b> to rotate camera.{" "}
+                                <b>0</b> to toggle camera mode.
                             </span>
                         )}
                     </p>
