@@ -46,9 +46,10 @@ import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorT
 
 // Import chunk utility functions
 import { SpatialGridManager } from "./managers/SpatialGridManager";
-import { processCustomBlock } from "./managers/BlockTypesManager";
+import { processCustomBlock, blockTypes, getCustomBlocks, getBlockTypes } from "./managers/BlockTypesManager";
 import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
 import BlockMaterial from "./blocks/BlockMaterial"; // Add this import
+
 
 // Function to optimize rendering performance
 function optimizeRenderer(gl) {
@@ -4369,13 +4370,7 @@ function TerrainBuilder(
 // Convert to forwardRef
 export default forwardRef(TerrainBuilder);
 
-// Export block types and related functions
-export {
-    blockTypes,
-    getCustomBlocks,
-    processCustomBlock,
-    getBlockTypes,
-} from "./managers/BlockTypesManager";
+
 // Add a method to explicitly set deferred chunk meshing mode
 const setDeferredChunkMeshing = (defer) => {
     const chunkSystem = getChunkSystem();
@@ -4501,6 +4496,10 @@ export {
     forceChunkUpdateByOrigin,
     configureChunkLoading,
     loadAllChunks,
+    blockTypes,
+    getCustomBlocks,
+    processCustomBlock,
+    getBlockTypes,
 };
 
 // Utility function to force loading of all chunks at once
