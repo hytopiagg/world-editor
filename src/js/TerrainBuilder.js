@@ -1532,6 +1532,7 @@ function TerrainBuilder(
                         terrainRef.current = {};
                         totalBlocksRef.current = 0;
                     }
+                    loadingManager.hideLoading();
                     setPageIsLoaded(true);
                 })
                 .catch((error) => {
@@ -1540,6 +1541,7 @@ function TerrainBuilder(
                         error
                     );
                     meshesInitializedRef.current = true;
+                    loadingManager.hideLoading();
                     setPageIsLoaded(true);
                 });
         }
