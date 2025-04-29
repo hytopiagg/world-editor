@@ -243,6 +243,7 @@ export const importMap = async (
                                         entity.rigidBodyOptions.rotation.z,
                                         entity.rigidBodyOptions.rotation.w
                                     );
+                                    
                                     const euler =
                                         new THREE.Euler().setFromQuaternion(
                                             quaternion
@@ -459,14 +460,22 @@ export const exportMapFile = async (terrainBuilderRef) => {
                 );
 
                 if (entityType) {
+                    // Get the Y rotation value (this is the only axis that's used in the app)
+                    // Check if rotation is a plain object (from DB) or a THREE.Euler object
+                    const isThreeEuler = obj.rotation instanceof THREE.Euler;
+                    const rotY = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
+                    
+                    // Only apply non-zero rotation (with a small epsilon to handle floating point imprecision)
+                    const hasRotation = Math.abs(rotY) > 0.001;
+                    
+                    // Create quaternion directly from Y rotation (this is more reliable than Euler conversion)
                     const quaternion = new THREE.Quaternion();
-                    quaternion.setFromEuler(
-                        new THREE.Euler(
-                            obj.rotation.x,
-                            obj.rotation.y,
-                            obj.rotation.z
-                        )
-                    );
+                    if (hasRotation) {
+                        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
+                    } else {
+                        // Use identity quaternion for no rotation (0,0,0,1)
+                        quaternion.identity();
+                    }
 
                     const modelUri = entityType.isCustom
                         ? `models/environment/${entityType.name}.gltf`
