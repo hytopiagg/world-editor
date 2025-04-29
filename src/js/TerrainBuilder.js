@@ -401,7 +401,7 @@ function TerrainBuilder(
             ) {
                 await Promise.all(
                     Object.keys(changesToSave.removed).map((key) => {
-                        const deleteRequest = store.delete(`${key}`);
+                        const deleteRequest = store.delete(key);
                         return new Promise((resolve, reject) => {
                             deleteRequest.onsuccess = resolve;
                             deleteRequest.onerror = reject;
@@ -422,12 +422,18 @@ function TerrainBuilder(
             ) {
                 await Promise.all(
                     Object.entries(changesToSave.added).map(([key, value]) => {
+                        // Store the block ID directly with the coordinate key
                         const putRequest = store.put(value, key);
                         return new Promise((resolve, reject) => {
                             putRequest.onsuccess = resolve;
                             putRequest.onerror = reject;
                         });
                     })
+                );
+                console.log(
+                    `Added/updated ${
+                        Object.keys(changesToSave.added).length
+                    } blocks in DB`
                 );
             }
 

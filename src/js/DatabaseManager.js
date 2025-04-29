@@ -62,12 +62,55 @@ export class DatabaseManager {
     static async saveData(storeName, key, data) {
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {
-            const transaction = db.transaction(storeName, "readwrite");
-            const store = transaction.objectStore(storeName);
-            const request = store.put(data, key);
+            // Special handling for terrain data
+            if (storeName === STORES.TERRAIN && key === "current") {
+                try {
+                    const transaction = db.transaction(storeName, "readwrite");
+                    const store = transaction.objectStore(storeName);
+                    
+                    // Clear existing terrain data
+                    const clearRequest = store.clear();
+                    
+                    clearRequest.onsuccess = () => {
+                        // For terrain store, each coordinate becomes a key, and block ID becomes the value
+                        const promises = Object.entries(data).map(([coordKey, blockId]) => {
+                            return new Promise((resolveBlock, rejectBlock) => {
+                                const putRequest = store.put(blockId, coordKey);
+                                putRequest.onsuccess = resolveBlock;
+                                putRequest.onerror = rejectBlock;
+                            });
+                        });
+                        
+                        // Wait for all block insertions to complete
+                        Promise.all(promises)
+                            .then(() => {
+                                console.log(`[DB] Saved ${Object.keys(data).length} terrain blocks with individual coordinates as keys`);
+                                resolve();
+                            })
+                            .catch((error) => {
+                                console.error("[DB] Error saving terrain blocks:", error);
+                                reject(error);
+                            });
+                    };
+                    
+                    clearRequest.onerror = (event) => {
+                        console.error("[DB] Error clearing terrain store:", event.target.error);
+                        reject(event.target.error);
+                    };
+                    
+                } catch (error) {
+                    console.error("[DB] Error in terrain saveData transaction:", error);
+                    reject(error);
+                }
+            } else {
+                // Original behavior for other stores
+                const transaction = db.transaction(storeName, "readwrite");
+                const store = transaction.objectStore(storeName);
+                const request = store.put(data, key);
 
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve();
+            }
         });
     }
 
@@ -79,7 +122,7 @@ export class DatabaseManager {
                 const tx = db.transaction(storeName, "readonly");
                 const store = tx.objectStore(storeName);
 
-                // <<< Special handling for loading the entire terrain store
+                // Special handling for loading the entire terrain store
                 if (storeName === STORES.TERRAIN && key === "current") {
                     const terrainData = {};
                     const cursorRequest = store.openCursor();
@@ -87,7 +130,7 @@ export class DatabaseManager {
                     cursorRequest.onsuccess = (event) => {
                         const cursor = event.target.result;
                         if (cursor) {
-                            // Assuming the key is the coordinate string and value is the block ID
+                            // The key is the coordinate string and value is the block ID
                             terrainData[cursor.key] = cursor.value;
                             cursor.continue();
                         } else {
@@ -108,7 +151,7 @@ export class DatabaseManager {
                         reject(event.target.error);
                     };
                 } else {
-                    // <<< Original logic for other stores/keys
+                    // Original logic for other stores/keys
                     const request = store.get(key);
                     request.onsuccess = () => {
                         // console.log(`[DB] Successfully retrieved data for key '${key}' from store '${storeName}':`, request.result);

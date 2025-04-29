@@ -110,10 +110,51 @@ export const importMap = async (
                             30
                         );
 
-                        // Now process terrain data
+                        // Create a mapping from imported block IDs to editor block IDs
+                        const blockIdMapping = {};
+                        
+                        // Get all current block types in the editor
+                        const currentBlockTypes = getBlockTypes();
+                        
+                        // Create a map of names to IDs for quick lookups
+                        const currentBlockNameToId = {};
+                        currentBlockTypes.forEach(blockType => {
+                            currentBlockNameToId[blockType.name.toLowerCase()] = blockType.id;
+                        });
+                        
+                        // If imported file has block types, build the mapping
+                        if (importData.blockTypes && importData.blockTypes.length > 0) {
+                            importData.blockTypes.forEach(importedBlockType => {
+                                const blockName = importedBlockType.name.toLowerCase();
+                                const importedId = importedBlockType.id;
+                                
+                                // First try to match by name (case insensitive)
+                                if (currentBlockNameToId.hasOwnProperty(blockName)) {
+                                    blockIdMapping[importedId] = currentBlockNameToId[blockName];
+                                    console.log(`Mapped imported block "${importedBlockType.name}" (ID: ${importedId}) to editor ID: ${blockIdMapping[importedId]}`);
+                                } else {
+                                    // If no name match, use the original ID
+                                    blockIdMapping[importedId] = importedId;
+                                    console.log(`No name match for imported block "${importedBlockType.name}" (ID: ${importedId}), using original ID`);
+                                }
+                            });
+                        } else {
+                            // If no block types in import, attempt to match standard blocks by ID only
+                            console.log("No block types in import file, using direct ID mapping");
+                            currentBlockTypes.forEach(blockType => {
+                                blockIdMapping[blockType.id] = blockType.id;
+                            });
+                        }
+
+                        // Now process terrain data with ID mapping
                         terrainData = Object.entries(importData.blocks).reduce(
-                            (acc, [key, blockId]) => {
-                                acc[key] = blockId;
+                            (acc, [key, importedBlockId]) => {
+                                // Use mapped ID if available, otherwise use the original ID
+                                const mappedId = blockIdMapping[importedBlockId] !== undefined 
+                                    ? blockIdMapping[importedBlockId] 
+                                    : importedBlockId;
+                                    
+                                acc[key] = mappedId;
                                 return acc;
                             },
                             {}
