@@ -62,6 +62,7 @@ import {
 } from "./utils/TerrainMouseUtils";
 import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
+// Function to optimize rendering performance
 function optimizeRenderer(gl) {
     if (gl) {
         gl.shadowMap.autoUpdate = false;
@@ -142,10 +143,11 @@ function TerrainBuilder(
                 autoSaveIntervalRef.current = setInterval(() => {
                     // Only save if there are pending changes
                     if (
-                        Object.keys(pendingChangesRef.current.terrain.added)
+                        pendingChangesRef.current?.terrain &&
+                        (Object.keys(pendingChangesRef.current.terrain.added || {})
                             .length > 0 ||
-                        Object.keys(pendingChangesRef.current.terrain.removed)
-                            .length > 0
+                        Object.keys(pendingChangesRef.current.terrain.removed || {})
+                            .length > 0)
                     ) {
                         console.log("Auto-saving terrain...");
                         efficientTerrainSave();
@@ -1740,20 +1742,24 @@ function TerrainBuilder(
             autoSaveIntervalRef.current = setInterval(() => {
                 if (
                     !isPlacingRef.current &&
-                    (Object.keys(pendingChangesRef.current.terrain.added)
+                    pendingChangesRef.current?.terrain &&
+                    (Object.keys(pendingChangesRef.current.terrain.added || {})
                         .length > 0 ||
-                        Object.keys(pendingChangesRef.current.terrain.removed)
-                            .length > 0)
+                    Object.keys(
+                        pendingChangesRef.current.terrain.removed || {}
+                    ).length > 0)
                 ) {
                     efficientTerrainSave();
                 }
             }, AUTO_SAVE_INTERVAL);
             if (
                 !isPlacingRef.current &&
-                (Object.keys(pendingChangesRef.current.terrain.added).length >
-                    0 ||
-                    Object.keys(pendingChangesRef.current.terrain.removed)
-                        .length > 0)
+                pendingChangesRef.current?.terrain &&
+                (Object.keys(pendingChangesRef.current.terrain.added || {})
+                    .length > 0 ||
+                    Object.keys(
+                        pendingChangesRef.current.terrain.removed || {}
+                    ).length > 0)
             ) {
                 efficientTerrainSave();
             }
@@ -1819,10 +1825,11 @@ function TerrainBuilder(
                 autoSaveIntervalRef.current = setInterval(() => {
                     if (
                         !isPlacingRef.current &&
-                        (Object.keys(pendingChangesRef.current.terrain.added)
+                        pendingChangesRef.current?.terrain &&
+                        (Object.keys(pendingChangesRef.current.terrain.added || {})
                             .length > 0 ||
                             Object.keys(
-                                pendingChangesRef.current.terrain.removed
+                                pendingChangesRef.current.terrain.removed || {}
                             ).length > 0)
                     ) {
                         efficientTerrainSave();
