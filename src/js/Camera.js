@@ -146,11 +146,9 @@ class CameraManager {
         }
 
         if (this.keys.has("a") || this.keys.has("arrowleft")) {
-            // Mode 1: Rotate camera
             if (this.isRotateMode) {
                 this.camera.rotateY(this.rotateSpeed);
             } else {
-                // Mode 2: Move camera left
                 const direction = new THREE.Vector3();
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;
@@ -168,11 +166,9 @@ class CameraManager {
             moved = true;
         }
         if (this.keys.has("d") || this.keys.has("arrowright")) {
-            // Mode 1: Rotate camera
             if (this.isRotateMode) {
                 this.camera.rotateY(-this.rotateSpeed);
             } else {
-                // Mode 2: Move camera right
                 const direction = new THREE.Vector3();
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;
@@ -282,7 +278,13 @@ class CameraManager {
             event.key &&
             movementKeys.includes(event.key.toLowerCase())
         ) {
-            return; // Stop processing if it's a movement key in an input field
+            return;
+        }
+
+        if (event.key === "0") {
+            this.isRotateMode = !this.isRotateMode;
+            console.log("Camera mode toggled. Rotate mode:", this.isRotateMode);
+            return;
         }
 
         if (event.key) this.keys.add(event.key.toLowerCase());
