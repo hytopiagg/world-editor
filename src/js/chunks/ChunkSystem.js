@@ -159,12 +159,15 @@ class ChunkSystem {
             chunkBlocks.get(chunkId)[index] = blockId;
         }
 
+        console.log("chunkBlocks", chunkBlocks);
         for (const [chunkId, blocks] of chunkBlocks.entries()) {
+            console.log("chunkId", chunkId);
             const [x, y, z] = chunkId.split(",").map(Number);
             chunks.push({
                 originCoordinate: { x, y, z },
                 blocks,
             });
+            console.log("pushing chunk", chunks[chunks.length - 1]);
         }
 
         const validChunks = [];
@@ -184,7 +187,7 @@ class ChunkSystem {
                 validChunks.push(chunk);
             }
         }
-
+        console.log("validChunks", validChunks);
         chunks = validChunks;
 
         this._chunkManager.updateChunks(chunks);

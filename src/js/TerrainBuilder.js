@@ -469,10 +469,15 @@ function TerrainBuilder(
             }
         } else {
             if (modeRef.current === "add") {
+                console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
                 const positions = getPlacementPositions(
                     previewPositionRef.current,
                     placementSizeRef.current
+                );
+                console.log(
+                    "handleBlockPlacement - ADD - positions",
+                    positions
                 );
                 const addedBlocks = {};
                 let blockWasPlaced = false; // Flag to track if any block was actually placed
@@ -480,11 +485,33 @@ function TerrainBuilder(
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
                     if (!terrainRef.current[blockKey]) {
                         addedBlocks[blockKey] = currentBlockTypeRef.current.id;
+                        console.log(
+                            "handleBlockPlacement - ADD - addedBlocks",
+                            addedBlocks
+                        );
                         terrainRef.current[blockKey] =
                             currentBlockTypeRef.current.id;
+                        console.log(
+                            "handleBlockPlacement - ADD - terrainRef.current",
+                            terrainRef.current
+                        );
                         recentlyPlacedBlocksRef.current.add(blockKey);
+                        console.log(
+                            "handleBlockPlacement - ADD - recentlyPlacedBlocksRef.current",
+                            recentlyPlacedBlocksRef.current
+                        );
                         placementChangesRef.current.terrain.added[blockKey] =
                             currentBlockTypeRef.current.id;
+                        console.log(
+                            "handleBlockPlacement - ADD - placementChangesRef.current",
+                            placementChangesRef.current
+                        );
+                        pendingChangesRef.current.terrain.added[blockKey] =
+                            currentBlockTypeRef.current.id;
+                        console.log(
+                            "handleBlockPlacement - ADD - pendingChangesRef.current",
+                            pendingChangesRef.current
+                        );
                         blockWasPlaced = true;
                     }
                 });
@@ -1141,7 +1168,10 @@ function TerrainBuilder(
                         totalBlocksRef.current = Object.keys(
                             terrainRef.current
                         ).length;
-                        pendingChangesRef.current = { added: {}, removed: {} };
+                        pendingChangesRef.current = {
+                            terrain: { added: {}, removed: {} },
+                            environment: { added: [], removed: [] },
+                        };
                         loadingManager.showLoading(
                             "Preloading textures for all blocks..."
                         );
@@ -1222,6 +1252,7 @@ function TerrainBuilder(
             sendTotalBlocks, // Provide the function to update the total block count in the UI
             activateTool: (toolName, activationData) =>
                 toolManagerRef.current?.activateTool(toolName, activationData),
+            pendingChangesRef,
         };
         toolManagerRef.current = new ToolManager(terrainBuilderProps);
         const wallTool = new WallTool(terrainBuilderProps);
@@ -1547,6 +1578,10 @@ function TerrainBuilder(
                         loadingManager.updateLoading(
                             `Building terrain with ${blockCount} blocks...`,
                             60
+                        );
+                        console.log(
+                            "blocks from - refreshTerrainFromDB",
+                            blocks
                         );
                         chunkSystem.updateFromTerrainData(blocks);
                         loadingManager.updateLoading(
@@ -1921,7 +1956,9 @@ function TerrainBuilder(
     }, [gl]);
 
     const efficientTerrainSave = async () => {
+        console.log("efficientTerrainSave");
         if (window.IS_DATABASE_CLEARING) {
+            console.log("efficientTerrainSave - DATABASE_CLEARING");
             return false;
         }
         if (
@@ -1932,9 +1969,16 @@ function TerrainBuilder(
                 Object.keys(pendingChangesRef.current.terrain.removed || {})
                     .length === 0)
         ) {
+            console.log("efficientTerrainSave - NO CHANGES");
+            console.log("pendingChangesRef.current", pendingChangesRef.current);
+            console.log(
+                "pendingChangesRef.current.terrain",
+                pendingChangesRef.current.terrain
+            );
             return true;
         }
         const changesToSave = { ...pendingChangesRef.current.terrain };
+        console.log("efficientTerrainSave - CHANGES TO SAVE", changesToSave);
         resetPendingChanges();
         try {
             const db = await DatabaseManager.getDBConnection();
@@ -1968,11 +2012,13 @@ function TerrainBuilder(
                     })
                 );
             }
+            console.log("efficientTerrainSave - WAITING FOR TX TO COMPLETE");
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
                 tx.onerror = reject;
             });
             lastSaveTimeRef.current = Date.now(); // Update last save time
+            console.log("efficientTerrainSave - SUCCESS");
             return true;
         } catch (error) {
             console.error("Error during efficient terrain save:", error);

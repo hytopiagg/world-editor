@@ -110,8 +110,6 @@ class SeedGeneratorTool extends BaseTool {
         compactButton.onclick = () => {
             this.isCompactMode = !this.isCompactMode;
             if (this.isCompactMode) {
-
-
                 caveSection.style.display = "none";
 
                 const temperatureContainer = document.getElementById(
@@ -130,8 +128,6 @@ class SeedGeneratorTool extends BaseTool {
                 compactButton.title = "Show All Options";
                 compactButton.innerHTML = "🔎";
             } else {
-
-
                 caveSection.style.display = "block";
 
                 const temperatureContainer = document.getElementById(
@@ -290,7 +286,6 @@ class SeedGeneratorTool extends BaseTool {
             (val) => {
                 this.generationOptions.mountainRange = val;
 
-
                 const sliderLabel = document.querySelector(
                     'label[for="mountain-range-slider"]'
                 );
@@ -444,16 +439,6 @@ class SeedGeneratorTool extends BaseTool {
         clearMapContainer.appendChild(clearMapCheckbox);
         clearMapContainer.appendChild(clearMapLabel);
         controlsSection.appendChild(clearMapContainer);
-
-
-
-
-
-
-
-
-
-
 
         const generateButton = document.createElement("button");
         generateButton.id = "generate-button";
@@ -619,7 +604,6 @@ class SeedGeneratorTool extends BaseTool {
      * Show all UI elements except the seed generator UI (called by showUI)
      */
     showAllOtherUI() {
-
         const toolbar = document.querySelector(".tool-bar");
         if (toolbar) {
             toolbar.style.display = toolbar.dataset.originalDisplay || "flex";
@@ -670,7 +654,6 @@ class SeedGeneratorTool extends BaseTool {
      * Show all UI elements that were hidden
      */
     showAllUI() {
-
         this._inShowAllUI = true;
 
         this.showUI();
@@ -692,7 +675,6 @@ class SeedGeneratorTool extends BaseTool {
      * Hide all UI elements for clean screenshots and create a restore button
      */
     enterScreenshotMode() {
-
         this.hideAllUI();
 
         this.createRestoreUIButton();
@@ -701,7 +683,6 @@ class SeedGeneratorTool extends BaseTool {
      * Hide all UI elements in the application
      */
     hideAllUI() {
-
         this.hideUI();
 
         const toolbar = document.querySelector(".tool-bar");
@@ -755,7 +736,6 @@ class SeedGeneratorTool extends BaseTool {
      * Create a small floating button to restore UI
      */
     createRestoreUIButton() {
-
         if (document.getElementById("restore-ui-button")) {
             return;
         }
@@ -795,7 +775,6 @@ class SeedGeneratorTool extends BaseTool {
      * Clean up when disposing of the tool
      */
     dispose() {
-
         const restoreButton = document.getElementById("restore-ui-button");
         if (restoreButton) {
             restoreButton.remove();
@@ -872,19 +851,13 @@ class SeedGeneratorTool extends BaseTool {
             biomeDiversity: 0.02 / (1 + (options.biomeSize || 100) / 200), // Range 0.01 to 0.05
             temperature: (options.temperature || 50) / 100, // Convert 0-100 to 0-1
 
-
-
-
             roughness: (() => {
                 const mountainValue = options.mountainHeight || 50;
                 if (mountainValue < 30) {
-
                     return 0.3 + (mountainValue / 30) * 0.2;
                 } else if (mountainValue < 70) {
-
                     return 0.5 + ((mountainValue - 30) / 40) * 1.0;
                 } else {
-
                     return 1.5 + ((mountainValue - 70) / 30) * 2.5;
                 }
             })(),
@@ -937,7 +910,6 @@ class SeedGeneratorTool extends BaseTool {
             settings.scale *= 1.2;
             settings.caveDensity *= 0.8;
         } else {
-
             settings.batchSize = 0; // No batching needed
             settings.useBatchProcessing = false;
             settings.caveComplexity = 1.0;
@@ -1011,7 +983,6 @@ class SeedGeneratorTool extends BaseTool {
                 seedNum,
                 blockTypes,
                 (message, progress) => {
-
                     this.updateProgressUI(message, progress);
                 }
             );
@@ -1019,23 +990,23 @@ class SeedGeneratorTool extends BaseTool {
             const generationTime = (endTime - startTime) / 1000;
             console.log(`World generation took ${generationTime} seconds`);
 
+            console.log("terrainData", terrainData);
             if (terrainData) {
+                let terrainDataToUse = terrainData?.current || terrainData;
                 if (settings.useBatchProcessing) {
-
                     this.updateTerrainInBatches(
-                        terrainData,
+                        terrainDataToUse,
                         settings.batchSize
                     );
                 } else {
-
                     this.terrainBuilderRef.current.updateTerrainFromToolBar(
-                        terrainData
+                        terrainDataToUse
                     );
                     this.hideProgressUI();
                 }
 
-                setTimeout(() => this.forceSaveTerrain(terrainData), 1000);
-                return terrainData;
+                setTimeout(() => this.forceSaveTerrain(terrainDataToUse), 1000);
+                return terrainDataToUse;
             }
         } catch (error) {
             console.error("Error generating world:", error);
@@ -1079,7 +1050,6 @@ class SeedGeneratorTool extends BaseTool {
                 progress
             );
             if (currentBatch < totalBatches) {
-
                 setTimeout(processBatch, 50);
             } else {
                 console.log("All batches processed!");

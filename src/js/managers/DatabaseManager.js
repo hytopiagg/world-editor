@@ -50,6 +50,7 @@ export class DatabaseManager {
         return this.getConnection();
     }
     static async saveData(storeName, key, data) {
+        console.log("saveData", storeName, key, data);
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, "readwrite");

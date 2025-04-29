@@ -149,6 +149,7 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
         chunkSystem.setBulkLoadingMode(false);
     }
 
+    console.log("updateTerrainChunks - for simple terrainData", terrainData);
     chunkSystem.updateFromTerrainData(terrainData);
 
 

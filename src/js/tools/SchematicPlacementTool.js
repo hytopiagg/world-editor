@@ -2,9 +2,9 @@ import * as THREE from "three";
 import BaseTool from "./BaseTool";
 import BlockMaterial from "../blocks/BlockMaterial"; // Import BlockMaterial for preview
 import { blockTypes } from "../managers/BlockTypesManager"; // For getting block type info
+
 class SchematicPlacementTool extends BaseTool {
     constructor(terrainBuilderProps) {
-
         console.log(
             "[SchematicPlacementTool] Constructor received props:",
             terrainBuilderProps
@@ -14,7 +14,6 @@ class SchematicPlacementTool extends BaseTool {
             console.error(
                 "[SchematicPlacementTool] ERROR: Scene object is missing in terrainBuilderProps!"
             );
-
 
             return; // Or throw an error?
         }
@@ -30,7 +29,6 @@ class SchematicPlacementTool extends BaseTool {
             console.error(
                 "[SchematicPlacementTool] ERROR: updateTerrainForUndoRedo function is missing in terrainBuilderProps!"
             );
-
         }
         this.name = "SchematicPlacementTool";
         this.schematicData = null;
@@ -41,7 +39,6 @@ class SchematicPlacementTool extends BaseTool {
         if (this.scene) {
             this.scene.add(this.previewGroup);
         } else {
-
             console.error(
                 "[SchematicPlacementTool] ERROR: this.scene is still undefined after super() call!"
             );
@@ -66,13 +63,11 @@ class SchematicPlacementTool extends BaseTool {
             this.schematicData
         );
 
-
         this.updatePreview(); // Initial preview update
         return true; // Indicate activation succeeded
     }
 
     onDeactivate() {
-
         this.schematicData = null;
         this.previewGroup.visible = false;
         this.clearPreviewMeshes();
@@ -102,21 +97,17 @@ class SchematicPlacementTool extends BaseTool {
             const worldY = basePosition.y + relY + this.anchorOffset.y;
             const worldZ = basePosition.z + relZ + this.anchorOffset.z;
             if (this.previewMeshes[relPosStr]) {
-
                 this.previewMeshes[relPosStr].position.set(
                     worldX,
                     worldY,
                     worldZ
                 );
             } else {
-
                 const blockType = blockTypes.find((b) => b.id === blockId);
                 const color = blockType ? 0x00ff00 : 0xff00ff; // Green for known, magenta for unknown
 
                 let material;
                 if (BlockMaterial.instance) {
-
-
                     material = new THREE.MeshPhongMaterial({
                         color: color,
                         opacity: 0.5,
@@ -138,29 +129,26 @@ class SchematicPlacementTool extends BaseTool {
                 this.previewMeshes[relPosStr] = mesh;
             }
         }
-
-
     }
+
     handleMouseDown(event, intersectionPoint, button) {
         if (!this.isActive || !this.schematicData) return; // Use the getter
         if (button === 0) {
-
             this.placeSchematic();
         } else if (button === 2) {
-
             console.log("Schematic placement cancelled by right-click.");
             this.onDeactivate();
         }
     }
+
     handleKeyDown(event) {
         if (!this.isActive) return; // Use the getter
         if (event.key === "Escape") {
             console.log("Schematic placement cancelled by Escape key.");
             this.onDeactivate();
         }
-
-
     }
+
     placeSchematic() {
         if (!this.schematicData || !this.previewPositionRef.current) {
             console.error("Cannot place schematic: data or position missing.");
@@ -170,6 +158,13 @@ class SchematicPlacementTool extends BaseTool {
         const addedBlocks = {};
         const removedBlocks = {};
         const terrain = this.terrainRef.current;
+        const pendingChanges = this.terrainBuilderProps?.pendingChangesRef?.current || {
+            terrain: { added: {}, removed: {} },
+            environment: { added: [], removed: [] },
+        };
+        console.log("original pendingChanges", JSON.stringify(pendingChanges));
+        console.log("terrain", terrain);
+        console.log("this.terrainBuilderProps", this.terrainBuilderProps);
         console.log(
             `Placing schematic at base position: ${basePosition.x},${basePosition.y},${basePosition.z}`
         );
@@ -205,7 +200,10 @@ class SchematicPlacementTool extends BaseTool {
             if (this.undoRedoManager && this.undoRedoManager.current) {
                 const changes = {
                     terrain: { added: addedBlocks, removed: removedBlocks },
-                    environment: { added: [], removed: [] },
+                    environment: {
+                        added: this.terrainBuilderProps?.environment?.added,
+                        removed: this.terrainBuilderProps?.environment?.removed,
+                    },
                 };
                 this.undoRedoManager.current.saveUndo(changes);
                 console.log(
@@ -222,31 +220,35 @@ class SchematicPlacementTool extends BaseTool {
             );
         }
 
+        console.log("pendingChanges", pendingChanges);
+
+        if (pendingChanges) {
+            pendingChanges.terrain.added = {
+                ...pendingChanges.terrain.added,
+                ...addedBlocks,
+            };
+            pendingChanges.terrain.removed = removedBlocks;
+        }
+
         if (this.terrainBuilderProps.activateTool) {
             console.log("Schematic placed, activating Brush tool...");
             this.terrainBuilderProps.activateTool("brush");
         } else {
-
             console.warn(
                 "activateTool not found in props, deactivating schematic tool."
             );
             this.deactivate();
         }
     }
-    clearPreviewMeshes() {
 
+    clearPreviewMeshes() {
         while (this.previewGroup.children.length > 0) {
             const mesh = this.previewGroup.children[0];
             this.previewGroup.remove(mesh);
-
-
-
-
         }
         this.previewMeshes = {};
     }
     dispose() {
-
         this.clearPreviewMeshes();
 
         if (this.scene) {
