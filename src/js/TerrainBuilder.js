@@ -144,10 +144,11 @@ function TerrainBuilder(
                 autoSaveIntervalRef.current = setInterval(() => {
                     // Only save if there are pending changes
                     if (
-                        Object.keys(pendingChangesRef.current.terrain.added)
+                        pendingChangesRef.current?.terrain &&
+                        (Object.keys(pendingChangesRef.current.terrain.added || {})
                             .length > 0 ||
-                        Object.keys(pendingChangesRef.current.terrain.removed)
-                            .length > 0
+                        Object.keys(pendingChangesRef.current.terrain.removed || {})
+                            .length > 0)
                     ) {
                         console.log("Auto-saving terrain...");
                         efficientTerrainSave();
@@ -2711,12 +2712,17 @@ function TerrainBuilder(
                 // Only save if there are pending changes and not in the middle of an operation
                 if (
                     !isPlacingRef.current &&
-                    (Object.keys(pendingChangesRef.current.terrain.added)
+                    pendingChangesRef.current?.terrain &&
+                    (Object.keys(pendingChangesRef.current.terrain.added || {})
                         .length > 0 ||
-                        Object.keys(pendingChangesRef.current.terrain.removed)
-                            .length > 0)
+                    Object.keys(
+                        pendingChangesRef.current.terrain.removed || {}
+                    ).length > 0)
                 ) {
-                    console.log("Auto-saving terrain...");
+                    console.log(
+                        `Auto-saving terrain...`
+                    );
+
                     efficientTerrainSave();
                 }
             }, AUTO_SAVE_INTERVAL);
@@ -2724,12 +2730,17 @@ function TerrainBuilder(
             // Save immediately if there are pending changes and not in the middle of an operation
             if (
                 !isPlacingRef.current &&
-                (Object.keys(pendingChangesRef.current.terrain.added).length >
-                    0 ||
-                    Object.keys(pendingChangesRef.current.terrain.removed)
-                        .length > 0)
+                pendingChangesRef.current?.terrain &&
+                (Object.keys(pendingChangesRef.current.terrain.added || {})
+                    .length > 0 ||
+                    Object.keys(
+                        pendingChangesRef.current.terrain.removed || {}
+                    ).length > 0)
             ) {
-                console.log("Immediate save after enabling auto-save...");
+                console.log(
+                    `Immediate save after enabling auto-save...`
+                );
+
                 efficientTerrainSave();
             }
         } else {
@@ -2889,10 +2900,11 @@ function TerrainBuilder(
                     // Only save if there are pending changes and not in the middle of an operation
                     if (
                         !isPlacingRef.current &&
-                        (Object.keys(pendingChangesRef.current.terrain.added)
+                        pendingChangesRef.current?.terrain &&
+                        (Object.keys(pendingChangesRef.current.terrain.added || {})
                             .length > 0 ||
                             Object.keys(
-                                pendingChangesRef.current.terrain.removed
+                                pendingChangesRef.current.terrain.removed || {}
                             ).length > 0)
                     ) {
                         console.log(
