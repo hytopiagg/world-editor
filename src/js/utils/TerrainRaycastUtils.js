@@ -119,7 +119,20 @@ const getTerrainRaycastIntersection = (
         spatialGridManagerRef.current.size > 0
     ) {
         // Use the optimized raycast method which now handles both block and ground plane detection
-        intersection = getOptimizedRaycastIntersection(true); // Always prioritize blocks
+        intersection = getOptimizedRaycastIntersection(
+            scene,
+            threeCamera,
+            threeRaycaster,
+            pointer,
+            useSpatialHashRef,
+            spatialGridManagerRef,
+            gridSizeRef,
+            selectionDistanceRef,
+            true,
+            recentlyPlacedBlocksRef,
+            isPlacingRef,
+            modeRef
+        ); // Always prioritize blocks
     } else {
         // Fallback to simple ground plane detection if spatial hash is not available
         const rayOrigin = threeRaycaster.ray.origin;
