@@ -144,10 +144,12 @@ function TerrainBuilder(
                     // Only save if there are pending changes
                     if (
                         pendingChangesRef.current?.terrain &&
-                        (Object.keys(pendingChangesRef.current.terrain.added || {})
-                            .length > 0 ||
-                        Object.keys(pendingChangesRef.current.terrain.removed || {})
-                            .length > 0)
+                        (Object.keys(
+                            pendingChangesRef.current.terrain.added || {}
+                        ).length > 0 ||
+                            Object.keys(
+                                pendingChangesRef.current.terrain.removed || {}
+                            ).length > 0)
                     ) {
                         console.log("Auto-saving terrain...");
                         efficientTerrainSave();
@@ -626,8 +628,9 @@ function TerrainBuilder(
                             const batch = blockEntries.slice(startIdx, endIdx);
                             batch.forEach(([posKey, blockId]) => {
                                 terrainRef.current[posKey] = blockId;
-                                pendingChangesRef.current.terrain.added[posKey] =
-                                    blockId;
+                                pendingChangesRef.current.terrain.added[
+                                    posKey
+                                ] = blockId;
                             });
                             if (endIdx < blockEntries.length) {
                                 setTimeout(() => {
@@ -1748,9 +1751,9 @@ function TerrainBuilder(
                     pendingChangesRef.current?.terrain &&
                     (Object.keys(pendingChangesRef.current.terrain.added || {})
                         .length > 0 ||
-                    Object.keys(
-                        pendingChangesRef.current.terrain.removed || {}
-                    ).length > 0)
+                        Object.keys(
+                            pendingChangesRef.current.terrain.removed || {}
+                        ).length > 0)
                 ) {
                     efficientTerrainSave();
                 }
@@ -1760,9 +1763,8 @@ function TerrainBuilder(
                 pendingChangesRef.current?.terrain &&
                 (Object.keys(pendingChangesRef.current.terrain.added || {})
                     .length > 0 ||
-                    Object.keys(
-                        pendingChangesRef.current.terrain.removed || {}
-                    ).length > 0)
+                    Object.keys(pendingChangesRef.current.terrain.removed || {})
+                        .length > 0)
             ) {
                 efficientTerrainSave();
             }
@@ -1829,8 +1831,9 @@ function TerrainBuilder(
                     if (
                         !isPlacingRef.current &&
                         pendingChangesRef.current?.terrain &&
-                        (Object.keys(pendingChangesRef.current.terrain.added || {})
-                            .length > 0 ||
+                        (Object.keys(
+                            pendingChangesRef.current.terrain.added || {}
+                        ).length > 0 ||
                             Object.keys(
                                 pendingChangesRef.current.terrain.removed || {}
                             ).length > 0)

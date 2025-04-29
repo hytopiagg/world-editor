@@ -26,7 +26,7 @@ import Tooltip from "./js/components/Tooltip";
 import UnderConstruction from "./js/components/UnderConstruction";
 import { processCustomBlock } from "./js/managers/BlockTypesManager";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
-
+import { loadingManager } from "./js/managers/LoadingManager";
 function App() {
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
@@ -97,6 +97,10 @@ function App() {
                 }
             }
         };
+
+        if (!pageIsLoaded) {
+            loadingManager.showLoading();
+        }
 
         if (pageIsLoaded) {
             loadSavedToolSelection();

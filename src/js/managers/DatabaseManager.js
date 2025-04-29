@@ -130,38 +130,119 @@ export class DatabaseManager {
                 const store = tx.objectStore(storeName);
 
                 if (storeName === STORES.TERRAIN && key === "current") {
-                    console.log("Getting current terrain data...");
-                    const terrainData = {};
-                    const cursorRequest = store.openCursor();
-                    let index = 0;
-                    cursorRequest.onsuccess = (event) => {
-                        const cursor = event.target.result;
-                        if (cursor) {
-                            terrainData[cursor.key] = cursor.value;
-                            index++;
-                            if (index % 100 === 0) {
-                                loadingManager.updateLoading(
-                                    `Loading terrain... ${index}`
-                                );
-                            }
-                            cursor.continue();
-                        } else {
-                            console.log(
-                                `[DB] Reconstructed terrain data with ${
-                                    Object.keys(terrainData).length
-                                } blocks from store '${storeName}'`
-                            );
-                            resolve(terrainData);
-                        }
-                    };
-                    cursorRequest.onerror = (event) => {
+                    console.log("Checking terrain data size...");
+                    const countRequest = store.count();
+
+                    countRequest.onerror = (event) => {
                         console.error(
-                            `[DB] Error reading terrain store with cursor:`,
+                            "[DB] Error counting terrain store:",
                             event.target.error
                         );
-                        reject(event.target.error);
+                        reject(event.target.error); // Reject if count fails
+                    };
+
+                    countRequest.onsuccess = async (event) => {
+                        const count = event.target.result;
+                        console.log(
+                            `[DB] Terrain store contains ${count} blocks.`
+                        );
+                        const SIZE_THRESHOLD = 1000000; // Example: Use bulk get below 100k items
+
+                        // --- Create a new transaction for the actual data retrieval ---
+                        // It's generally safer to use a new transaction after the count.
+                        const dataTx = db.transaction(storeName, "readonly");
+                        const dataStore = dataTx.objectStore(storeName);
+                        let terrainData = {};
+
+                        if (count < SIZE_THRESHOLD) {
+                            if (loadingManager.isLoading) {
+                                loadingManager.updateLoading(
+                                    `Loading terrain in memory...`
+                                );
+                            }
+                            try {
+                                const keysRequest = dataStore.getAllKeys();
+                                const valuesRequest = dataStore.getAll();
+
+                                // Use Promise.all to wait for both requests
+                                const [keys, values] = await Promise.all([
+                                    new Promise((res, rej) => {
+                                        keysRequest.onsuccess = () =>
+                                            res(keysRequest.result);
+                                        keysRequest.onerror = rej;
+                                    }),
+                                    new Promise((res, rej) => {
+                                        valuesRequest.onsuccess = () =>
+                                            res(valuesRequest.result);
+                                        valuesRequest.onerror = rej;
+                                    }),
+                                ]);
+
+                                if (keys.length !== values.length) {
+                                    console.error(
+                                        "[DB] Mismatch between keys and values count in bulk get!"
+                                    );
+                                    // Fallback or reject might be needed here
+                                    reject(
+                                        new Error(
+                                            "Key/Value count mismatch in bulk retrieval"
+                                        )
+                                    );
+                                    return;
+                                }
+
+                                for (let i = 0; i < keys.length; i++) {
+                                    terrainData[keys[i]] = values[i];
+                                }
+                                console.log(
+                                    `[DB] Reconstructed terrain data with ${keys.length} blocks using bulk get.`
+                                );
+                                resolve(terrainData);
+                            } catch (error) {
+                                console.error(
+                                    "[DB] Error during bulk retrieval:",
+                                    error.target ? error.target.error : error
+                                );
+                                reject(
+                                    error.target ? error.target.error : error
+                                );
+                            }
+                        } else {
+                            // ---- Cursor Iteration Path (Lower Memory, Potentially Slower for small sets) ----
+                            console.log("[DB] Using cursor retrieval.");
+                            let index = 0;
+                            const cursorRequest = dataStore.openCursor();
+
+                            cursorRequest.onsuccess = (event) => {
+                                const cursor = event.target.result;
+                                if (cursor) {
+                                    terrainData[cursor.key] = cursor.value;
+                                    index++;
+                                    if (index % 5000 === 0 || index === count) {
+                                        // Update progress less frequently or at the end
+                                        loadingManager.updateLoading(
+                                            `Loading terrain... ${index}/${count}`
+                                        );
+                                    }
+                                    cursor.continue();
+                                } else {
+                                    console.log(
+                                        `[DB] Reconstructed terrain data with ${index} blocks using cursor.`
+                                    );
+                                    resolve(terrainData);
+                                }
+                            };
+                            cursorRequest.onerror = (event) => {
+                                console.error(
+                                    "[DB] Error reading terrain store with cursor:",
+                                    event.target.error
+                                );
+                                reject(event.target.error);
+                            };
+                        }
                     };
                 } else {
+                    // Original logic for non-terrain stores
                     const request = store.get(key);
                     request.onsuccess = () => {
                         resolve(request.result);
