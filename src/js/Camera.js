@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import QuickTipsManager from "./components/QuickTipsManager";
+
 class CameraManager {
     constructor() {
         this.camera = null;
@@ -284,6 +286,8 @@ class CameraManager {
         if (event.key === "0") {
             this.isRotateMode = !this.isRotateMode;
             console.log("Camera mode toggled. Rotate mode:", this.isRotateMode);
+            const modeText = this.isRotateMode ? "Rotate" : "Glide";
+            QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
             return;
         }
 

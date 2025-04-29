@@ -8,7 +8,7 @@ class QuickTipsManager {
     static listeners = [];
     static currentTip = QuickTipsManager.defaultTip;
     static defaultTip =
-        "Move the camera with W, A, S, D. Right click to rotate. Middle click to drag-move.";
+        "Move the camera with W, A, S, D. Right click to rotate. 0 to toggle camera mode. Middle click to drag-move.";
     /**
      * Set the current tool tip text
      * @param {string} tipText - The tooltip text to display

@@ -332,7 +332,7 @@ function App() {
                     </p>
                 </div>
 
-                <QuickTips />
+                {pageIsLoaded && <QuickTips />}
 
                 <UndoRedoManager
                     ref={undoRedoManagerRef}
