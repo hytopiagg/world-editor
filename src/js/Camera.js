@@ -27,7 +27,7 @@ class CameraManager {
         this.lastTarget = null;
         this.animationFrameId = null;
         this.onCameraAngleChange = null;
-
+        this.isRotateMode = true;
         this.controls.enableZoom = false;
         this.controls.panSpeed = 10;
 
@@ -147,30 +147,45 @@ class CameraManager {
 
         if (this.keys.has("a") || this.keys.has("arrowleft")) {
             // Mode 1: Rotate camera
-            this.camera.rotateY(this.rotateSpeed);
-
-            // Mode 2: Move camera left
-            // const direction = new THREE.Vector3();
-            // this.camera.getWorldDirection(direction);
-            // direction.y = 0;
-            // direction.normalize();
-            // const leftVector = new THREE.Vector3(direction.z, 0, -direction.x);
-            // this.camera.position.add(leftVector.multiplyScalar(this.moveSpeed));
+            if (this.isRotateMode) {
+                this.camera.rotateY(this.rotateSpeed);
+            } else {
+                // Mode 2: Move camera left
+                const direction = new THREE.Vector3();
+                this.camera.getWorldDirection(direction);
+                direction.y = 0;
+                direction.normalize();
+                const leftVector = new THREE.Vector3(
+                    direction.z,
+                    0,
+                    -direction.x
+                );
+                this.camera.position.add(
+                    leftVector.multiplyScalar(this.moveSpeed)
+                );
+            }
 
             moved = true;
         }
         if (this.keys.has("d") || this.keys.has("arrowright")) {
             // Mode 1: Rotate camera
-            this.camera.rotateY(-this.rotateSpeed);
-            
-            // Mode 2: Move camera right
-            // const direction = new THREE.Vector3();
-            // this.camera.getWorldDirection(direction);
-            // direction.y = 0;
-            // direction.normalize();
-            // const rightVector = new THREE.Vector3(-direction.z, 0, direction.x);
-            // this.camera.position.add(rightVector.multiplyScalar(this.moveSpeed));
-            
+            if (this.isRotateMode) {
+                this.camera.rotateY(-this.rotateSpeed);
+            } else {
+                // Mode 2: Move camera right
+                const direction = new THREE.Vector3();
+                this.camera.getWorldDirection(direction);
+                direction.y = 0;
+                direction.normalize();
+                const rightVector = new THREE.Vector3(
+                    -direction.z,
+                    0,
+                    direction.x
+                );
+                this.camera.position.add(
+                    rightVector.multiplyScalar(this.moveSpeed)
+                );
+            }
             moved = true;
         }
 
