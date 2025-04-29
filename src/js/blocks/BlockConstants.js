@@ -27,7 +27,7 @@ export const BlockFaceAxes = {
 export const BlockFaces = Object.keys(BlockFaceEnum);
 
 // Default block AO intensity
-export const DEFAULT_BLOCK_AO_INTENSITY = [0, 0.3, 0.5, 0.7];
+export const DEFAULT_BLOCK_AO_INTENSITY = [0, 0, 0, 0];
 
 // Default block color (RGBA)
 export const DEFAULT_BLOCK_COLOR = [1.0, 1.0, 1.0, 1.0];

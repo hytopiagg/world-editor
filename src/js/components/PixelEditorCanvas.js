@@ -29,6 +29,14 @@ const hexToRgb = (hex) => {
         : null;
 };
 
+// Helper to convert rgba to hex
+const rgbaToHex = (r, g, b) => {
+    return "#" + [r, g, b].map(x => {
+        const hex = x.toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+    }).join("");
+};
+
 // Flood fill needs to operate on the internal ImageData now
 const floodFillInternal = (imgData, startX, startY, fillColorRgba) => {
     const { width, height, data } = imgData;
@@ -113,6 +121,7 @@ const PixelEditorCanvas = forwardRef(
             canvasSize = 480,
             selectedFace,
             onPixelUpdate,
+            onColorPicked,
         },
         ref // Receive ref from parent
     ) => {
@@ -125,6 +134,10 @@ const PixelEditorCanvas = forwardRef(
         // Add ref to track current drawing state without pushing to history
         const currentDrawingRef = useRef(null);
 
+        // Alt key state tracking
+        const [isAltPressed, setIsAltPressed] = useState(false);
+        const previousToolRef = useRef(null);
+
         // History state
         const [history, setHistory] = useState([]);
         const [historyIndex, setHistoryIndex] = useState(-1);
@@ -136,6 +149,57 @@ const PixelEditorCanvas = forwardRef(
             }
             return null;
         }, [history, historyIndex]);
+
+        // Effect to handle Alt key events
+        useEffect(() => {
+            const handleKeyDown = (e) => {
+                if (e.key === 'Alt' || e.keyCode === 18) {
+                    e.preventDefault(); // Prevent browser's default behavior
+                    if (!isAltPressed) {
+                        setIsAltPressed(true);
+                        // Store the current tool when Alt is first pressed
+                        previousToolRef.current = selectedTool;
+                    }
+                }
+            };
+
+            const handleKeyUp = (e) => {
+                if (e.key === 'Alt' || e.keyCode === 18) {
+                    e.preventDefault(); // Prevent browser's default behavior
+                    setIsAltPressed(false);
+                }
+            };
+
+            // Add event listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            // Clean up
+            return () => {
+                window.removeEventListener('keydown', handleKeyDown);
+                window.removeEventListener('keyup', handleKeyUp);
+            };
+        }, [isAltPressed, selectedTool]);
+
+        // Effect to switch to eyedropper when Alt is pressed
+        useEffect(() => {
+            if (isAltPressed && onColorPicked) {
+                // Only store the previous tool if not already the eyedropper
+                if (selectedTool !== TOOLS.EYEDROPPER) {
+                    previousToolRef.current = selectedTool;
+                }
+                // Switch to eyedropper tool
+                if (onColorPicked && typeof onColorPicked.setTool === 'function') {
+                    onColorPicked.setTool(TOOLS.EYEDROPPER);
+                }
+            } else if (!isAltPressed && previousToolRef.current !== null) {
+                // Switch back to previous tool when Alt is released
+                if (onColorPicked && typeof onColorPicked.setTool === 'function') {
+                    onColorPicked.setTool(previousToolRef.current);
+                }
+                previousToolRef.current = null;
+            }
+        }, [isAltPressed, selectedTool, onColorPicked]);
 
         // Function to draw the visual canvas based on currentImageData
         const drawVisualCanvas = useCallback(() => {
@@ -416,6 +480,25 @@ const PixelEditorCanvas = forwardRef(
             return null;
         };
 
+        // Get color at pixel position
+        const getPixelColor = (x, y) => {
+            if (!currentImageData || x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) {
+                return null;
+            }
+            
+            const index = (y * GRID_SIZE + x) * 4;
+            const r = currentImageData.data[index];
+            const g = currentImageData.data[index + 1];
+            const b = currentImageData.data[index + 2];
+            const a = currentImageData.data[index + 3];
+            
+            // If fully transparent, return null or a default
+            if (a === 0) return null;
+            
+            // Convert to hex
+            return rgbaToHex(r, g, b);
+        };
+
         // Update pixel directly in a *copy* of the current ImageData
         const updateImageDataPixel = (imgData, x, y, colorRgba) => {
             if (!imgData || x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE)
@@ -512,6 +595,15 @@ const PixelEditorCanvas = forwardRef(
             const coords = getCoords(e);
             if (!coords || !currentImageData) return;
 
+            // Handle eyedropper tool
+            if (selectedTool === TOOLS.EYEDROPPER) {
+                const color = getPixelColor(coords.x, coords.y);
+                if (color && onColorPicked && typeof onColorPicked.pickColor === 'function') {
+                    onColorPicked.pickColor(color);
+                }
+                return; // Don't proceed with drawing
+            }
+
             // Save the starting snapshot before drawing
             startImageDataRef.current = new ImageData(
                 new Uint8ClampedArray(currentImageData.data),
@@ -538,6 +630,11 @@ const PixelEditorCanvas = forwardRef(
         };
 
         const handleMouseMove = (e) => {
+            // If eyedropper active, don't prevent motion
+            if (selectedTool === TOOLS.EYEDROPPER) {
+                return;
+            }
+            
             if (!isDrawing) return;
 
             const coords = getCoords(e);
@@ -550,6 +647,11 @@ const PixelEditorCanvas = forwardRef(
         };
 
         const handleMouseUp = () => {
+            // If eyedropper active, don't process drawing end
+            if (selectedTool === TOOLS.EYEDROPPER) {
+                return;
+            }
+            
             if (!isDrawing) return;
             setIsDrawing(false);
 
@@ -763,6 +865,7 @@ PixelEditorCanvas.propTypes = {
     canvasSize: PropTypes.number,
     selectedFace: PropTypes.string.isRequired,
     onPixelUpdate: PropTypes.func, // Expects (face, imageData) => void
+    onColorPicked: PropTypes.object, // Object with pickColor and setTool functions
 };
 
 // Add display name for debugging

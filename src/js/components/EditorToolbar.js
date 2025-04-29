@@ -6,6 +6,7 @@ import {
     FaFillDrip,
     FaUndo,
     FaRedo,
+    FaEyeDropper,
 } from "react-icons/fa"; // Using icons
 import "../../css/TextureGenerationModal.css"; // CSS for styling
 
@@ -13,6 +14,7 @@ const TOOLS = {
     PENCIL: "pencil",
     ERASER: "eraser",
     FILL: "fill",
+    EYEDROPPER: "eyedropper", // New eyedropper tool
 };
 
 const EditorToolbar = ({
@@ -25,7 +27,7 @@ const EditorToolbar = ({
 }) => {
     return (
         <div className="editor-toolbar">
-            <label className="face-selector-label">Edit Face:</label>
+            <label className="face-selector-label">Tools:</label>
             <button
                 className={`tool-button ${
                     selectedTool === TOOLS.PENCIL ? "active" : ""
@@ -54,6 +56,15 @@ const EditorToolbar = ({
                 <FaFillDrip />
             </button>
             <button
+                className={`tool-button ${
+                    selectedTool === TOOLS.EYEDROPPER ? "active" : ""
+                }`}
+                onClick={() => onSelectTool(TOOLS.EYEDROPPER)}
+                title="Color Picker (Alt)"
+            >
+                <FaEyeDropper />
+            </button>
+            <button
                 onClick={onUndo}
                 disabled={!canUndo}
                 title="Undo"
@@ -76,6 +87,10 @@ const EditorToolbar = ({
 EditorToolbar.propTypes = {
     selectedTool: PropTypes.string.isRequired,
     onSelectTool: PropTypes.func.isRequired,
+    onUndo: PropTypes.func,
+    onRedo: PropTypes.func,
+    canUndo: PropTypes.bool,
+    canRedo: PropTypes.bool,
 };
 
 // Export TOOLS constant as well if needed elsewhere

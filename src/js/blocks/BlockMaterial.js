@@ -72,10 +72,6 @@ class BlockMaterial {
             this._defaultMaterial.map = textureAtlas;
             this._defaultMaterial.needsUpdate = true;
         }
-
-        if (this._liquidMaterial) {
-            this._liquidMaterial.uniforms.textureAtlas.value = textureAtlas;
-        }
     }
 
     /**

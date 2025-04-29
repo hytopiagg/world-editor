@@ -1218,78 +1218,9 @@ class Chunk {
         blockFaceAO,
         chunkManager
     ) {
-        // Initialize the cache if it doesn't exist
-        if (!this._vertexColorCache) {
-            this._vertexColorCache = new Map();
-        }
-
-        // Create a cache key from the vertex coordinate, block type
-        // Using coordinates and block ID is enough, no need to include AO data in the key
-        const cacheKey = `${vertexCoordinate.x},${vertexCoordinate.y},${vertexCoordinate.z}-${blockType.id}`;
-
-        // Check if we have a cached result
-        if (this._vertexColorCache.has(cacheKey)) {
-            return this._vertexColorCache.get(cacheKey);
-        }
-
+        // Simply return the base color without AO calculations
         const baseColor = blockType.color;
-        let aoIntensityLevel = 0;
-
-        // Calculate AO
-        for (const aoSide of Object.values(blockFaceAO)) {
-            const [dx, dy, dz] = aoSide;
-            let neighborBlockType;
-
-            if (this._extendedBlockTypes) {
-                const ex =
-                    Math.floor(vertexCoordinate.x + dx) -
-                    (this.originCoordinate.x - 1);
-                const ey =
-                    Math.floor(vertexCoordinate.y + dy) -
-                    (this.originCoordinate.y - 1);
-                const ez =
-                    Math.floor(vertexCoordinate.z + dz) -
-                    (this.originCoordinate.z - 1);
-                if (
-                    ex >= 0 &&
-                    ex <= CHUNK_SIZE + 1 &&
-                    ey >= 0 &&
-                    ey <= CHUNK_SIZE + 1 &&
-                    ez >= 0 &&
-                    ez <= CHUNK_SIZE + 1
-                ) {
-                    neighborBlockType = this._extendedBlockTypes[ex][ey][ez];
-                }
-            }
-
-            if (!neighborBlockType) {
-                const neighborGlobalCoordinate = {
-                    x: Math.floor(vertexCoordinate.x + dx),
-                    y: Math.floor(vertexCoordinate.y + dy),
-                    z: Math.floor(vertexCoordinate.z + dz),
-                };
-                neighborBlockType = chunkManager.getGlobalBlockType(
-                    neighborGlobalCoordinate
-                );
-            }
-
-            if (neighborBlockType && !neighborBlockType.isLiquid) {
-                aoIntensityLevel++;
-            }
-        }
-
-        const ao = blockType.aoIntensity[aoIntensityLevel];
-        const result = [
-            baseColor[0] - ao,
-            baseColor[1] - ao,
-            baseColor[2] - ao,
-            baseColor[3],
-        ];
-
-        // Cache the result
-        this._vertexColorCache.set(cacheKey, result);
-
-        return result;
+        return [...baseColor]; // Return a copy of the base color
     }
 
     /**

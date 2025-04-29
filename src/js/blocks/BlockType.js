@@ -63,7 +63,7 @@ class BlockType {
      * @returns {Array} The AO intensity values
      */
     get aoIntensity() {
-        return this._aoIntensity;
+        return [0, 0, 0, 0]; // Always return zeros to disable AO
     }
 
     /**

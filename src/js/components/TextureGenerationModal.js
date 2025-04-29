@@ -1,13 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
-import { FaUndo, FaRedo } from "react-icons/fa";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import EditorToolbar, { TOOLS } from "./EditorToolbar";
 import PixelEditorCanvas from "./PixelEditorCanvas";
 import BlockPreview3D from "./BlockPreview3D";
 import FaceSelector from "./FaceSelector";
 import "../../css/TextureGenerationModal.css"; // We'll create this CSS file next
-import "../../css/BlockPreview3D.css"; // Import preview CSS
 import * as THREE from "three"; // Import THREE
 import CustomColorPicker from "./ColorPicker";
 
@@ -302,6 +300,21 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         }
     };
 
+    // Create a color picker controller to pass to the canvas
+    const colorPickerController = useCallback(
+        {
+            pickColor: (hexColor) => {
+                if (hexColor) {
+                    setSelectedColor(hexColor);
+                }
+            },
+            setTool: (toolName) => {
+                setSelectedTool(toolName);
+            },
+        },
+        [] // Empty dependency array since the functions only reference state setters
+    );
+
     if (!isOpen) return null;
 
     // Determine texture to initially load into canvas
@@ -321,7 +334,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         {/* Static Sidebar for Tools and Preview */}
                         <div className="editor-sidebar">
                             <CustomColorPicker
-                                selectedColor={selectedColor}
+                                value={selectedColor}
                                 onChange={setSelectedColor}
                             />
                             <div className="preview-face-container">
@@ -339,6 +352,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 selectedColor={selectedColor}
                                 selectedFace={selectedFace}
                                 onPixelUpdate={handlePixelUpdate}
+                                onColorPicked={colorPickerController}
                             />
                             <div className="editor-toolbar-container">
                                 <EditorToolbar
@@ -370,6 +384,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 <div className="hcaptcha-container">
                                     <HCaptcha
                                         ref={hCaptchaRef}
+                                        theme="dark"
                                         sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY}
                                         onVerify={(token) => {
                                             setHCaptchaToken(token);

@@ -195,6 +195,7 @@ const AIAssistantPanel = ({
                 ref={hCaptchaRef}
                 sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY}
                 size="compact"
+                theme="dark"
                 onVerify={(token) => {
                     setHCaptchaToken(token);
                     setCaptchaError(null);

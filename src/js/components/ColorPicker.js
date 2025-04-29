@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     Flex,
     ColorArea,
@@ -7,341 +7,249 @@ import {
 } from "@adobe/react-spectrum";
 import styles from "../../css/ColorPicker.module.css";
 
-// Helper component for number input
-const CustomNumberInput = ({
-    label,
-    value,
-    onChange,
-    min,
-    max,
-    step = 1,
-    formatOptions,
-    width,
-}) => {
-    const handleChange = (e) => {
-        let newValue = parseFloat(e.target.value);
-        if (isNaN(newValue)) {
-            newValue = min; // Or handle differently
-        }
-        newValue = Math.max(min, Math.min(max, newValue));
-        onChange(newValue);
-    };
-
-    // Basic formatting (can be expanded)
-    let displayValue = value;
-    if (formatOptions?.style === "percent") {
-        displayValue = (value / 100).toLocaleString(undefined, {
-            style: "percent",
-            maximumFractionDigits: formatOptions.maximumFractionDigits ?? 0,
-        });
-    } else {
-        displayValue = value.toFixed(formatOptions?.maximumFractionDigits ?? 0);
-    }
-
-    // For direct input, don't format immediately
-    const [inputValue, setInputValue] = useState(() =>
-        value.toFixed(formatOptions?.maximumFractionDigits ?? 0)
-    ); // Initial state from prop
-
+// Simple number input that doesn't cause update loops
+const CustomNumberInput = ({ label, value, onChange, min, max, step = 1 }) => {
+    const [localValue, setLocalValue] = useState(value);
+    
+    // Only update local value when prop changes significantly
     useEffect(() => {
-        const propValueFormatted = value.toFixed(
-            formatOptions?.maximumFractionDigits ?? 0
-        );
-        if (propValueFormatted !== inputValue) {
-            setInputValue(propValueFormatted);
+        if (Math.abs(localValue - value) > 0.1) {
+            setLocalValue(value);
         }
-    }, [value, formatOptions]);
-
-    const handleInputChange = (e) => {
-        setInputValue(e.target.value);
+    }, [value]);
+    
+    const handleChange = (e) => {
+        const newValue = Math.max(min, Math.min(max, Number(e.target.value)));
+        setLocalValue(newValue);
     };
-
-    const handleBlur = (e) => {
-        let numericValue = parseFloat(e.target.value);
-        if (isNaN(numericValue)) {
-            numericValue = min;
-        } else {
-            numericValue = Math.max(min, Math.min(max, numericValue));
-        }
-        onChange(numericValue);
-        setInputValue(
-            numericValue.toFixed(formatOptions?.maximumFractionDigits ?? 0)
-        );
+    
+    const handleBlur = () => {
+        // Only notify parent on blur (not every keystroke)
+        onChange(localValue);
     };
-
-    const increment = () => {
-        const newValue = Math.min(max, value + step);
-        onChange(newValue);
-        setInputValue(
-            newValue.toFixed(formatOptions?.maximumFractionDigits ?? 0)
-        );
-    };
-
-    const decrement = () => {
-        const newValue = Math.max(min, value - step);
-        onChange(newValue);
-        setInputValue(
-            newValue.toFixed(formatOptions?.maximumFractionDigits ?? 0)
-        );
-    };
-
+    
     return (
-        <div className={styles.inputRow} style={width ? { width } : {}}>
+        <div className={styles.inputRow}>
             <label className={styles.label}>{label}</label>
             <div className={styles.inputWrapper}>
                 <input
                     type="number"
                     className={styles.numberInput}
-                    value={inputValue}
-                    onChange={handleInputChange}
+                    value={localValue}
+                    onChange={handleChange}
                     onBlur={handleBlur}
                     min={min}
                     max={max}
                     step={step}
-                    style={{
-                        appearance: "textfield",
-                        MozAppearance: "textfield",
-                    }}
+                    style={{ appearance: "textfield", MozAppearance: "textfield" }}
                 />
             </div>
         </div>
     );
 };
 
-// Helper component for hex input
-const CustomHexInput = ({ label, value, onChange }) => {
-    const [hexValue, setHexValue] = useState(value.toString("hex"));
-
+// Simple hex input component
+const CustomHexInput = ({ label, hexValue, onChange }) => {
+    const [localValue, setLocalValue] = useState(hexValue);
+    
+    // Only update when prop changes
     useEffect(() => {
-        setHexValue(value.toString("hex"));
-    }, [value]);
-
+        if (localValue !== hexValue) {
+            setLocalValue(hexValue);
+        }
+    }, [hexValue]);
+    
     const handleChange = (e) => {
-        let input = e.target.value;
-        setHexValue(input); // Allow typing
-
+        setLocalValue(e.target.value);
+    };
+    
+    const handleBlur = () => {
         try {
-            if (
-                input.startsWith("#") &&
-                (input.length === 7 || input.length === 4)
-            ) {
-                const newColor = parseColor(input);
-                onChange(newColor.toFormat("hsb"));
-            } else if (
-                !input.startsWith("#") &&
-                (input.length === 6 || input.length === 3)
-            ) {
-                const newColor = parseColor(`#${input}`);
-                onChange(newColor.toFormat("hsb"));
+            // Check if it's a valid hex color
+            let formattedValue = localValue;
+            if (!formattedValue.startsWith('#')) {
+                formattedValue = '#' + formattedValue;
+            }
+            
+            // Simple validation
+            if (/^#([0-9A-F]{3}){1,2}$/i.test(formattedValue)) {
+                onChange(formattedValue);
+            } else {
+                // Invalid format, revert to previous value
+                setLocalValue(hexValue);
             }
         } catch (error) {
-            // Invalid color input
-            console.warn("Invalid hex color", input);
+            // Revert on error
+            setLocalValue(hexValue);
         }
     };
-
-    const handleBlur = (e) => {
-        let input = e.target.value;
-        try {
-            const newColor = parseColor(
-                input.startsWith("#") ? input : `#${input}`
-            );
-            onChange(newColor.toFormat("hsb"));
-            setHexValue(newColor.toString("hex"));
-        } catch (error) {
-            setHexValue(value.toString("hex"));
-            console.warn("Invalid hex color on blur, reverting", input);
-        }
-    };
-
+    
     return (
         <div className={styles.inputRow}>
             <label className={styles.label}>{label}</label>
             <input
                 type="text"
                 className={styles.hexInput}
-                value={hexValue}
+                value={localValue}
                 onChange={handleChange}
                 onBlur={handleBlur}
                 maxLength={7}
-                placeholder="#aabbcc"
+                placeholder="#RRGGBB"
             />
         </div>
     );
 };
 
 /**
- * A Spectrum-style picker with custom inputs
- * • 2-D SV box
- * • vertical hue slider
- * • custom editable hex/HSB/RGB inputs
- *
- * Props
- * ──────────────────────────────────────────────────
- * value        – hex string (“#C4DB42”)
- * onChange(hex) – called whenever the color changes
+ * A color picker component with stable update behavior
  */
-export default function CustomColorPicker({ value, onChange }) {
-    const [colorObj, setColorObj] = useState(() =>
-        parseColor(value || "#000000").toFormat("hsb")
-    );
-
-    useEffect(() => {
-        const newHex = colorObj.toString("hex");
-        // Only call onChange if the hex value actually changed to avoid loops
-        if (newHex !== value) {
-            onChange(newHex);
+export default function CustomColorPicker({ value = "#000000", onChange }) {
+    // Parse the incoming hex value to an HSB object once
+    const [internalColor, setInternalColor] = useState(() => {
+        try {
+            return parseColor(value).toFormat("hsb");
+        } catch (e) {
+            return parseColor("#000000").toFormat("hsb");
         }
-    }, [colorObj, onChange, value]); // Added value dependency
+    });
 
-    // Effect 2: Sync internal state ONLY when 'value' prop changes externally
-    const syncColor = useMemo(
-        () => parseColor(value || "#000000").toFormat("hsb"),
-        [value]
-    );
-
+    // When value prop changes from parent, update internal state
     useEffect(() => {
-        if (syncColor.toString("hsb") !== colorObj.toString("hsb")) {
-            setColorObj(syncColor);
+        try {
+            const newColor = parseColor(value).toFormat("hsb");
+            if (newColor.toString("hex") !== internalColor.toString("hex")) {
+                setInternalColor(newColor);
+            }
+        } catch (e) {
+            // Handle invalid colors gracefully
+            console.warn("Invalid color value:", value);
         }
-    }, [syncColor]);
+    }, [value]);
 
-    // --- Input change handlers ---
-    const handleHueChange = useCallback(
-        (h) => setColorObj(colorObj.withChannelValue("hue", h)),
-        [colorObj]
-    );
-    const handleSaturationChange = useCallback(
-        (s) => setColorObj(colorObj.withChannelValue("saturation", s)),
-        [colorObj]
-    );
-    const handleBrightnessChange = useCallback(
-        (b) => setColorObj(colorObj.withChannelValue("brightness", b)),
-        [colorObj]
-    );
+    // Update parent only when color area or slider changes
+    const handleColorChange = useCallback((newColor) => {
+        setInternalColor(newColor);
+        const hexValue = newColor.toString("hex");
+        onChange(hexValue);
+    }, [onChange]);
 
-    const handleRedChange = useCallback(
-        (r) => {
-            const rgbColor = colorObj
-                .toFormat("rgb")
-                .withChannelValue("red", r);
-            setColorObj(rgbColor.toFormat("hsb"));
-        },
-        [colorObj]
-    );
-    const handleGreenChange = useCallback(
-        (g) => {
-            const rgbColor = colorObj
-                .toFormat("rgb")
-                .withChannelValue("green", g);
-            setColorObj(rgbColor.toFormat("hsb"));
-        },
-        [colorObj]
-    );
-    const handleBlueChange = useCallback(
-        (b) => {
-            const rgbColor = colorObj
-                .toFormat("rgb")
-                .withChannelValue("blue", b);
-            setColorObj(rgbColor.toFormat("hsb"));
-        },
-        [colorObj]
-    );
+    // Handle individual HSB channel changes
+    const updateChannel = useCallback((channel, value) => {
+        const newColor = internalColor.withChannelValue(channel, value);
+        setInternalColor(newColor);
+        onChange(newColor.toString("hex"));
+    }, [internalColor, onChange]);
 
-    const handleHexChange = useCallback((newColor) => {
-        // Already in HSB format from CustomHexInput's onChange logic
-        setColorObj(newColor);
-    }, []);
+    // Separate handlers for RGB to avoid conversion issues
+    const updateRgbChannel = useCallback((channel, value) => {
+        const rgbColor = internalColor.toFormat("rgb").withChannelValue(channel, value);
+        const newColor = rgbColor.toFormat("hsb");
+        setInternalColor(newColor);
+        onChange(newColor.toString("hex"));
+    }, [internalColor, onChange]);
+
+    // Get current RGB values
+    const rgbValues = {
+        red: internalColor.toFormat("rgb").getChannelValue("red"),
+        green: internalColor.toFormat("rgb").getChannelValue("green"),
+        blue: internalColor.toFormat("rgb").getChannelValue("blue")
+    };
+
+    // Handle hex input changes
+    const handleHexChange = useCallback((hexValue) => {
+        try {
+            const newColor = parseColor(hexValue).toFormat("hsb");
+            setInternalColor(newColor);
+            onChange(hexValue);
+        } catch (e) {
+            console.warn("Invalid hex color:", hexValue);
+        }
+    }, [onChange]);
 
     return (
         <Flex direction="row" gap="size-150" alignItems="flex-start">
-            {/* SV square – saturation (x) × brightness (y) in HSB space  */}
+            {/* Color area */}
             <ColorArea
-                value={colorObj}
-                onChange={setColorObj}
+                value={internalColor}
+                onChange={handleColorChange}
                 xChannel="saturation"
                 yChannel="brightness"
-                height="size-1000" // Adjust size as needed
-                width="size-1200" // Adjust size as needed
+                height="size-1000"
+                width="size-1200"
             />
 
-            {/* vertical hue slider */}
+            {/* Hue slider */}
             <ColorSlider
                 channel="hue"
                 orientation="vertical"
-                value={colorObj}
-                onChange={setColorObj}
-                height="calc(var(--spectrum-global-dimension-size-1000) + 2 * var(--spectrum-global-dimension-size-10))" // Match height of ColorArea + input padding/margins roughly
+                value={internalColor}
+                onChange={handleColorChange}
+                height="calc(var(--spectrum-global-dimension-size-1000) + 2 * var(--spectrum-global-dimension-size-10))"
             />
 
-            {/* Container for Custom Inputs */}
+            {/* Input controls */}
             <div className={styles.inputContainer}>
+                {/* HSB inputs */}
                 <CustomNumberInput
                     label="H"
-                    value={colorObj.getChannelValue("hue")}
-                    onChange={handleHueChange}
+                    value={Math.round(internalColor.getChannelValue("hue"))}
+                    onChange={(val) => updateChannel("hue", val)}
                     min={0}
                     max={360}
                     step={1}
-                    formatOptions={{ maximumFractionDigits: 0 }}
                 />
                 <CustomNumberInput
                     label="S"
-                    value={colorObj.getChannelValue("saturation")}
-                    onChange={handleSaturationChange}
+                    value={Math.round(internalColor.getChannelValue("saturation"))}
+                    onChange={(val) => updateChannel("saturation", val)}
                     min={0}
                     max={100}
                     step={1}
-                    formatOptions={{
-                        /*style: "percent",*/ maximumFractionDigits: 0,
-                    }} // Using plain number for simplicity
                 />
                 <CustomNumberInput
                     label="B"
-                    value={colorObj.getChannelValue("brightness")}
-                    onChange={handleBrightnessChange}
+                    value={Math.round(internalColor.getChannelValue("brightness"))}
+                    onChange={(val) => updateChannel("brightness", val)}
                     min={0}
                     max={100}
                     step={1}
-                    formatOptions={{
-                        /*style: "percent",*/ maximumFractionDigits: 0,
-                    }} // Using plain number for simplicity
                 />
-                <div className={styles.separator}></div>{" "}
-                {/* Optional separator */}
+                
+                <div className={styles.separator}></div>
+                
+                {/* RGB inputs */}
                 <CustomNumberInput
                     label="R"
-                    value={colorObj.toFormat("rgb").getChannelValue("red")}
-                    onChange={handleRedChange}
+                    value={Math.round(rgbValues.red)}
+                    onChange={(val) => updateRgbChannel("red", val)}
                     min={0}
                     max={255}
                     step={1}
-                    formatOptions={{ maximumFractionDigits: 0 }}
                 />
                 <CustomNumberInput
                     label="G"
-                    value={colorObj.toFormat("rgb").getChannelValue("green")}
-                    onChange={handleGreenChange}
+                    value={Math.round(rgbValues.green)}
+                    onChange={(val) => updateRgbChannel("green", val)}
                     min={0}
                     max={255}
                     step={1}
-                    formatOptions={{ maximumFractionDigits: 0 }}
                 />
                 <CustomNumberInput
                     label="B"
-                    value={colorObj.toFormat("rgb").getChannelValue("blue")}
-                    onChange={handleBlueChange}
+                    value={Math.round(rgbValues.blue)}
+                    onChange={(val) => updateRgbChannel("blue", val)}
                     min={0}
                     max={255}
                     step={1}
-                    formatOptions={{ maximumFractionDigits: 0 }}
                 />
-                <div className={styles.separator}></div>{" "}
-                {/* Optional separator */}
+                
+                <div className={styles.separator}></div>
+                
+                {/* Hex input */}
                 <CustomHexInput
                     label="Hex"
-                    value={colorObj} // Pass the color object
-                    onChange={handleHexChange} // Let the component handle parsing
+                    hexValue={internalColor.toString("hex")}
+                    onChange={handleHexChange}
                 />
             </div>
         </Flex>

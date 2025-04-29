@@ -6,8 +6,8 @@
     right: 20px; /* Will adjust this later */
     width: 300px; /* Will adjust this later */
     padding: 15px;
-    background: rgba(40, 40, 40, 0.9);
-    border: 1px solid #555;
+    background: rgba(26, 26, 26, 0.95); /* Darker background to match App theme */
+    border: 1px solid #333;
     border-radius: 8px;
     color: white;
     z-index: 100;
@@ -15,37 +15,51 @@
     flex-direction: column;
     gap: 10px;
     box-sizing: border-box; /* Ensure padding is included in width */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .ai-assistant-textarea {
     width: 100%;
     min-height: 80px;
-    background: #333;
+    background: #222;
     color: white;
-    border: 1px solid #666;
-    border-radius: 4px;
-    padding: 5px;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 10px;
     box-sizing: border-box; /* Include padding in width */
     resize: vertical; /* Allow vertical resize */
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
 }
 
 .ai-assistant-button {
     padding: 8px 15px;
-    background: #007bff;
+    background-color: transparent;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: opacity 0.2s ease-in-out; /* Smooth transition */
+    height: 40px;
+    font-size: 16px;
+    transition: background 0.2s ease-in-out;
+}
+
+.ai-assistant-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.ai-assistant-button:active {
+    background: #0084ff;
 }
 
 .ai-assistant-button:disabled {
-    opacity: 0.6;
+    background-color: rgba(255, 255, 255, 0.2);
     cursor: not-allowed;
+    opacity: 0.7;
 }
 
 .ai-assistant-error {
-    color: #ffcccc;
+    color: #ff6b6b;
     font-size: 0.9em;
     margin-top: 5px;
 }
@@ -53,14 +67,16 @@
 .ai-assistant-history-list {
     max-height: 150px; /* Limit height and make scrollable */
     overflow-y: auto;
-    border-top: 1px solid #555;
+    border-top: 1px solid #333;
+    margin-top: 5px;
+    padding-top: 8px;
 }
 
 .ai-assistant-history-item {
-    background: #444;
-    padding: 5px 8px;
-    margin-bottom: 5px;
-    border-radius: 3px;
+    background: #222;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 0.9em;
     white-space: nowrap; /* Prevent wrapping */
@@ -70,7 +86,7 @@
 }
 
 .ai-assistant-history-item:hover {
-    background: #555;
+    background: #333;
 }
 
 /* Captcha Container Styling */
@@ -88,6 +104,20 @@
     /* This targets the div hCaptcha injects */
     /* max-width: 100%; /* REMOVED - We set width/scale directly */
     /* overflow: hidden; /* Moved to container */
+}
+
+/* Improve HCaptcha container styles for dark theme */
+.h-captcha {
+    display: flex;
+    justify-content: center;
+    margin: 5px 0;
+}
+
+/* Custom dark theme styles that work with hcaptcha iframe */
+.h-captcha iframe {
+    background: #222 !important;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 /* Basic Responsiveness */
@@ -116,5 +146,9 @@
         /* height: 78px; */
         /* transform: scale(0.9); */
         /* transform-origin: 0 0; */
+    }
+
+    .h-captcha {
+        min-height: 144px;
     }
 } 
