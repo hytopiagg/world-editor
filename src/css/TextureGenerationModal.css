@@ -12,6 +12,10 @@
     -webkit-backdrop-filter: blur(3px);
 }
 
+.modal-content {
+    height: auto;
+}
+
 .modal-close-button {
     background-color: rgba(255, 107, 107, 0.8); /* Slightly transparent red */
 }
@@ -21,7 +25,7 @@
 }
 
 .texture-editor-modal {
-    width: 75%;
+    width: auto;
     min-width: 1000px;
 }
 
@@ -35,53 +39,22 @@
     text-transform: uppercase; /* Match sidebar button text style */
 }
 
-.modal-body p {
-    margin-bottom: 10px;
-    font-size: 0.95rem;
-    color: rgba(241, 241, 241, 0.9); /* Match sidebar text color */
-}
-
 .prompt-input {
     width: 100%;
+    height: 100%;
     padding: 10px;
-    margin-bottom: 15px;
     border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
     border-radius: 8px; /* Match sidebar button radius */
     color: #fff;
     font-size: 0.9rem;
     box-sizing: border-box;
-    resize: vertical;
-    min-height: 60px;
+    resize: none;
     transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .prompt-input:focus {
     outline: none;
     border-color: rgba(255, 255, 255, 0.3);
-}
-
-.generate-button {
-    display: block;
-    width: 100%;
-    padding: 12px;
-    background-color: #5a5aff; /* Match sidebar create-texture-button */
-    color: white;
-    border: none;
-    border-radius: 8px; /* Match sidebar button radius */
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s ease; /* Match sidebar transitions */
-}
-
-.generate-button:hover:not(:disabled) {
-    background-color: #4a4add; /* Match sidebar button hover */
-    transform: scale(1.02); /* Slight scale effect */
-}
-
-.generate-button:disabled {
-    background-color: rgba(80, 80, 80, 0.5);
-    cursor: not-allowed;
-    opacity: 0.7;
 }
 
 .loading-indicator {
@@ -127,12 +100,11 @@
 }
 
 .modal-header {
+    flex-shrink: 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 15px;
     margin-bottom: 15px;
-    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
     width: 100%;
 }
 
@@ -144,143 +116,161 @@
     text-transform: uppercase; /* Match sidebar text style */
 }
 
-.header-buttons {
+.generation-section {
+    height: 70px;
     display: flex;
     align-items: center;
+    justify-content: center;
+    flex-direction: row;
     gap: 10px;
-    margin-left: 20px;
+    flex-shrink: 0;
 }
 
-.logout-button {
-    background-color: rgba(255, 107, 107, 0.8); /* Slightly transparent red */
+.generation-controls {
+    flex: 1;
+    height: 100%;
+}
+
+/* Main editor container using flexbox */
+.editor-main-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 15px;
+    gap: 10px;
+    min-height: 0; /* Important for flex container to respect parent height */
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+.top-controls-container {
+    display: flex;
+    flex-direction: row;
+}
+
+/* Static sidebar with fixed width */
+.editor-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 10px;
+    width: 280px;
+    flex-shrink: 0;
+    overflow-y: auto;
+}
+
+/* Scalable canvas container */
+.editor-canvas-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    padding: 10px;
+    min-height: 0; /* Important for flex container to respect parent height */
+}
+
+.editor-toolbar-container {
+    display: flex;
+    flex-direction: column;
+    width: 150px;
+}
+
+.editor-toolbar{
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    justify-content: center;
+    align-items: center;
+}
+
+.tool-button{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0px;
+    margin: 0px;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+    
+}
+
+.tool-button-undo-redo{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0px;
+    margin: 0px;
+    background-color: #434343;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+}
+
+.tool-button-undo-redo:disabled{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0px;
+    margin: 0px;
+    background-color: #333333;
+}
+
+
+/* Bottom controls container */
+.bottom-controls-container {
+    flex-shrink: 0;
+    margin-top: 0px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+}
+
+.bottom-controls-container h3 {
+    margin-bottom: 0px;
+    margin-top: 0px;
+}
+
+/* Generation section moved to bottom */
+.generation-section {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.generate-button {
+    background-color: #0084ff;
     color: white;
     border: none;
     padding: 8px 15px;
     border-radius: 8px; /* Match sidebar button radius */
-    cursor: pointer;
-    font-size: 0.9em;
-    font-weight: bold;
-    transition: all 0.2s ease; /* Match sidebar transitions */
+    width: 120px;
 }
 
-.logout-button:hover {
-    background-color: rgba(255, 70, 70, 0.9); /* Darker red on hover */
-    transform: scale(1.05); /* Match sidebar hover effect */
-}
-
-.generation-controls {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
-.generation-controls .prompt-input {
-    flex-grow: 1;
-    margin-bottom: 0;
-    height: auto;
-    min-height: 40px;
-}
-
-.generation-controls .generate-button,
-.generation-controls .login-button {
-    flex-shrink: 0;
-    width: auto;
-    padding: 10px 15px;
-    height: 40px;
-    box-sizing: border-box;
-}
-
-.login-button {
-    background-color: #5a5aff; /* Match sidebar create-texture-button */
+.use-texture-button {
+    background-color: #0084ff;
     color: white;
     border: none;
+    padding: 8px 15px;
     border-radius: 8px; /* Match sidebar button radius */
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s ease; /* Match sidebar transitions */
+    width: 120px;
 }
 
-.login-button:hover:not(:disabled) {
-    background-color: #4a4add; /* Match sidebar button hover */
-    transform: scale(1.05); /* Match sidebar hover effect */
-}
-
-.login-button:disabled {
-    background-color: rgba(80, 80, 80, 0.5);
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-/* Editor Layout */
-.editor-area {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-}
-
-.editor-tools {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
-    border-radius: 12px; /* Match sidebar container radius */
-    padding: 20px;
-}
-
-/* Preview and Face Selector */
-.preview-face-container {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 10px;
-    justify-content: center;
-}
-
-/* FaceSelector button styles */
-.face-selector button {
-    padding: 4px 8px;
-    font-size: 0.8rem;
-    min-width: 50px;
-    background-color: rgba(255, 255, 255, 0.1); /* Match sidebar button background */
-    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
-    border-radius: 8px; /* Match sidebar button radius */
-    color: #fff;
-    transition: all 0.2s ease; /* Match sidebar transitions */
-}
-
-.face-selector button:hover {
-    background-color: rgba(255, 255, 255, 0.2); /* Match sidebar button hover */
-    transform: scale(1.05); /* Match sidebar hover effect */
-}
-
-.face-selector button.selected {
-    background-color: rgba(241, 241, 241, 0.2); /* Match sidebar selected state */
-}
-
-.face-selector {
-    gap: 4px;
-}
-
-.editor-canvas-container {
-    justify-content: center;
-    align-items: center;
-    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
-    border-radius: 12px; /* Match sidebar container radius */
-    padding: 10px;
-}
-
-/* Action buttons area */
-.modal-actions {
-    padding-top: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-}
-
-.modal-actions .modal-close-button {
-    margin-left: 0;
+.use-texture-button:not(:disabled):hover {
+    background: #1f93ff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    border: none;
 }
 
 .texture-name-input {
@@ -289,7 +279,7 @@
     border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
     border-radius: 8px; /* Match sidebar button radius */
     color: #fff;
-    min-width: 180px;
+    min-width: 200px;
     box-sizing: border-box;
     transition: all 0.2s ease; /* Match sidebar transitions */
 }
@@ -299,34 +289,11 @@
     border-color: rgba(255, 255, 255, 0.3);
 }
 
-.use-texture-button {
-    padding: 10px 20px;
-    background-color: #4caf50; /* Keep green for action */
-    color: white;
-    border: none;
-    border-radius: 8px; /* Match sidebar button radius */
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s ease; /* Match sidebar transitions */
-}
-
-.use-texture-button:hover:not(:disabled) {
-    background-color: #45a049;
-    transform: scale(1.05); /* Match sidebar hover effect */
-}
-
-.use-texture-button:disabled {
-    background-color: rgba(80, 80, 80, 0.5);
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
 /* hCaptcha styling */
 .hcaptcha-container {
     display: flex;
     justify-content: center;
-    margin: 15px 0;
+    align-items: center;
 }
 
 .error-message.captcha-error {
@@ -334,180 +301,80 @@
     margin-bottom: 15px;
 }
 
-/* Generation section */
-.generation-section {
-    max-width: 600px;
-    width: 100%;
-    margin: 0 auto 20px auto;
+/* Action buttons area */
+.modal-actions {
+    margin-top: 15px;
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
-    border-radius: 12px; /* Match sidebar container radius */
-    padding: 15px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 15px;
 }
 
-/* Responsive styles remain unchanged */
-@media (max-width: 768px) {
-    .modal-content.texture-editor-modal {
-        /* max-width: 95vw; */ /* Allow more width on smaller screens */
-        width: 90vw; /* Set width directly */
-        padding: 20px;
-    }
-
-    .editor-area {
-        flex-direction: column; /* Stack tools and canvas vertically */
-        align-items: center; /* Center items when stacked */
-        flex-grow: 1;
-        display: flex; /* Center canvas */
-        gap: 20px; /* Add vertical gap when stacked */
-    }
-
-    .editor-tools {
-        flex-direction: row; /* Arrange tools horizontally */
-        flex-wrap: wrap; /* Allow wrapping if space is limited */
-        justify-content: center; /* Center tools horizontally */
-        gap: 10px; /* Reduce gap */
-        width: 100%; /* Take full width */
-    }
-
-    .editor-tools > * { /* Target direct children of editor-tools */
-        margin-bottom: 10px; /* Add some spacing below wrapped items */
-    }
-
-    .editor-canvas-container {
-        width: 100%; /* Ensure canvas container takes full width */
-        margin-top: 20px; /* Add space between tools and canvas */
-    }
-
-    /* Ensure canvas itself scales if needed, maintaining aspect ratio */
-    .pixel-editor-canvas {
-        max-width: 100%;
-        height: auto;
-    }
-
-    .generation-controls {
-        flex-direction: column; /* Stack prompt and button */
-        align-items: stretch; /* Make children full width */
-    }
-
-    .generation-controls .generate-button,
-    .generation-controls .login-button {
-        width: 100%; /* Make button full width */
-    }
-
-    .modal-header {
-        flex-direction: column; /* Stack title and close button */
-        align-items: center; /* Center header items */
-        text-align: center;
-        padding-bottom: 10px;
-        margin-bottom: 10px;
-    }
-
-    .modal-header h2 {
-        margin-bottom: 10px; /* Space below title */
-    }
-
-    .header-buttons {
-        margin-left: 0; /* Remove left margin when stacked */
-    }
-
-    /* Adjust preview/face layout for smaller screens */
-    .preview-face-container {
-        flex-direction: row; /* Side-by-side on smaller screens */
-        align-items: flex-start; /* Align to top */
-        justify-content: center; /* Center horizontally */
-        flex-wrap: wrap; /* Allow wrapping */
-    }
+.modal-actions input{
+    height: 42px;
 }
 
-@media (max-width: 480px) {
-    .modal-content {
-        padding: 15px;
-    }
-
-    .modal-content h2 {
-        font-size: 1.3rem;
-    }
-
-    .generation-controls .prompt-input,
-    .generation-controls .generate-button,
-    .generation-controls .login-button {
-        font-size: 0.9rem;
-    }
-
-    .editor-tools {
-        gap: 8px;
-    }
-
-    .tool-button {
-        padding: 6px; /* Slightly smaller tool buttons */
-        font-size: 1rem;
-    }
-
-    .undo-redo-buttons button {
-        padding: 6px;
-        font-size: 1rem;
-    }
-
-    /* Adjust ColorPalette for small screens if necessary */
-    /* .color-palette {
-        grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
-    } */
-
-    .editor-toolbar {
-        display: flex;
-        gap: 5px;
-        margin-bottom: 15px;
-        padding: 8px;
-        background-color: #3a3a3e;
-        border-radius: 4px;
-    }
-    
-    .tool-button {
-        background-color: #4f4f54;
-        border: 1px solid #666;
-        color: #ccc;
-        padding: 8px 10px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1.1rem; /* Make icons slightly larger */
-        line-height: 1;
-        transition:
-            background-color 0.2s,
-            border-color 0.2s;
-    }
-    
-    .tool-button:hover {
-        background-color: #5a5a60;
-        border-color: #888;
-    }
-    
-    .tool-button.active {
-        background-color: #6a6aff;
-        border-color: #8a8aff;
-        color: white;
-    }
-    
-    /* Container for undo/redo */
-    .undo-redo-buttons {
-        display: flex;
-        gap: 5px;
-        /* margin-bottom: 15px; */ /* Add margin if needed */
-    }
-    
-    .undo-redo-buttons .tool-button {
-        /* Use same style as other tool buttons */
-        flex-grow: 1; /* Make buttons fill space */
-    }
-    
-    .undo-redo-buttons .tool-button:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-        background-color: #4f4f54; /* Keep background consistent */
-        border-color: #666;
-        color: #888;
-    }
-    
+.modal-actions .modal-close-button {
+    margin-left: 0;
+    width: 150px;
+    height: 40px;
 }
+
+.preview-face-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.face-selector {
+    margin-top: 15px; /* Space above */
+    border-radius: 8px;
+}
+
+.face-selector-label {
+    color: #aaa;
+}
+
+.face-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* Layout buttons */
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.face-button {
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size:14px;
+    text-align: center;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+}
+
+.pixel-editor-canvas {
+    cursor: crosshair; /* Default cursor */
+    /* You might want specific cursors based on the selected tool */
+    background-color: #fff; /* Fallback background */
+    /* The checkerboard pattern will be drawn via canvas API */
+    touch-action: none; /* Prevent scrolling on touch devices */
+    image-rendering: pixelated; /* Ensure crisp pixels when scaled */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    box-sizing: border-box;
+}
+
+/* Add a container for the canvas to help with scaling */
+.pixel-editor-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    padding: 10px;
+}
+

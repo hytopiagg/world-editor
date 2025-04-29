@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import PropTypes from "prop-types";
 import { TOOLS } from "./EditorToolbar"; // Import TOOLS enum
-import "../../css/PixelEditorCanvas.css";
+import "../../css/TextureGenerationModal.css";
 
 const GRID_SIZE = 24;
 const DEFAULT_BG_COLOR = "#FFFFFF"; // White background for transparency representation
@@ -740,16 +740,18 @@ const PixelEditorCanvas = forwardRef(
         );
 
         return (
-            <canvas
-                ref={canvasRef}
-                width={canvasSize}
-                height={canvasSize}
-                className="pixel-editor-canvas"
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseLeave}
-            />
+            <div className="pixel-editor-wrapper">
+                <canvas
+                    ref={canvasRef}
+                    width={canvasSize}
+                    height={canvasSize}
+                    className="pixel-editor-canvas"
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseLeave}
+                />
+            </div>
         );
     }
 );

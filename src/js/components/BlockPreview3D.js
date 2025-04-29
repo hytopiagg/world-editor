@@ -19,10 +19,9 @@ const PreviewCube = ({ textureObjects }) => {
 
             return new THREE.MeshPhongMaterial({
                 map: texture, // Use the texture object directly
-                side: THREE.FrontSide,
+                side: THREE.DoubleSide,
                 transparent: true,
-                alphaTest: 0.1,
-                color: texture ? 0xffffff : 0xcccccc,
+                depthWrite: true, // Prevent depth buffer issues with transparency
             });
         });
         // Depend on the textureObjects state itself
@@ -48,10 +47,13 @@ const BlockPreview3D = ({ textureObjects }) => {
 
     return (
         <div className="block-preview-3d-container">
+            <div className="block-preview-label-container">
+                <p>Block Preview</p>
+            </div>
             <Canvas
                 key={previewKey}
                 shadows
-                camera={{ position: [1.5, 1.5, 1.5], fov: 50 }}
+                camera={{ position: [1, 1, 1], fov: 80 }}
             >
                 <ambientLight intensity={0.6} />
                 <directionalLight

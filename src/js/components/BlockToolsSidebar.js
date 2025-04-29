@@ -1208,7 +1208,7 @@ const BlockToolsSidebar = ({
                     className="create-texture-button"
                     onClick={onOpenTextureModal}
                 >
-                    Create a Texture
+                    Create Texture
                 </button>
             </div>
             <div className="dead-space"></div>

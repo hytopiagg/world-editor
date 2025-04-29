@@ -46,24 +46,38 @@ a {
 }
 
 /* Global Button Styles */
-button {
-  background-color: transparent;
+button{
   border: none;
+  background-color: transparent;
+  border-radius: 8px;
   font-size: 16px;
-  border-radius: 5px;
   padding: 8px 15px;
   cursor: pointer;
   color: white;
+  height: 40px;
 }
 
 button:hover {
     background: rgba(255, 255, 255, 0.2);
 }
 
-button.selected {
+button.active:hover, button.selected:hover {
+    background: #1f93ff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    border: none;
+}
+
+button.selected, button.active {
     background: #0084ff;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     border: none;
+    font-weight: bold;
+}
+
+button:disabled {
+    background-color: rgba(255, 255, 255, 0.2);
+    cursor: not-allowed;
+    opacity:0.7;
 }
 
 .vignette-gradient {

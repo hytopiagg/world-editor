@@ -25,6 +25,7 @@ const EditorToolbar = ({
 }) => {
     return (
         <div className="editor-toolbar">
+            <label className="face-selector-label">Edit Face:</label>
             <button
                 className={`tool-button ${
                     selectedTool === TOOLS.PENCIL ? "active" : ""
@@ -56,7 +57,7 @@ const EditorToolbar = ({
                 onClick={onUndo}
                 disabled={!canUndo}
                 title="Undo"
-                className="tool-button"
+                className="tool-button-undo-redo"
             >
                 <FaUndo />
             </button>
@@ -64,7 +65,7 @@ const EditorToolbar = ({
                 onClick={onRedo}
                 disabled={!canRedo}
                 title="Redo"
-                className="tool-button"
+                className="tool-button-undo-redo"
             >
                 <FaRedo />
             </button>
