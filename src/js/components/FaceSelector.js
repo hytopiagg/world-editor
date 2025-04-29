@@ -1,6 +1,7 @@
 import React from "react";
 import PropTypes from "prop-types";
-import "../../css/FaceSelector.css";
+import "../../css/TextureGenerationModal.css";
+
 const FACES = ["Top", "Bottom", "Left", "Right", "Front", "Back", "All"];
 const FaceSelector = ({ selectedFace, onSelectFace }) => {
     return (

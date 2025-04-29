@@ -497,22 +497,23 @@
 
 .create-texture-button {
     display: block; /* Make it take full width */
-    width: calc(100% - 20px); /* Account for padding/margin */
     padding: 10px 15px;
-    margin: 15px 10px 10px 10px; /* Add some margin */
-    background-color: #5a5aff; /* Button color */
+    margin-top: 12px;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px;
     font-size: 0.9rem;
     font-weight: bold;
     text-align: center;
     cursor: pointer;
     transition: background-color 0.2s ease;
+    background: #0084ff;
 }
 
 .create-texture-button:hover {
-    background-color: #4a4add;
+  background: #1f93ff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  border: none;
 }
 
 .custom-asset-drop-zone {
@@ -593,4 +594,19 @@
   padding: 5px;
   box-sizing: border-box;
   text-align: center;
+}
+
+.custom-label-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.download-all-icon-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: 1rem;
+  padding: 4px;
 }

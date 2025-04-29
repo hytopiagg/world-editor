@@ -1068,68 +1068,9 @@ class Chunk {
         blockFaceAO,
         chunkManager
     ) {
-
-        if (!this._vertexColorCache) {
-            this._vertexColorCache = new Map();
-        }
-
-
-        const cacheKey = `${vertexCoordinate.x},${vertexCoordinate.y},${vertexCoordinate.z}-${blockType.id}`;
-
-        if (this._vertexColorCache.has(cacheKey)) {
-            return this._vertexColorCache.get(cacheKey);
-        }
+        // Simply return the base color without AO calculations
         const baseColor = blockType.color;
-        let aoIntensityLevel = 0;
-
-        for (const aoSide of Object.values(blockFaceAO)) {
-            const [dx, dy, dz] = aoSide;
-            let neighborBlockType;
-            if (this._extendedBlockTypes) {
-                const ex =
-                    Math.floor(vertexCoordinate.x + dx) -
-                    (this.originCoordinate.x - 1);
-                const ey =
-                    Math.floor(vertexCoordinate.y + dy) -
-                    (this.originCoordinate.y - 1);
-                const ez =
-                    Math.floor(vertexCoordinate.z + dz) -
-                    (this.originCoordinate.z - 1);
-                if (
-                    ex >= 0 &&
-                    ex <= CHUNK_SIZE + 1 &&
-                    ey >= 0 &&
-                    ey <= CHUNK_SIZE + 1 &&
-                    ez >= 0 &&
-                    ez <= CHUNK_SIZE + 1
-                ) {
-                    neighborBlockType = this._extendedBlockTypes[ex][ey][ez];
-                }
-            }
-            if (!neighborBlockType) {
-                const neighborGlobalCoordinate = {
-                    x: Math.floor(vertexCoordinate.x + dx),
-                    y: Math.floor(vertexCoordinate.y + dy),
-                    z: Math.floor(vertexCoordinate.z + dz),
-                };
-                neighborBlockType = chunkManager.getGlobalBlockType(
-                    neighborGlobalCoordinate
-                );
-            }
-            if (neighborBlockType && !neighborBlockType.isLiquid) {
-                aoIntensityLevel++;
-            }
-        }
-        const ao = blockType.aoIntensity[aoIntensityLevel];
-        const result = [
-            baseColor[0] - ao,
-            baseColor[1] - ao,
-            baseColor[2] - ao,
-            baseColor[3],
-        ];
-
-        this._vertexColorCache.set(cacheKey, result);
-        return result;
+        return [...baseColor]; // Return a copy of the base color
     }
     /**
      * Convert local coordinate to global coordinate

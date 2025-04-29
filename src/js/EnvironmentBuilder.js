@@ -410,6 +410,13 @@ const EnvironmentBuilder = (
                         model.modelUrl === obj.modelUrl
                 );
                 if (modelType) {
+                    // Create a proper THREE.Euler from the loaded data
+                    const eulerRotation = new THREE.Euler(
+                        obj.rotation?.x || 0,
+                        obj.rotation?.y || 0,
+                        obj.rotation?.z || 0
+                    );
+                    
                     targetObjects.set(obj.instanceId, {
                         ...obj,
                         modelUrl: modelType.modelUrl, // Use the current modelUrl from environmentModels
@@ -418,11 +425,7 @@ const EnvironmentBuilder = (
                             obj.position.y,
                             obj.position.z
                         ),
-                        rotation: new THREE.Euler(
-                            obj.rotation.x,
-                            obj.rotation.y,
-                            obj.rotation.z
-                        ),
+                        rotation: eulerRotation,
                         scale: new THREE.Vector3(
                             obj.scale.x,
                             obj.scale.y,
@@ -850,13 +853,34 @@ const EnvironmentBuilder = (
                 (model) => model.modelUrl === modelUrl
             );
             instancedData.instances.forEach((data, instanceId) => {
+                // Convert to plain objects since THREE.js objects aren't properly serialized
+                const serializablePosition = { 
+                    x: data.position.x, 
+                    y: data.position.y, 
+                    z: data.position.z 
+                };
+                
+                // Limit rotation values to 5 decimal places to reduce precision issues
+                const serializableRotation = { 
+                    x: Number(data.rotation.x.toFixed(5)), 
+                    y: Number(data.rotation.y.toFixed(5)), 
+                    z: Number(data.rotation.z.toFixed(5)),
+                    _isEuler: true  // Add a flag to indicate this is an Euler angle
+                };
+                
+                const serializableScale = { 
+                    x: data.scale.x, 
+                    y: data.scale.y, 
+                    z: data.scale.z 
+                };
+
                 allObjects.push({
                     modelUrl,
                     name: modelData?.name, // Add model name to saved data
                     instanceId,
-                    position: data.position,
-                    rotation: data.rotation,
-                    scale: data.scale,
+                    position: serializablePosition,
+                    rotation: serializableRotation,
+                    scale: serializableScale,
                 });
             });
         }

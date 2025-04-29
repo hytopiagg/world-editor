@@ -1,7 +1,9 @@
-import React, { useRef, useMemo } from "react";
+import React, { useRef, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Box } from "@react-three/drei";
+import { FaPlay } from "react-icons/fa";
+import { FaPause } from "react-icons/fa";
 import * as THREE from "three";
 
 const FACE_ORDER = ["right", "left", "top", "bottom", "front", "back"];
@@ -12,14 +14,15 @@ const PreviewCube = ({ textureObjects }) => {
         const fallbackTexture = textureObjects?.all; // Get the actual fallback texture object
         return FACE_ORDER.map((faceKey) => {
             const texture = textureObjects?.[faceKey] || fallbackTexture;
-            return new THREE.MeshStandardMaterial({
+            if (texture) {
+                texture.colorSpace = THREE.SRGBColorSpace;
+            }
+
+            return new THREE.MeshPhongMaterial({
                 map: texture, // Use the texture object directly
-                side: THREE.FrontSide,
+                side: THREE.DoubleSide,
                 transparent: true,
-                alphaTest: 0.1,
-                roughness: 1,
-                metalness: 0,
-                color: texture ? 0xffffff : 0xcccccc,
+                depthWrite: true, // Prevent depth buffer issues with transparency
             });
         });
 
@@ -31,7 +34,9 @@ PreviewCube.propTypes = {
     textureObjects: PropTypes.object.isRequired,
 };
 const BlockPreview3D = ({ textureObjects }) => {
-
+    const [isRotating, setIsRotating] = useState(true);
+    
+    // Keying the canvas might not be strictly necessary now, but doesn't hurt
     const previewKey = useMemo(
         () =>
             Object.values(textureObjects)
@@ -39,22 +44,50 @@ const BlockPreview3D = ({ textureObjects }) => {
                 .join("-"),
         [textureObjects]
     );
+
+    const toggleRotation = () => {
+        setIsRotating(!isRotating);
+    };
+
     return (
         <div className="block-preview-3d-container">
+            <div className="block-preview-label-container">
+                <p>Block Preview</p>
+            </div>
             <Canvas
                 key={previewKey}
                 shadows
-                camera={{ position: [1.5, 1.5, 1.5], fov: 50 }}
+                camera={{ position: [1, 1, 1], fov: 80 }}
             >
-                <ambientLight intensity={0.6} />
+                <ambientLight intensity={1} />
                 <directionalLight
                     position={[5, 5, 5]}
-                    intensity={1.0}
+                    intensity={2}
                     castShadow
                     shadow-mapSize-width={1024}
                     shadow-mapSize-height={1024}
                 />
-                <directionalLight position={[-5, -5, -5]} intensity={0.3} />
+                <directionalLight
+                    position={[0, 5, 0]}
+                    intensity={1}
+                    castShadow
+                    shadow-mapSize-width={1024}
+                    shadow-mapSize-height={1024}
+                />
+                <directionalLight
+                    position={[5, 5, 0]}
+                    intensity={1}
+                    castShadow
+                    shadow-mapSize-width={1024}
+                    shadow-mapSize-height={1024}
+                />
+                <directionalLight
+                    position={[-5, 5, 0]}
+                    intensity={1}
+                    castShadow
+                    shadow-mapSize-width={1024}
+                    shadow-mapSize-height={1024}
+                />
                 <PreviewCube textureObjects={textureObjects} />
                 <OrbitControls
                     enableZoom={true}
@@ -63,10 +96,20 @@ const BlockPreview3D = ({ textureObjects }) => {
                     maxDistance={5}
                     minPolarAngle={Math.PI / 6}
                     maxPolarAngle={Math.PI / 1.6}
-                    autoRotate={true}
+                    autoRotate={isRotating}
                     autoRotateSpeed={1.5}
                 />
             </Canvas>
+            
+            <div className="block-preview-controls">
+                <button 
+                    className="rotation-control-button" 
+                    onClick={toggleRotation}
+                    title={isRotating ? "Pause rotation" : "Start rotation"}
+                >
+                    {isRotating ? <FaPause size={16}/> : <FaPlay size={16}/>}
+                </button>
+            </div>
         </div>
     );
 };

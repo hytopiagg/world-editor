@@ -4,40 +4,29 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 5000;
+    backdrop-filter: blur(3px); /* Match sidebar blur effect */
+    -webkit-backdrop-filter: blur(3px);
 }
 
 .modal-content {
-    background-color: #2a2a2e; /* Dark background */
-    padding: 30px;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    width: 90%;
-    color: #e0e0e0; /* Light text */
-    font-family: "Arial", sans-serif;
-    display: flex; /* Use flexbox for overall layout */
-    flex-direction: column; /* Stack elements vertically */
+    height: auto;
 }
 
 .modal-close-button {
-    background-color: #e74c3c; /* Red background */
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-    color: white;
-    cursor: pointer;
-    padding: 8px 15px;
-    margin-left: auto; /* Push to the right within header-buttons */
-    font-weight: bold;
-    transition: background-color 0.2s ease;
+    background-color: rgba(255, 107, 107, 0.8); /* Slightly transparent red */
 }
 
 .modal-close-button:hover {
-    background-color: #c0392b; /* Darker red on hover */
+    background-color: rgba(255, 70, 70, 0.9); /* Darker red on hover */
+}
+
+.texture-editor-modal {
+    width: auto;
+    min-width: 1000px;
 }
 
 .modal-content h2 {
@@ -46,70 +35,41 @@
     color: #fff;
     text-align: center;
     font-size: 1.5rem;
-}
-
-.modal-body p {
-    margin-bottom: 10px;
-    font-size: 0.95rem;
+    font-weight: bold;
+    text-transform: uppercase; /* Match sidebar button text style */
 }
 
 .prompt-input {
     width: 100%;
+    height: 100%;
     padding: 10px;
-    margin-bottom: 15px;
-    border: 1px solid #444;
-    border-radius: 4px;
-    background-color: #333;
-    color: #e0e0e0;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 8px; /* Match sidebar button radius */
+    color: #fff;
     font-size: 0.9rem;
-    box-sizing: border-box; /* Include padding and border in the element's total width and height */
-    resize: vertical;
-    min-height: 60px;
+    box-sizing: border-box;
+    resize: none;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .prompt-input:focus {
     outline: none;
-    border-color: #6a6aff;
-    box-shadow: 0 0 0 2px rgba(106, 106, 255, 0.3);
-}
-
-.generate-button {
-    display: block;
-    width: 100%;
-    padding: 12px;
-    background-color: #6a6aff; /* A nice blue/purple */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.generate-button:hover:not(:disabled) {
-    background-color: #5555dd;
-}
-
-.generate-button:disabled {
-    background-color: #555;
-    cursor: not-allowed;
-    opacity: 0.7;
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .loading-indicator {
     text-align: center;
     margin-top: 20px;
-    color: #aaa;
+    color: rgba(241, 241, 241, 0.5); /* Match sidebar secondary text */
     font-style: italic;
 }
 
 .error-message {
-    color: #ff6b6b; /* Light red for errors */
+    color: #ff6b6b;
     background-color: rgba(255, 107, 107, 0.1);
     padding: 10px;
-    border: 1px solid #ff6b6b;
-    border-radius: 4px;
+    border: 1.5px solid rgba(255, 107, 107, 0.3); /* Match sidebar border style */
+    border-radius: 8px; /* Match sidebar button radius */
     margin-top: 15px;
     font-size: 0.9rem;
     text-align: center;
@@ -118,376 +78,349 @@
 .image-preview-container {
     margin-top: 25px;
     text-align: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 12px; /* Match sidebar container radius */
+    padding: 15px;
 }
 
 .image-preview-container h3 {
     margin-bottom: 15px;
-    color: #ccc;
+    color: rgba(241, 241, 241, 0.9);
     font-size: 1.1rem;
+    font-weight: bold;
 }
 
 .generated-image {
     max-width: 100%;
     height: auto;
-    border: 1px solid #555;
-    border-radius: 4px;
-    background-color: #444; /* Placeholder background */
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 8px; /* Match sidebar button radius */
     display: block;
     margin: 0 auto;
 }
 
-/* Make modal wider for editor */
-.modal-content.texture-editor-modal {
-    /* max-width: 750px; */ /* Adjust as needed */ /* Removed this line */
-}
-
 .modal-header {
+    flex-shrink: 0;
     display: flex;
-    justify-content: space-between; /* Space between title and button group */
+    justify-content: space-between;
     align-items: center;
-    /* border-bottom: 1px solid #eee; */ /* Maybe remove border? */
-    padding-bottom: 15px;
     margin-bottom: 15px;
-    width: 100%; /* Take full width */
+    width: 100%;
 }
 
 .modal-header h2 {
     margin: 0;
     font-size: 1.4em;
-    color: #e0e0e0; /* Light text */
-    flex-shrink: 0; /* Don't let title shrink */
+    color: #fff;
+    flex-shrink: 0;
+    text-transform: uppercase; /* Match sidebar text style */
 }
 
-.header-buttons {
+.generation-section {
+    height: 70px;
     display: flex;
     align-items: center;
-    gap: 10px; /* Add some space between buttons */
-    margin-left: 20px; /* Add space between title and buttons */
-}
-
-.logout-button {
-    background-color: #f44336; /* Red background */
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9em;
-    transition: background-color 0.2s ease;
-}
-
-.logout-button:hover {
-    background-color: #d32f2f; /* Darker red on hover */
+    justify-content: center;
+    flex-direction: row;
+    gap: 10px;
+    flex-shrink: 0;
 }
 
 .generation-controls {
+    flex: 1;
+    height: 100%;
+}
+
+/* Main editor container using flexbox */
+.editor-main-container {
     display: flex;
+    flex-direction: column;
+    flex: 1;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 15px;
     gap: 10px;
+    min-height: 0; /* Important for flex container to respect parent height */
     margin-bottom: 15px;
+    overflow: hidden;
 }
 
-.generation-controls .prompt-input {
-    flex-grow: 1;
-    margin-bottom: 0; /* Remove default margin */
-    height: auto; /* Adjust height */
-    min-height: 40px; /* Ensure minimum height */
-}
-
-.generation-controls .generate-button,
-.generation-controls .login-button {
-    flex-shrink: 0;
-    width: auto; /* Adjust width */
-    padding: 10px 15px; /* Match input height roughly */
-    height: 40px; /* Match input height */
-    box-sizing: border-box;
-}
-
-.login-button { /* Add styling for the login button */
-    background-color: #007bff; /* Blue for login */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.login-button:hover:not(:disabled) {
-    background-color: #0056b3;
-}
-
-.login-button:disabled {
-    background-color: #555;
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-/* Editor Layout */
-.editor-area {
+.top-controls-container {
     display: flex;
-    justify-content: center; /* Center items horizontally */
-    gap: 20px; /* Add space between tools and canvas */
+    flex-direction: row;
 }
 
-.editor-tools {
+/* Static sidebar with fixed width */
+.editor-sidebar {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 10px;
+    width: 280px;
+    flex-shrink: 0;
+    overflow-y: auto;
 }
 
-/* New container for Preview and Face Selector */
-.preview-face-container {
-    display: flex;
-    flex-direction: row; /* Stack preview and selector side-by-side */
-    align-items: flex-start; /* Align items to the top */
-    gap: 10px; /* Space between preview and selector */
-    justify-content: center; /* Center items if space allows */
-}
-
-/* Adjust FaceSelector button styles for compactness */
-/* Assuming FaceSelector buttons have a common class or structure */
-/* You might need to adjust the selector based on FaceSelector.css */
-.face-selector button {
-    padding: 4px 8px; /* Reduced padding */
-    font-size: 0.8rem; /* Smaller font */
-    min-width: 50px; /* Adjust min-width if needed */
-}
-
-/* Adjust FaceSelector grid gap */
-.face-selector {
-    gap: 4px; /* Reduced gap between buttons */
-}
-
+/* Scalable canvas container */
 .editor-canvas-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    padding: 10px;
+    min-height: 0; /* Important for flex container to respect parent height */
+}
+
+.editor-toolbar-container {
+    display: flex;
+    flex-direction: column;
+    width: 150px;
+}
+
+.editor-toolbar{
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
     justify-content: center;
     align-items: center;
 }
 
-/* Make canvas slightly smaller by default if needed */
-/* .pixel-editor-canvas {
-  width: 480px;
-  height: 480px;
-} */
-
-/* Action buttons area */
-.modal-actions {
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px solid #444;
+.tool-button{
     display: flex;
+    justify-content: center;
     align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
+    width: 40px;
+    height: 40px;
+    padding: 0px;
+    margin: 0px;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+    
 }
 
-/* Ensure footer close button doesn't have extra auto margin */
-.modal-actions .modal-close-button {
-    margin-left: 0;
+.tool-button-undo-redo{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0px;
+    margin: 0px;
+    background-color: #434343;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+}
+
+.tool-button-undo-redo:disabled{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0px;
+    margin: 0px;
+    background-color: #333333;
+}
+
+
+/* Bottom controls container */
+.bottom-controls-container {
+    flex-shrink: 0;
+    margin-top: 0px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+}
+
+.bottom-controls-container h3 {
+    margin-bottom: 0px;
+    margin-top: 0px;
+}
+
+/* Generation section moved to bottom */
+.generation-section {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.generate-button {
+    background-color: #0084ff;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 8px; /* Match sidebar button radius */
+    width: 120px;
+}
+
+.use-texture-button {
+    background-color: #0084ff;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 8px; /* Match sidebar button radius */
+    width: 120px;
+}
+
+.use-texture-button:not(:disabled):hover {
+    background: #1f93ff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    border: none;
 }
 
 .texture-name-input {
     padding: 8px 10px;
     font-size: 0.9rem;
-    border: 1px solid #555;
-    border-radius: 4px;
-    background-color: #333;
-    color: #e0e0e0;
-    min-width: 180px;
+    border: 1.5px solid rgba(255, 255, 255, 0.1); /* Match sidebar border */
+    border-radius: 8px; /* Match sidebar button radius */
+    color: #fff;
+    min-width: 200px;
     box-sizing: border-box;
+    transition: all 0.2s ease; /* Match sidebar transitions */
 }
 
 .texture-name-input:focus {
     outline: none;
-    border-color: #6a6aff;
-    box-shadow: 0 0 0 2px rgba(106, 106, 255, 0.3);
-}
-
-.use-texture-button {
-    padding: 10px 20px;
-    background-color: #4caf50; /* Green for action */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.use-texture-button:hover:not(:disabled) {
-    background-color: #45a049;
-}
-
-.use-texture-button:disabled {
-    background-color: #555;
-    cursor: not-allowed;
-    opacity: 0.7;
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 /* hCaptcha styling */
 .hcaptcha-container {
     display: flex;
     justify-content: center;
-    margin: 15px 0;
+    align-items: center;
 }
 
 .error-message.captcha-error {
-    margin-top: 0; /* Remove extra space above if it directly follows hCaptcha */
+    margin-top: 0;
     margin-bottom: 15px;
 }
 
-/* Responsive Adjustments */
-
-@media (max-width: 768px) {
-    .modal-content.texture-editor-modal {
-        /* max-width: 95vw; */ /* Allow more width on smaller screens */
-        width: 90vw; /* Set width directly */
-        padding: 20px;
-    }
-
-    .editor-area {
-        flex-direction: column; /* Stack tools and canvas vertically */
-        align-items: center; /* Center items when stacked */
-        flex-grow: 1;
-        display: flex; /* Center canvas */
-        gap: 20px; /* Add vertical gap when stacked */
-    }
-
-    .editor-tools {
-        flex-direction: row; /* Arrange tools horizontally */
-        flex-wrap: wrap; /* Allow wrapping if space is limited */
-        justify-content: center; /* Center tools horizontally */
-        gap: 10px; /* Reduce gap */
-        width: 100%; /* Take full width */
-    }
-
-    .editor-tools > * { /* Target direct children of editor-tools */
-        margin-bottom: 10px; /* Add some spacing below wrapped items */
-    }
-
-    .editor-canvas-container {
-        width: 100%; /* Ensure canvas container takes full width */
-        margin-top: 20px; /* Add space between tools and canvas */
-    }
-
-    /* Ensure canvas itself scales if needed, maintaining aspect ratio */
-    .pixel-editor-canvas {
-        max-width: 100%;
-        height: auto;
-    }
-
-    .generation-controls {
-        flex-direction: column; /* Stack prompt and button */
-        align-items: stretch; /* Make children full width */
-    }
-
-    .generation-controls .generate-button,
-    .generation-controls .login-button {
-        width: 100%; /* Make button full width */
-    }
-
-    .modal-header {
-        flex-direction: column; /* Stack title and close button */
-        align-items: center; /* Center header items */
-        text-align: center;
-        padding-bottom: 10px;
-        margin-bottom: 10px;
-    }
-
-    .modal-header h2 {
-        margin-bottom: 10px; /* Space below title */
-    }
-
-    .header-buttons {
-        margin-left: 0; /* Remove left margin when stacked */
-    }
-
-    /* Adjust preview/face layout for smaller screens */
-    .preview-face-container {
-        flex-direction: row; /* Side-by-side on smaller screens */
-        align-items: flex-start; /* Align to top */
-        justify-content: center; /* Center horizontally */
-        flex-wrap: wrap; /* Allow wrapping */
-    }
+/* Action buttons area */
+.modal-actions {
+    margin-top: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 15px;
 }
 
-@media (max-width: 480px) {
-    .modal-content {
-        padding: 15px;
-    }
-
-    .modal-content h2 {
-        font-size: 1.3rem;
-    }
-
-    .generation-controls .prompt-input,
-    .generation-controls .generate-button,
-    .generation-controls .login-button {
-        font-size: 0.9rem;
-    }
-
-    .editor-tools {
-        gap: 8px;
-    }
-
-    .tool-button {
-        padding: 6px; /* Slightly smaller tool buttons */
-        font-size: 1rem;
-    }
-
-    .undo-redo-buttons button {
-        padding: 6px;
-        font-size: 1rem;
-    }
-
-    /* Adjust ColorPalette for small screens if necessary */
-    /* .color-palette {
-        grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
-    } */
+.modal-actions input{
+    height: 42px;
 }
 
-/* Style the new generation section wrapper */
-.generation-section {
-    /* width: fit-content; Size to content */
-    max-width: 600px; /* Reduced max-width */
-    width: 100%;      /* Still allow it to take space up to max-width */
-    margin: 0 auto 20px auto; /* Center horizontally, add bottom margin */
-    display: flex;            /* Use flexbox */
-    flex-direction: column;   /* Stack children vertically */
-    align-items: stretch;     /* Make children fill width */
-    gap: 10px;                /* Add space between children */
+.modal-actions .modal-close-button {
+    margin-left: 0;
+    width: 150px;
+    height: 40px;
 }
 
-/* Ensure controls container doesn't interfere */
-.generation-controls {
-    /* display: flex; */ /* Remove flex if previously added here */
-    /* gap: 10px; */
-    margin-bottom: 0; /* Remove bottom margin if any */
-    /* The textarea inside should already have width: 100% or flex-grow */
+.preview-face-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.face-selector {
+    margin-top: 15px; /* Space above */
+    border-radius: 8px;
+}
+
+.face-selector-label {
+    color: #aaa;
+}
+
+.face-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* Layout buttons */
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.face-button {
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size:14px;
+    text-align: center;
+    border: 1px solid rgba(241, 241, 241, 0.15);
+}
+
+.pixel-editor-canvas {
+    cursor: crosshair; /* Default cursor */
+    /* You might want specific cursors based on the selected tool */
+    background-color: #fff; /* Fallback background */
+    /* The checkerboard pattern will be drawn via canvas API */
+    touch-action: none; /* Prevent scrolling on touch devices */
+    image-rendering: pixelated; /* Ensure crisp pixels when scaled */
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    box-sizing: border-box;
+}
+
+/* Add a container for the canvas to help with scaling */
+.pixel-editor-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    padding: 10px;
+}
+
+.block-preview-3d-container {
+    width: 100%;
+    height: auto;
+    position: relative;
+    aspect-ratio: 1 / 1;
+    /* background-color: #222; */ /* Optional background for the canvas area */
+    border-radius: 4px;
+    border: 1px solid #444;
+    background-color: rgba(54, 54, 54, 1);
+}
+
+.block-preview-label-container {
+    position: absolute;
+    width: 100%;
+    color: rgb(122, 122, 122);
+    bottom: 0;
+}
+
+.block-preview-controls {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 10;
+}
+
+.rotation-control-button {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background-color: rgba(54, 54, 54, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 10px;
+}
+
+.rotation-control-button:hover {
+    background-color: rgba(74, 74, 74, 0.9);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 
 
-.generation-controls .prompt-input {
-    /* flex-grow: 1; */ /* May not be needed if parent handles width */
-    width: 100%; /* Explicitly set width */
-    box-sizing: border-box; /* Ensure padding doesn't add to width */
-    margin-bottom: 0; /* Reset margin */
-}
-
-.generate-button {
-    /* width: 100%; */ /* Should be handled by align-items: stretch now */
-    /* width: auto; */ /* Remove auto width if set */
-    box-sizing: border-box; /* Ensure padding doesn't add to width */
-    /* height: 40px; */ /* Keep height consistent if needed */
-}
-
-
-/* Adjust hCaptcha container */
-.hcaptcha-container {
-    /* display: flex; */ /* Remove flex if previously added */
-    /* justify-content: center; */ /* Remove centering, parent handles alignment */
-    margin: 0; /* Reset margins, parent gap handles spacing */
-    width: auto; /* Allow it to size naturally */
-    align-self: center; /* Center the captcha itself within the stretched space */
-}

@@ -1,14 +1,15 @@
-/* src/js/components/CustomColorPicker.module.css */
 .inputContainer {
     display: flex;
     flex-direction: column;
     gap: 4px; /* Increased gap */
-    width: 110px; /* Slightly wider */
+    width: 100px; /* Slightly wider */
     font-size: 13px; /* Slightly larger font */
 }
 .inputRow {
     display: flex;
+    flex-direction: row;
     align-items: center;
+    width: 90px;
     gap: 6px;
 }
 .label {
@@ -32,7 +33,7 @@
     /* Add padding-right to prevent text overlapping buttons */
     padding-right: 20px; /* Adjust based on button width */
     font-size: inherit;
-    border: 1px solid var(--spectrum-alias-border-color-default, #ccc);
+    border: 1px solid var(--spectrum-alias-border-color-default, #616161);
     border-radius: 3px;
     background-color: var(--spectrum-alias-background-color-default, white);
     color: white; /* Changed text color */
@@ -93,4 +94,5 @@
     height: 1px;
     background-color: var(--spectrum-alias-border-color-default, #ddd);
     margin: 5px 0; /* Increased space around separator */
+    background-color: rgb(87, 87, 87);
 } 

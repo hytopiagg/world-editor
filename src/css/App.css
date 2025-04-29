@@ -12,7 +12,7 @@
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
-    background-color: #9bcbe8;
+    background-color: black;
 }
 
 .canvas-container {
@@ -20,6 +20,7 @@
     margin-left: 0;
     overflow: hidden;
     cursor: default;
+    background-color: #9bcbe8;
 }
 
 /* Set base dimensions and overflow for both html and body */
@@ -45,24 +46,38 @@ a {
 }
 
 /* Global Button Styles */
-button {
-  background-color: transparent;
+button{
   border: none;
+  background-color: transparent;
+  border-radius: 8px;
   font-size: 16px;
-  border-radius: 5px;
   padding: 8px 15px;
   cursor: pointer;
   color: white;
+  height: 40px;
 }
 
 button:hover {
     background: rgba(255, 255, 255, 0.2);
 }
 
-button.selected {
+button.active:hover, button.selected:hover {
+    background: #1f93ff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    border: none;
+}
+
+button.selected, button.active {
     background: #0084ff;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     border: none;
+    font-weight: bold;
+}
+
+button:disabled {
+    background-color: rgba(255, 255, 255, 0.2);
+    cursor: not-allowed;
+    opacity:0.7;
 }
 
 .vignette-gradient {
@@ -84,31 +99,6 @@ button.selected {
 /* ==========================================================================
    UI Components
    ========================================================================== */
-
-/* Debug Info Panel */
-.debug-info {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    background-color: rgba(13, 13, 13, 0.7);
-    color: white;
-    padding: 15px;
-    font-family: monospace;
-    font-size: 12px;
-    z-index: 1000;
-    width: 200px;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
-}
-
-.debug-info p {
-    margin: 5px 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
 
 /* First, disable dragging globally */
 * {

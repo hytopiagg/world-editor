@@ -1,15 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
-import { FaUndo, FaRedo } from "react-icons/fa";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import EditorToolbar, { TOOLS } from "./EditorToolbar";
 import PixelEditorCanvas from "./PixelEditorCanvas";
 import BlockPreview3D from "./BlockPreview3D";
 import FaceSelector from "./FaceSelector";
 import "../../css/TextureGenerationModal.css"; // We'll create this CSS file next
-import "../../css/BlockPreview3D.css"; // Import preview CSS
-import "../../css/FaceSelector.css"; // Import face selector CSS
-import "../../css/EditorToolbar.css"; // Ensure toolbar CSS is imported for button styles
 import * as THREE from "three"; // Import THREE
 import CustomColorPicker from "./ColorPicker";
 const FACES = ["all", "top", "bottom", "left", "right", "front", "back"];
@@ -276,112 +272,143 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             pixelCanvasRef.current.redo();
         }
     };
+
+    // Create a color picker controller to pass to the canvas
+    const colorPickerController = useCallback(
+        {
+            pickColor: (hexColor) => {
+                if (hexColor) {
+                    setSelectedColor(hexColor);
+                }
+            },
+            setTool: (toolName) => {
+                setSelectedTool(toolName);
+            },
+        },
+        [] // Empty dependency array since the functions only reference state setters
+    );
+
     if (!isOpen) return null;
 
     const initialCanvasTexture = textureObjects[selectedFace];
     return (
         <div className="modal-overlay">
             <div className="modal-content texture-editor-modal">
-                {/* Top Bar: Title and Buttons */}
+                {/* Top Bar: Title */}
                 <div className="modal-header">
                     <h2>Create & Edit Texture</h2>
                 </div>
-                {/* Generation Section */}
-                <div className="generation-section">
-                    {/* Generation Controls */}
-                    <div className="generation-controls">
-                        <textarea
-                            className="prompt-input"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
-                            rows="2"
-                            disabled={isLoading} // Only disable based on loading state
-                        />
-                    </div>
-                    {/* Show Generate button */}
-                    <button
-                        className="generate-button"
-                        onClick={handleGenerate}
-                        disabled={isLoading || !prompt.trim() || !hCaptchaToken} // Disable based on loading state, prompt, and captcha token
-                    >
-                        {isLoading ? "Generating..." : "Generate"}
-                    </button>
-                    {/* hCaptcha Component */}
-                    <div className="hcaptcha-container">
-                        <HCaptcha
-                            ref={hCaptchaRef}
-                            sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY} // Make sure this env var is set!
-                            onVerify={(token) => {
-                                setHCaptchaToken(token);
-                                setCaptchaError(null); // Clear error on successful verification
-                            }}
-                            onExpire={() => {
-                                setHCaptchaToken(null);
-                                setCaptchaError(
-                                    "CAPTCHA expired. Please verify again."
-                                );
-                            }}
-                            onError={(err) => {
-                                setHCaptchaToken(null);
-                                setCaptchaError(`CAPTCHA error: ${err}`);
-                            }}
-                        />
-                    </div>
-                    {captchaError && (
-                        <div className="error-message captcha-error">
-                            {captchaError}
-                        </div>
-                    )}
-                </div>{" "}
-                {/* End of generation-section */}
-                {isLoading && (
-                    <div className="loading-indicator">Generating image...</div>
-                )}
-                {error && <div className="error-message">{error}</div>}
-                {/* Editor Section: Render unconditionally now */}
-                <div className="editor-area">
-                    <div className="editor-tools">
-                        <EditorToolbar
-                            selectedTool={selectedTool}
-                            onSelectTool={setSelectedTool}
-                            onUndo={handleUndo}
-                            onRedo={handleRedo}
-                            canUndo={canUndo}
-                            canRedo={canRedo}
-                        />
-                        <CustomColorPicker
-                            selectedColor={selectedColor}
-                            onChange={setSelectedColor}
-                        />
-                        {/* New container for preview and face selector */}
-                        <div className="preview-face-container">
-                            <BlockPreview3D textureObjects={textureObjects} />
-                            <FaceSelector
-                                selectedFace={selectedFace}
-                                onSelectFace={handleSelectFace}
+                
+                {/* Main Content Area with Sidebar and Canvas */}
+                <div className="editor-main-container">
+                    <div className="top-controls-container">
+                        {/* Static Sidebar for Tools and Preview */}
+                        <div className="editor-sidebar">
+                            <CustomColorPicker
+                                value={selectedColor}
+                                onChange={setSelectedColor}
                             />
+                            <div className="preview-face-container">
+                                    <BlockPreview3D textureObjects={textureObjects} />
+                            </div>
+                        </div>
+                        
+                        {/* Scalable Canvas Area */}
+                        <div className="editor-canvas-container">
+                            <PixelEditorCanvas
+                                ref={pixelCanvasRef}
+                                key={selectedFace}
+                                initialTextureObject={initialCanvasTexture}
+                                selectedTool={selectedTool}
+                                selectedColor={selectedColor}
+                                selectedFace={selectedFace}
+                                onPixelUpdate={handlePixelUpdate}
+                                onColorPicked={colorPickerController}
+                            />
+                            <div className="editor-toolbar-container">
+                                <EditorToolbar
+                                    selectedTool={selectedTool}
+                                    onSelectTool={setSelectedTool}
+                                    onUndo={handleUndo}
+                                    onRedo={handleRedo}
+                                    canUndo={canUndo}
+                                    canRedo={canRedo}
+                                />
+                                <FaceSelector
+                                    selectedFace={selectedFace}
+                                    onSelectFace={handleSelectFace}
+                                />
+                            </div>
                         </div>
                     </div>
-                    <div className="editor-canvas-container">
-                        <PixelEditorCanvas
-                            ref={pixelCanvasRef}
-                            key={selectedFace}
-                            initialTextureObject={initialCanvasTexture}
-                            selectedTool={selectedTool}
-                            selectedColor={selectedColor}
-                            selectedFace={selectedFace}
-                            onPixelUpdate={handlePixelUpdate}
-                        />
+                        {/* Bottom Controls Area */}
+                    <div className="bottom-controls-container">
+                        {/* Error Display */}
+                        {error && <div className="error-message">{error}</div>}
+                        {isLoading && (
+                            <div className="loading-indicator">Generating image...</div>
+                        )}
+                        <h3>Generate AI Texture</h3>
+                        {/* Generation Section - Moved to Bottom */}
+                        <div className="generation-section">
+                            {/* hCaptcha Component */}
+                                <div className="hcaptcha-container">
+                                    <HCaptcha
+                                        ref={hCaptchaRef}
+                                        theme="dark"
+                                        sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY}
+                                        onVerify={(token) => {
+                                            setHCaptchaToken(token);
+                                            setCaptchaError(null);
+                                        }}
+                                        onExpire={() => {
+                                            setHCaptchaToken(null);
+                                            setCaptchaError(
+                                                "CAPTCHA expired. Please verify again."
+                                            );
+                                        }}
+                                        onError={(err) => {
+                                            setHCaptchaToken(null);
+                                            setCaptchaError(`CAPTCHA error: ${err}`);
+                                        }}
+                                    />
+                                </div>
+                            <div className="generation-controls">
+                                <textarea
+                                    className="prompt-input"
+                                    value={prompt}
+                                    onChange={(e) => setPrompt(e.target.value)}
+                                    placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
+                                    rows="2"
+                                    disabled={isLoading}
+                                />
+                            </div>
+                            
+                            <div className="generation-buttons">
+                                <button
+                                    className="generate-button"
+                                    onClick={handleGenerate}
+                                    disabled={isLoading || !prompt.trim() || !hCaptchaToken}
+                                >
+                                    {isLoading ? "Generating..." : "Generate"}
+                                </button>
+                            </div>
+                            
+                            {captchaError && (
+                                <div className="error-message captcha-error">
+                                    {captchaError}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-                {/* Action Button: Render unconditionally, disable based on texture presence */}
-                <div className="modal-actions">
+                 {/* Action Buttons */}
+                 <div className="modal-actions">
                     <button
                         className="modal-close-button"
                         onClick={handleClose}
                     >
-                        Close
+                        Cancel
                     </button>
                     {/* Texture name input */}
                     <input
@@ -399,7 +426,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                             !textureName.trim()
                         }
                     >
-                        Use Texture
+                        Add Texture
                     </button>
                 </div>
             </div>

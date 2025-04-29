@@ -116,11 +116,299 @@ function TerrainBuilder(
             removed: [],
         },
     });
+    const firstLoadCompletedRef = useRef(false); // Flag to track if the first load is complete
+    const initialSaveCompleteRef = useRef(false);
     const autoSaveIntervalRef = useRef(null);
     const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
     const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
-    const gridSizeRef = useRef(16);
-    const firstLoadCompletedRef = useRef(false);
+    const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
+
+    // Setup auto-save only if enabled
+    useEffect(() => {
+        const setupAutoSave = () => {
+            // Clear any existing interval first
+            if (autoSaveIntervalRef.current) {
+                clearInterval(autoSaveIntervalRef.current);
+                autoSaveIntervalRef.current = null;
+            }
+
+            // Only set up the interval if auto-save is enabled
+            if (isAutoSaveEnabledRef.current) {
+                console.log(
+                    `Auto-save enabled with interval: ${
+                        AUTO_SAVE_INTERVAL / 1000
+                    } seconds`
+                );
+                autoSaveIntervalRef.current = setInterval(() => {
+                    // Only save if there are pending changes
+                    if (
+                        Object.keys(pendingChangesRef.current.terrain.added)
+                            .length > 0 ||
+                        Object.keys(pendingChangesRef.current.terrain.removed)
+                            .length > 0
+                    ) {
+                        console.log("Auto-saving terrain...");
+                        efficientTerrainSave();
+                    }
+                }, AUTO_SAVE_INTERVAL);
+            } else {
+                console.log("Auto-save is disabled");
+            }
+        };
+
+        // Initial setup
+        setupAutoSave();
+
+        // Cleanup on unmount
+        return () => {
+            if (autoSaveIntervalRef.current) {
+                clearInterval(autoSaveIntervalRef.current);
+            }
+        };
+    }, []); // Empty dependency array means this runs once on mount
+
+    // Also save when user navigates away
+    useEffect(() => {
+        // Variable to track if a reload was just prevented (Cancel was clicked)
+        let reloadJustPrevented = false;
+        // Store the URL to detect actual navigation vs reload attempts
+        const currentUrl = window.location.href;
+
+        const handleBeforeUnload = (event) => {
+            // Skip save if database is being cleared
+            if (window.IS_DATABASE_CLEARING) {
+                console.log(
+                    "Database is being cleared, skipping unsaved changes check"
+                );
+                return;
+            }
+
+            // Skip if pendingChangesRef or its current property is null/undefined
+            if (!pendingChangesRef || !pendingChangesRef.current) {
+                console.log("No pending changes ref available");
+                return;
+            }
+
+            // Ensure we have properly structured changes before checking
+            const hasTerrainChanges =
+                pendingChangesRef.current.terrain &&
+                (Object.keys(pendingChangesRef.current.terrain.added || {})
+                    .length > 0 ||
+                    Object.keys(pendingChangesRef.current.terrain.removed || {})
+                        .length > 0);
+
+            // If we have pending changes, save immediately and show warning
+            if (hasTerrainChanges) {
+                localStorage.setItem("reload_attempted", "true");
+
+                // Standard way to show a confirmation dialog when closing the page
+                // This works across modern browsers
+                reloadJustPrevented = true;
+                event.preventDefault();
+                event.returnValue =
+                    "You have unsaved changes. Are you sure you want to leave?";
+                return event.returnValue;
+            }
+        };
+
+        // This handler runs when the user navigates back/forward or after the beforeunload dialog
+        const handlePopState = (event) => {
+            // Check if this is after a cancel action from beforeunload
+            if (reloadJustPrevented) {
+                console.log("Detected popstate after reload prevention");
+                event.preventDefault();
+
+                // Reset the flag
+                reloadJustPrevented = false;
+
+                // Restore the history state to prevent the reload
+                window.history.pushState(null, document.title, currentUrl);
+                return false;
+            }
+        };
+
+        // Function to handle when the page is shown after being hidden
+        // This can happen when user clicks Cancel on the reload prompt
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                // Check if we were in the middle of a reload attempt
+                const reloadAttempted =
+                    localStorage.getItem("reload_attempted") === "true";
+                if (reloadAttempted) {
+                    console.log(
+                        "Page became visible again after reload attempt"
+                    );
+                    // Clear the flag
+                    localStorage.removeItem("reload_attempted");
+                    // If we have a reload prevention flag, this means the user canceled
+                    if (reloadJustPrevented) {
+                        reloadJustPrevented = false;
+                        console.log(
+                            "User canceled reload, restoring history state"
+                        );
+                        // Restore history state
+                        window.history.pushState(
+                            null,
+                            document.title,
+                            currentUrl
+                        );
+                    }
+                }
+            }
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        window.addEventListener("popstate", handlePopState);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        // Set initial history state
+        window.history.pushState(null, document.title, currentUrl);
+
+        // Clear any stale reload flags
+        localStorage.removeItem("reload_attempted");
+
+        return () => {
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+            window.removeEventListener("popstate", handlePopState);
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange
+            );
+        };
+    }, []);
+
+    // Function to efficiently save terrain data
+    const efficientTerrainSave = async () => {
+        // Make it async
+        // Skip if database is being cleared
+        if (window.IS_DATABASE_CLEARING) {
+            return false;
+        }
+
+        // Skip if no changes to save
+        if (
+            !pendingChangesRef.current ||
+            !pendingChangesRef.current.terrain ||
+            (Object.keys(pendingChangesRef.current.terrain.added || {})
+                .length === 0 &&
+                Object.keys(pendingChangesRef.current.terrain.removed || {})
+                    .length === 0)
+        ) {
+            return true;
+        }
+
+        // Capture the changes to save
+        const changesToSave = { ...pendingChangesRef.current.terrain };
+
+        // Reset pending changes immediately *before* starting the async save
+        resetPendingChanges();
+
+        try {
+            const db = await DatabaseManager.getDBConnection();
+            const tx = db.transaction(STORES.TERRAIN, "readwrite");
+            const store = tx.objectStore(STORES.TERRAIN);
+
+            // Apply removals
+            if (
+                changesToSave.removed &&
+                Object.keys(changesToSave.removed).length > 0
+            ) {
+                await Promise.all(
+                    Object.keys(changesToSave.removed).map((key) => {
+                        const deleteRequest = store.delete(key);
+                        return new Promise((resolve, reject) => {
+                            deleteRequest.onsuccess = resolve;
+                            deleteRequest.onerror = reject;
+                        });
+                    })
+                );
+                console.log(
+                    `Deleted ${
+                        Object.keys(changesToSave.removed).length
+                    } blocks from DB`
+                );
+            }
+
+            // Apply additions/updates
+            if (
+                changesToSave.added &&
+                Object.keys(changesToSave.added).length > 0
+            ) {
+                await Promise.all(
+                    Object.entries(changesToSave.added).map(([key, value]) => {
+                        // Store the block ID directly with the coordinate key
+                        const putRequest = store.put(value, key);
+                        return new Promise((resolve, reject) => {
+                            putRequest.onsuccess = resolve;
+                            putRequest.onerror = reject;
+                        });
+                    })
+                );
+                console.log(
+                    `Added/updated ${
+                        Object.keys(changesToSave.added).length
+                    } blocks in DB`
+                );
+            }
+
+            // Complete the transaction
+            await new Promise((resolve, reject) => {
+                tx.oncomplete = resolve;
+                tx.onerror = reject;
+            });
+            lastSaveTimeRef.current = Date.now(); // Update last save time
+            return true;
+        } catch (error) {
+            console.error("Error during efficient terrain save:", error);
+            // IMPORTANT: Restore pending changes if save failed
+            pendingChangesRef.current.terrain = changesToSave;
+            return false;
+        }
+    };
+
+    // Initialize the incremental terrain save system
+    useEffect(() => {
+        console.log("Initializing incremental terrain save system");
+        // Reset initial save flag to ensure we save a baseline
+        initialSaveCompleteRef.current = false;
+        // Clear pending changes
+        pendingChangesRef.current = { added: {}, removed: {} };
+        // Set the last save time to now to prevent immediate saving on startup
+        lastSaveTimeRef.current = Date.now();
+        console.log(
+            "Last save time initialized to:",
+            new Date(lastSaveTimeRef.current).toLocaleTimeString()
+        );
+
+        // Attempt to load and validate terrain data
+        const validateTerrain = async () => {
+            try {
+                const terrain = await DatabaseManager.getData(
+                    STORES.TERRAIN,
+                    "current"
+                );
+                if (terrain && Object.keys(terrain).length > 0) {
+                    console.log(
+                        `Loaded existing terrain with ${
+                            Object.keys(terrain).length
+                        } blocks`
+                    );
+                    // We already have terrain data, mark as initialized
+                    initialSaveCompleteRef.current = true;
+                } else {
+                    console.log(
+                        "No existing terrain found, will create baseline on first save"
+                    );
+                }
+            } catch (err) {
+                console.error("Error validating terrain data:", err);
+            }
+        };
+
+        validateTerrain();
+    }, []);
+
+    // Scene setup
     const {
         scene,
         camera: threeCamera,
@@ -639,26 +927,9 @@ function TerrainBuilder(
                 }
             }
             potentialNewPosition.copy(blockIntersection.point);
-            if (modeRef.current === "delete" || modeRef.current === "remove") {
-                if (blockIntersection.block) {
-                    potentialNewPosition.x = blockIntersection.block.x;
-                    potentialNewPosition.y = blockIntersection.block.y;
-                    potentialNewPosition.z = blockIntersection.block.z;
-                } else {
-                    potentialNewPosition.x = Math.round(
-                        potentialNewPosition.x -
-                            blockIntersection.normal.x * 0.5
-                    );
-                    potentialNewPosition.y = Math.round(
-                        potentialNewPosition.y -
-                            blockIntersection.normal.y * 0.5
-                    );
-                    potentialNewPosition.z = Math.round(
-                        potentialNewPosition.z -
-                            blockIntersection.normal.z * 0.5
-                    );
-                }
-            } else {
+
+                // For add mode, calculate placement position precisely based on the face that was hit
+                // First, get the block coordinates where we hit
                 const hitBlock = blockIntersection.block || {
                     x: Math.floor(blockIntersection.point.x),
                     y: Math.floor(blockIntersection.point.y),
@@ -682,12 +953,35 @@ function TerrainBuilder(
                     potentialNewPosition.y = Math.round(potentialNewPosition.y);
                     potentialNewPosition.z = Math.round(potentialNewPosition.z);
                 }
-                if (
-                    blockIntersection.isGroundPlane &&
-                    modeRef.current === "add"
-                ) {
+
+                // Handle y-coordinate special case if this is a ground plane hit
+                if (blockIntersection.isGroundPlane) {
                     potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
                 }
+                else{
+                    if (modeRef.current === "remove") {
+                        if(blockIntersection.normal.y === 1){
+                            potentialNewPosition.y = potentialNewPosition.y - 1;
+                        }
+                        else if(blockIntersection.normal.y === -1){
+                            potentialNewPosition.y = potentialNewPosition.y + 1;
+                        }
+                        else if(blockIntersection.normal.x === 1){
+                            potentialNewPosition.x = potentialNewPosition.x - 1;
+                        }
+                        else if(blockIntersection.normal.x === -1){
+                            potentialNewPosition.x = potentialNewPosition.x + 1;
+                        }
+                        else if(blockIntersection.normal.z === 1){
+                            potentialNewPosition.z = potentialNewPosition.z - 1;
+                        }
+                        else if(blockIntersection.normal.z === -1){
+                            potentialNewPosition.z = potentialNewPosition.z + 1;
+                        }
+                    }
+                }
+                
+                // Apply axis lock if enabled
                 if (axisLockEnabledRef.current) {
                     const originalPos = previewPositionRef.current.clone();
                     const axisLock = lockedAxisRef.current;
@@ -702,7 +996,8 @@ function TerrainBuilder(
                         potentialNewPosition.y = originalPos.y;
                     }
                 }
-            }
+
+            // --- Start: Placement Constraints Logic (Using Raw Ground Intersection) ---
             let shouldUpdatePreview = true;
             let thresholdMet = false; // Flag to track if raw ground threshold was met
             if (isPlacingRef.current && !isToolActive) {
@@ -713,6 +1008,8 @@ function TerrainBuilder(
                     if (isFirstBlockRef.current) {
                         shouldUpdatePreview = true;
                         thresholdMet = true; // Mark that we're forcing the placement
+                        // Lock the Y-coordinate of the SNAPPED position for any mode
+                        currentPlacingYRef.current = potentialNewPosition.y; // Update the Y-lock position based on initial hit
                         potentialNewPosition.y = currentPlacingYRef.current;
                     } else {
                         if (groundDistanceMoved < THRESHOLD_FOR_PLACING) {
@@ -720,6 +1017,7 @@ function TerrainBuilder(
                         } else {
                             shouldUpdatePreview = true;
                             thresholdMet = true; // Mark that we passed the raw ground check
+                            // Lock the Y-coordinate of the SNAPPED position consistently
                             potentialNewPosition.y = currentPlacingYRef.current;
                         }
                     }
@@ -1954,78 +2252,6 @@ function TerrainBuilder(
             cancelAnimationFrame(frameId);
         };
     }, [gl]);
-
-    const efficientTerrainSave = async () => {
-        console.log("efficientTerrainSave");
-        if (window.IS_DATABASE_CLEARING) {
-            console.log("efficientTerrainSave - DATABASE_CLEARING");
-            return false;
-        }
-        if (
-            !pendingChangesRef.current ||
-            !pendingChangesRef.current.terrain ||
-            (Object.keys(pendingChangesRef.current.terrain.added || {})
-                .length === 0 &&
-                Object.keys(pendingChangesRef.current.terrain.removed || {})
-                    .length === 0)
-        ) {
-            console.log("efficientTerrainSave - NO CHANGES");
-            console.log("pendingChangesRef.current", pendingChangesRef.current);
-            console.log(
-                "pendingChangesRef.current.terrain",
-                pendingChangesRef.current.terrain
-            );
-            return true;
-        }
-        const changesToSave = { ...pendingChangesRef.current.terrain };
-        console.log("efficientTerrainSave - CHANGES TO SAVE", changesToSave);
-        resetPendingChanges();
-        try {
-            const db = await DatabaseManager.getDBConnection();
-            const tx = db.transaction(STORES.TERRAIN, "readwrite");
-            const store = tx.objectStore(STORES.TERRAIN);
-            if (
-                changesToSave.removed &&
-                Object.keys(changesToSave.removed).length > 0
-            ) {
-                await Promise.all(
-                    Object.keys(changesToSave.removed).map((key) => {
-                        const deleteRequest = store.delete(`${key}`);
-                        return new Promise((resolve, reject) => {
-                            deleteRequest.onsuccess = resolve;
-                            deleteRequest.onerror = reject;
-                        });
-                    })
-                );
-            }
-            if (
-                changesToSave.added &&
-                Object.keys(changesToSave.added).length > 0
-            ) {
-                await Promise.all(
-                    Object.entries(changesToSave.added).map(([key, value]) => {
-                        const putRequest = store.put(value, key);
-                        return new Promise((resolve, reject) => {
-                            putRequest.onsuccess = resolve;
-                            putRequest.onerror = reject;
-                        });
-                    })
-                );
-            }
-            console.log("efficientTerrainSave - WAITING FOR TX TO COMPLETE");
-            await new Promise((resolve, reject) => {
-                tx.oncomplete = resolve;
-                tx.onerror = reject;
-            });
-            lastSaveTimeRef.current = Date.now(); // Update last save time
-            console.log("efficientTerrainSave - SUCCESS");
-            return true;
-        } catch (error) {
-            console.error("Error during efficient terrain save:", error);
-            pendingChangesRef.current.terrain = changesToSave;
-            return false;
-        }
-    };
 
     return (
         <>
