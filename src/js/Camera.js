@@ -32,7 +32,6 @@ class CameraManager {
         this.controls.panSpeed = 10;
 
         const handleWheel = (event) => {
-
             const isUIElement = event.target.closest(
                 ".block-tools-sidebar, .controls-container, .debug-info, .modal-overlay"
             );
@@ -70,7 +69,6 @@ class CameraManager {
         this.loadSavedState();
 
         this.controls.addEventListener("change", () => {
-
             const direction = new THREE.Vector3();
             this.camera.getWorldDirection(direction);
             const verticalAngle = THREE.MathUtils.radToDeg(
@@ -148,16 +146,35 @@ class CameraManager {
         }
 
         if (this.keys.has("a") || this.keys.has("arrowleft")) {
+            // Mode 1: Rotate camera
             this.camera.rotateY(this.rotateSpeed);
+
+            // Mode 2: Move camera left
+            // const direction = new THREE.Vector3();
+            // this.camera.getWorldDirection(direction);
+            // direction.y = 0;
+            // direction.normalize();
+            // const leftVector = new THREE.Vector3(direction.z, 0, -direction.x);
+            // this.camera.position.add(leftVector.multiplyScalar(this.moveSpeed));
+
             moved = true;
         }
         if (this.keys.has("d") || this.keys.has("arrowright")) {
+            // Mode 1: Rotate camera
             this.camera.rotateY(-this.rotateSpeed);
+            
+            // Mode 2: Move camera right
+            // const direction = new THREE.Vector3();
+            // this.camera.getWorldDirection(direction);
+            // direction.y = 0;
+            // direction.normalize();
+            // const rightVector = new THREE.Vector3(-direction.z, 0, direction.x);
+            // this.camera.position.add(rightVector.multiplyScalar(this.moveSpeed));
+            
             moved = true;
         }
 
         if (this.keys.has(" ")) {
-
             this.camera.position.y += this.moveSpeed;
             moved = true;
         }
@@ -167,7 +184,6 @@ class CameraManager {
         }
 
         if (moved) {
-
             const newTarget = this.camera.position
                 .clone()
                 .add(this.camera.getWorldDirection(new THREE.Vector3()));
@@ -269,7 +285,6 @@ class CameraManager {
     }
     setAngleChangeCallback(callback) {
         this.onCameraAngleChange = (angle) => {
-
             const roundedAngle = Math.round(angle * 100) / 100;
             callback(roundedAngle);
 
@@ -279,7 +294,6 @@ class CameraManager {
     setInputDisabled(disabled) {
         this._isInputDisabled = disabled;
         if (disabled) {
-
             this.keys.clear();
         }
     }
