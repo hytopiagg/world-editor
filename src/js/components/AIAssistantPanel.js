@@ -29,17 +29,13 @@ const AIAssistantPanel = ({
                 cursorRequest.onsuccess = (event) => {
                     const cursor = event.target.result;
                     if (cursor) {
-
                         loadedHistory.push({
                             prompt: cursor.key,
                             schematic: cursor.value,
                         });
                         cursor.continue();
                     } else {
-
                         if (loadedHistory.length > 0) {
-
-
                             loadedHistory.sort(
                                 (a, b) =>
                                     (b.schematic.timestamp || 0) -
@@ -66,7 +62,6 @@ const AIAssistantPanel = ({
             }
         };
         if (isVisible) {
-
             loadSavedSchematics();
         }
     }, [isVisible]); // Re-load if visibility changes
@@ -116,7 +111,6 @@ const AIAssistantPanel = ({
                 loadAISchematic(schematic);
 
                 try {
-
                     const { DatabaseManager, STORES } = await import(
                         "../managers/DatabaseManager"
                     );
@@ -134,9 +128,7 @@ const AIAssistantPanel = ({
                         "[AI Panel] Error saving schematic to DB:",
                         dbError
                     );
-
                 }
-
             } else {
                 setError("AI could not generate a structure for this prompt.");
             }
@@ -198,7 +190,12 @@ const AIAssistantPanel = ({
             )}
             {/* Added History Section */}
             {generationHistory.length > 0 && (
-                <div className="ai-assistant-history-list">
+                <div
+                    onWheel={(e) => {
+                        e.stopPropagation();
+                    }}
+                    className="ai-assistant-history-list"
+                >
                     <h5>History:</h5>
                     {generationHistory.map((entry, index) => (
                         <div
