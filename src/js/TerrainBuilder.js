@@ -1467,6 +1467,7 @@ function TerrainBuilder(
                             })
                         );
                     }
+                    console.log("Loading terrain...");
                     return DatabaseManager.getData(STORES.TERRAIN, "current");
                 })
                 .then((savedTerrain) => {

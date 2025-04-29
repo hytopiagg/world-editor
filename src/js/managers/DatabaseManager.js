@@ -1,4 +1,5 @@
 import { version } from "../Constants";
+import { loadingManager } from "../managers/LoadingManager";
 export const STORES = {
     TERRAIN: "terrain",
     ENVIRONMENT: "environment",
@@ -15,7 +16,6 @@ export class DatabaseManager {
     static DB_VERSION = 2; // Incremented version number
     static dbConnection = null; // Add static property to store connection
     static async openDB() {
-
         if (this.dbConnection) {
             return Promise.resolve(this.dbConnection);
         }
@@ -45,7 +45,6 @@ export class DatabaseManager {
         return this.dbConnection;
     }
 
-
     static async getDBConnection() {
         return this.getConnection();
     }
@@ -58,39 +57,58 @@ export class DatabaseManager {
                 try {
                     const transaction = db.transaction(storeName, "readwrite");
                     const store = transaction.objectStore(storeName);
-                    
+
                     // Clear existing terrain data
                     const clearRequest = store.clear();
-                    
+
                     clearRequest.onsuccess = () => {
                         // For terrain store, each coordinate becomes a key, and block ID becomes the value
-                        const promises = Object.entries(data).map(([coordKey, blockId]) => {
-                            return new Promise((resolveBlock, rejectBlock) => {
-                                const putRequest = store.put(blockId, coordKey);
-                                putRequest.onsuccess = resolveBlock;
-                                putRequest.onerror = rejectBlock;
-                            });
-                        });
-                        
+                        const promises = Object.entries(data).map(
+                            ([coordKey, blockId]) => {
+                                return new Promise(
+                                    (resolveBlock, rejectBlock) => {
+                                        const putRequest = store.put(
+                                            blockId,
+                                            coordKey
+                                        );
+                                        putRequest.onsuccess = resolveBlock;
+                                        putRequest.onerror = rejectBlock;
+                                    }
+                                );
+                            }
+                        );
+
                         // Wait for all block insertions to complete
                         Promise.all(promises)
                             .then(() => {
-                                console.log(`[DB] Saved ${Object.keys(data).length} terrain blocks with individual coordinates as keys`);
+                                console.log(
+                                    `[DB] Saved ${
+                                        Object.keys(data).length
+                                    } terrain blocks with individual coordinates as keys`
+                                );
                                 resolve();
                             })
                             .catch((error) => {
-                                console.error("[DB] Error saving terrain blocks:", error);
+                                console.error(
+                                    "[DB] Error saving terrain blocks:",
+                                    error
+                                );
                                 reject(error);
                             });
                     };
-                    
+
                     clearRequest.onerror = (event) => {
-                        console.error("[DB] Error clearing terrain store:", event.target.error);
+                        console.error(
+                            "[DB] Error clearing terrain store:",
+                            event.target.error
+                        );
                         reject(event.target.error);
                     };
-                    
                 } catch (error) {
-                    console.error("[DB] Error in terrain saveData transaction:", error);
+                    console.error(
+                        "[DB] Error in terrain saveData transaction:",
+                        error
+                    );
                     reject(error);
                 }
             } else {
@@ -105,7 +123,6 @@ export class DatabaseManager {
         });
     }
     static async getData(storeName, key) {
-
         const db = await this.getDBConnection();
         return new Promise((resolve, reject) => {
             try {
@@ -113,15 +130,22 @@ export class DatabaseManager {
                 const store = tx.objectStore(storeName);
 
                 if (storeName === STORES.TERRAIN && key === "current") {
+                    console.log("Getting current terrain data...");
                     const terrainData = {};
                     const cursorRequest = store.openCursor();
+                    let index = 0;
                     cursorRequest.onsuccess = (event) => {
                         const cursor = event.target.result;
                         if (cursor) {
                             terrainData[cursor.key] = cursor.value;
+                            index++;
+                            if (index % 100 === 0) {
+                                loadingManager.updateLoading(
+                                    `Loading terrain... ${index}`
+                                );
+                            }
                             cursor.continue();
                         } else {
-
                             console.log(
                                 `[DB] Reconstructed terrain data with ${
                                     Object.keys(terrainData).length
@@ -140,7 +164,6 @@ export class DatabaseManager {
                 } else {
                     const request = store.get(key);
                     request.onsuccess = () => {
-
                         resolve(request.result);
                     };
                     request.onerror = (event) => {
@@ -222,7 +245,6 @@ export class DatabaseManager {
         }
     }
     static async clearDatabase() {
-
         const confirmed = window.confirm(
             "Warning: This will clear all data including the terrain, environment, and custom blocks. \n\nAre you sure you want to continue?"
         );
@@ -231,7 +253,6 @@ export class DatabaseManager {
         }
         try {
             console.log("Starting database clearing process...");
-
 
             window.IS_DATABASE_CLEARING = true;
             let clearedStores = 0;
@@ -250,7 +271,6 @@ export class DatabaseManager {
                         `Failed to clear store ${storeName}, continuing with others:`,
                         storeError
                     );
-
                 }
             }
             console.log(
@@ -264,7 +284,6 @@ export class DatabaseManager {
 
             setTimeout(() => {
                 try {
-
                     window.location.href = window.location.href;
                 } catch (reloadError) {
                     console.error("Error during reload:", reloadError);
