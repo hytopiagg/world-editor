@@ -581,6 +581,19 @@ function TerrainBuilder(
             console.timeEnd("buildUpdateTerrain");
             return;
         }
+        if (!pendingChangesRef.current) {
+            console.log("initializing pendingChangesRef");
+            pendingChangesRef.current = {
+                terrain: {
+                    added: {},
+                    removed: {},
+                },
+                environment: {
+                    added: [],
+                    removed: [],
+                },
+            };
+        }
         try {
             const terrainBlocks = useProvidedBlocks
                 ? options.blocks
@@ -611,7 +624,7 @@ function TerrainBuilder(
                             const batch = blockEntries.slice(startIdx, endIdx);
                             batch.forEach(([posKey, blockId]) => {
                                 terrainRef.current[posKey] = blockId;
-                                pendingChangesRef.current.added[posKey] =
+                                pendingChangesRef.current.terrain.added[posKey] =
                                     blockId;
                             });
                             if (endIdx < blockEntries.length) {
@@ -767,6 +780,7 @@ function TerrainBuilder(
                     "handleBlockPlacement - ADD - positions",
                     positions
                 );
+                // Initialize pendingChangesRef if it doesn't exist
                 const addedBlocks = {};
                 let blockWasPlaced = false; // Flag to track if any block was actually placed
                 positions.forEach((pos) => {
@@ -928,74 +942,68 @@ function TerrainBuilder(
             }
             potentialNewPosition.copy(blockIntersection.point);
 
-                // For add mode, calculate placement position precisely based on the face that was hit
-                // First, get the block coordinates where we hit
-                const hitBlock = blockIntersection.block || {
-                    x: Math.floor(blockIntersection.point.x),
-                    y: Math.floor(blockIntersection.point.y),
-                    z: Math.floor(blockIntersection.point.z),
-                };
-                if (blockIntersection.face && blockIntersection.normal) {
-                    potentialNewPosition.x =
-                        hitBlock.x + blockIntersection.normal.x;
-                    potentialNewPosition.y =
-                        hitBlock.y + blockIntersection.normal.y;
-                    potentialNewPosition.z =
-                        hitBlock.z + blockIntersection.normal.z;
-                    potentialNewPosition.x = Math.round(potentialNewPosition.x);
-                    potentialNewPosition.y = Math.round(potentialNewPosition.y);
-                    potentialNewPosition.z = Math.round(potentialNewPosition.z);
-                } else {
-                    potentialNewPosition.add(
-                        blockIntersection.normal.clone().multiplyScalar(0.5)
-                    );
-                    potentialNewPosition.x = Math.round(potentialNewPosition.x);
-                    potentialNewPosition.y = Math.round(potentialNewPosition.y);
-                    potentialNewPosition.z = Math.round(potentialNewPosition.z);
-                }
+            // For add mode, calculate placement position precisely based on the face that was hit
+            // First, get the block coordinates where we hit
+            const hitBlock = blockIntersection.block || {
+                x: Math.floor(blockIntersection.point.x),
+                y: Math.floor(blockIntersection.point.y),
+                z: Math.floor(blockIntersection.point.z),
+            };
+            if (blockIntersection.face && blockIntersection.normal) {
+                potentialNewPosition.x =
+                    hitBlock.x + blockIntersection.normal.x;
+                potentialNewPosition.y =
+                    hitBlock.y + blockIntersection.normal.y;
+                potentialNewPosition.z =
+                    hitBlock.z + blockIntersection.normal.z;
+                potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                potentialNewPosition.z = Math.round(potentialNewPosition.z);
+            } else {
+                potentialNewPosition.add(
+                    blockIntersection.normal.clone().multiplyScalar(0.5)
+                );
+                potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                potentialNewPosition.z = Math.round(potentialNewPosition.z);
+            }
 
-                // Handle y-coordinate special case if this is a ground plane hit
-                if (blockIntersection.isGroundPlane) {
-                    potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
-                }
-                else{
-                    if (modeRef.current === "remove") {
-                        if(blockIntersection.normal.y === 1){
-                            potentialNewPosition.y = potentialNewPosition.y - 1;
-                        }
-                        else if(blockIntersection.normal.y === -1){
-                            potentialNewPosition.y = potentialNewPosition.y + 1;
-                        }
-                        else if(blockIntersection.normal.x === 1){
-                            potentialNewPosition.x = potentialNewPosition.x - 1;
-                        }
-                        else if(blockIntersection.normal.x === -1){
-                            potentialNewPosition.x = potentialNewPosition.x + 1;
-                        }
-                        else if(blockIntersection.normal.z === 1){
-                            potentialNewPosition.z = potentialNewPosition.z - 1;
-                        }
-                        else if(blockIntersection.normal.z === -1){
-                            potentialNewPosition.z = potentialNewPosition.z + 1;
-                        }
+            // Handle y-coordinate special case if this is a ground plane hit
+            if (blockIntersection.isGroundPlane) {
+                potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
+            } else {
+                if (modeRef.current === "remove") {
+                    if (blockIntersection.normal.y === 1) {
+                        potentialNewPosition.y = potentialNewPosition.y - 1;
+                    } else if (blockIntersection.normal.y === -1) {
+                        potentialNewPosition.y = potentialNewPosition.y + 1;
+                    } else if (blockIntersection.normal.x === 1) {
+                        potentialNewPosition.x = potentialNewPosition.x - 1;
+                    } else if (blockIntersection.normal.x === -1) {
+                        potentialNewPosition.x = potentialNewPosition.x + 1;
+                    } else if (blockIntersection.normal.z === 1) {
+                        potentialNewPosition.z = potentialNewPosition.z - 1;
+                    } else if (blockIntersection.normal.z === -1) {
+                        potentialNewPosition.z = potentialNewPosition.z + 1;
                     }
                 }
-                
-                // Apply axis lock if enabled
-                if (axisLockEnabledRef.current) {
-                    const originalPos = previewPositionRef.current.clone();
-                    const axisLock = lockedAxisRef.current;
-                    if (axisLock === "x") {
-                        potentialNewPosition.y = originalPos.y;
-                        potentialNewPosition.z = originalPos.z;
-                    } else if (axisLock === "y") {
-                        potentialNewPosition.x = originalPos.x;
-                        potentialNewPosition.z = originalPos.z;
-                    } else if (axisLock === "z") {
-                        potentialNewPosition.x = originalPos.x;
-                        potentialNewPosition.y = originalPos.y;
-                    }
+            }
+
+            // Apply axis lock if enabled
+            if (axisLockEnabledRef.current) {
+                const originalPos = previewPositionRef.current.clone();
+                const axisLock = lockedAxisRef.current;
+                if (axisLock === "x") {
+                    potentialNewPosition.y = originalPos.y;
+                    potentialNewPosition.z = originalPos.z;
+                } else if (axisLock === "y") {
+                    potentialNewPosition.x = originalPos.x;
+                    potentialNewPosition.z = originalPos.z;
+                } else if (axisLock === "z") {
+                    potentialNewPosition.x = originalPos.x;
+                    potentialNewPosition.y = originalPos.y;
                 }
+            }
 
             // --- Start: Placement Constraints Logic (Using Raw Ground Intersection) ---
             let shouldUpdatePreview = true;

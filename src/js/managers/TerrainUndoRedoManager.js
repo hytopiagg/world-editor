@@ -35,9 +35,11 @@ class TerrainUndoRedoManager {
 
     trackTerrainChanges(added = {}, removed = {}) {
         if (window.IS_DATABASE_CLEARING) {
+            console.log("Database is being cleared, skipping tracking changes");
             return;
         }
 
+        // Initialize the changes object if it doesn't exist
         if (!this.pendingChangesRef.current) {
             this.pendingChangesRef.current = {
                 terrain: {
@@ -51,6 +53,7 @@ class TerrainUndoRedoManager {
             };
         }
 
+        // Ensure terrain object exists
         if (!this.pendingChangesRef.current.terrain) {
             this.pendingChangesRef.current.terrain = {
                 added: {},
@@ -58,6 +61,7 @@ class TerrainUndoRedoManager {
             };
         }
 
+        // Ensure environment object exists
         if (!this.pendingChangesRef.current.environment) {
             this.pendingChangesRef.current.environment = {
                 added: [],
@@ -65,13 +69,16 @@ class TerrainUndoRedoManager {
             };
         }
 
+        // Safely handle potentially null or undefined values
         const safeAdded = added || {};
         const safeRemoved = removed || {};
 
+        // Track added blocks
         Object.entries(safeAdded).forEach(([key, value]) => {
             if (this.pendingChangesRef.current?.terrain?.added) {
                 this.pendingChangesRef.current.terrain.added[key] = value;
             }
+            // If this position was previously in the removed list, remove it
             if (
                 this.pendingChangesRef.current?.terrain?.removed &&
                 this.pendingChangesRef.current.terrain.removed[key]
@@ -80,13 +87,16 @@ class TerrainUndoRedoManager {
             }
         });
 
+        // Track removed blocks
         Object.entries(safeRemoved).forEach(([key, value]) => {
+            // If this position was previously in the added list, just remove it
             if (
                 this.pendingChangesRef.current?.terrain?.added &&
                 this.pendingChangesRef.current.terrain.added[key]
             ) {
                 delete this.pendingChangesRef.current.terrain.added[key];
             } else if (this.pendingChangesRef.current?.terrain?.removed) {
+                // Otherwise track it as removed
                 this.pendingChangesRef.current.terrain.removed[key] = value;
             }
         });
