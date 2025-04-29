@@ -1266,11 +1266,17 @@ function TerrainBuilder(
                     Math.abs(target.x) <= gridSizeHalf &&
                     Math.abs(target.z) <= gridSizeHalf
                 ) {
+                    // Ensure consistent behavior with block intersection by using centered coordinates
+                    const adjustedX = Math.floor(target.x) + 0.5;
+                    const adjustedZ = Math.floor(target.z) + 0.5;
+                    
                     // This is a hit against the ground plane within the valid build area
                     intersection = {
-                        point: target.clone(),
+                        point: new THREE.Vector3(adjustedX, 0, adjustedZ),
                         normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
                         block: {
+                            // For ground plane hits in remove mode, we need to be very specific about the block position
+                            // to match the exact behavior when hitting blocks
                             x: Math.floor(target.x),
                             y: 0,
                             z: Math.floor(target.z),
@@ -1355,29 +1361,6 @@ function TerrainBuilder(
             // Calculate the SNAPPED potential new position (based on blockIntersection)
             potentialNewPosition.copy(blockIntersection.point);
 
-            // If in delete/remove mode, select the actual block, not the face
-            if (modeRef.current === "delete" || modeRef.current === "remove") {
-                // For delete/remove mode, use the block coordinates directly
-                if (blockIntersection.block) {
-                    potentialNewPosition.x = blockIntersection.block.x;
-                    potentialNewPosition.y = blockIntersection.block.y;
-                    potentialNewPosition.z = blockIntersection.block.z;
-                } else {
-                    // If no block property, use the old method as fallback
-                    potentialNewPosition.x = Math.round(
-                        potentialNewPosition.x -
-                            blockIntersection.normal.x * 0.5
-                    );
-                    potentialNewPosition.y = Math.round(
-                        potentialNewPosition.y -
-                            blockIntersection.normal.y * 0.5
-                    );
-                    potentialNewPosition.z = Math.round(
-                        potentialNewPosition.z -
-                            blockIntersection.normal.z * 0.5
-                    );
-                }
-            } else {
                 // For add mode, calculate placement position precisely based on the face that was hit
                 // First, get the block coordinates where we hit
                 const hitBlock = blockIntersection.block || {
@@ -1414,13 +1397,32 @@ function TerrainBuilder(
                 }
 
                 // Handle y-coordinate special case if this is a ground plane hit
-                if (
-                    blockIntersection.isGroundPlane &&
-                    modeRef.current === "add"
-                ) {
+                if (blockIntersection.isGroundPlane) {
                     potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
                 }
-
+                else{
+                    if (modeRef.current === "remove") {
+                        if(blockIntersection.normal.y === 1){
+                            potentialNewPosition.y = potentialNewPosition.y - 1;
+                        }
+                        else if(blockIntersection.normal.y === -1){
+                            potentialNewPosition.y = potentialNewPosition.y + 1;
+                        }
+                        else if(blockIntersection.normal.x === 1){
+                            potentialNewPosition.x = potentialNewPosition.x - 1;
+                        }
+                        else if(blockIntersection.normal.x === -1){
+                            potentialNewPosition.x = potentialNewPosition.x + 1;
+                        }
+                        else if(blockIntersection.normal.z === 1){
+                            potentialNewPosition.z = potentialNewPosition.z - 1;
+                        }
+                        else if(blockIntersection.normal.z === -1){
+                            potentialNewPosition.z = potentialNewPosition.z + 1;
+                        }
+                    }
+                }
+                
                 // Apply axis lock if enabled
                 if (axisLockEnabledRef.current) {
                     // Keep only movement along the selected axis
@@ -1438,7 +1440,6 @@ function TerrainBuilder(
                         potentialNewPosition.y = originalPos.y;
                     }
                 }
-            }
 
             // --- Start: Placement Constraints Logic (Using Raw Ground Intersection) ---
             let shouldUpdatePreview = true;
@@ -1456,7 +1457,8 @@ function TerrainBuilder(
                         // For the first block, bypass the threshold check and always place
                         shouldUpdatePreview = true;
                         thresholdMet = true; // Mark that we're forcing the placement
-                        // Lock the Y-coordinate of the SNAPPED position
+                        // Lock the Y-coordinate of the SNAPPED position for any mode
+                        currentPlacingYRef.current = potentialNewPosition.y; // Update the Y-lock position based on initial hit
                         potentialNewPosition.y = currentPlacingYRef.current;
                     } else {
                         // After first block, apply normal threshold logic
@@ -1469,7 +1471,7 @@ function TerrainBuilder(
                             // Raw ground distance threshold met: Allow preview update and placement.
                             shouldUpdatePreview = true;
                             thresholdMet = true; // Mark that we passed the raw ground check
-                            // Lock the Y-coordinate of the SNAPPED position
+                            // Lock the Y-coordinate of the SNAPPED position consistently
                             potentialNewPosition.y = currentPlacingYRef.current;
                             // Ground anchor update happens *after* successful preview update below
                         }
@@ -3566,8 +3568,8 @@ function TerrainBuilder(
                 gridSize: gridSizeRef.current,
                 recentlyPlacedBlocks: recentlyPlacedBlocksRef.current,
                 isPlacing: isPlacingRef.current,
-                mode: modeRef.current,
-                debug: true, // Enable debug logging for this call
+                mode: modeRef.current, // Pass the current mode for mode-specific handling
+                debug: false, // Only enable debug logging when needed
             };
 
             // Perform raycast against spatial hash grid
@@ -3576,6 +3578,14 @@ function TerrainBuilder(
                 threeCamera,
                 raycastOptions
             );
+
+            // Ensure consistent block position format regardless of mode
+            if (gridResult && gridResult.block) {
+                // Ensure block coordinates are integers
+                gridResult.block.x = Math.floor(gridResult.block.x);
+                gridResult.block.y = Math.floor(gridResult.block.y);
+                gridResult.block.z = Math.floor(gridResult.block.z);
+            }
 
             intersection = gridResult;
         } else {
@@ -3603,9 +3613,13 @@ function TerrainBuilder(
                     Math.abs(target.x) <= gridSizeHalf &&
                     Math.abs(target.z) <= gridSizeHalf
                 ) {
+                    // Ensure consistent behavior with block intersection by using centered coordinates
+                    const adjustedX = Math.floor(target.x) + 0.5;
+                    const adjustedZ = Math.floor(target.z) + 0.5;
+                    
                     // This is a hit against the ground plane within the valid build area
                     intersection = {
-                        point: target.clone(),
+                        point: new THREE.Vector3(adjustedX, 0, adjustedZ),
                         normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
                         block: {
                             x: Math.floor(target.x),
