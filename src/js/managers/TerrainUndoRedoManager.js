@@ -34,7 +34,7 @@ class TerrainUndoRedoManager {
     }
 
     trackTerrainChanges(added = {}, removed = {}) {
-        if (window.IS_DATABASE_CLEARING) {
+        if (localStorage.getItem("IS_DATABASE_CLEARING")) {
             console.log("Database is being cleared, skipping tracking changes");
             return;
         }

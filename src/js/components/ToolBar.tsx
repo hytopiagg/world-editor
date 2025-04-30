@@ -320,9 +320,9 @@ const ToolBar = ({
     useEffect(() => {
         const checkUndoRedoAvailability = async () => {
             const undoStates =
-                (await DatabaseManager.getData(STORES.UNDO, "states")) || [];
+                (await DatabaseManager.getData(STORES.UNDO, "states")) as any[] || [];
             const redoStates =
-                (await DatabaseManager.getData(STORES.REDO, "states")) || [];
+                (await DatabaseManager.getData(STORES.REDO, "states")) as any[] || [];
             setCanUndo(undoStates.length > 0);
             setCanRedo(redoStates.length > 0);
         };

@@ -180,7 +180,7 @@ function TerrainBuilder(
 
         const handleBeforeUnload = (event) => {
             // Skip save if database is being cleared
-            if (window.IS_DATABASE_CLEARING) {
+            if (localStorage.getItem("IS_DATABASE_CLEARING")) {
                 console.log(
                     "Database is being cleared, skipping unsaved changes check"
                 );
@@ -285,7 +285,7 @@ function TerrainBuilder(
     const efficientTerrainSave = async () => {
         // Make it async
         // Skip if database is being cleared
-        if (window.IS_DATABASE_CLEARING) {
+        if (localStorage.getItem("IS_DATABASE_CLEARING")) {
             return false;
         }
 
@@ -1252,7 +1252,7 @@ function TerrainBuilder(
     const clearMap = async () => {
         try {
             await terrainUndoRedoManager.clearUndoRedoHistory();
-            window.IS_DATABASE_CLEARING = true;
+            localStorage.setItem("IS_DATABASE_CLEARING", "true");
             try {
                 terrainRef.current = {};
                 totalBlocksRef.current = 0;
@@ -1305,7 +1305,7 @@ function TerrainBuilder(
             } catch (error) {
                 console.error("Error during clearMap operation:", error);
             } finally {
-                window.IS_DATABASE_CLEARING = false;
+                localStorage.removeItem("IS_DATABASE_CLEARING");
             }
         } catch (error) {
             console.error("Failed to clear map:", error);

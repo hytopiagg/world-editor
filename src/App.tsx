@@ -171,7 +171,7 @@ function App() {
                     "gridSize"
                 );
                 if (savedGridSize) {
-                    setGridSize(savedGridSize);
+                    setGridSize(+savedGridSize);
                 }
             } catch (error) {
                 console.error("Error loading grid size from IndexedDB:", error);

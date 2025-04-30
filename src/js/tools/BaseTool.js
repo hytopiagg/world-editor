@@ -127,6 +127,7 @@ class BaseTool {
     get isActive() {
         return this.active;
     }
+    
     /**
      * Clean up any resources when the tool is no longer needed
      */

@@ -1,5 +1,5 @@
 import { version } from "../Constants";
-import { loadingManager } from "../managers/LoadingManager";
+import { loadingManager } from "./LoadingManager";
 export const STORES = {
     TERRAIN: "terrain",
     ENVIRONMENT: "environment",
@@ -27,7 +27,8 @@ export class DatabaseManager {
                 resolve(request.result);
             };
             request.onupgradeneeded = (event) => {
-                const db = event.target.result;
+                // TODO: CHECK IF RESULT EXISTS & ADD MIGRATION LOGIC
+                const db = (event.target as IDBOpenDBRequest).result;
 
                 Object.values(STORES).forEach((storeName) => {
                     if (!db.objectStoreNames.contains(storeName)) {
@@ -48,7 +49,7 @@ export class DatabaseManager {
     static async getDBConnection() {
         return this.getConnection();
     }
-    static async saveData(storeName, key, data) {
+    static async saveData(storeName: string, key: string, data: any): Promise<void> {
         console.log("saveData", storeName, key, data);
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {
@@ -178,7 +179,7 @@ export class DatabaseManager {
                                             res(valuesRequest.result);
                                         valuesRequest.onerror = rej;
                                     }),
-                                ]);
+                                ]) as [string[], any[]];
 
                                 if (keys.length !== values.length) {
                                     console.error(
@@ -266,7 +267,7 @@ export class DatabaseManager {
             }
         });
     }
-    static async deleteData(storeName, key) {
+    static async deleteData(storeName: string, key: string): Promise<void> {
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, "readwrite");
@@ -276,7 +277,7 @@ export class DatabaseManager {
             request.onsuccess = () => resolve();
         });
     }
-    static async clearStore(storeName) {
+    static async clearStore(storeName: string): Promise<void> {
         try {
             const db = await this.getConnection();
 
@@ -337,7 +338,7 @@ export class DatabaseManager {
         try {
             console.log("Starting database clearing process...");
 
-            window.IS_DATABASE_CLEARING = true;
+            localStorage.setItem("IS_DATABASE_CLEARING", "true");
             let clearedStores = 0;
 
             for (const storeName of Object.values(STORES)) {
@@ -376,7 +377,7 @@ export class DatabaseManager {
                 }
             }, 100);
         } catch (error) {
-            window.IS_DATABASE_CLEARING = false; // Reset the flag
+            localStorage.removeItem("IS_DATABASE_CLEARING"); // Reset the flag
             console.error("Unhandled error during database clearing:", error);
             alert(
                 "There was an error clearing the database. Please check the console for details."
