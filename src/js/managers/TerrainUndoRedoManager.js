@@ -135,6 +135,7 @@ class TerrainUndoRedoManager {
             if (!isNaN(parseInt(blockId))) {
                 let dataUri = null;
                 if (this.customBlocks && this.customBlocks[blockId]) {
+                    console.log("this.customBlocks", this.customBlocks);
                     dataUri = this.customBlocks[blockId].dataUri;
                 }
                 if (!dataUri && typeof localStorage !== "undefined") {

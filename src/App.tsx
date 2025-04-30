@@ -180,6 +180,11 @@ function App() {
         loadGridSize();
     }, []);
 
+    useEffect(() => {
+        DatabaseManager.clearStore(STORES.UNDO);
+        DatabaseManager.clearStore(STORES.REDO);
+    }, []);
+
     const LoadingScreen = () => (
         <div className="loading-screen">
             <img
@@ -419,6 +424,7 @@ function App() {
                         environmentBuilderRef={environmentBuilderRef}
                         previewPositionToAppJS={setCurrentPreviewPosition}
                         undoRedoManager={undoRedoManagerRef}
+                        customBlocks={getCustomBlocks()}
                     />
                     <EnvironmentBuilder
                         ref={environmentBuilderRef}
