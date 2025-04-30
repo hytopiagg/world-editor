@@ -4,7 +4,7 @@ import React, {
 import { MIN_UNDO_STATES } from "../Constants";
 import { DatabaseManager, STORES } from "./DatabaseManager";
 function UndoRedoManager(
-    { terrainBuilderRef, environmentBuilderRef, children },
+    { terrainBuilderRef, environmentBuilderRef },
     ref
 ) {
 
@@ -942,6 +942,6 @@ function UndoRedoManager(
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     });
-    return <>{children}</>;
+    return <></>;
 }
 export default React.forwardRef(UndoRedoManager);

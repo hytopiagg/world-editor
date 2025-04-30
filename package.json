@@ -7,6 +7,8 @@
         "@hcaptcha/react-hcaptcha": "^1.12.0",
         "@react-three/drei": "^9.121.4",
         "@react-three/fiber": "^8.17.14",
+        "@types/react": "^19.1.2",
+        "@types/react-dom": "^19.1.2",
         "file-saver": "^2.0.5",
         "jszip": "^3.10.1",
         "pako": "^2.1.0",
@@ -16,7 +18,8 @@
         "react-icons": "^5.4.0",
         "react-scripts": "^5.0.1",
         "sharp": "^0.34.1",
-        "three": "^0.160.0"
+        "three": "^0.160.0",
+        "typescript": "^5.8.3"
     },
     "scripts": {
         "start": "react-scripts start",

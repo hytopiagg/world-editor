@@ -3,7 +3,6 @@ import { Canvas } from "@react-three/fiber";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FaCamera, FaDatabase, FaVolumeMute } from "react-icons/fa";
 import "./css/App.css";
-import hytopiaLogo from "./images/hytopia_logo_white.png";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
@@ -184,7 +183,7 @@ function App() {
     const LoadingScreen = () => (
         <div className="loading-screen">
             <img
-                src={hytopiaLogo}
+                src={'./images/hytopia_logo_white.png'}
                 alt="Hytopia Logo"
                 className="loading-logo"
             />
@@ -225,6 +224,7 @@ function App() {
                 textureUri: faceTextures.all || faceTextures.top || null,
                 sideTextures: {},
                 isCustom: true,
+                isMultiTexture: false,
             };
 
             // Populate sideTextures using the mapped keys, excluding 'all'
@@ -311,12 +311,6 @@ function App() {
         terrainBuilderRef.current?.activateTool("schematic", schematic);
     }, []);
 
-    // Callback for the SchematicPlacementTool to call when it's done (placed or cancelled)
-    const handleClearAISchematic = useCallback(() => {
-        console.log("App: Clearing AI schematic state");
-        setCurrentSchematic(null);
-    }, []);
-
     return (
         <Provider theme={defaultTheme}>
             <div className="App">
@@ -330,7 +324,7 @@ function App() {
 
                 {/* Hytopia Logo */}
                 <div className="hytopia-logo-wrapper">
-                    <img src={hytopiaLogo} alt="Hytopia Logo" />
+                    <img src={'./images/hytopia_logo_white.png'} alt="Hytopia Logo" />
                     <p className="hytopia-version-text">
                         World Editor Version {version}
                     </p>
@@ -411,7 +405,6 @@ function App() {
                     <TerrainBuilder
                         isInputDisabled={isTextureModalOpen}
                         ref={terrainBuilderRef}
-                        blockToolsRef={blockToolsRef}
                         currentBlockType={currentBlockType}
                         mode={mode}
                         setDebugInfo={setDebugInfo}
@@ -426,7 +419,6 @@ function App() {
                         environmentBuilderRef={environmentBuilderRef}
                         previewPositionToAppJS={setCurrentPreviewPosition}
                         undoRedoManager={undoRedoManagerRef}
-                        clearAISchematic={handleClearAISchematic}
                     />
                     <EnvironmentBuilder
                         ref={environmentBuilderRef}
@@ -478,9 +470,8 @@ function App() {
                         <Tooltip text={isMuted ? "Unmute" : "Mute"}>
                             <button
                                 onClick={toggleMute}
-                                className={`camera-control-button ${
-                                    !isMuted ? "active" : ""
-                                }`}
+                                className={`camera-control-button ${!isMuted ? "active" : ""
+                                    }`}
                             >
                                 <FaVolumeMute />
                             </button>
