@@ -5,8 +5,15 @@
  * and directing input events to the currently active tool.
  */
 import QuickTipsManager from "../components/QuickTipsManager";
+import BaseTool from "./BaseTool";
+
 class ToolManager {
-    constructor(terrainBuilderProps) {
+    tools: Record<string, BaseTool>;
+    activeTool: BaseTool | null;
+    toolChangeListeners: ((toolName: string) => void)[];
+    terrainBuilder: any;
+
+    constructor(terrainBuilderProps: any) {
 
         if (!terrainBuilderProps.scene) {
             console.error("ToolManager initialized without scene property");

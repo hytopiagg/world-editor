@@ -1548,7 +1548,8 @@ function TerrainBuilder(
                     setPageIsLoaded(true);
                 });
         }
-        const terrainBuilderProps = {
+            
+        const terrainBuilderProps= {
             scene,
             terrainRef: terrainRef,
             currentBlockTypeRef: currentBlockTypeRef,

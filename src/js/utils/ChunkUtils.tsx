@@ -24,7 +24,7 @@ export const setDeferredChunkMeshing = (defer) => {
  * @param {Object} options - Options for the update
  * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates (faster but less accurate at boundaries)
  */
-export const forceChunkUpdate = (chunkKeys, options = {}) => {
+export const forceChunkUpdate = (chunkKeys, options: any = {}) => {
     const chunkSystem = getChunkSystem();
     if (!chunkSystem || chunkKeys.length === 0) {
         return;
@@ -38,7 +38,7 @@ export const forceChunkUpdate = (chunkKeys, options = {}) => {
  * @param {Object} options - Options for the update
  * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates for faster processing
  */
-export const forceChunkUpdateByOrigin = (chunkOrigin, options = {}) => {
+export const forceChunkUpdateByOrigin = (chunkOrigin, options: any = {}) => {
     const chunkSystem = getChunkSystem();
     if (!chunkSystem) {
         console.warn("forceChunkUpdateByOrigin: No chunk system available");
@@ -56,7 +56,7 @@ export const forceChunkUpdateByOrigin = (chunkOrigin, options = {}) => {
  * @param {number} options.priorityDistance Distance within which chunks get immediate meshes
  * @param {number} options.deferredBuildDelay Delay in ms before building deferred chunks
  */
-export const configureChunkLoading = (options = {}) => {
+export const configureChunkLoading = (options: any = {}) => {
     const chunkSystem = getChunkSystem();
     if (!chunkSystem) {
         console.warn(
@@ -70,7 +70,7 @@ export const configureChunkLoading = (options = {}) => {
     if (deferMeshBuilding) {
         chunkSystem.setBulkLoadingMode(true, priorityDistance);
     } else {
-        chunkSystem.setBulkLoadingMode(false);
+        chunkSystem.setBulkLoadingMode(false, priorityDistance);
     }
     return true;
 };
@@ -114,11 +114,11 @@ export const loadAllChunks = async () => {
                 });
             }
         }
-        chunkSystem.processRenderQueue(true); // true = prioritize by camera distance
+        chunkSystem.processRenderQueue(); // true = prioritize by camera distance
         if (i + BATCH_SIZE < chunksWithDistances.length) {
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
     }
-    chunkSystem.processRenderQueue(true);
+    chunkSystem.processRenderQueue();
     return true;
 };

@@ -2,6 +2,19 @@ import * as THREE from "three";
 import QuickTipsManager from "./components/QuickTipsManager";
 
 class CameraManager {
+    camera: THREE.Camera | null;
+    controls: any | null;
+    moveSpeed: number;
+    rotateSpeed: number;
+    keys: Set<string>;
+    isSliderDragging: boolean;
+    lastPosition: THREE.Vector3 | null;
+    lastTarget: THREE.Vector3 | null;
+    animationFrameId: number | null;
+    onCameraAngleChange: ((angle: number) => void) | null;
+    _eventsInitialized: boolean;
+    _isInputDisabled: boolean;
+    isRotateMode: boolean;
     constructor() {
         this.camera = null;
         this.controls = null;

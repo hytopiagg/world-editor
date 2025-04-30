@@ -908,7 +908,7 @@ class ChunkManager {
     /**
      * Queue a chunk for rendering
      * @param {Chunk} chunk - The chunk to queue
-     * @param {Object} options - Options for rendering
+     * @param {any} options - Options for rendering
      * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates
      */
     queueChunkForRender(chunk, options = {}) {

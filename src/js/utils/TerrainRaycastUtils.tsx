@@ -1,15 +1,15 @@
 import * as THREE from "three";
 
 const getOptimizedRaycastIntersection = (
-    scene,
-    threeCamera,
-    threeRaycaster,
-    pointer,
+    scene: THREE.Scene,
+    threeCamera: THREE.Camera,
+    threeRaycaster: THREE.Raycaster,
+    pointer: THREE.Vector2,
     useSpatialHashRef,
     spatialGridManagerRef,
     gridSizeRef,
     selectionDistanceRef,
-    prioritizeBlocks,
+    prioritizeBlocks: boolean,
     recentlyPlacedBlocksRef,
     isPlacingRef,
     modeRef
@@ -89,10 +89,10 @@ const getOptimizedRaycastIntersection = (
 };
 
 const getTerrainRaycastIntersection = (
-    scene,
-    threeCamera,
-    threeRaycaster,
-    pointer,
+    scene: THREE.Scene,
+    threeCamera: THREE.Camera,
+    threeRaycaster: THREE.Raycaster,
+    pointer: THREE.Vector2,
     useSpatialHashRef,
     spatialGridManagerRef,
     gridSizeRef,

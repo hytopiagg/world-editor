@@ -27,7 +27,7 @@ const GlobalLoadingScreen = () => {
         <div className="global-loading-screen">
             <div className="loading-content">
                 <img
-                    src={'../../images/hytopia_logo_white.png'}
+                    src={'/assets/img/hytopia_logo_white.png'}
                     alt="Hytopia Logo"
                     className="loading-logo"
                 />

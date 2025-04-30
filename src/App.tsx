@@ -188,7 +188,7 @@ function App() {
     const LoadingScreen = () => (
         <div className="loading-screen">
             <img
-                src={'./images/hytopia_logo_white.png'}
+                src={'/assets/img/hytopia_logo_white.png'}
                 alt="Hytopia Logo"
                 className="loading-logo"
             />
@@ -329,7 +329,7 @@ function App() {
 
                 {/* Hytopia Logo */}
                 <div className="hytopia-logo-wrapper">
-                    <img src={'./images/hytopia_logo_white.png'} alt="Hytopia Logo" />
+                    <img src={'/assets/img/hytopia_logo_white.png'} alt="Hytopia Logo" />
                     <p className="hytopia-version-text">
                         World Editor Version {version}
                     </p>

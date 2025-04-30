@@ -37,7 +37,7 @@ function handleTerrainMouseUp(
                 const addedBlocks = Array.from(
                     recentlyPlacedBlocksRef.current
                 ).map((posKey) => {
-                    return [posKey, terrainRef.current[posKey]];
+                    return [posKey, terrainRef.current[posKey as string]];
                 });
                 spatialGridManagerRef.current.updateBlocks(addedBlocks, []);
             }
