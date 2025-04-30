@@ -22,7 +22,7 @@ import {
     FaUndo,
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
-import Tooltip from "../components/Tooltip";
+import Tooltip from "./Tooltip";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
 import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
@@ -802,7 +802,9 @@ const ToolBar = ({
                             <input
                                 type="number"
                                 value={newGridSize}
-                                onChange={(e) => setNewGridSize(e.target.value)}
+                                onChange={(e) =>
+                                    setNewGridSize(parseInt(e.target.value))
+                                }
                                 min="10"
                                 max="500"
                             />

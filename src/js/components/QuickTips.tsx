@@ -39,9 +39,8 @@ const QuickTips = () => {
         setIsVisible(!isVisible);
         setIsFading(false);
     };
-    const containerClassName = `quick-tips-container ${
-        isFading ? "fading" : ""
-    }`;
+    const containerClassName = `quick-tips-container ${isFading ? "fading" : ""
+        }`;
     return (
         isVisible && (
             <div className={containerClassName}>

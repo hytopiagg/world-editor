@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import "../../css/GlobalLoadingScreen.css";
-import hytopiaLogo from "../../images/hytopia_logo_white.png";
 import { version } from "../Constants";
 import { loadingManager } from "../managers/LoadingManager";
 const GlobalLoadingScreen = () => {
@@ -28,7 +27,7 @@ const GlobalLoadingScreen = () => {
         <div className="global-loading-screen">
             <div className="loading-content">
                 <img
-                    src={hytopiaLogo}
+                    src={'../../images/hytopia_logo_white.png'}
                     alt="Hytopia Logo"
                     className="loading-logo"
                 />

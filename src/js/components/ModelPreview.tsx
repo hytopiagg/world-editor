@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import '../../css/ModelPreview.css'; // We'll create this CSS file later
 
 const disposeObject = (object) => {
@@ -20,7 +20,7 @@ const disposeObject = (object) => {
   }
 
   if (object.children) {
-      object.children.forEach(disposeObject);
+    object.children.forEach(disposeObject);
   }
 };
 
@@ -42,10 +42,10 @@ const ModelPreview = ({ modelUrl, skybox }) => {
 
   const cleanupModel = useCallback(() => {
     if (modelRef.current && sceneRef.current) {
-        console.log("Cleanup function called for model:", modelRef.current.uuid);
-        sceneRef.current.remove(modelRef.current);
-        disposeObject(modelRef.current); // Use recursive dispose
-        modelRef.current = null;
+      console.log("Cleanup function called for model:", modelRef.current.uuid);
+      sceneRef.current.remove(modelRef.current);
+      disposeObject(modelRef.current); // Use recursive dispose
+      modelRef.current = null;
     } else {
 
     }
@@ -55,8 +55,8 @@ const ModelPreview = ({ modelUrl, skybox }) => {
     if (!mountRef.current) return;
 
     if (!sceneRef.current) {
-        sceneRef.current = new THREE.Scene();
-        console.log("--- Re-initializing THREE Scene due to StrictMode remount ---");
+      sceneRef.current = new THREE.Scene();
+      console.log("--- Re-initializing THREE Scene due to StrictMode remount ---");
     }
 
     console.log("--- Initializing THREE Scene --- (ModelPreview)");
@@ -113,8 +113,8 @@ const ModelPreview = ({ modelUrl, skybox }) => {
       frameIdRef.current = requestAnimationFrame(animate);
 
       if (controlsRef.current && rendererRef.current && sceneRef.current && cameraRef.current) {
-          controlsRef.current.update();
-          rendererRef.current.render(sceneRef.current, cameraRef.current);
+        controlsRef.current.update();
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
       }
     };
     animate();
@@ -130,38 +130,38 @@ const ModelPreview = ({ modelUrl, skybox }) => {
     window.addEventListener('resize', handleResize);
 
     return () => {
-        console.log("--- Cleaning up THREE Scene --- (ModelPreview)");
-        cancelAnimationFrame(frameIdRef.current);
-        window.removeEventListener('resize', handleResize);
-        if (controlsRef.current) {
-            controlsRef.current.dispose();
-            controlsRef.current = null;
-        }
+      console.log("--- Cleaning up THREE Scene --- (ModelPreview)");
+      cancelAnimationFrame(frameIdRef.current);
+      window.removeEventListener('resize', handleResize);
+      if (controlsRef.current) {
+        controlsRef.current.dispose();
+        controlsRef.current = null;
+      }
 
-        if (sceneRef.current) {
-             if (ambientLightRef.current) sceneRef.current.remove(ambientLightRef.current);
-             if (directionalLightRef.current) sceneRef.current.remove(directionalLightRef.current);
-             if (gridHelperRef.current) {
-                sceneRef.current.remove(gridHelperRef.current);
-                gridHelperRef.current.geometry?.dispose();
-                gridHelperRef.current.material?.dispose();
-             }
+      if (sceneRef.current) {
+        if (ambientLightRef.current) sceneRef.current.remove(ambientLightRef.current);
+        if (directionalLightRef.current) sceneRef.current.remove(directionalLightRef.current);
+        if (gridHelperRef.current) {
+          sceneRef.current.remove(gridHelperRef.current);
+          gridHelperRef.current.geometry?.dispose();
+          gridHelperRef.current.material?.dispose();
         }
+      }
 
-        ambientLightRef.current = null;
-        directionalLightRef.current = null;
-        gridHelperRef.current = null;
+      ambientLightRef.current = null;
+      directionalLightRef.current = null;
+      gridHelperRef.current = null;
 
-        cleanupModel();
+      cleanupModel();
 
-        if (rendererRef.current && rendererRef.current.domElement.parentNode === currentMount) {
-           currentMount.removeChild(rendererRef.current.domElement);
-        }
-        if (rendererRef.current) {
-            rendererRef.current.dispose();
-            rendererRef.current = null;
-        }
-        sceneRef.current = null; // Allow scene to be garbage collected
+      if (rendererRef.current && rendererRef.current.domElement.parentNode === currentMount) {
+        currentMount.removeChild(rendererRef.current.domElement);
+      }
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current = null;
+      }
+      sceneRef.current = null; // Allow scene to be garbage collected
     };
 
   }, []); // IMPORTANT: Empty dependency array ensures this runs only once
@@ -177,25 +177,18 @@ const ModelPreview = ({ modelUrl, skybox }) => {
       console.log("Attempting to load model:", modelUrl);
       const loader = loaderRef.current;
       const scene = sceneRef.current;
-      const controls = controlsRef.current;
       loader.load(
         modelUrl,
         (gltf) => {
           console.log("Model loaded successfully:", modelUrl);
 
           if (modelRef.current) {
-              cleanupModel();
+            cleanupModel();
           }
 
           const loadedModel = gltf.scene;
           modelLoadedInThisEffect = loadedModel;
           modelRef.current = loadedModel;
-          loadedModel.traverse((node) => {
-            if (node.isMesh) {
-              node.castShadow = true;
-              node.receiveShadow = true;
-            }
-          });
 
           const box = new THREE.Box3().setFromObject(loadedModel);
           const size = box.getSize(new THREE.Vector3());
@@ -248,8 +241,8 @@ const ModelPreview = ({ modelUrl, skybox }) => {
         sceneRef.current.remove(modelLoadedInThisEffect);
         disposeObject(modelLoadedInThisEffect);
 
-        if(modelRef.current === modelLoadedInThisEffect) {
-            modelRef.current = null;
+        if (modelRef.current === modelLoadedInThisEffect) {
+          modelRef.current = null;
         }
       }
     };

@@ -1,5 +1,11 @@
 
 class LoadingManager {
+    listeners: Set<Function>;
+    isLoading: boolean;
+    message: string;
+    progress: number | null;
+    loadingTimers: Set<NodeJS.Timeout>;
+
     constructor() {
         this.listeners = new Set();
         this.isLoading = false;
