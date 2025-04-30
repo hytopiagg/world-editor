@@ -8,3 +8,9 @@ export type UndoRedoState = {
         removed: any[];
     }
 }
+
+export type CustomModel = {
+    data: ArrayBuffer;
+    name: string;
+    timestamp: number;
+}

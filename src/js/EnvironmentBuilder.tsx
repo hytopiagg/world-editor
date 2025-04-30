@@ -10,9 +10,9 @@ import {
 } from "react";
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { MAX_ENVIRONMENT_OBJECTS } from "./Constants";
+import { CustomModel } from "./types/DatabaseTypes";
 export const environmentModels = (() => {
     try {
-
         const fetchModelList = () => {
             const manifestUrl = `${process.env.PUBLIC_URL}/assets/models/environment/mattifest.json`;
             const xhr = new XMLHttpRequest();
@@ -59,7 +59,6 @@ const EnvironmentBuilder = (
     },
     ref
 ) => {
-
     const loader = useRef(new GLTFLoader());
     const placeholderMeshRef = useRef(null);
     const loadedModels = useRef(new Map());
@@ -117,14 +116,12 @@ const EnvironmentBuilder = (
         }
     };
     const preloadModels = async () => {
-
         try {
             const customModels = await DatabaseManager.getData(
                 STORES.CUSTOM_MODELS,
                 "models"
-            );
+            ) as CustomModel[];
             if (customModels) {
-
                 const customModelIndices = environmentModels
                     .filter((model) => model.isCustom)
                     .map((model) => environmentModels.indexOf(model));
@@ -160,7 +157,6 @@ const EnvironmentBuilder = (
                     try {
                         const gltf = await loadModel(model.modelUrl);
                         if (gltf) {
-
                             gltf.scene.updateMatrixWorld(true);
 
                             await new Promise((r) => setTimeout(r, 0));
@@ -246,7 +242,7 @@ const EnvironmentBuilder = (
         });
 
         const initialCapacity = MAX_ENVIRONMENT_OBJECTS;
-        const instancedMeshArray = [];
+        const instancedMeshArray: THREE.InstancedMesh[] = [];
         for (const { material, geometries } of geometriesByMaterial.values()) {
             if (geometries.length > 0) {
                 const mergedGeometry = mergeGeometries(geometries);
@@ -369,7 +365,6 @@ const EnvironmentBuilder = (
         ) {
             await setupPreview(position);
         } else if (position) {
-
             placeholderMeshRef.current.position.copy(
                 position.clone().add(positionOffset.current)
             );
@@ -381,7 +376,6 @@ const EnvironmentBuilder = (
             );
         }
     };
-
 
     const updateEnvironmentToMatch = (targetState) => {
         try {
@@ -403,7 +397,6 @@ const EnvironmentBuilder = (
             }
 
             targetState.forEach((obj) => {
-
                 const modelType = environmentModels.find(
                     (model) =>
                         model.name === obj.name ||
@@ -416,7 +409,7 @@ const EnvironmentBuilder = (
                         obj.rotation?.y || 0,
                         obj.rotation?.z || 0
                     );
-                    
+
                     targetObjects.set(obj.instanceId, {
                         ...obj,
                         modelUrl: modelType.modelUrl, // Use the current modelUrl from environmentModels
@@ -447,7 +440,6 @@ const EnvironmentBuilder = (
 
             for (const [instanceId, obj] of targetObjects) {
                 if (!currentObjects.has(instanceId)) {
-
                     const modelType = environmentModels.find(
                         (model) =>
                             model.modelUrl === obj.modelUrl ||
@@ -476,12 +468,17 @@ const EnvironmentBuilder = (
         }
     };
 
-
     const placeEnvironmentModelWithoutSaving = (
         blockType,
         mesh,
         savedInstanceId = null
     ) => {
+        console.log(
+            "placeEnvironmentModelWithoutSaving",
+            blockType,
+            mesh,
+            savedInstanceId
+        );
         if (!blockType || !mesh) {
             console.warn(`blockType and mesh null`);
             return null;
@@ -561,12 +558,8 @@ const EnvironmentBuilder = (
         };
     };
 
-
     const clearEnvironments = () => {
-
-
         for (const instancedData of instancedMeshes.current.values()) {
-
             instancedData.meshes.forEach((mesh) => {
                 mesh.count = 0;
                 mesh.instanceMatrix.needsUpdate = true;
@@ -579,7 +572,6 @@ const EnvironmentBuilder = (
     const getRandomValue = (min, max) => {
         return Math.random() * (max - min) + min;
     };
-
 
     const getPlacementTransform = () => {
         const settings = placementSettingsRef.current;
@@ -603,15 +595,12 @@ const EnvironmentBuilder = (
         };
     };
 
-
-
     const placeEnvironmentModel = (mode = "add") => {
         if (!scene || !placeholderMeshRef.current) return;
 
         if (mode === "add" && !currentBlockType) return;
 
         if (mode === "remove") {
-
             const placementPositions = getPlacementPositions(
                 placeholderMeshRef.current.position,
                 placementSizeRef.current
@@ -619,14 +608,12 @@ const EnvironmentBuilder = (
             const removedObjects = [];
 
             placementPositions.forEach((placementPosition) => {
-
                 const POSITION_TOLERANCE = 0.5;
 
                 for (const [
                     modelUrl,
                     instancedData,
                 ] of instancedMeshes.current.entries()) {
-
                     const instances = Array.from(
                         instancedData.instances.entries()
                     ).map(([instanceId, data]) => ({
@@ -652,7 +639,6 @@ const EnvironmentBuilder = (
                     });
 
                     matchingInstances.forEach((instance) => {
-
                         const objectData = instancedData.instances.get(
                             instance.instanceId
                         );
@@ -689,7 +675,7 @@ const EnvironmentBuilder = (
                                 Math.max(
                                     ...Array.from(
                                         instancedData.instances.keys()
-                                    ),
+                                    ) as number[],
                                     -1
                                 ) + 1;
                             mesh.instanceMatrix.needsUpdate = true;
@@ -745,7 +731,7 @@ const EnvironmentBuilder = (
         let highestInstanceId = -1;
         for (const [_, data] of instancedMeshes.current) {
             if (data.instances.size > 0) {
-                const maxId = Math.max(...Array.from(data.instances.keys()));
+                const maxId = Math.max(...Array.from(data.instances.keys()) as number[]);
                 highestInstanceId = Math.max(highestInstanceId, maxId);
             }
         }
@@ -753,8 +739,7 @@ const EnvironmentBuilder = (
         let nextInstanceId = highestInstanceId + 1;
 
         const totalNeededInstances = nextInstanceId + placementPositions.length;
-        const currentCapacity =
-            instancedData.meshes[0]?.instanceMatrix.count || 0;
+
         if (totalNeededInstances > MAX_ENVIRONMENT_OBJECTS) {
             alert(
                 `Maximum Environment Objects (${MAX_ENVIRONMENT_OBJECTS}) Exceeded! Please clear the environment and try again.`
@@ -843,35 +828,33 @@ const EnvironmentBuilder = (
         return addedObjects;
     };
 
-
     const updateLocalStorage = () => {
         const allObjects = [];
 
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
-
             const modelData = environmentModels.find(
                 (model) => model.modelUrl === modelUrl
             );
             instancedData.instances.forEach((data, instanceId) => {
                 // Convert to plain objects since THREE.js objects aren't properly serialized
-                const serializablePosition = { 
-                    x: data.position.x, 
-                    y: data.position.y, 
-                    z: data.position.z 
+                const serializablePosition = {
+                    x: data.position.x,
+                    y: data.position.y,
+                    z: data.position.z,
                 };
-                
+
                 // Limit rotation values to 5 decimal places to reduce precision issues
-                const serializableRotation = { 
-                    x: Number(data.rotation.x.toFixed(5)), 
-                    y: Number(data.rotation.y.toFixed(5)), 
+                const serializableRotation = {
+                    x: Number(data.rotation.x.toFixed(5)),
+                    y: Number(data.rotation.y.toFixed(5)),
                     z: Number(data.rotation.z.toFixed(5)),
-                    _isEuler: true  // Add a flag to indicate this is an Euler angle
+                    _isEuler: true, // Add a flag to indicate this is an Euler angle
                 };
-                
-                const serializableScale = { 
-                    x: data.scale.x, 
-                    y: data.scale.y, 
-                    z: data.scale.z 
+
+                const serializableScale = {
+                    x: data.scale.x,
+                    y: data.scale.y,
+                    z: data.scale.z,
                 };
 
                 allObjects.push({
@@ -905,9 +888,7 @@ const EnvironmentBuilder = (
                 );
                 break;
             case "diamond":
-
                 positions.push(
-
                     { x: centerPos.x + 1, y: centerPos.y, z: centerPos.z },
                     { x: centerPos.x - 1, y: centerPos.y, z: centerPos.z },
                     { x: centerPos.x, y: centerPos.y, z: centerPos.z + 1 },
@@ -928,7 +909,6 @@ const EnvironmentBuilder = (
                 for (let x = -1; x <= 1; x++) {
                     for (let z = -1; z <= 1; z++) {
                         if (x !== 0 || z !== 0) {
-
                             positions.push({
                                 x: centerPos.x + x,
                                 y: centerPos.y,
@@ -942,7 +922,6 @@ const EnvironmentBuilder = (
                 for (let x = -2; x <= 1; x++) {
                     for (let z = -2; z <= 1; z++) {
                         if (x !== 0 || z !== 0) {
-
                             positions.push({
                                 x: centerPos.x + x,
                                 y: centerPos.y,
@@ -955,7 +934,6 @@ const EnvironmentBuilder = (
         }
         return positions;
     };
-
 
     const removeInstance = (modelUrl, instanceId) => {
         const instancedData = instancedMeshes.current.get(modelUrl);
@@ -972,7 +950,7 @@ const EnvironmentBuilder = (
             mesh.setMatrixAt(instanceId, new THREE.Matrix4());
 
             mesh.count =
-                Math.max(...Array.from(instancedData.instances.keys()), -1) + 1;
+                Math.max(...Array.from(instancedData.instances.keys()) as number[], -1) + 1;
             mesh.instanceMatrix.needsUpdate = true;
         });
 
@@ -1032,8 +1010,6 @@ const EnvironmentBuilder = (
         }
     };
     const updatePreviewPosition = (position) => {
-
-
         if (placeholderMeshRef.current && position) {
             placeholderMeshRef.current.position.copy(
                 position.clone().add(positionOffset.current)
@@ -1042,13 +1018,11 @@ const EnvironmentBuilder = (
     };
     const removePreview = () => {
         if (placeholderMeshRef.current) {
-
             scene.remove(placeholderMeshRef.current);
 
             placeholderMeshRef.current.traverse((child) => {
                 if (child.isMesh) {
                     if (child.material) {
-
                         if (Array.isArray(child.material)) {
                             child.material.forEach((material) =>
                                 material.dispose()
@@ -1065,7 +1039,6 @@ const EnvironmentBuilder = (
             });
 
             placeholderMeshRef.current = null;
-
         }
     };
 
@@ -1128,7 +1101,6 @@ const EnvironmentBuilder = (
             );
         }
     }, [placementSize]);
-
 
     useEffect(() => {
         placementSettingsRef.current = placementSettings;
