@@ -3,9 +3,10 @@ import React, {
 } from "react";
 import { MIN_UNDO_STATES } from "../Constants";
 import { DatabaseManager, STORES } from "./DatabaseManager";
+import { UndoRedoState } from "../types/DatabaseTypes";
 function UndoRedoManager(
     { terrainBuilderRef, environmentBuilderRef },
-    ref
+    ref: any
 ) {
 
     const [isInitialized, setIsInitialized] = React.useState(false);
@@ -25,9 +26,6 @@ function UndoRedoManager(
                 const undoStates =
                     (await DatabaseManager.getData(STORES.UNDO, "states")) ||
                     [];
-                console.log(
-                    `UndoRedoManager: Database is initialized. Found ${undoStates.length} existing undo states`
-                );
 
                 if (!undoStates) {
                     console.log(
@@ -123,11 +121,11 @@ function UndoRedoManager(
                             (removed) =>
                                 removed.modelUrl === obj.modelUrl &&
                                 Math.abs(removed.position.x - obj.position.x) <
-                                    0.001 &&
+                                0.001 &&
                                 Math.abs(removed.position.y - obj.position.y) <
-                                    0.001 &&
+                                0.001 &&
                                 Math.abs(removed.position.z - obj.position.z) <
-                                    0.001
+                                0.001
                         )
                 );
 
@@ -181,7 +179,16 @@ function UndoRedoManager(
         try {
             console.log("Starting undo operation...");
             const undoStates =
-                (await DatabaseManager.getData(STORES.UNDO, "states")) || [];
+                (await DatabaseManager.getData(STORES.UNDO, "states")) as {
+                    terrain: {
+                        added: any[];
+                        removed: any[];
+                    };
+                    environment: {
+                        added: any[];
+                        removed: any[];
+                    };
+                }[] || [];
             console.log(`Found ${undoStates.length} undo states`);
             if (undoStates.length === 0) {
                 console.log("No undo states available");
@@ -190,20 +197,20 @@ function UndoRedoManager(
             const [currentUndo, ...remainingUndo] = undoStates;
             console.log("Undo state:", currentUndo);
             const redoStates =
-                (await DatabaseManager.getData(STORES.REDO, "states")) || [];
+                (await DatabaseManager.getData(STORES.REDO, "states")) as UndoRedoState[] || [];
 
             const redoChanges = {
                 terrain: currentUndo.terrain
                     ? {
-                          added: currentUndo.terrain.removed,
-                          removed: currentUndo.terrain.added,
-                      }
+                        added: currentUndo.terrain.removed,
+                        removed: currentUndo.terrain.added,
+                    }
                     : null,
                 environment: currentUndo.environment
                     ? {
-                          added: currentUndo.environment.removed,
-                          removed: currentUndo.environment.added,
-                      }
+                        added: currentUndo.environment.removed,
+                        removed: currentUndo.environment.added,
+                    }
                     : null,
             };
 
@@ -215,7 +222,7 @@ function UndoRedoManager(
                         STORES.ENVIRONMENT,
                         "current"
                     )) || [];
-                newEnvironment = [...currentEnv];
+                newEnvironment = [...(currentEnv as any[])];
 
                 const originalEnvCount = newEnvironment.length;
                 if (
@@ -295,13 +302,13 @@ function UndoRedoManager(
     const redo = async () => {
         try {
             const redoStates =
-                (await DatabaseManager.getData(STORES.REDO, "states")) || [];
+                (await DatabaseManager.getData(STORES.REDO, "states")) as UndoRedoState[] || [];
             if (redoStates.length === 0) {
                 return null;
             }
             const [currentRedo, ...remainingRedo] = redoStates;
             const undoStates =
-                (await DatabaseManager.getData(STORES.UNDO, "states")) || [];
+                (await DatabaseManager.getData(STORES.UNDO, "states")) as UndoRedoState[] || [];
 
             let newEnvironment = [];
             if (currentRedo.environment) {
@@ -310,7 +317,7 @@ function UndoRedoManager(
                         STORES.ENVIRONMENT,
                         "current"
                     )) || [];
-                newEnvironment = [...currentEnv];
+                newEnvironment = [...(currentEnv as any[])];
 
                 if (currentRedo.environment.removed?.length > 0) {
                     newEnvironment = newEnvironment.filter(
@@ -342,15 +349,15 @@ function UndoRedoManager(
             const undoChanges = {
                 terrain: currentRedo.terrain
                     ? {
-                          added: currentRedo.terrain.removed,
-                          removed: currentRedo.terrain.added,
-                      }
+                        added: currentRedo.terrain.removed,
+                        removed: currentRedo.terrain.added,
+                    }
                     : null,
                 environment: currentRedo.environment
                     ? {
-                          added: currentRedo.environment.removed,
-                          removed: currentRedo.environment.added,
-                      }
+                        added: currentRedo.environment.removed,
+                        removed: currentRedo.environment.added,
+                    }
                     : null,
             };
             await Promise.all([
@@ -394,8 +401,7 @@ function UndoRedoManager(
                             }
                         );
                         console.log(
-                            `Will remove ${
-                                Object.keys(removedBlocks).length
+                            `Will remove ${Object.keys(removedBlocks).length
                             } blocks from the terrain`
                         );
 
@@ -430,8 +436,7 @@ function UndoRedoManager(
                                     tx.onerror = reject;
                                 });
                                 console.log(
-                                    `Successfully deleted ${
-                                        Object.keys(removedBlocks).length
+                                    `Successfully deleted ${Object.keys(removedBlocks).length
                                     } blocks directly from DB`
                                 );
                             } catch (dbError) {
@@ -454,8 +459,7 @@ function UndoRedoManager(
                             }
                         );
                         console.log(
-                            `Will add back ${
-                                Object.keys(addedBlocks).length
+                            `Will add back ${Object.keys(addedBlocks).length
                             } blocks to the terrain`
                         );
 
@@ -493,8 +497,7 @@ function UndoRedoManager(
                                     tx.onerror = reject;
                                 });
                                 console.log(
-                                    `Successfully added ${
-                                        Object.keys(addedBlocks).length
+                                    `Successfully added ${Object.keys(addedBlocks).length
                                     } blocks directly to DB`
                                 );
                             } catch (dbError) {
@@ -510,10 +513,8 @@ function UndoRedoManager(
                         }
                     }
                     console.log(
-                        `Selectively updating terrain: ${
-                            Object.keys(addedBlocks).length
-                        } additions, ${
-                            Object.keys(removedBlocks).length
+                        `Selectively updating terrain: ${Object.keys(addedBlocks).length
+                        } additions, ${Object.keys(removedBlocks).length
                         } removals`
                     );
 
@@ -639,8 +640,7 @@ function UndoRedoManager(
                             }
                         );
                         console.log(
-                            `[Redo] Will ADD ${
-                                Object.keys(addedBlocks).length
+                            `[Redo] Will ADD ${Object.keys(addedBlocks).length
                             } blocks (originally removed)`
                         );
 
@@ -678,8 +678,7 @@ function UndoRedoManager(
                                     tx.onerror = reject;
                                 });
                                 console.log(
-                                    `[Redo DB] Successfully ADDED ${
-                                        Object.keys(addedBlocks).length
+                                    `[Redo DB] Successfully ADDED ${Object.keys(addedBlocks).length
                                     } blocks directly to DB`
                                 );
                             } catch (dbError) {
@@ -705,8 +704,7 @@ function UndoRedoManager(
                             }
                         );
                         console.log(
-                            `[Redo] Will REMOVE ${
-                                Object.keys(removedBlocks).length
+                            `[Redo] Will REMOVE ${Object.keys(removedBlocks).length
                             } blocks (originally added)`
                         );
 
@@ -741,8 +739,7 @@ function UndoRedoManager(
                                     tx.onerror = reject;
                                 });
                                 console.log(
-                                    `[Redo DB] Successfully DELETED ${
-                                        Object.keys(removedBlocks).length
+                                    `[Redo DB] Successfully DELETED ${Object.keys(removedBlocks).length
                                     } blocks directly from DB`
                                 );
                             } catch (dbError) {
@@ -758,10 +755,8 @@ function UndoRedoManager(
                         }
                     }
                     console.log(
-                        `Selectively updating terrain: ${
-                            Object.keys(addedBlocks).length
-                        } additions, ${
-                            Object.keys(removedBlocks).length
+                        `Selectively updating terrain: ${Object.keys(addedBlocks).length
+                        } additions, ${Object.keys(removedBlocks).length
                         } removals`
                     );
 
@@ -882,7 +877,7 @@ function UndoRedoManager(
             }
 
             const undoStates =
-                (await DatabaseManager.getData(STORES.UNDO, "states")) || [];
+                (await DatabaseManager.getData(STORES.UNDO, "states")) as UndoRedoState[] || [];
 
             const newUndoStates = [changes, ...undoStates];
 
@@ -906,9 +901,6 @@ function UndoRedoManager(
                             STORES.UNDO,
                             "states"
                         )) || [];
-                    console.log(
-                        `Verified undo states after save: ${verifyStates.length}`
-                    );
                 } catch (saveError) {
                     console.error(
                         "Error saving undo state to database:",
