@@ -1,11 +1,10 @@
 import React from "react";
-import hytopiaLogo from "../../images/Hytopia_Tiny.png";
 const UnderConstruction = () => {
     return (
         <div className="under-construction-overlay">
             <div className="under-construction-content">
                 <img
-                    src={hytopiaLogo}
+                    src={'/assets/img/Hytopia_Tiny.png'}
                     alt="Hytopia Logo"
                     className="loading-logo"
                 />

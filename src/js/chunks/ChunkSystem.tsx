@@ -1,5 +1,3 @@
-
-
 import * as THREE from "three";
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
 import ChunkManager from "./ChunkManager";
@@ -8,12 +6,22 @@ import { CHUNK_SIZE } from "./ChunkConstants";
  * Integrates the chunk system with TerrainBuilder
  */
 class ChunkSystem {
+    _scene: THREE.Scene;
+    _chunkManager: ChunkManager;
+    _initialized: boolean;
+    _options: {
+        viewDistance: number;
+        viewDistanceEnabled: boolean;
+    };
+    _cameraPosition: THREE.Vector3;
+    _frustum: THREE.Frustum;
+    _nonVisibleBlocks: { [key: string]: boolean };
     /**
      * Create a new chunk system
      * @param {Object} scene - The THREE.js scene
      * @param {Object} options - Options for the chunk system
      */
-    constructor(scene, options = {}) {
+    constructor(scene, options: any = {}) {
         this._scene = scene;
         this._chunkManager = new ChunkManager(scene);
         this._initialized = false;
@@ -58,10 +66,8 @@ class ChunkSystem {
      * @private
      */
     async _startBackgroundTasks() {
-
         setTimeout(async () => {
             try {
-
                 console.log("Starting background tasks...");
 
                 console.log("Background tasks completed");
@@ -75,7 +81,6 @@ class ChunkSystem {
      * Call this method once during initialization
      */
     setupConsoleFiltering() {
-
         const originalConsoleTime = console.time;
         const originalConsoleTimeEnd = console.timeEnd;
         const originalConsoleLog = console.log;
@@ -248,7 +253,6 @@ class ChunkSystem {
                 id: block.id,
             });
 
-
             const isNearXBoundary =
                 x % CHUNK_SIZE === 0 || x % CHUNK_SIZE === CHUNK_SIZE - 1;
             const isNearYBoundary =
@@ -256,11 +260,9 @@ class ChunkSystem {
             const isNearZBoundary =
                 z % CHUNK_SIZE === 0 || z % CHUNK_SIZE === CHUNK_SIZE - 1;
             if (isNearXBoundary || isNearYBoundary || isNearZBoundary) {
-
                 for (let ox = -1; ox <= 1; ox++) {
                     for (let oy = -1; oy <= 1; oy++) {
                         for (let oz = -1; oz <= 1; oz++) {
-
                             if (ox === 0 && oy === 0 && oz === 0) continue;
 
                             if (Math.abs(ox) + Math.abs(oy) + Math.abs(oz) > 1)
@@ -311,6 +313,7 @@ class ChunkSystem {
                 this._chunkManager.updateChunk({
                     originCoordinate: { x: originX, y: originY, z: originZ },
                     blocks,
+                    removed: false,
                 });
 
                 chunk = this._chunkManager._chunks.get(chunkId);
@@ -343,7 +346,6 @@ class ChunkSystem {
                 id: block.id,
             });
 
-
             const isNearXBoundary =
                 x % CHUNK_SIZE === 0 || x % CHUNK_SIZE === CHUNK_SIZE - 1;
             const isNearYBoundary =
@@ -351,11 +353,9 @@ class ChunkSystem {
             const isNearZBoundary =
                 z % CHUNK_SIZE === 0 || z % CHUNK_SIZE === CHUNK_SIZE - 1;
             if (isNearXBoundary || isNearYBoundary || isNearZBoundary) {
-
                 for (let ox = -1; ox <= 1; ox++) {
                     for (let oy = -1; oy <= 1; oy++) {
                         for (let oz = -1; oz <= 1; oz++) {
-
                             if (ox === 0 && oy === 0 && oz === 0) continue;
 
                             if (Math.abs(ox) + Math.abs(oy) + Math.abs(oz) > 1)
@@ -388,7 +388,6 @@ class ChunkSystem {
         for (const chunkId of chunksToUpdate) {
             const chunk = this._chunkManager._chunks.get(chunkId);
             if (chunk) {
-
                 const options = chunkOptions.get(chunkId) || {};
 
                 if (options.added && options.added.length > 0) {
@@ -414,7 +413,6 @@ class ChunkSystem {
         const y = position.y;
         const z = position.z;
 
-
         const boundary = 1; // 1 block buffer
         return (
             x <= originX + boundary ||
@@ -433,7 +431,6 @@ class ChunkSystem {
      * @private
      */
     _markNeighboringChunks(originX, originY, originZ) {
-
         this._markNeighborIfExists(originX - CHUNK_SIZE, originY, originZ);
         this._markNeighborIfExists(originX + CHUNK_SIZE, originY, originZ);
 
@@ -519,7 +516,6 @@ class ChunkSystem {
         const chunks = Array.from(this._chunkManager._chunks.values());
 
         for (const chunk of chunks) {
-
             if (chunk._solidMesh) {
                 this._scene.remove(chunk._solidMesh);
                 this._chunkManager.chunkMeshManager.removeSolidMesh(chunk);
@@ -556,15 +552,15 @@ class ChunkSystem {
             return null;
         }
 
-        if (!this._scene.camera) {
+        if (!(this._scene as any).camera) {
             console.error(
                 "Cannot force update chunk visibility: no camera set"
             );
             return null;
         }
 
-        this._scene.camera.updateMatrixWorld(true);
-        this._scene.camera.updateProjectionMatrix();
+        (this._scene as any).camera.updateMatrixWorld(true);
+        (this._scene as any).camera.updateProjectionMatrix();
 
         return this._chunkManager.forceUpdateAllChunkVisibility(isBulkLoading);
     }
@@ -593,7 +589,7 @@ class ChunkSystem {
      * @param {Object} options - Options for the update
      * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates
      */
-    forceUpdateChunks(chunkKeys, options = {}) {
+    forceUpdateChunks(chunkKeys, options: any = {}) {
         if (!this._initialized || !chunkKeys || chunkKeys.length === 0) {
             return;
         }
@@ -604,28 +600,26 @@ class ChunkSystem {
             }`
         );
 
-        const updatingChunks = new Set(chunkKeys);
+        // const updatingChunks = new Set(chunkKeys);
 
         for (const chunkKey of chunkKeys) {
             const chunk = this._chunkManager.getChunkByKey(chunkKey);
             if (chunk) {
-
                 this._chunkManager.queueChunkForRender(chunk, {
                     skipNeighbors,
                 });
-                if (!skipNeighbors) {
-
-                    const neighbors =
-                        this._chunkManager.getChunkNeighbors(chunk);
-                    for (const neighbor of neighbors) {
-                        if (neighbor && !updatingChunks.has(neighbor.chunkId)) {
-                            updatingChunks.add(neighbor.chunkId);
-                            this._chunkManager.queueChunkForRender(neighbor, {
-                                skipNeighbors: true,
-                            });
-                        }
-                    }
-                }
+                // if (!skipNeighbors) {
+                // const neighbors =
+                //     this._chunkManager.getChunkNeighbors(chunk);
+                // for (const neighbor of neighbors) {
+                //     if (neighbor && !updatingChunks.has(neighbor.chunkId)) {
+                //         updatingChunks.add(neighbor.chunkId);
+                //         this._chunkManager.queueChunkForRender(neighbor, {
+                //             skipNeighbors: true,
+                //         });
+                //     }
+                // }
+                // }
             }
         }
 

@@ -5,6 +5,8 @@ import * as THREE from "three";
  * Singleton class for managing block materials
  */
 class BlockMaterial {
+    _defaultMaterial: THREE.MeshPhongMaterial | null;
+    _liquidMaterial: THREE.ShaderMaterial | null;
     constructor() {
         this._defaultMaterial = null;
         this._liquidMaterial = null;
@@ -14,10 +16,10 @@ class BlockMaterial {
      * @returns {BlockMaterial} The singleton instance
      */
     static get instance() {
-        if (!this._instance) {
-            this._instance = new BlockMaterial();
+        if (!(this as any)._instance) {
+            (this as any)._instance = new BlockMaterial();
         }
-        return this._instance;
+        return (this as any)._instance;
     }
     /**
      * Get the default material for solid blocks
@@ -142,7 +144,7 @@ class BlockMaterial {
                 side: THREE.DoubleSide,
             });
 
-            this._liquidMaterial.extensions = {
+            (this._liquidMaterial as any).extensions = {
                 derivatives: false,
                 fragDepth: false,
                 drawBuffers: false,
@@ -153,5 +155,5 @@ class BlockMaterial {
     }
 }
 
-BlockMaterial._instance = null;
+(BlockMaterial as any)._instance = null;
 export default BlockMaterial;

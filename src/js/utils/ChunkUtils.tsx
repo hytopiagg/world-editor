@@ -82,7 +82,7 @@ export const loadAllChunks = async () => {
         return;
     }
     const scene = chunkSystem._scene;
-    const camera = scene?.camera;
+    const camera = (scene as any).camera;
     if (!camera) {
         console.warn("No camera available for prioritizing chunks");
         return;

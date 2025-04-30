@@ -1,7 +1,3 @@
-
-
-import * as THREE from "three";
-
 export const BlockFaceEnum = {
     left: 0,
     right: 1,

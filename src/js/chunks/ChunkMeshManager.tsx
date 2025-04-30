@@ -14,6 +14,10 @@ import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
  * Manages meshes for chunks
  */
 class ChunkMeshManager {
+    _liquidMeshes: Map<string, THREE.Mesh>;
+    _liquidMeshPool: THREE.Mesh[];
+    _solidMeshes: Map<string, THREE.Mesh>;
+    _solidMeshPool: THREE.Mesh[];
     constructor() {
         this._liquidMeshes = new Map();
         this._liquidMeshPool = [];
