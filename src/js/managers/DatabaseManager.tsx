@@ -54,7 +54,7 @@ export class DatabaseManager {
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {
             // Special handling for terrain data
-            if (storeName === STORES.TERRAIN && key === "current") {
+            if ((storeName === STORES.TERRAIN || storeName === STORES.ENVIRONMENT) && key === "current") {
                 try {
                     const transaction = db.transaction(storeName, "readwrite");
                     const store = transaction.objectStore(storeName);
@@ -64,34 +64,51 @@ export class DatabaseManager {
 
                     clearRequest.onsuccess = () => {
                         // For terrain store, each coordinate becomes a key, and block ID becomes the value
-                        const promises = Object.entries(data).map(
-                            ([coordKey, blockId]) => {
-                                return new Promise(
-                                    (resolveBlock, rejectBlock) => {
-                                        const putRequest = store.put(
-                                            blockId,
-                                            coordKey
-                                        );
-                                        putRequest.onsuccess = resolveBlock;
-                                        putRequest.onerror = rejectBlock;
-                                    }
-                                );
-                            }
-                        );
 
-                        // Wait for all block insertions to complete
+                        let promises: Promise<void>[] = [];
+                        if (storeName === STORES.TERRAIN) {
+                            promises = Object.entries(data).map(
+                                ([coordKey, blockId]) => {
+                                    return new Promise(
+                                        (resolveBlock, rejectBlock) => {
+                                            const putRequest = store.put(
+                                                blockId,
+                                                coordKey
+                                            );
+                                            putRequest.onsuccess = resolveBlock;
+                                            putRequest.onerror = rejectBlock;
+                                        }
+                                    );
+                                }
+                            );
+                        } else if (storeName === STORES.ENVIRONMENT) {
+                            promises = Object.entries(data).map(
+                                ([key, val]: [string, any]) => {
+                                    return new Promise(
+                                        (resolveBlock, rejectBlock) => {
+                                            const putRequest = store.put(
+                                                val,
+                                                key
+                                            );
+                                            putRequest.onsuccess = resolveBlock;
+                                            putRequest.onerror = rejectBlock;
+                                        }
+                                    );
+                                }
+                            )
+                        }
+
                         Promise.all(promises)
                             .then(() => {
                                 console.log(
-                                    `[DB] Saved ${
-                                        Object.keys(data).length
-                                    } terrain blocks with individual coordinates as keys`
+                                    `[DB] Saved ${Object.keys(data).length
+                                    } ${storeName} data`
                                 );
                                 resolve();
                             })
                             .catch((error) => {
                                 console.error(
-                                    "[DB] Error saving terrain blocks:",
+                                    `[DB] Error saving ${storeName} data:`,
                                     error
                                 );
                                 reject(error);
@@ -100,14 +117,14 @@ export class DatabaseManager {
 
                     clearRequest.onerror = (event) => {
                         console.error(
-                            "[DB] Error clearing terrain store:",
+                            `[DB] Error clearing ${storeName} store:`,
                             event.target.error
                         );
                         reject(event.target.error);
                     };
                 } catch (error) {
                     console.error(
-                        "[DB] Error in terrain saveData transaction:",
+                        `[DB] Error in ${storeName} saveData transaction:`,
                         error
                     );
                     reject(error);
@@ -132,13 +149,13 @@ export class DatabaseManager {
 
                 console.log("storeName", storeName);
                 console.log("key", key);
-                if (storeName === STORES.TERRAIN && key === "current") {
-                    console.log("Checking terrain data size...");
+                if ((storeName === STORES.TERRAIN || storeName === STORES.ENVIRONMENT) && key === "current") {
+                    console.log(`Checking ${storeName} data size...`);
                     const countRequest = store.count();
 
                     countRequest.onerror = (event) => {
                         console.error(
-                            "[DB] Error counting terrain store:",
+                            `[DB] Error counting ${storeName} store:`,
                             event.target.error
                         );
                         reject(event.target.error); // Reject if count fails
@@ -147,7 +164,7 @@ export class DatabaseManager {
                     countRequest.onsuccess = async (event) => {
                         const count = event.target.result;
                         console.log(
-                            `[DB] Terrain store contains ${count} blocks.`
+                            `[DB] ${storeName} store contains ${count} items.`
                         );
                         const SIZE_THRESHOLD = 1000000; // Example: Use bulk get below 100k items
 
@@ -155,12 +172,12 @@ export class DatabaseManager {
                         // It's generally safer to use a new transaction after the count.
                         const dataTx = db.transaction(storeName, "readonly");
                         const dataStore = dataTx.objectStore(storeName);
-                        let terrainData = {};
+                        let data = {};
 
                         if (count < SIZE_THRESHOLD) {
                             if (loadingManager.isLoading) {
                                 loadingManager.updateLoading(
-                                    `Loading terrain in memory...`
+                                    `Loading ${storeName} in memory...`
                                 );
                             }
                             try {
@@ -195,15 +212,15 @@ export class DatabaseManager {
                                 }
 
                                 for (let i = 0; i < keys.length; i++) {
-                                    terrainData[keys[i]] = values[i];
+                                    data[keys[i]] = values[i];
                                 }
                                 console.log(
-                                    `[DB] Reconstructed terrain data with ${keys.length} blocks using bulk get.`
+                                    `[DB] Reconstructed ${storeName} data with ${keys.length} items using bulk get.`
                                 );
-                                resolve(terrainData);
+                                resolve(data);
                             } catch (error) {
                                 console.error(
-                                    "[DB] Error during bulk retrieval:",
+                                    `[DB] Error during bulk retrieval:`,
                                     error.target ? error.target.error : error
                                 );
                                 reject(
@@ -219,25 +236,25 @@ export class DatabaseManager {
                             cursorRequest.onsuccess = (event) => {
                                 const cursor = event.target.result;
                                 if (cursor) {
-                                    terrainData[cursor.key] = cursor.value;
+                                    data[cursor.key] = cursor.value;
                                     index++;
                                     if (index % 5000 === 0 || index === count) {
                                         // Update progress less frequently or at the end
                                         loadingManager.updateLoading(
-                                            `Loading terrain... ${index}/${count}`
+                                            `Loading ${storeName}... ${index}/${count}`
                                         );
                                     }
                                     cursor.continue();
                                 } else {
                                     console.log(
-                                        `[DB] Reconstructed terrain data with ${index} blocks using cursor.`
+                                        `[DB] Reconstructed ${storeName} data with ${index} items using cursor.`
                                     );
-                                    resolve(terrainData);
+                                    resolve(data);
                                 }
                             };
                             cursorRequest.onerror = (event) => {
                                 console.error(
-                                    "[DB] Error reading terrain store with cursor:",
+                                    `[DB] Error reading ${storeName} store with cursor:`,
                                     event.target.error
                                 );
                                 reject(event.target.error);
@@ -245,7 +262,7 @@ export class DatabaseManager {
                         }
                     };
                 } else {
-                    // Original logic for non-terrain stores
+                    // Original logic for non-terrain/environment stores
                     const request = store.get(key);
                     request.onsuccess = () => {
                         resolve(request.result);
@@ -346,8 +363,7 @@ export class DatabaseManager {
                     await this.clearStore(storeName);
                     clearedStores++;
                     console.log(
-                        `Cleared store ${storeName} (${clearedStores}/${
-                            Object.values(STORES).length
+                        `Cleared store ${storeName} (${clearedStores}/${Object.values(STORES).length
                         })`
                     );
                 } catch (storeError) {
@@ -358,8 +374,7 @@ export class DatabaseManager {
                 }
             }
             console.log(
-                `Database clearing complete. Cleared ${clearedStores}/${
-                    Object.values(STORES).length
+                `Database clearing complete. Cleared ${clearedStores}/${Object.values(STORES).length
                 } stores.`
             );
 

@@ -137,6 +137,9 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
         } blocks (defer: ${onlyVisibleChunks})`
     );
 
+
+    console.log("onlyVisibleChunks", onlyVisibleChunks);
+    console.log("chunkSystem._scene.camera", chunkSystem._scene.camera);
     if (onlyVisibleChunks && chunkSystem._scene.camera) {
         const viewDistance = chunkSystem._viewDistance || 96; // Default 6 chunks
         const priorityDistance = viewDistance * 0.5;
@@ -149,7 +152,7 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
         chunkSystem.setBulkLoadingMode(false);
     }
 
-    console.log("updateTerrainChunks - for simple terrainData", terrainData);
+    // console.log("updateTerrainChunks - for simple terrainData", terrainData);
     chunkSystem.updateFromTerrainData(terrainData);
 
 

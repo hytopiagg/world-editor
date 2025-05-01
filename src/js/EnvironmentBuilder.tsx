@@ -991,16 +991,19 @@ const EnvironmentBuilder = (
         updateLocalStorage();
     };
     const refreshEnvironmentFromDB = async () => {
+        console.log("refreshEnvironmentFromDB");
         try {
             const savedEnv = await DatabaseManager.getData(
                 STORES.ENVIRONMENT,
                 "current"
             );
-            if (Array.isArray(savedEnv) && savedEnv.length > 0) {
+            console.log("savedEnv", savedEnv);
+            if (Object.keys(savedEnv).length > 0) {
                 console.log(
-                    `Loading ${savedEnv.length} environment objects from database`
+                    `Loading ${Object.keys(savedEnv).length} environment objects from database`
                 );
-                updateEnvironmentToMatch(savedEnv);
+
+                updateEnvironmentToMatch(Object.values(savedEnv));
             } else {
                 console.log("No environment objects found in database");
                 clearEnvironments();
@@ -1129,6 +1132,7 @@ const EnvironmentBuilder = (
             refreshEnvironmentFromDB,
             beginUndoRedoOperation,
             endUndoRedoOperation,
+            updateLocalStorage,
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

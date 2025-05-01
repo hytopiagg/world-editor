@@ -1511,11 +1511,10 @@ function TerrainBuilder(
                                 ) {
                                     await BlockTypeRegistry.instance.preload();
                                 }
-                                await rebuildTextureAtlas();
+                                await rebuildTextureAtlas(); // TODO: Remove this?
                                 updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
-                                processChunkRenderQueue();
-                                window.fullTerrainDataRef = terrainRef.current;
-                                window.pendingChunksToLoad = new Set();
+                                processChunkRenderQueue(); // TODO: Remove this?
+                                window.fullTerrainDataRef = terrainRef.current; 
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);
                             } catch (error) {

@@ -214,66 +214,10 @@ function UndoRedoManager(
                     : null,
             };
 
-
-            let newEnvironment = [];
-            if (currentUndo.environment) {
-                const currentEnv =
-                    (await DatabaseManager.getData(
-                        STORES.ENVIRONMENT,
-                        "current"
-                    )) || [];
-                newEnvironment = [...(currentEnv as any[])];
-
-                const originalEnvCount = newEnvironment.length;
-                if (
-                    currentUndo.environment.added &&
-                    currentUndo.environment.added.length > 0
-                ) {
-                    console.log(
-                        `Removing ${currentUndo.environment.added.length} added environment objects`
-                    );
-                    newEnvironment = newEnvironment.filter(
-                        (obj) =>
-                            !(currentUndo.environment.added || []).some(
-                                (added) =>
-                                    added.modelUrl === obj.modelUrl &&
-                                    Math.abs(
-                                        added.position.x - obj.position.x
-                                    ) < 0.001 &&
-                                    Math.abs(
-                                        added.position.y - obj.position.y
-                                    ) < 0.001 &&
-                                    Math.abs(
-                                        added.position.z - obj.position.z
-                                    ) < 0.001
-                            )
-                    );
-                    console.log(
-                        `Environment objects went from ${originalEnvCount} to ${newEnvironment.length}`
-                    );
-                }
-
-                if (
-                    Array.isArray(currentUndo.environment.removed) &&
-                    currentUndo.environment.removed.length > 0
-                ) {
-                    console.log(
-                        `Restoring ${currentUndo.environment.removed.length} removed environment objects`
-                    );
-                    newEnvironment.push(...currentUndo.environment.removed);
-                }
-            }
             console.log("Saving updated state to database...");
 
             try {
                 await Promise.all([
-
-
-                    DatabaseManager.saveData(
-                        STORES.ENVIRONMENT,
-                        "current",
-                        newEnvironment
-                    ),
                     DatabaseManager.saveData(
                         STORES.UNDO,
                         "states",
@@ -310,42 +254,6 @@ function UndoRedoManager(
             const undoStates =
                 (await DatabaseManager.getData(STORES.UNDO, "states")) as UndoRedoState[] || [];
 
-            let newEnvironment = [];
-            if (currentRedo.environment) {
-                const currentEnv =
-                    (await DatabaseManager.getData(
-                        STORES.ENVIRONMENT,
-                        "current"
-                    )) || [];
-                newEnvironment = [...(currentEnv as any[])];
-
-                if (currentRedo.environment.removed?.length > 0) {
-                    newEnvironment = newEnvironment.filter(
-                        (obj) =>
-                            !currentRedo.environment.removed.some(
-                                (removedObj) =>
-                                    removedObj.modelUrl === obj.modelUrl &&
-                                    Math.abs(
-                                        removedObj.position.x - obj.position.x
-                                    ) < 0.001 &&
-                                    Math.abs(
-                                        removedObj.position.y - obj.position.y
-                                    ) < 0.001 &&
-                                    Math.abs(
-                                        removedObj.position.z - obj.position.z
-                                    ) < 0.001
-                            )
-                    );
-                }
-
-                if (currentRedo.environment.added?.length > 0) {
-                    newEnvironment = [
-                        ...newEnvironment,
-                        ...currentRedo.environment.added,
-                    ];
-                }
-            }
-
             const undoChanges = {
                 terrain: currentRedo.terrain
                     ? {
@@ -361,12 +269,6 @@ function UndoRedoManager(
                     : null,
             };
             await Promise.all([
-
-                DatabaseManager.saveData(
-                    STORES.ENVIRONMENT,
-                    "current",
-                    newEnvironment
-                ),
                 DatabaseManager.saveData(STORES.REDO, "states", remainingRedo),
                 DatabaseManager.saveData(STORES.UNDO, "states", [
                     undoChanges,
@@ -386,8 +288,10 @@ function UndoRedoManager(
             const undoneChanges = await undo();
             if (undoneChanges) {
                 console.log(
-                    "Undo operation successful, selectively updating terrain..."
+                    "Undo operation successful, selectively updating..."
                 );
+
+                console.log("undoneChanges", undoneChanges);
 
                 if (undoneChanges.terrain && terrainBuilderRef?.current) {
                     const addedBlocks = {};
@@ -895,12 +799,6 @@ function UndoRedoManager(
                         ),
                         DatabaseManager.saveData(STORES.REDO, "states", []),
                     ]);
-
-                    const verifyStates =
-                        (await DatabaseManager.getData(
-                            STORES.UNDO,
-                            "states"
-                        )) || [];
                 } catch (saveError) {
                     console.error(
                         "Error saving undo state to database:",
