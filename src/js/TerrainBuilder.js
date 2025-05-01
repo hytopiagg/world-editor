@@ -1061,10 +1061,10 @@ function TerrainBuilder(
                     rawPlacementAnchorRef.current.copy(currentGroundPoint); // Reset the raw ground anchor
                 }
             }
-            // if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
-            //     console.log("updatePreviewPosition - handleBlockPlacement");
-            //     handleBlockPlacement();
-            // }
+            if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
+                console.log("updatePreviewPosition - handleBlockPlacement");
+                handleBlockPlacement();
+            }
         }
         updatePreviewPosition.isProcessing = false;
     };
