@@ -641,6 +641,34 @@ const EnvironmentBuilder = (
         };
     };
 
+    const findCollidingInstances = (position, tolerance = 0.5) => {
+        const collidingInstances = [];
+
+        for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+            const instances = Array.from(instancedData.instances.entries())
+                .map(([instanceId, data]) => ({
+                    instanceId,
+                    modelUrl,
+                    position: data.position,
+                    rotation: data.rotation,
+                    scale: data.scale,
+                    matrix: data.matrix,
+                }));
+
+            const matchingInstances = instances.filter(instance => {
+                return (
+                    Math.abs(instance.position.x - position.x) < tolerance &&
+                    Math.abs(instance.position.y - position.y) < tolerance &&
+                    Math.abs(instance.position.z - position.z) < tolerance
+                );
+            });
+
+            collidingInstances.push(...matchingInstances);
+        }
+
+        return collidingInstances;
+    };
+
     const placeEnvironmentModel = (mode = "add") => {
         console.log("placeEnvironmentModel", mode);
         if (!scene || !placeholderMeshRef.current) return;
@@ -655,81 +683,51 @@ const EnvironmentBuilder = (
             const removedObjects = [];
 
             placementPositions.forEach((placementPosition) => {
-                const POSITION_TOLERANCE = 0.5;
+                const collidingInstances = findCollidingInstances(placementPosition);
 
-                for (const [
-                    modelUrl,
-                    instancedData,
-                ] of instancedMeshes.current.entries()) {
-                    const instances = Array.from(
-                        instancedData.instances.entries()
-                    ).map(([instanceId, data]) => ({
-                        instanceId,
-                        modelUrl,
-                        position: data.position,
-                        rotation: data.rotation,
-                        scale: data.scale,
-                    }));
+                collidingInstances.forEach((instance) => {
+                    const instancedData = instancedMeshes.current.get(instance.modelUrl);
+                    const objectData = instancedData.instances.get(instance.instanceId);
 
-                    const matchingInstances = instances.filter((instance) => {
-                        return (
-                            Math.abs(
-                                instance.position.x - placementPosition.x
-                            ) < POSITION_TOLERANCE &&
-                            Math.abs(
-                                instance.position.y - placementPosition.y
-                            ) < POSITION_TOLERANCE &&
-                            Math.abs(
-                                instance.position.z - placementPosition.z
-                            ) < POSITION_TOLERANCE
+                    const removedObject = {
+                        modelUrl: instance.modelUrl,
+                        instanceId: instance.instanceId,
+                        position: {
+                            x: objectData.position.x,
+                            y: objectData.position.y,
+                            z: objectData.position.z,
+                        },
+                        rotation: {
+                            x: objectData.rotation.x,
+                            y: objectData.rotation.y,
+                            z: objectData.rotation.z,
+                        },
+                        scale: {
+                            x: objectData.scale.x,
+                            y: objectData.scale.y,
+                            z: objectData.scale.z,
+                        },
+                    };
+
+                    instancedData.instances.delete(instance.instanceId);
+
+                    instancedData.meshes.forEach((mesh) => {
+                        mesh.setMatrixAt(
+                            instance.instanceId,
+                            new THREE.Matrix4()
                         );
+
+                        mesh.count =
+                            Math.max(
+                                ...Array.from(
+                                    instancedData.instances.keys()
+                                ) as number[],
+                                -1
+                            ) + 1;
+                        mesh.instanceMatrix.needsUpdate = true;
                     });
-
-                    matchingInstances.forEach((instance) => {
-                        const objectData = instancedData.instances.get(
-                            instance.instanceId
-                        );
-
-                        const removedObject = {
-                            modelUrl,
-                            instanceId: instance.instanceId,
-                            position: {
-                                x: objectData.position.x,
-                                y: objectData.position.y,
-                                z: objectData.position.z,
-                            },
-                            rotation: {
-                                x: objectData.rotation.x,
-                                y: objectData.rotation.y,
-                                z: objectData.rotation.z,
-                            },
-                            scale: {
-                                x: objectData.scale.x,
-                                y: objectData.scale.y,
-                                z: objectData.scale.z,
-                            },
-                        };
-
-                        instancedData.instances.delete(instance.instanceId);
-
-                        instancedData.meshes.forEach((mesh) => {
-                            mesh.setMatrixAt(
-                                instance.instanceId,
-                                new THREE.Matrix4()
-                            );
-
-                            mesh.count =
-                                Math.max(
-                                    ...Array.from(
-                                        instancedData.instances.keys()
-                                    ) as number[],
-                                    -1
-                                ) + 1;
-                            mesh.instanceMatrix.needsUpdate = true;
-                        });
-                        removedObjects.push(removedObject);
-                    });
-                }
+                    removedObjects.push(removedObject);
+                });
             });
 
             if (removedObjects.length > 0) {
@@ -776,29 +774,9 @@ const EnvironmentBuilder = (
         const addedObjects = [];
 
         // Check for collisions before placing new models
-        const POSITION_TOLERANCE = 0.5;
-        const validPlacementPositions = placementPositions.filter(placementPosition => {
-            for (const [_, instancedData] of instancedMeshes.current.entries()) {
-                const instances = Array.from(instancedData.instances.entries())
-                    .map(([instanceId, data]) => ({
-                        instanceId,
-                        position: data.position,
-                    }));
-
-                const hasCollision = instances.some(instance => {
-                    return (
-                        Math.abs(instance.position.x - placementPosition.x) < POSITION_TOLERANCE &&
-                        Math.abs(instance.position.y - placementPosition.y) < POSITION_TOLERANCE &&
-                        Math.abs(instance.position.z - placementPosition.z) < POSITION_TOLERANCE
-                    );
-                });
-
-                if (hasCollision) {
-                    return false;
-                }
-            }
-            return true;
-        });
+        const validPlacementPositions = placementPositions.filter(placementPosition =>
+            findCollidingInstances(placementPosition).length === 0
+        );
 
         if (validPlacementPositions.length === 0) {
             console.log("No valid positions to place models - all positions are occupied");
