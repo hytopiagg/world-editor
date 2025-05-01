@@ -286,6 +286,7 @@ function UndoRedoManager(
             console.log("=== UNDO OPERATION STARTED ===");
 
             const undoneChanges = await undo();
+            console.log("undoneChanges", undoneChanges);
             if (undoneChanges) {
                 console.log(
                     "Undo operation successful, selectively updating..."

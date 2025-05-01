@@ -1,6 +1,15 @@
 import { DatabaseManager, STORES } from "./DatabaseManager";
 
 class TerrainUndoRedoManager {
+    terrainRef: React.MutableRefObject<any>;
+    totalBlocksRef: React.MutableRefObject<any>;
+    sendTotalBlocks: (totalBlocks: number) => void;
+    updateDebugInfo: () => void;
+    importedUpdateTerrainBlocks: (added: any, removed: any) => void;
+    updateSpatialHashForBlocks: (added: any, removed: any, options: any) => void;
+    customBlocks: any;
+    BlockTextureAtlas: any;
+    pendingChangesRef: React.MutableRefObject<any>;
     constructor({
         terrainRef,
         totalBlocksRef,
@@ -132,11 +141,11 @@ class TerrainUndoRedoManager {
 
         // Handle custom block textures
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-            if (!isNaN(parseInt(blockId))) {
+            if (!isNaN(parseInt(blockId as string))) {
                 let dataUri = null;
-                if (this.customBlocks && this.customBlocks[blockId]) {
+                if (this.customBlocks && this.customBlocks[blockId as string]) {
                     console.log("this.customBlocks", this.customBlocks);
-                    dataUri = this.customBlocks[blockId].dataUri;
+                    dataUri = this.customBlocks[blockId as string].dataUri;
                 }
                 if (!dataUri && typeof localStorage !== "undefined") {
                     const storageKeys = [
