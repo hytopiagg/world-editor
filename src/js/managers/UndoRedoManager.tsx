@@ -395,6 +395,9 @@ function UndoRedoManager(
                                     STORES.TERRAIN,
                                     "readwrite"
                                 );
+
+                                console.log("changeData", changeData);
+                                
                                 const store = tx.objectStore(changeData.store);
 
                                 await Promise.all(
@@ -496,6 +499,13 @@ function UndoRedoManager(
                                 await terrainBuilderRef.current.refreshTerrainFromDB();
                             }
                         } else if (changeData.store === STORES.ENVIRONMENT) {
+                            if (environmentBuilderRef?.current?.updateEnvironmentForUndoRedo) {
+                                environmentBuilderRef.current.updateEnvironmentForUndoRedo(added, removed, "undo");
+                            } else {
+                                console.warn(
+                                    "No update environment function available, falling back to refreshEnvironmentFromDB"
+                                );
+                            }
 
                             if (environmentBuilderRef?.current?.refreshEnvironment) {
                                 console.log("Refreshing environment from DB...");

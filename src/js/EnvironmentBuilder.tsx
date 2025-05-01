@@ -110,13 +110,31 @@ const EnvironmentBuilder = (
 
     const updateEnvironmentForUndoRedo = (added, removed, source: "undo" | "redo") => {
         console.log("updateEnvironmentForUndoRedo", added, removed, source);
-        // loop through added and removed and update the instanced meshes
-        for (const [modelUrl, instancedData] of instancedMeshes.current) {
-            if (added[modelUrl]) {
-                instancedData.instances.set(added[modelUrl].instanceId, added[modelUrl]);
-            }
+        if (added && Object.keys(added).length > 0) {
+            Object.values(added).forEach((instance: {
+                instanceId: number;
+                modelUrl: string;
+                position: { x: number; y: number; z: number };
+                rotation: { x: number; y: number; z: number };
+                scale: { x: number; y: number; z: number };
+            }) => {
+                console.log("adding", instance);
+                if (instancedMeshes.current.has(instance.modelUrl)) {
+                    instancedMeshes.current.get(instance.modelUrl).instances.set(instance.instanceId, instance);
+                } else {
+                    console.log("no instanced meshes found for", instance.modelUrl);
+                }
+            });
         }
-
+        if (removed && Object.keys(removed).length > 0) {
+            Object.values(removed).forEach((instance: {
+                instanceId: number;
+                modelUrl: string;
+            }) => {
+                console.log("removing", instance);
+                removeInstance(instance.modelUrl, instance.instanceId, false);
+            });
+        }
     };
 
     const loadModel = async (modelToLoadUrl) => {
@@ -989,7 +1007,7 @@ const EnvironmentBuilder = (
         return positions;
     };
 
-    const removeInstance = (modelUrl, instanceId) => {
+    const removeInstance = (modelUrl, instanceId, updateUndoRedo = true) => {
         const instancedData = instancedMeshes.current.get(modelUrl);
         if (!instancedData || !instancedData.instances.has(instanceId)) {
             console.warn(`Instance ${instanceId} not found for removal`);
@@ -1028,7 +1046,7 @@ const EnvironmentBuilder = (
             },
         };
 
-        if (!isUndoRedoOperation.current) {
+        if (updateUndoRedo) {
             const changes = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [removedObject] },
@@ -1041,8 +1059,6 @@ const EnvironmentBuilder = (
                 );
             }
         }
-
-        updateLocalStorage();
     };
     const refreshEnvironment = () => {
         const savedEnv = getAllEnvironmentObjects();
@@ -1195,6 +1211,7 @@ const EnvironmentBuilder = (
             endUndoRedoOperation,
             updateLocalStorage,
             getAllEnvironmentObjects,
+            updateEnvironmentForUndoRedo
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );
