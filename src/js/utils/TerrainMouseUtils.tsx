@@ -144,6 +144,7 @@ function handleTerrainMouseDown(
             };
             updatePreviewPosition();
             if (isFirstBlockRef.current) {
+                console.log("isFirstBlockRef.current");
                 handleBlockPlacement();
             }
             playPlaceSound(); // Play sound on initial click

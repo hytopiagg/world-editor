@@ -294,35 +294,53 @@ function UndoRedoManager(
 
                 console.log("undoneChanges", undoneChanges);
 
-                if (undoneChanges.terrain && terrainBuilderRef?.current) {
-                    const addedBlocks = {};
-                    const removedBlocks = {};
+                const isTerrainChange = undoneChanges.terrain && (Object.keys(undoneChanges.terrain.added || {}).length > 0 || Object.keys(undoneChanges.terrain.removed || {}).length > 0);
+                const isEnvironmentChange = undoneChanges.environment && (Object.keys(undoneChanges.environment.added || {}).length > 0 || Object.keys(undoneChanges.environment.removed || {}).length > 0);
+                const changeData = isTerrainChange ?
+                    {
+                        store: STORES.TERRAIN,
+                        added: undoneChanges.terrain.added,
+                        removed: undoneChanges.terrain.removed,
+                        builderRef: terrainBuilderRef,
+                    } : isEnvironmentChange ?
+                        {
+                            store: STORES.ENVIRONMENT,
+                            added: undoneChanges.environment.added,
+                            removed: undoneChanges.environment.removed,
+                            builderRef: environmentBuilderRef,
+                        } : null;
 
-                    if (undoneChanges.terrain.added) {
-                        Object.keys(undoneChanges.terrain.added).forEach(
-                            (posKey) => {
-                                removedBlocks[posKey] =
-                                    undoneChanges.terrain.added[posKey];
+
+                if (changeData) {
+                    const added = {};
+                    const removed = {};
+
+                    if (changeData.added) {
+                        Object.keys(changeData.added).forEach(
+                            (key) => {
+                                removed[key] =
+                                    changeData.added[key];
                             }
                         );
                         console.log(
-                            `Will remove ${Object.keys(removedBlocks).length
-                            } blocks from the terrain`
+                            `Will remove ${Object.keys(removed).length
+                            } blocks from the ${changeData.store}`
                         );
 
-                        if (Object.keys(removedBlocks).length > 0) {
+                        if (Object.keys(removed).length > 0) {
                             try {
 
                                 const db =
                                     await DatabaseManager.getDBConnection();
                                 const tx = db.transaction(
-                                    STORES.TERRAIN,
+                                    changeData.store,
                                     "readwrite"
                                 );
-                                const store = tx.objectStore(STORES.TERRAIN);
+                                const store = tx.objectStore(changeData.store);
 
                                 await Promise.all(
-                                    Object.keys(removedBlocks).map((key) => {
+                                    Object.keys(removed).map((key) => {
+                                        console.log("deleting", key);
                                         const deleteRequest = store.delete(
                                             `${key}`
                                         );
@@ -341,7 +359,7 @@ function UndoRedoManager(
                                     tx.onerror = reject;
                                 });
                                 console.log(
-                                    `Successfully deleted ${Object.keys(removedBlocks).length
+                                    `Successfully deleted ${Object.keys(removed).length
                                     } blocks directly from DB`
                                 );
                             } catch (dbError) {
@@ -357,18 +375,18 @@ function UndoRedoManager(
                         }
                     }
 
-                    if (undoneChanges.terrain.removed) {
-                        Object.entries(undoneChanges.terrain.removed).forEach(
-                            ([posKey, blockId]) => {
-                                addedBlocks[posKey] = blockId;
+                    if (changeData.removed) {
+                        Object.entries(changeData.removed).forEach(
+                            ([key, value]) => {
+                                added[key] = value;
                             }
                         );
                         console.log(
-                            `Will add back ${Object.keys(addedBlocks).length
-                            } blocks to the terrain`
+                            `Will add back ${Object.keys(added).length
+                            } blocks to the ${changeData.store}`
                         );
 
-                        if (Object.keys(addedBlocks).length > 0) {
+                        if (Object.keys(added).length > 0) {
                             try {
 
                                 const db =
@@ -377,10 +395,10 @@ function UndoRedoManager(
                                     STORES.TERRAIN,
                                     "readwrite"
                                 );
-                                const store = tx.objectStore(STORES.TERRAIN);
+                                const store = tx.objectStore(changeData.store);
 
                                 await Promise.all(
-                                    Object.entries(addedBlocks).map(
+                                    Object.entries(added).map(
                                         ([key, value]) => {
                                             const putRequest = store.put(
                                                 value,
@@ -402,8 +420,7 @@ function UndoRedoManager(
                                     tx.onerror = reject;
                                 });
                                 console.log(
-                                    `Successfully added ${Object.keys(addedBlocks).length
-                                    } blocks directly to DB`
+                                    `Successfully added ${Object.keys(added).length} blocks directly to DB`
                                 );
                             } catch (dbError) {
                                 console.error(
@@ -418,18 +435,20 @@ function UndoRedoManager(
                         }
                     }
                     console.log(
-                        `Selectively updating terrain: ${Object.keys(addedBlocks).length
-                        } additions, ${Object.keys(removedBlocks).length
+                        `Selectively updating terrain: ${Object.keys(added).length
+                        } additions, ${Object.keys(removed).length
                         } removals`
                     );
 
                     try {
+
+                        // TODO: ATTACH ENVIRONMENT UPDATE RENDERING LOGIC
                         if (
                             terrainBuilderRef.current.updateTerrainForUndoRedo
                         ) {
                             terrainBuilderRef.current.updateTerrainForUndoRedo(
-                                addedBlocks,
-                                removedBlocks,
+                                added,
+                                removed,
                                 "undo"
                             );
                             console.log(
@@ -437,9 +456,9 @@ function UndoRedoManager(
                             );
 
                             const addedBlocksCount =
-                                Object.keys(addedBlocks).length;
+                                Object.keys(added).length;
                             const removedBlocksCount =
-                                Object.keys(removedBlocks).length;
+                                Object.keys(removed).length;
                             if (
                                 addedBlocksCount > 0 ||
                                 removedBlocksCount > 0
@@ -458,8 +477,8 @@ function UndoRedoManager(
                             terrainBuilderRef.current.updateTerrainBlocks
                         ) {
                             terrainBuilderRef.current.updateTerrainBlocks(
-                                addedBlocks,
-                                removedBlocks
+                                added,
+                                removed
                             );
                             console.log(
                                 "Terrain updated successfully with standard method"
@@ -483,25 +502,25 @@ function UndoRedoManager(
                     );
                 }
 
-                if (environmentBuilderRef?.current?.refreshEnvironmentFromDB) {
-                    console.log("Refreshing environment from DB...");
-                    try {
-                        await environmentBuilderRef.current.refreshEnvironmentFromDB();
-                        console.log("Environment refreshed successfully");
-                    } catch (refreshError) {
-                        console.error(
-                            "Error refreshing environment:",
-                            refreshError
-                        );
-                        alert(
-                            `Error during undo operation: Failed to refresh environment. Details: ${refreshError.message}`
-                        );
-                    }
-                } else {
-                    console.warn(
-                        "Unable to refresh environment - refreshEnvironmentFromDB not available"
-                    );
-                }
+                // if (environmentBuilderRef?.current?.refreshEnvironmentFromDB) {
+                //     console.log("Refreshing environment from DB...");
+                //     try {
+                //         await environmentBuilderRef.current.refreshEnvironmentFromDB();
+                //         console.log("Environment refreshed successfully");
+                //     } catch (refreshError) {
+                //         console.error(
+                //             "Error refreshing environment:",
+                //             refreshError
+                //         );
+                //         alert(
+                //             `Error during undo operation: Failed to refresh environment. Details: ${refreshError.message}`
+                //         );
+                //     }
+                // } else {
+                //     console.warn(
+                //         "Unable to refresh environment - refreshEnvironmentFromDB not available"
+                //     );
+                // }
                 console.log("=== UNDO OPERATION COMPLETED ===");
             } else {
                 console.log("Undo operation did not return any changes");

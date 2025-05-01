@@ -202,22 +202,10 @@ const ModelPreview = ({ modelUrl, skybox }) => {
 
           } else {
 
-
-
-
-
-
-
-
-
             loadedModel.position.x = -center.x;
             loadedModel.position.y = -box.min.y; // Position bottom at y=0 using original box
             loadedModel.position.z = -center.z;
             scene.add(loadedModel);
-
-
-
-
 
           }
         },

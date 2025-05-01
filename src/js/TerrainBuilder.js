@@ -747,6 +747,7 @@ function TerrainBuilder(
                         .placeEnvironmentModel === "function"
                 ) {
                     try {
+                        console.log("handleBlockPlacement - ENVIRONMENT");
                         const result =
                             environmentBuilderRef.current.placeEnvironmentModel(
                                 modeRef.current
@@ -1060,9 +1061,10 @@ function TerrainBuilder(
                     rawPlacementAnchorRef.current.copy(currentGroundPoint); // Reset the raw ground anchor
                 }
             }
-            if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
-                handleBlockPlacement();
-            }
+            // if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
+            //     console.log("updatePreviewPosition - handleBlockPlacement");
+            //     handleBlockPlacement();
+            // }
         }
         updatePreviewPosition.isProcessing = false;
     };
@@ -1511,9 +1513,9 @@ function TerrainBuilder(
                                 ) {
                                     await BlockTypeRegistry.instance.preload();
                                 }
-                                await rebuildTextureAtlas(); // TODO: Remove this?
+                                await rebuildTextureAtlas(); 
                                 updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
-                                processChunkRenderQueue(); // TODO: Remove this?
+                                processChunkRenderQueue(); 
                                 window.fullTerrainDataRef = terrainRef.current; 
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);

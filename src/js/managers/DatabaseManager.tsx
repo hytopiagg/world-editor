@@ -147,8 +147,6 @@ export class DatabaseManager {
                 const tx = db.transaction(storeName, "readonly");
                 const store = tx.objectStore(storeName);
 
-                console.log("storeName", storeName);
-                console.log("key", key);
                 if ((storeName === STORES.TERRAIN || storeName === STORES.ENVIRONMENT) && key === "current") {
                     console.log(`Checking ${storeName} data size...`);
                     const countRequest = store.count();

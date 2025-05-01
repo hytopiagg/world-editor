@@ -378,6 +378,7 @@ const EnvironmentBuilder = (
     };
 
     const updateEnvironmentToMatch = (targetState) => {
+        console.log("updateEnvironmentToMatch", targetState);
         try {
             isUndoRedoOperation.current = true;
 
@@ -596,6 +597,7 @@ const EnvironmentBuilder = (
     };
 
     const placeEnvironmentModel = (mode = "add") => {
+        console.log("placeEnvironmentModel", mode);
         if (!scene || !placeholderMeshRef.current) return;
 
         if (mode === "add" && !currentBlockType) return;
@@ -812,7 +814,7 @@ const EnvironmentBuilder = (
             }
         }
 
-        updateLocalStorage();
+        // updateLocalStorage();
         setTotalEnvironmentObjects((prev) => prev + placementPositions.length);
 
         if (
