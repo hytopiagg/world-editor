@@ -120,7 +120,30 @@ const EnvironmentBuilder = (
             }) => {
                 console.log("adding", instance);
                 if (instancedMeshes.current.has(instance.modelUrl)) {
-                    instancedMeshes.current.get(instance.modelUrl).instances.set(instance.instanceId, instance);
+                    const instancedData = instancedMeshes.current.get(instance.modelUrl);
+                    const position = new THREE.Vector3(instance.position.x, instance.position.y, instance.position.z);
+                    const rotation = new THREE.Euler(instance.rotation.x, instance.rotation.y, instance.rotation.z);
+                    const scale = new THREE.Vector3(instance.scale.x, instance.scale.y, instance.scale.z);
+
+                    const matrix = new THREE.Matrix4();
+                    matrix.compose(
+                        position,
+                        new THREE.Quaternion().setFromEuler(rotation),
+                        scale
+                    );
+
+                    instancedData.meshes.forEach((mesh) => {
+                        mesh.count = Math.max(mesh.count, instance.instanceId + 1);
+                        mesh.setMatrixAt(instance.instanceId, matrix);
+                        mesh.instanceMatrix.needsUpdate = true;
+                    });
+
+                    instancedData.instances.set(instance.instanceId, {
+                        position,
+                        rotation,
+                        scale,
+                        matrix
+                    });
                 } else {
                     console.log("no instanced meshes found for", instance.modelUrl);
                 }
