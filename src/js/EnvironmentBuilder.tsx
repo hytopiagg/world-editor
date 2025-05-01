@@ -74,6 +74,51 @@ const EnvironmentBuilder = (
 
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
 
+
+    const getAllEnvironmentObjects = () => {
+        const instances = [];
+        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            const name = modelUrl.split("/").pop().split(".")[0];
+            const instanceData = [...instancedData.instances];
+            instanceData.forEach((instance) => {
+                console.log("instance", instance);
+
+                instances.push({
+                    name,
+                    modelUrl,
+                    instanceId: instance[0],
+                    position: {
+                        x: instance[1]?.position?.x,
+                        y: instance[1]?.position?.y,
+                        z: instance[1]?.position?.z,
+                    },
+                    rotation: {
+                        x: instance[1]?.rotation?.x,
+                        y: instance[1]?.rotation?.y,
+                        z: instance[1]?.rotation?.z,
+                    },
+                    scale: {
+                        x: instance[1]?.scale?.x,
+                        y: instance[1]?.scale?.y,
+                        z: instance[1]?.scale?.z,
+                    },
+                });
+            });
+        }
+        return instances;
+    };
+
+    const updateEnvironmentForUndoRedo = (added, removed, source: "undo" | "redo") => {
+        console.log("updateEnvironmentForUndoRedo", added, removed, source);
+        // loop through added and removed and update the instanced meshes
+        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            if (added[modelUrl]) {
+                instancedData.instances.set(added[modelUrl].instanceId, added[modelUrl]);
+            }
+        }
+        
+    };
+
     const loadModel = async (modelToLoadUrl) => {
         if (!modelToLoadUrl) {
             console.warn("No model URL provided");
@@ -460,7 +505,7 @@ const EnvironmentBuilder = (
                 }
             }
 
-            updateLocalStorage();
+            // updateLocalStorage();
             setTotalEnvironmentObjects(targetObjects.size);
         } catch (error) {
             console.error("Error updating environment:", error);
@@ -792,12 +837,16 @@ const EnvironmentBuilder = (
             };
             addedObjects.push(newObject);
 
+            console.log("newObject", newObject);
+
             instancedData.instances.set(instanceId, {
                 position: position.clone(),
                 rotation: transform.rotation.clone(),
                 scale: transform.scale.clone(),
                 matrix: matrix.clone(),
             });
+
+            console.log("instancedData", instancedData.instances);
         });
 
         if (!isUndoRedoOperation.current) {
@@ -992,6 +1041,12 @@ const EnvironmentBuilder = (
 
         updateLocalStorage();
     };
+    const refreshEnvironment = () => {
+        const savedEnv = getAllEnvironmentObjects();
+        console.log("savedEnv", savedEnv);
+        updateEnvironmentToMatch(savedEnv);
+    };
+
     const refreshEnvironmentFromDB = async () => {
         console.log("refreshEnvironmentFromDB");
         try {
@@ -1132,9 +1187,11 @@ const EnvironmentBuilder = (
             updateEnvironmentToMatch,
             loadModel,
             refreshEnvironmentFromDB,
+            refreshEnvironment,
             beginUndoRedoOperation,
             endUndoRedoOperation,
             updateLocalStorage,
+            getAllEnvironmentObjects,
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

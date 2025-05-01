@@ -440,54 +440,82 @@ function UndoRedoManager(
                         } removals`
                     );
 
+                    console.log("changeData", changeData);
+                    console.log("terrainBuilderRef", terrainBuilderRef.current);
+                    console.log("environmentBuilderRef", environmentBuilderRef.current);
+                    console.log("added", added);
+                    console.log("removed", removed);
+
                     try {
-
                         // TODO: ATTACH ENVIRONMENT UPDATE RENDERING LOGIC
-                        if (
-                            terrainBuilderRef.current.updateTerrainForUndoRedo
-                        ) {
-                            terrainBuilderRef.current.updateTerrainForUndoRedo(
-                                added,
-                                removed,
-                                "undo"
-                            );
-                            console.log(
-                                "Terrain updated successfully with optimized method"
-                            );
-
-                            const addedBlocksCount =
-                                Object.keys(added).length;
-                            const removedBlocksCount =
-                                Object.keys(removed).length;
+                        if (changeData.store === STORES.TERRAIN) {
                             if (
-                                addedBlocksCount > 0 ||
-                                removedBlocksCount > 0
+                                terrainBuilderRef.current.updateTerrainForUndoRedo
                             ) {
-                                console.log(
-                                    "Forcing immediate visibility update to ensure changes are visible"
+                                terrainBuilderRef.current.updateTerrainForUndoRedo(
+                                    added,
+                                    removed,
+                                    "undo"
                                 );
+                                console.log(
+                                    "Terrain updated successfully with optimized method"
+                                );
+
+                                const addedBlocksCount =
+                                    Object.keys(added).length;
+                                const removedBlocksCount =
+                                    Object.keys(removed).length;
                                 if (
-                                    terrainBuilderRef.current
-                                        .updateVisibleChunks
+                                    addedBlocksCount > 0 ||
+                                    removedBlocksCount > 0
                                 ) {
-                                    terrainBuilderRef.current.updateVisibleChunks();
+                                    console.log(
+                                        "Forcing immediate visibility update to ensure changes are visible"
+                                    );
+                                    if (
+                                        terrainBuilderRef.current
+                                            .updateVisibleChunks
+                                    ) {
+                                        terrainBuilderRef.current.updateVisibleChunks();
+                                    }
                                 }
+                            } else if (
+                                terrainBuilderRef.current.updateTerrainBlocks
+                            ) {
+                                terrainBuilderRef.current.updateTerrainBlocks(
+                                    added,
+                                    removed
+                                );
+                                console.log(
+                                    "Terrain updated successfully with standard method"
+                                );
+                            } else {
+                                console.warn(
+                                    "No update terrain function available, falling back to refreshTerrainFromDB"
+                                );
+                                await terrainBuilderRef.current.refreshTerrainFromDB();
                             }
-                        } else if (
-                            terrainBuilderRef.current.updateTerrainBlocks
-                        ) {
-                            terrainBuilderRef.current.updateTerrainBlocks(
-                                added,
-                                removed
-                            );
-                            console.log(
-                                "Terrain updated successfully with standard method"
-                            );
-                        } else {
-                            console.warn(
-                                "No update terrain function available, falling back to refreshTerrainFromDB"
-                            );
-                            await terrainBuilderRef.current.refreshTerrainFromDB();
+                        } else if (changeData.store === STORES.ENVIRONMENT) {
+
+                            if (environmentBuilderRef?.current?.refreshEnvironment) {
+                                console.log("Refreshing environment from DB...");
+                                try {
+                                    await environmentBuilderRef.current.refreshEnvironment();
+                                    console.log("Environment refreshed successfully");
+                                } catch (refreshError) {
+                                    console.error(
+                                        "Error refreshing environment:",
+                                        refreshError
+                                    );
+                                    alert(
+                                        `Error during undo operation: Failed to refresh environment. Details: ${refreshError.message}`
+                                    );
+                                }
+                            } else {
+                                console.warn(
+                                    "Unable to refresh environment - refreshEnvironmentFromDB not available"
+                                );
+                            }
                         }
                     } catch (updateError) {
                         console.error("Error updating terrain:", updateError);
@@ -502,25 +530,7 @@ function UndoRedoManager(
                     );
                 }
 
-                // if (environmentBuilderRef?.current?.refreshEnvironmentFromDB) {
-                //     console.log("Refreshing environment from DB...");
-                //     try {
-                //         await environmentBuilderRef.current.refreshEnvironmentFromDB();
-                //         console.log("Environment refreshed successfully");
-                //     } catch (refreshError) {
-                //         console.error(
-                //             "Error refreshing environment:",
-                //             refreshError
-                //         );
-                //         alert(
-                //             `Error during undo operation: Failed to refresh environment. Details: ${refreshError.message}`
-                //         );
-                //     }
-                // } else {
-                //     console.warn(
-                //         "Unable to refresh environment - refreshEnvironmentFromDB not available"
-                //     );
-                // }
+
                 console.log("=== UNDO OPERATION COMPLETED ===");
             } else {
                 console.log("Undo operation did not return any changes");
