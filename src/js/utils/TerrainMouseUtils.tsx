@@ -5,6 +5,7 @@ function handleTerrainMouseUp(
     toolManagerRef,
     isPlacingRef,
     placedBlockCountRef,
+    placedEnvironmentCountRef,
     recentlyPlacedBlocksRef,
     terrainRef,
     spatialGridManagerRef,
@@ -13,6 +14,7 @@ function handleTerrainMouseUp(
     ref,
     getRaycastIntersection
 ) {
+    console.log("handleTerrainMouseUp");
     const isToolActive =
         toolManagerRef.current && toolManagerRef.current.getActiveTool();
     if (isToolActive) {
@@ -30,8 +32,11 @@ function handleTerrainMouseUp(
             return;
         }
     }
+
+    console.log("isPlacingRef.current", isPlacingRef.current);
     if (isPlacingRef.current) {
         isPlacingRef.current = false;
+        console.log("placedBlockCountRef.current", placedBlockCountRef.current);
         if (placedBlockCountRef.current > 0) {
             if (spatialGridManagerRef.current) {
                 const addedBlocks = Array.from(
@@ -41,6 +46,9 @@ function handleTerrainMouseUp(
                 });
                 spatialGridManagerRef.current.updateBlocks(addedBlocks, []);
             }
+        }
+
+        if (placedEnvironmentCountRef.current > 0 || placedBlockCountRef.current > 0) {
             if (
                 placementChangesRef.current &&
                 (Object.keys(placementChangesRef.current.terrain.added || {})
@@ -78,6 +86,7 @@ function handleTerrainMouseUp(
                     }
                 }
             }
+            placedEnvironmentCountRef.current = 0;
             placedBlockCountRef.current = 0;
         }
         recentlyPlacedBlocksRef.current.clear();
@@ -89,6 +98,7 @@ function handleTerrainMouseDown(
     toolManagerRef,
     isPlacingRef,
     placedBlockCountRef,
+    placedEnvironmentCountRef,
     recentlyPlacedBlocksRef,
     placementChangesRef,
     getRaycastIntersection,
@@ -103,7 +113,9 @@ function handleTerrainMouseDown(
 ) {
     const isToolActive =
         toolManagerRef.current && toolManagerRef.current.getActiveTool();
+    console.log("handleTerrainMouseDown");
     if (isToolActive) {
+        console.log("isToolActive");
         const intersection = getRaycastIntersection();
         if (intersection) {
             const mouseEvent = {
@@ -120,8 +132,10 @@ function handleTerrainMouseDown(
     }
     if (e.button === 0) {
         if (!isToolActive) {
+            console.log("isPlacingRef.current = true");
             isPlacingRef.current = true;
             const initialBlockIntersection = getRaycastIntersection();
+            console.log("initialBlockIntersection", initialBlockIntersection);
             if (initialBlockIntersection) {
                 currentPlacingYRef.current = previewPositionRef.current.y; // Use current preview Y
             }
@@ -138,6 +152,7 @@ function handleTerrainMouseDown(
             isFirstBlockRef.current = true;
             recentlyPlacedBlocksRef.current.clear();
             placedBlockCountRef.current = 0;
+            placedEnvironmentCountRef.current = 0;
             placementChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },

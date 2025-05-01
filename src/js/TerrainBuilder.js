@@ -514,6 +514,7 @@ function TerrainBuilder(
     const placementSizeRef = useRef(placementSize);
     const previewIsGroundPlaneRef = useRef(false);
     const placedBlockCountRef = useRef(0); // Track number of blocks placed during a mouse down/up cycle
+    const placedEnvironmentCountRef = useRef(0); // Track number of Environment objects placed during a mouse down/up cycle
     const lastDeletionTimeRef = useRef(0); // Add this ref to track the last deletion time
     const lastPlacementTimeRef = useRef(0); // Add this ref to track the last placement time
     const [previewPosition, setPreviewPosition] = useState(new THREE.Vector3());
@@ -714,11 +715,13 @@ function TerrainBuilder(
     };
     const handleMouseDown = useCallback(
         (e) => {
+            console.log("handleMouseDown");
             handleTerrainMouseDown(
                 e,
                 toolManagerRef,
                 isPlacingRef,
                 placedBlockCountRef,
+                placedEnvironmentCountRef,
                 recentlyPlacedBlocksRef,
                 placementChangesRef,
                 getRaycastIntersection,
@@ -750,8 +753,12 @@ function TerrainBuilder(
                         console.log("handleBlockPlacement - ENVIRONMENT");
                         const result =
                             environmentBuilderRef.current.placeEnvironmentModel(
-                                modeRef.current
+                                modeRef.current,
+                                false
                             );
+                        if (result?.length > 0) {
+                            placedEnvironmentCountRef.current += result.length;
+                        }
                         if (modeRef.current === "add" && result?.length > 0) {
                             if (placementChangesRef.current) {
                                 placementChangesRef.current.environment.added =
@@ -782,44 +789,16 @@ function TerrainBuilder(
                     previewPositionRef.current,
                     placementSizeRef.current
                 );
-                console.log(
-                    "handleBlockPlacement - ADD - positions",
-                    positions
-                );
-                // Initialize pendingChangesRef if it doesn't exist
                 const addedBlocks = {};
                 let blockWasPlaced = false; // Flag to track if any block was actually placed
                 positions.forEach((pos) => {
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
                     if (!terrainRef.current[blockKey]) {
                         addedBlocks[blockKey] = currentBlockTypeRef.current.id;
-                        console.log(
-                            "handleBlockPlacement - ADD - addedBlocks",
-                            addedBlocks
-                        );
-                        terrainRef.current[blockKey] =
-                            currentBlockTypeRef.current.id;
-                        console.log(
-                            "handleBlockPlacement - ADD - terrainRef.current",
-                            terrainRef.current
-                        );
+                        terrainRef.current[blockKey] = currentBlockTypeRef.current.id;
                         recentlyPlacedBlocksRef.current.add(blockKey);
-                        console.log(
-                            "handleBlockPlacement - ADD - recentlyPlacedBlocksRef.current",
-                            recentlyPlacedBlocksRef.current
-                        );
-                        placementChangesRef.current.terrain.added[blockKey] =
-                            currentBlockTypeRef.current.id;
-                        console.log(
-                            "handleBlockPlacement - ADD - placementChangesRef.current",
-                            placementChangesRef.current
-                        );
-                        pendingChangesRef.current.terrain.added[blockKey] =
-                            currentBlockTypeRef.current.id;
-                        console.log(
-                            "handleBlockPlacement - ADD - pendingChangesRef.current",
-                            pendingChangesRef.current
-                        );
+                        placementChangesRef.current.terrain.added[blockKey] = currentBlockTypeRef.current.id;
+                        pendingChangesRef.current.terrain.added[blockKey] = currentBlockTypeRef.current.id;
                         blockWasPlaced = true;
                     }
                 });
@@ -1076,6 +1055,7 @@ function TerrainBuilder(
                 toolManagerRef,
                 isPlacingRef,
                 placedBlockCountRef,
+                placedEnvironmentCountRef,
                 recentlyPlacedBlocksRef,
                 terrainRef,
                 spatialGridManagerRef,
@@ -1513,10 +1493,10 @@ function TerrainBuilder(
                                 ) {
                                     await BlockTypeRegistry.instance.preload();
                                 }
-                                await rebuildTextureAtlas(); 
+                                await rebuildTextureAtlas();
                                 updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
-                                processChunkRenderQueue(); 
-                                window.fullTerrainDataRef = terrainRef.current; 
+                                processChunkRenderQueue();
+                                window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);
                             } catch (error) {
@@ -1549,8 +1529,8 @@ function TerrainBuilder(
                     setPageIsLoaded(true);
                 });
         }
-            
-        const terrainBuilderProps= {
+
+        const terrainBuilderProps = {
             scene,
             terrainRef: terrainRef,
             currentBlockTypeRef: currentBlockTypeRef,

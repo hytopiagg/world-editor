@@ -710,7 +710,7 @@ const EnvironmentBuilder = (
         return collidingInstances;
     };
 
-    const placeEnvironmentModel = (mode = "add") => {
+    const placeEnvironmentModel = (mode = "add", saveUndo = true) => {
         console.log("placeEnvironmentModel", mode);
         if (!scene || !placeholderMeshRef.current) return;
 
@@ -771,12 +771,12 @@ const EnvironmentBuilder = (
                 });
             });
 
-            if (removedObjects.length > 0) {
+            if (removedObjects.length > 0 ) {
                 console.log(
                     `Removed ${removedObjects.length} environment objects`
                 );
 
-                if (!isUndoRedoOperation.current) {
+                if (!isUndoRedoOperation.current && saveUndo) {
                     const changes = {
                         terrain: { added: {}, removed: {} }, // no terrain changes
                         environment: { added: [], removed: removedObjects },
@@ -786,7 +786,6 @@ const EnvironmentBuilder = (
                     }
                 }
 
-                updateLocalStorage();
                 return removedObjects;
             }
             return []; // No objects were removed
