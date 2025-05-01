@@ -777,6 +777,26 @@ function UndoRedoManager(
                             } else {
                                 console.warn("No update environment function available, falling back to refreshEnvironmentFromDB");
                             }
+
+                            if (environmentBuilderRef?.current?.refreshEnvironment) {
+                                console.log("Refreshing environment from DB...");
+                                try {
+                                    await environmentBuilderRef.current.refreshEnvironment();
+                                    console.log("Environment refreshed successfully");
+                                } catch (refreshError) {
+                                    console.error(
+                                        "Error refreshing environment:",
+                                        refreshError
+                                    );
+                                    alert(
+                                        `Error during undo operation: Failed to refresh environment. Details: ${refreshError.message}`
+                                    );
+                                }
+                            } else {
+                                console.warn(
+                                    "Unable to refresh environment - refreshEnvironmentFromDB not available"
+                                );
+                            }
                         }
                     } catch (updateError) {
                         console.error("Error updating terrain:", updateError);
