@@ -48,7 +48,7 @@ class TerrainUndoRedoManager {
             return;
         }
 
-        // Initialize the changes object if it doesn't exist
+
         if (!this.pendingChangesRef.current) {
             this.pendingChangesRef.current = {
                 terrain: {
@@ -62,7 +62,7 @@ class TerrainUndoRedoManager {
             };
         }
 
-        // Ensure terrain object exists
+
         if (!this.pendingChangesRef.current.terrain) {
             this.pendingChangesRef.current.terrain = {
                 added: {},
@@ -70,7 +70,7 @@ class TerrainUndoRedoManager {
             };
         }
 
-        // Ensure environment object exists
+
         if (!this.pendingChangesRef.current.environment) {
             this.pendingChangesRef.current.environment = {
                 added: [],
@@ -78,16 +78,16 @@ class TerrainUndoRedoManager {
             };
         }
 
-        // Safely handle potentially null or undefined values
+
         const safeAdded = added || {};
         const safeRemoved = removed || {};
 
-        // Track added blocks
+
         Object.entries(safeAdded).forEach(([key, value]) => {
             if (this.pendingChangesRef.current?.terrain?.added) {
                 this.pendingChangesRef.current.terrain.added[key] = value;
             }
-            // If this position was previously in the removed list, remove it
+
             if (
                 this.pendingChangesRef.current?.terrain?.removed &&
                 this.pendingChangesRef.current.terrain.removed[key]
@@ -96,16 +96,16 @@ class TerrainUndoRedoManager {
             }
         });
 
-        // Track removed blocks
+
         Object.entries(safeRemoved).forEach(([key, value]) => {
-            // If this position was previously in the added list, just remove it
+
             if (
                 this.pendingChangesRef.current?.terrain?.added &&
                 this.pendingChangesRef.current.terrain.added[key]
             ) {
                 delete this.pendingChangesRef.current.terrain.added[key];
             } else if (this.pendingChangesRef.current?.terrain?.removed) {
-                // Otherwise track it as removed
+
                 this.pendingChangesRef.current.terrain.removed[key] = value;
             }
         });
@@ -139,7 +139,7 @@ class TerrainUndoRedoManager {
             return;
         }
 
-        // Handle custom block textures
+
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             if (!isNaN(parseInt(blockId as string))) {
                 let dataUri = null;
@@ -180,7 +180,7 @@ class TerrainUndoRedoManager {
             }
         });
 
-        // Update terrain data
+
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             this.terrainRef.current[posKey] = blockId;
         });
@@ -189,7 +189,7 @@ class TerrainUndoRedoManager {
             delete this.terrainRef.current[posKey];
         });
 
-        // Update block count
+
         this.totalBlocksRef.current = Object.keys(
             this.terrainRef.current
         ).length;
@@ -200,7 +200,7 @@ class TerrainUndoRedoManager {
         this.updateDebugInfo();
         this.importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
 
-        // Update spatial hash
+
         const addedBlocksArray = Object.entries(addedBlocks).map(
             ([posKey, blockId]) => {
                 const [x, y, z] = posKey.split(",").map(Number);

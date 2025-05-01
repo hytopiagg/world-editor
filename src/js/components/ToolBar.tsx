@@ -688,7 +688,7 @@ const ToolBar = ({
                                         if (terrainBuilderRef.current) {
                                             await terrainBuilderRef.current.saveTerrainManually();
                                         }
-                                        // Save Environment
+
                                         if (environmentBuilderRef.current) {
                                             await environmentBuilderRef.current.updateLocalStorage();
                                         }

@@ -273,7 +273,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         }
     };
 
-    // Create a color picker controller to pass to the canvas
+
     const colorPickerController = useCallback(
         {
             pickColor: (hexColor) => {

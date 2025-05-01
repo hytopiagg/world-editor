@@ -97,46 +97,46 @@ export const importMap = async (
                             30
                         );
 
-                        // Create a mapping from imported block IDs to editor block IDs
+
                         const blockIdMapping = {};
                         
-                        // Get all current block types in the editor
+
                         const currentBlockTypes = getBlockTypes();
                         
-                        // Create a map of names to IDs for quick lookups
+
                         const currentBlockNameToId = {};
                         currentBlockTypes.forEach(blockType => {
                             currentBlockNameToId[blockType.name.toLowerCase()] = blockType.id;
                         });
                         
-                        // If imported file has block types, build the mapping
+
                         if (importData.blockTypes && importData.blockTypes.length > 0) {
                             importData.blockTypes.forEach(importedBlockType => {
                                 const blockName = importedBlockType.name.toLowerCase();
                                 const importedId = importedBlockType.id;
                                 
-                                // First try to match by name (case insensitive)
+
                                 if (currentBlockNameToId.hasOwnProperty(blockName)) {
                                     blockIdMapping[importedId] = currentBlockNameToId[blockName];
                                     console.log(`Mapped imported block "${importedBlockType.name}" (ID: ${importedId}) to editor ID: ${blockIdMapping[importedId]}`);
                                 } else {
-                                    // If no name match, use the original ID
+
                                     blockIdMapping[importedId] = importedId;
                                     console.log(`No name match for imported block "${importedBlockType.name}" (ID: ${importedId}), using original ID`);
                                 }
                             });
                         } else {
-                            // If no block types in import, attempt to match standard blocks by ID only
+
                             console.log("No block types in import file, using direct ID mapping");
                             currentBlockTypes.forEach(blockType => {
                                 blockIdMapping[blockType.id] = blockType.id;
                             });
                         }
 
-                        // Now process terrain data with ID mapping
+
                         terrainData = Object.entries(importData.blocks).reduce(
                             (acc, [key, importedBlockId]) => {
-                                // Use mapped ID if available, otherwise use the original ID
+
                                 const mappedId = blockIdMapping[importedBlockId] !== undefined 
                                     ? blockIdMapping[importedBlockId] 
                                     : importedBlockId;
@@ -412,20 +412,20 @@ export const exportMapFile = async (terrainBuilderRef) => {
                     (model) => model.modelUrl === obj.modelUrl
                 );
                 if (entityType) {
-                    // Get the Y rotation value (this is the only axis that's used in the app)
-                    // Check if rotation is a plain object (from DB) or a THREE.Euler object
+
+
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
                     const rotY = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
                     
-                    // Only apply non-zero rotation (with a small epsilon to handle floating point imprecision)
+
                     const hasRotation = Math.abs(rotY) > 0.001;
                     
-                    // Create quaternion directly from Y rotation (this is more reliable than Euler conversion)
+
                     const quaternion = new THREE.Quaternion();
                     if (hasRotation) {
                         quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
                     } else {
-                        // Use identity quaternion for no rotation (0,0,0,1)
+
                         quaternion.identity();
                     }
 

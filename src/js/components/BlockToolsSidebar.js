@@ -492,7 +492,7 @@ const BlockToolsSidebar = ({
                 const duplicateFileNames = new Set();
                 const processedFileNames = new Set(); // Track names within the current batch
 
-                // 1. Read all files and check for duplicates
+
                 const fileReadPromises = modelFiles.map((file) => {
                     return new Promise((resolve, reject) => {
                         const fileName = file.name.replace(/\.[^/.]+$/, "");
@@ -528,10 +528,10 @@ const BlockToolsSidebar = ({
                     });
                 });
 
-                // Use Promise.allSettled to handle potential errors for individual files
+
                 const results = await Promise.allSettled(fileReadPromises);
 
-                // Alert about all duplicates found at once
+
                 if (duplicateFileNames.size > 0) {
                     alert(
                         `The following model names already exist or were duplicated in the drop:\n- ${Array.from(
@@ -542,13 +542,13 @@ const BlockToolsSidebar = ({
                     );
                 }
 
-                // 2. Process successfully read, non-duplicate files
+
                 results.forEach((result) => {
                     if (result.status === "fulfilled") {
                         const { file, fileName, data } = result.value;
 
                         try {
-                            // Prepare data for IndexedDB
+
                             const modelDataForDB = {
                                 name: fileName,
                                 data: data, // Store ArrayBuffer
@@ -556,7 +556,7 @@ const BlockToolsSidebar = ({
                             };
                             newModelsForDB.push(modelDataForDB);
 
-                            // Create Blob URL and prepare data for UI state
+
                             const blob = new Blob([data], {
                                 type: file.type || "model/gltf-binary",
                             }); // Use file.type or default for glb
@@ -584,10 +584,10 @@ const BlockToolsSidebar = ({
                                 `Error processing model ${fileName}:`,
                                 error
                             );
-                            // Optionally alert the user about specific file processing errors
+
                         }
                     } else {
-                        // Log errors for files that failed to read or were duplicates
+
                         console.error(
                             "Failed to process a model file:",
                             result.reason?.message || result.reason
@@ -595,15 +595,15 @@ const BlockToolsSidebar = ({
                     }
                 });
 
-                // 3. Update Database and UI if new models were successfully processed
+
                 if (newModelsForDB.length > 0) {
                     try {
-                        // Combine existing and new models for DB
+
                         const updatedModelsForDB = [
                             ...existingModels,
                             ...newModelsForDB,
                         ];
-                        // Save all new models to DB at once
+
                         await DatabaseManager.saveData(
                             STORES.CUSTOM_MODELS,
                             "models",
@@ -613,10 +613,10 @@ const BlockToolsSidebar = ({
                             `Saved ${newModelsForDB.length} new models to DB.`
                         );
 
-                        // Update UI state
+
                         environmentModels.push(...newModelsForUI);
 
-                        // Load new models into the environment (optional: could be done selectively)
+
                         if (environmentBuilder && environmentBuilder.current) {
                             for (const model of newModelsForUI) {
                                 try {
@@ -635,7 +635,7 @@ const BlockToolsSidebar = ({
                             }
                         }
 
-                        // Refresh the sidebar UI
+
                         refreshBlockTools();
                     } catch (error) {
                         console.error(
@@ -645,13 +645,13 @@ const BlockToolsSidebar = ({
                         alert(
                             "An error occurred while saving or loading the new models. Check the console for details."
                         );
-                        // Consider reverting UI changes if save fails?
+
                     }
                 } else if (
                     duplicateFileNames.size === 0 &&
                     modelFiles.length > 0
                 ) {
-                    // Handle cases where files were dropped, but none were valid (e.g., all failed to read)
+
                     alert(
                         "Could not process any of the dropped model files. Check the console for errors."
                     );

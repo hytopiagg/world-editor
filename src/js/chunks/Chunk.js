@@ -1068,7 +1068,7 @@ class Chunk {
         blockFaceAO,
         chunkManager
     ) {
-        // Simply return the base color without AO calculations
+
         const baseColor = blockType.color;
         return [...baseColor]; // Return a copy of the base color
     }

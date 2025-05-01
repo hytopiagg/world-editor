@@ -62,7 +62,7 @@ import {
 } from "./utils/TerrainMouseUtils";
 import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
-// Function to optimize rendering performance
+
 function optimizeRenderer(gl) {
     if (gl) {
         gl.shadowMap.autoUpdate = false;
@@ -124,16 +124,16 @@ function TerrainBuilder(
     const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
     const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
 
-    // Setup auto-save only if enabled
+
     useEffect(() => {
         const setupAutoSave = () => {
-            // Clear any existing interval first
+
             if (autoSaveIntervalRef.current) {
                 clearInterval(autoSaveIntervalRef.current);
                 autoSaveIntervalRef.current = null;
             }
 
-            // Only set up the interval if auto-save is enabled
+
             if (isAutoSaveEnabledRef.current) {
                 console.log(
                     `Auto-save enabled with interval: ${
@@ -141,7 +141,7 @@ function TerrainBuilder(
                     } seconds`
                 );
                 autoSaveIntervalRef.current = setInterval(() => {
-                    // Only save if there are pending changes
+
                     if (
                         pendingChangesRef.current?.terrain &&
                         (Object.keys(
@@ -160,10 +160,10 @@ function TerrainBuilder(
             }
         };
 
-        // Initial setup
+
         setupAutoSave();
 
-        // Cleanup on unmount
+
         return () => {
             if (autoSaveIntervalRef.current) {
                 clearInterval(autoSaveIntervalRef.current);
@@ -171,15 +171,15 @@ function TerrainBuilder(
         };
     }, []); // Empty dependency array means this runs once on mount
 
-    // Also save when user navigates away
+
     useEffect(() => {
-        // Variable to track if a reload was just prevented (Cancel was clicked)
+
         let reloadJustPrevented = false;
-        // Store the URL to detect actual navigation vs reload attempts
+
         const currentUrl = window.location.href;
 
         const handleBeforeUnload = (event) => {
-            // Skip save if database is being cleared
+
             if (localStorage.getItem("IS_DATABASE_CLEARING")) {
                 console.log(
                     "Database is being cleared, skipping unsaved changes check"
@@ -187,13 +187,13 @@ function TerrainBuilder(
                 return;
             }
 
-            // Skip if pendingChangesRef or its current property is null/undefined
+
             if (!pendingChangesRef || !pendingChangesRef.current) {
                 console.log("No pending changes ref available");
                 return;
             }
 
-            // Ensure we have properly structured changes before checking
+
             const hasTerrainChanges =
                 pendingChangesRef.current.terrain &&
                 (Object.keys(pendingChangesRef.current.terrain.added || {})
@@ -201,12 +201,12 @@ function TerrainBuilder(
                     Object.keys(pendingChangesRef.current.terrain.removed || {})
                         .length > 0);
 
-            // If we have pending changes, save immediately and show warning
+
             if (hasTerrainChanges) {
                 localStorage.setItem("reload_attempted", "true");
 
-                // Standard way to show a confirmation dialog when closing the page
-                // This works across modern browsers
+
+
                 reloadJustPrevented = true;
                 event.preventDefault();
                 event.returnValue =
@@ -215,42 +215,36 @@ function TerrainBuilder(
             }
         };
 
-        // This handler runs when the user navigates back/forward or after the beforeunload dialog
         const handlePopState = (event) => {
-            // Check if this is after a cancel action from beforeunload
             if (reloadJustPrevented) {
                 console.log("Detected popstate after reload prevention");
                 event.preventDefault();
 
-                // Reset the flag
                 reloadJustPrevented = false;
 
-                // Restore the history state to prevent the reload
                 window.history.pushState(null, document.title, currentUrl);
                 return false;
             }
         };
 
-        // Function to handle when the page is shown after being hidden
-        // This can happen when user clicks Cancel on the reload prompt
         const handleVisibilityChange = () => {
             if (document.visibilityState === "visible") {
-                // Check if we were in the middle of a reload attempt
+
                 const reloadAttempted =
                     localStorage.getItem("reload_attempted") === "true";
                 if (reloadAttempted) {
                     console.log(
                         "Page became visible again after reload attempt"
                     );
-                    // Clear the flag
+
                     localStorage.removeItem("reload_attempted");
-                    // If we have a reload prevention flag, this means the user canceled
+
                     if (reloadJustPrevented) {
                         reloadJustPrevented = false;
                         console.log(
                             "User canceled reload, restoring history state"
                         );
-                        // Restore history state
+
                         window.history.pushState(
                             null,
                             document.title,
@@ -265,10 +259,10 @@ function TerrainBuilder(
         window.addEventListener("popstate", handlePopState);
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
-        // Set initial history state
+
         window.history.pushState(null, document.title, currentUrl);
 
-        // Clear any stale reload flags
+
         localStorage.removeItem("reload_attempted");
 
         return () => {
@@ -281,15 +275,15 @@ function TerrainBuilder(
         };
     }, []);
 
-    // Function to efficiently save terrain data
+
     const efficientTerrainSave = async () => {
-        // Make it async
-        // Skip if database is being cleared
+
+
         if (localStorage.getItem("IS_DATABASE_CLEARING")) {
             return false;
         }
 
-        // Skip if no changes to save
+
         if (
             !pendingChangesRef.current ||
             !pendingChangesRef.current.terrain ||
@@ -301,10 +295,10 @@ function TerrainBuilder(
             return true;
         }
 
-        // Capture the changes to save
+
         const changesToSave = { ...pendingChangesRef.current.terrain };
 
-        // Reset pending changes immediately *before* starting the async save
+
         resetPendingChanges();
 
         try {
@@ -312,7 +306,7 @@ function TerrainBuilder(
             const tx = db.transaction(STORES.TERRAIN, "readwrite");
             const store = tx.objectStore(STORES.TERRAIN);
 
-            // Apply removals
+
             if (
                 changesToSave.removed &&
                 Object.keys(changesToSave.removed).length > 0
@@ -333,14 +327,14 @@ function TerrainBuilder(
                 );
             }
 
-            // Apply additions/updates
+
             if (
                 changesToSave.added &&
                 Object.keys(changesToSave.added).length > 0
             ) {
                 await Promise.all(
                     Object.entries(changesToSave.added).map(([key, value]) => {
-                        // Store the block ID directly with the coordinate key
+
                         const putRequest = store.put(value, key);
                         return new Promise((resolve, reject) => {
                             putRequest.onsuccess = resolve;
@@ -355,7 +349,7 @@ function TerrainBuilder(
                 );
             }
 
-            // Complete the transaction
+
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
                 tx.onerror = reject;
@@ -364,27 +358,27 @@ function TerrainBuilder(
             return true;
         } catch (error) {
             console.error("Error during efficient terrain save:", error);
-            // IMPORTANT: Restore pending changes if save failed
+
             pendingChangesRef.current.terrain = changesToSave;
             return false;
         }
     };
 
-    // Initialize the incremental terrain save system
+
     useEffect(() => {
         console.log("Initializing incremental terrain save system");
-        // Reset initial save flag to ensure we save a baseline
+
         initialSaveCompleteRef.current = false;
-        // Clear pending changes
+
         pendingChangesRef.current = { added: {}, removed: {} };
-        // Set the last save time to now to prevent immediate saving on startup
+
         lastSaveTimeRef.current = Date.now();
         console.log(
             "Last save time initialized to:",
             new Date(lastSaveTimeRef.current).toLocaleTimeString()
         );
 
-        // Attempt to load and validate terrain data
+
         const validateTerrain = async () => {
             try {
                 const terrain = await DatabaseManager.getData(
@@ -397,7 +391,7 @@ function TerrainBuilder(
                             Object.keys(terrain).length
                         } blocks`
                     );
-                    // We already have terrain data, mark as initialized
+
                     initialSaveCompleteRef.current = true;
                 } else {
                     console.log(
@@ -412,7 +406,7 @@ function TerrainBuilder(
         validateTerrain();
     }, []);
 
-    // Scene setup
+
     const {
         scene,
         camera: threeCamera,
@@ -927,8 +921,8 @@ function TerrainBuilder(
             }
             potentialNewPosition.copy(blockIntersection.point);
 
-            // For add mode, calculate placement position precisely based on the face that was hit
-            // First, get the block coordinates where we hit
+
+
             const hitBlock = blockIntersection.block || {
                 x: Math.floor(blockIntersection.point.x),
                 y: Math.floor(blockIntersection.point.y),
@@ -953,7 +947,7 @@ function TerrainBuilder(
                 potentialNewPosition.z = Math.round(potentialNewPosition.z);
             }
 
-            // Handle y-coordinate special case if this is a ground plane hit
+
             if (blockIntersection.isGroundPlane) {
                 potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
             } else {
@@ -974,7 +968,7 @@ function TerrainBuilder(
                 }
             }
 
-            // Apply axis lock if enabled
+
             if (axisLockEnabledRef.current) {
                 const originalPos = previewPositionRef.current.clone();
                 const axisLock = lockedAxisRef.current;
@@ -990,7 +984,7 @@ function TerrainBuilder(
                 }
             }
 
-            // --- Start: Placement Constraints Logic (Using Raw Ground Intersection) ---
+
             let shouldUpdatePreview = true;
             let thresholdMet = false; // Flag to track if raw ground threshold was met
             if (isPlacingRef.current && !isToolActive) {
@@ -1001,7 +995,7 @@ function TerrainBuilder(
                     if (isFirstBlockRef.current) {
                         shouldUpdatePreview = true;
                         thresholdMet = true; // Mark that we're forcing the placement
-                        // Lock the Y-coordinate of the SNAPPED position for any mode
+
                         currentPlacingYRef.current = potentialNewPosition.y; // Update the Y-lock position based on initial hit
                         potentialNewPosition.y = currentPlacingYRef.current;
                     } else {
@@ -1010,7 +1004,7 @@ function TerrainBuilder(
                         } else {
                             shouldUpdatePreview = true;
                             thresholdMet = true; // Mark that we passed the raw ground check
-                            // Lock the Y-coordinate of the SNAPPED position consistently
+
                             potentialNewPosition.y = currentPlacingYRef.current;
                         }
                     }

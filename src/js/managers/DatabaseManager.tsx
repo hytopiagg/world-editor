@@ -27,7 +27,7 @@ export class DatabaseManager {
                 resolve(request.result);
             };
             request.onupgradeneeded = (event) => {
-                // TODO: CHECK IF RESULT EXISTS & ADD MIGRATION LOGIC
+
                 const db = (event.target as IDBOpenDBRequest).result;
 
                 Object.values(STORES).forEach((storeName) => {
@@ -53,17 +53,17 @@ export class DatabaseManager {
         console.log("saveData", storeName, key, data);
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {
-            // Special handling for terrain data
+
             if ((storeName === STORES.TERRAIN || storeName === STORES.ENVIRONMENT) && key === "current") {
                 try {
                     const transaction = db.transaction(storeName, "readwrite");
                     const store = transaction.objectStore(storeName);
 
-                    // Clear existing terrain data
+
                     const clearRequest = store.clear();
 
                     clearRequest.onsuccess = () => {
-                        // For terrain store, each coordinate becomes a key, and block ID becomes the value
+
 
                         let promises: Promise<void>[] = [];
                         if (storeName === STORES.TERRAIN) {
@@ -130,7 +130,7 @@ export class DatabaseManager {
                     reject(error);
                 }
             } else {
-                // Original behavior for other stores
+
                 const transaction = db.transaction(storeName, "readwrite");
                 const store = transaction.objectStore(storeName);
                 const request = store.put(data, key);
@@ -166,8 +166,8 @@ export class DatabaseManager {
                         );
                         const SIZE_THRESHOLD = 1000000; // Example: Use bulk get below 100k items
 
-                        // --- Create a new transaction for the actual data retrieval ---
-                        // It's generally safer to use a new transaction after the count.
+
+
                         const dataTx = db.transaction(storeName, "readonly");
                         const dataStore = dataTx.objectStore(storeName);
                         let data = {};
@@ -182,7 +182,7 @@ export class DatabaseManager {
                                 const keysRequest = dataStore.getAllKeys();
                                 const valuesRequest = dataStore.getAll();
 
-                                // Use Promise.all to wait for both requests
+
                                 const [keys, values] = await Promise.all([
                                     new Promise((res, rej) => {
                                         keysRequest.onsuccess = () =>
@@ -200,7 +200,7 @@ export class DatabaseManager {
                                     console.error(
                                         "[DB] Mismatch between keys and values count in bulk get!"
                                     );
-                                    // Fallback or reject might be needed here
+
                                     reject(
                                         new Error(
                                             "Key/Value count mismatch in bulk retrieval"
@@ -226,7 +226,7 @@ export class DatabaseManager {
                                 );
                             }
                         } else {
-                            // ---- Cursor Iteration Path (Lower Memory, Potentially Slower for small sets) ----
+
                             console.log("[DB] Using cursor retrieval.");
                             let index = 0;
                             const cursorRequest = dataStore.openCursor();
@@ -237,7 +237,7 @@ export class DatabaseManager {
                                     data[cursor.key] = cursor.value;
                                     index++;
                                     if (index % 5000 === 0 || index === count) {
-                                        // Update progress less frequently or at the end
+
                                         loadingManager.updateLoading(
                                             `Loading ${storeName}... ${index}/${count}`
                                         );
@@ -260,7 +260,7 @@ export class DatabaseManager {
                         }
                     };
                 } else {
-                    // Original logic for non-terrain/environment stores
+
                     const request = store.get(key);
                     request.onsuccess = () => {
                         resolve(request.result);

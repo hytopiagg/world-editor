@@ -490,7 +490,7 @@ const EnvironmentBuilder = (
                         model.modelUrl === obj.modelUrl
                 );
                 if (modelType) {
-                    // Create a proper THREE.Euler from the loaded data
+
                     const eulerRotation = new THREE.Euler(
                         obj.rotation?.x || 0,
                         obj.rotation?.y || 0,
@@ -546,7 +546,7 @@ const EnvironmentBuilder = (
                 }
             }
 
-            // updateLocalStorage();
+
             setTotalEnvironmentObjects(targetObjects.size);
         } catch (error) {
             console.error("Error updating environment:", error);
@@ -813,7 +813,7 @@ const EnvironmentBuilder = (
         );
         const addedObjects = [];
 
-        // Check for collisions before placing new models
+
         const validPlacementPositions = placementPositions.filter(placementPosition =>
             findCollidingInstances(placementPosition).length === 0
         );
@@ -930,14 +930,14 @@ const EnvironmentBuilder = (
                 (model) => model.modelUrl === modelUrl
             );
             instancedData.instances.forEach((data, instanceId) => {
-                // Convert to plain objects since THREE.js objects aren't properly serialized
+
                 const serializablePosition = {
                     x: data.position.x,
                     y: data.position.y,
                     z: data.position.z,
                 };
 
-                // Limit rotation values to 5 decimal places to reduce precision issues
+
                 const serializableRotation = {
                     x: Number(data.rotation.x.toFixed(5)),
                     y: Number(data.rotation.y.toFixed(5)),

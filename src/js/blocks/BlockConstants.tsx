@@ -18,7 +18,7 @@ export const BlockFaceAxes = {
 
 export const BlockFaces = Object.keys(BlockFaceEnum);
 
-// Default block AO intensity
+
 export const DEFAULT_BLOCK_AO_INTENSITY = [0, 0, 0, 0];
 
 export const DEFAULT_BLOCK_COLOR = [1.0, 1.0, 1.0, 1.0];

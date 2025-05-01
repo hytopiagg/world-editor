@@ -3,7 +3,7 @@
  * Extracted from TerrainBuilder.js
  */
 
-// Initialize global mouse buttons state
+
 window.mouseButtons = 0;
 
 /**

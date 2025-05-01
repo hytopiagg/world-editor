@@ -600,7 +600,7 @@ class ChunkSystem {
             }`
         );
 
-        // const updatingChunks = new Set(chunkKeys);
+
 
         for (const chunkKey of chunkKeys) {
             const chunk = this._chunkManager.getChunkByKey(chunkKey);
@@ -608,18 +608,18 @@ class ChunkSystem {
                 this._chunkManager.queueChunkForRender(chunk, {
                     skipNeighbors,
                 });
-                // if (!skipNeighbors) {
-                // const neighbors =
-                //     this._chunkManager.getChunkNeighbors(chunk);
-                // for (const neighbor of neighbors) {
-                //     if (neighbor && !updatingChunks.has(neighbor.chunkId)) {
-                //         updatingChunks.add(neighbor.chunkId);
-                //         this._chunkManager.queueChunkForRender(neighbor, {
-                //             skipNeighbors: true,
-                //         });
-                //     }
-                // }
-                // }
+
+
+
+
+
+
+
+
+
+
+
+
             }
         }
 

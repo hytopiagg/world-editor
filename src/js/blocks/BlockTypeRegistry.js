@@ -72,10 +72,10 @@ class BlockTypeRegistry {
 
         for (const blockTypeData of blockTypes) {
 
-            /// disabled liquid rendering
+
             const isLiquid = false;
-                // blockTypeData.name.toLowerCase().includes("water") ||
-                // blockTypeData.name.toLowerCase().includes("lava");
+
+
 
             const blockType = new BlockType({
                 id: blockTypeData.id,

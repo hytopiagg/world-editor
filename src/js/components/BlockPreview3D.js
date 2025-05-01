@@ -36,7 +36,7 @@ PreviewCube.propTypes = {
 const BlockPreview3D = ({ textureObjects }) => {
     const [isRotating, setIsRotating] = useState(true);
     
-    // Keying the canvas might not be strictly necessary now, but doesn't hurt
+
     const previewKey = useMemo(
         () =>
             Object.values(textureObjects)
