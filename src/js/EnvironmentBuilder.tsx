@@ -116,7 +116,7 @@ const EnvironmentBuilder = (
                 instancedData.instances.set(added[modelUrl].instanceId, added[modelUrl]);
             }
         }
-        
+
     };
 
     const loadModel = async (modelToLoadUrl) => {
@@ -775,6 +775,36 @@ const EnvironmentBuilder = (
         );
         const addedObjects = [];
 
+        // Check for collisions before placing new models
+        const POSITION_TOLERANCE = 0.5;
+        const validPlacementPositions = placementPositions.filter(placementPosition => {
+            for (const [_, instancedData] of instancedMeshes.current.entries()) {
+                const instances = Array.from(instancedData.instances.entries())
+                    .map(([instanceId, data]) => ({
+                        instanceId,
+                        position: data.position,
+                    }));
+
+                const hasCollision = instances.some(instance => {
+                    return (
+                        Math.abs(instance.position.x - placementPosition.x) < POSITION_TOLERANCE &&
+                        Math.abs(instance.position.y - placementPosition.y) < POSITION_TOLERANCE &&
+                        Math.abs(instance.position.z - placementPosition.z) < POSITION_TOLERANCE
+                    );
+                });
+
+                if (hasCollision) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        if (validPlacementPositions.length === 0) {
+            console.log("No valid positions to place models - all positions are occupied");
+            return [];
+        }
+
         let highestInstanceId = -1;
         for (const [_, data] of instancedMeshes.current) {
             if (data.instances.size > 0) {
@@ -785,7 +815,7 @@ const EnvironmentBuilder = (
 
         let nextInstanceId = highestInstanceId + 1;
 
-        const totalNeededInstances = nextInstanceId + placementPositions.length;
+        const totalNeededInstances = nextInstanceId + validPlacementPositions.length;
 
         if (totalNeededInstances > MAX_ENVIRONMENT_OBJECTS) {
             alert(
@@ -794,7 +824,7 @@ const EnvironmentBuilder = (
             return;
         }
 
-        placementPositions.forEach((placementPosition) => {
+        validPlacementPositions.forEach((placementPosition) => {
             const instanceId = nextInstanceId++;
 
             const transform = getPlacementTransform();
@@ -837,16 +867,12 @@ const EnvironmentBuilder = (
             };
             addedObjects.push(newObject);
 
-            console.log("newObject", newObject);
-
             instancedData.instances.set(instanceId, {
                 position: position.clone(),
                 rotation: transform.rotation.clone(),
                 scale: transform.scale.clone(),
                 matrix: matrix.clone(),
             });
-
-            console.log("instancedData", instancedData.instances);
         });
 
         if (!isUndoRedoOperation.current) {
@@ -863,8 +889,7 @@ const EnvironmentBuilder = (
             }
         }
 
-        // updateLocalStorage();
-        setTotalEnvironmentObjects((prev) => prev + placementPositions.length);
+        setTotalEnvironmentObjects((prev) => prev + validPlacementPositions.length);
 
         if (
             placementSettingsRef.current?.randomScale ||
