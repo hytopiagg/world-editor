@@ -21,8 +21,7 @@ export const importMap = async (
                         10
                     );
 
-                    console.log("Importing map data:", event.target.result);
-                    const importData = JSON.parse(event.target.result);
+                    const importData = JSON.parse(event.target.result as string);
                     console.log("Importing map data:", importData);
                     let terrainData = {};
                     let environmentData = [];
@@ -135,7 +134,7 @@ export const importMap = async (
                         }
 
 
-                        terrainData = Object.entries(importData.blocks).reduce(
+                        terrainData = Object.entries(importData.blocks as { [key: string]: number }).reduce(
                             (acc, [key, importedBlockId]) => {
 
                                 const mappedId = blockIdMapping[importedBlockId] !== undefined
@@ -206,7 +205,7 @@ export const importMap = async (
                             environmentData = Object.entries(
                                 importData.entities
                             )
-                                .map(([key, entity], index) => {
+                                .map(([key, entity] : [string, any], index) => {
                                     const [x, y, z] = key
                                         .split(",")
                                         .map(Number);
