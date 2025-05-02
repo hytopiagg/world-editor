@@ -21,6 +21,7 @@ export const importMap = async (
                         10
                     );
 
+                    console.log("Importing map data:", event.target.result);
                     const importData = JSON.parse(event.target.result);
                     console.log("Importing map data:", importData);
                     let terrainData = {};
@@ -51,19 +52,19 @@ export const importMap = async (
                                         blockType.isMultiTexture !== undefined
                                             ? blockType.isMultiTexture
                                             : !(
-                                                  blockType.textureUri?.endsWith(
-                                                      ".png"
-                                                  ) ||
-                                                  blockType.textureUri?.endsWith(
-                                                      ".jpg"
-                                                  ) ||
-                                                  blockType.textureUri?.endsWith(
-                                                      ".jpeg"
-                                                  ) ||
-                                                  blockType.textureUri?.endsWith(
-                                                      ".gif"
-                                                  )
-                                              );
+                                                blockType.textureUri?.endsWith(
+                                                    ".png"
+                                                ) ||
+                                                blockType.textureUri?.endsWith(
+                                                    ".jpg"
+                                                ) ||
+                                                blockType.textureUri?.endsWith(
+                                                    ".jpeg"
+                                                ) ||
+                                                blockType.textureUri?.endsWith(
+                                                    ".gif"
+                                                )
+                                            );
 
                                     const processedBlock = {
                                         id: blockType.id,
@@ -99,22 +100,22 @@ export const importMap = async (
 
 
                         const blockIdMapping = {};
-                        
+
 
                         const currentBlockTypes = getBlockTypes();
-                        
+
 
                         const currentBlockNameToId = {};
                         currentBlockTypes.forEach(blockType => {
                             currentBlockNameToId[blockType.name.toLowerCase()] = blockType.id;
                         });
-                        
+
 
                         if (importData.blockTypes && importData.blockTypes.length > 0) {
                             importData.blockTypes.forEach(importedBlockType => {
                                 const blockName = importedBlockType.name.toLowerCase();
                                 const importedId = importedBlockType.id;
-                                
+
 
                                 if (currentBlockNameToId.hasOwnProperty(blockName)) {
                                     blockIdMapping[importedId] = currentBlockNameToId[blockName];
@@ -137,10 +138,10 @@ export const importMap = async (
                         terrainData = Object.entries(importData.blocks).reduce(
                             (acc, [key, importedBlockId]) => {
 
-                                const mappedId = blockIdMapping[importedBlockId] !== undefined 
-                                    ? blockIdMapping[importedBlockId] 
+                                const mappedId = blockIdMapping[importedBlockId] !== undefined
+                                    ? blockIdMapping[importedBlockId]
                                     : importedBlockId;
-                                    
+
                                 acc[key] = mappedId;
                                 return acc;
                             },
@@ -216,7 +217,7 @@ export const importMap = async (
                                         entity.rigidBodyOptions.rotation.z,
                                         entity.rigidBodyOptions.rotation.w
                                     );
-                                    
+
                                     const euler =
                                         new THREE.Euler().setFromQuaternion(
                                             quaternion
@@ -321,7 +322,7 @@ export const importMap = async (
                     setTimeout(() => {
                         loadingManager.hideLoading();
                     }, 500);
-                    resolve();
+                    // resolve();
                 } catch (error) {
                     loadingManager.hideLoading();
                     console.error("Error processing import:", error);
@@ -341,7 +342,7 @@ export const importMap = async (
         throw error;
     }
 };
-export const exportMapFile = async (terrainBuilderRef) => {
+export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) => {
     try {
         if (
             !terrainBuilderRef.current.getCurrentTerrainData() ||
@@ -355,9 +356,11 @@ export const exportMapFile = async (terrainBuilderRef) => {
         loadingManager.showLoading("Preparing to export map...", 0);
 
         loadingManager.updateLoading("Retrieving environment data...", 10);
-        const environmentObjects =
-            (await DatabaseManager.getData(STORES.ENVIRONMENT, "current")) ||
-            [];
+        const environmentObjects = environmentBuilderRef.current.getAllEnvironmentObjects();
+        // (await DatabaseManager.getData(STORES.ENVIRONMENT, "current")) ||
+        // [];
+
+        console.log("Exporting environment data:", environmentObjects);
 
         loadingManager.updateLoading("Processing terrain data...", 30);
         const simplifiedTerrain = Object.entries(
@@ -416,10 +419,10 @@ export const exportMapFile = async (terrainBuilderRef) => {
 
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
                     const rotY = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
-                    
+
 
                     const hasRotation = Math.abs(rotY) > 0.001;
-                    
+
 
                     const quaternion = new THREE.Quaternion();
                     if (hasRotation) {

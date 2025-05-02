@@ -291,7 +291,7 @@ const ToolBar = ({
     };
     const handleExportMap = () => {
         try {
-            exportMapFile(terrainBuilderRef);
+            exportMapFile(terrainBuilderRef, environmentBuilderRef);
         } catch (error) {
             console.error("Error exporting map:", error);
             alert("Error exporting map. Please try again.");
