@@ -624,7 +624,6 @@ class SelectionTool extends BaseTool {
     rotatePosition(pos, center) {
         const relativeX = pos.x - center.x;
         const relativeZ = pos.z - center.z;
-
         let newX, newZ;
         switch (this.rotation) {
             case 1: // 90°
