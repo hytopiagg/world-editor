@@ -972,6 +972,9 @@ const EnvironmentBuilder = (
                 });
             });
         }
+
+        console.log("allObjects", allObjects);
+        console.log("getAllEnvironmentObjects", getAllEnvironmentObjects());
         DatabaseManager.saveData(STORES.ENVIRONMENT, "current", allObjects);
         setTotalEnvironmentObjects(allObjects.length);
     };

@@ -108,7 +108,7 @@ function App() {
 
     // Add Ctrl+S hotkey for saving
     useEffect(() => {
-        const handleKeyDown = (e) => {
+        const handleKeyDown = async (e) => {
             // Check for Ctrl+S (or Cmd+S on Mac)
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {
                 e.preventDefault(); // Prevent browser's save dialog
@@ -116,15 +116,16 @@ function App() {
                 // Set saving state directly for immediate feedback
                 setIsSaving(true);
 
-                // Call the save function
-                if (terrainBuilderRef.current) {
-                    console.log("Saving via Ctrl+S hotkey");
-                    terrainBuilderRef.current
-                        .saveTerrainManually()
-                        .finally(() => {
-                            // Ensure saving state is cleared
-                            setIsSaving(false);
-                        });
+                try {
+                    if (terrainBuilderRef.current) {
+                        await terrainBuilderRef.current.saveTerrainManually();
+                    }
+
+                    if (environmentBuilderRef.current) {
+                        await environmentBuilderRef.current.updateLocalStorage();
+                    }
+                } finally {
+                    setIsSaving(false);
                 }
             }
         };
