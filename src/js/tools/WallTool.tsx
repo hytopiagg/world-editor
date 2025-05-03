@@ -6,9 +6,24 @@
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
 class WallTool extends BaseTool {
-    /**
-     * Creates a new WallTool instance
-     */
+
+    wallHeight: number;
+    isCtrlPressed: boolean;
+    wallStartPosition: THREE.Vector3 | null;
+    wallPreviewMeshes: THREE.Mesh[];
+    wallDebugMesh: THREE.Mesh | null;
+    terrainRef: React.RefObject<any>;
+    currentBlockTypeRef: React.RefObject<any>;
+    scene: THREE.Scene;
+    toolManagerRef: React.RefObject<any>;
+    terrainBuilderRef: React.RefObject<any>;
+    undoRedoManager: React.RefObject<any>;
+    saveUndoFunction: (changes: any) => void;
+    placementChangesRef: React.RefObject<any>;
+    isPlacingRef: React.RefObject<any>;
+    previewPositionRef: React.RefObject<any>;
+    wallPreview: THREE.InstancedMesh | null;
+
     constructor(terrainBuilderProps) {
         console.log("WallTool initialized");
         super(terrainBuilderProps);
@@ -581,14 +596,14 @@ class WallTool extends BaseTool {
         const color = this.isCtrlPressed ? 0xff4e4e : 0x4e8eff;
 
         if (this.wallPreview.isInstancedMesh) {
-            this.wallPreview.material.color.set(color);
+            (this.wallPreview.material as THREE.MeshBasicMaterial)?.color.set(color);
         }
 
         else if (this.wallPreview.children) {
 
             this.wallPreview.children.forEach((mesh) => {
-                if (mesh && mesh.material) {
-                    mesh.material.color.set(color);
+                if (mesh && (mesh as THREE.Mesh).material) {
+                    ((mesh as THREE.Mesh).material as THREE.MeshBasicMaterial).color.set(color);
                 }
             });
         }
@@ -633,7 +648,6 @@ class WallTool extends BaseTool {
         this.terrainRef = null;
         this.currentBlockTypeRef = null;
         this.scene = null;
-        this.renderer = null;
         this.wallStartPosition = null;
         this.wallPreviewMeshes = [];
         this.toolManagerRef = null;
