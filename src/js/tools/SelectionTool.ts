@@ -13,6 +13,7 @@ class SelectionTool extends BaseTool {
     originalEnvironmentPositions = new Map();
     selectionHeight = 1;
     verticalOffset = 0;
+    rotation = 0; // 0: 0°, 1: 90°, 2: 180°, 3: 270°
 
     terrainRef = null;
     scene = null;
@@ -49,6 +50,7 @@ class SelectionTool extends BaseTool {
         this.isMovingSelection = false;
         this.selectionHeight = 1;
         this.verticalOffset = 0;
+        this.rotation = 0;
         return true;
     }
 
@@ -143,6 +145,12 @@ class SelectionTool extends BaseTool {
             } else {
                 this.setSelectionHeight(this.selectionHeight + 1);
             }
+        } else if (event.key === "3" && this.isMovingSelection) {
+            this.rotation = (this.rotation + 1) % 4;
+            this.updateSelectionPreview(
+                this.previewPositionRef.current,
+                this.previewPositionRef.current
+            );
         }
     }
 
@@ -185,12 +193,16 @@ class SelectionTool extends BaseTool {
                             previewGeometry,
                             previewMaterial
                         );
+                        const rotatedPos = this.rotatePosition(
+                            originalPos,
+                            this.selectionCenter
+                        );
                         mesh.position.set(
-                            originalPos.x + this.moveOffset.x,
-                            originalPos.y +
+                            rotatedPos.x + this.moveOffset.x,
+                            rotatedPos.y +
                                 this.moveOffset.y +
                                 this.verticalOffset,
-                            originalPos.z + this.moveOffset.z
+                            rotatedPos.z + this.moveOffset.z
                         );
                         previewGroup.add(mesh);
                     }
@@ -210,12 +222,20 @@ class SelectionTool extends BaseTool {
                             previewGeometry,
                             envPreviewMaterial
                         );
+                        const rotatedPos = this.rotatePosition(
+                            new THREE.Vector3(
+                                originalPos.x,
+                                originalPos.y,
+                                originalPos.z
+                            ),
+                            this.selectionCenter
+                        );
                         mesh.position.set(
-                            originalPos.x + this.moveOffset.x,
-                            originalPos.y +
+                            rotatedPos.x + this.moveOffset.x,
+                            rotatedPos.y +
                                 this.moveOffset.y +
                                 this.verticalOffset,
-                            originalPos.z + this.moveOffset.z
+                            rotatedPos.z + this.moveOffset.z
                         );
                         mesh.scale.set(1.2, 1.2, 1.2); // Slightly larger to distinguish from blocks
                         previewGroup.add(mesh);
@@ -436,10 +456,23 @@ class SelectionTool extends BaseTool {
             for (const [posKey, blockId] of this.selectedBlocks) {
                 const originalPos = this.originalPositions.get(posKey);
                 if (originalPos) {
-                    const newX = originalPos.x + this.moveOffset.x;
-                    const newY =
-                        originalPos.y + this.moveOffset.y + this.verticalOffset;
-                    const newZ = originalPos.z + this.moveOffset.z;
+                    // First rotate the position around the center
+                    const rotatedPos = this.rotatePosition(
+                        originalPos,
+                        this.selectionCenter
+                    );
+
+                    // Then apply the move offset
+                    const finalPos = new THREE.Vector3(
+                        rotatedPos.x + this.moveOffset.x,
+                        rotatedPos.y + this.moveOffset.y + this.verticalOffset,
+                        rotatedPos.z + this.moveOffset.z
+                    );
+
+                    // Round the final position to ensure we're on grid points
+                    const newX = Math.round(finalPos.x);
+                    const newY = Math.round(finalPos.y);
+                    const newZ = Math.round(finalPos.z);
                     const newPosKey = `${newX},${newY},${newZ}`;
 
                     // Add new block
@@ -460,28 +493,34 @@ class SelectionTool extends BaseTool {
                 ...this.pendingChangesRef.current.terrain.added,
                 ...addedBlocks,
             };
-            console.log(
-                "pendingChangesRef after adding blocks",
-                this.pendingChangesRef.current
-            );
         }
 
         // Place environment objects
-        console.log("selectedEnvironments", this.selectedEnvironments);
-        console.log("environmentBuilderRef", this.environmentBuilderRef);
         if (this.selectedEnvironments && this.environmentBuilderRef?.current) {
-            console.log("placing environment objects");
             for (const [envKey, envObj] of this.selectedEnvironments) {
-                console.log("envKey", envKey);
-                console.log("envObj", envObj);
                 const originalPos =
                     this.originalEnvironmentPositions.get(envKey);
-                console.log("originalPos", originalPos);
                 if (originalPos) {
-                    const newPos = { ...originalPos };
-                    newPos.x += this.moveOffset.x;
-                    newPos.y += this.moveOffset.y + this.verticalOffset;
-                    newPos.z += this.moveOffset.z;
+                    // First rotate the position around the center
+                    const rotatedPos = this.rotatePosition(
+                        new THREE.Vector3(
+                            originalPos.x,
+                            originalPos.y,
+                            originalPos.z
+                        ),
+                        this.selectionCenter
+                    );
+
+                    // Then apply the move offset
+                    const newPos = {
+                        x: Math.round(rotatedPos.x + this.moveOffset.x),
+                        y: Math.round(
+                            rotatedPos.y +
+                                this.moveOffset.y +
+                                this.verticalOffset
+                        ),
+                        z: Math.round(rotatedPos.z + this.moveOffset.z),
+                    };
 
                     const modelType =
                         this.environmentBuilderRef.current.getModelType(
@@ -492,9 +531,11 @@ class SelectionTool extends BaseTool {
                     // Create a new THREE.Object3D with the correct position, rotation, and scale
                     const tempMesh = new THREE.Object3D();
                     tempMesh.position.set(newPos.x, newPos.y, newPos.z);
+                    // Add rotation based on current rotation state
+                    const rotationY = (this.rotation * Math.PI) / 2;
                     tempMesh.rotation.set(
                         envObj.rotation.x,
-                        envObj.rotation.y,
+                        envObj.rotation.y + rotationY,
                         envObj.rotation.z
                     );
                     tempMesh.scale.set(
@@ -528,6 +569,33 @@ class SelectionTool extends BaseTool {
         this.selectedEnvironments = null;
         this.isMovingSelection = false;
         super.dispose();
+    }
+
+    // Helper method to rotate a position around the center point
+    rotatePosition(pos, center) {
+        const relativeX = pos.x - center.x;
+        const relativeZ = pos.z - center.z;
+
+        let newX, newZ;
+        switch (this.rotation) {
+            case 1: // 90°
+                newX = center.x + relativeZ;
+                newZ = center.z - relativeX;
+                break;
+            case 2: // 180°
+                newX = center.x - relativeX;
+                newZ = center.z - relativeZ;
+                break;
+            case 3: // 270°
+                newX = center.x - relativeZ;
+                newZ = center.z + relativeX;
+                break;
+            default: // 0°
+                newX = pos.x;
+                newZ = pos.z;
+        }
+
+        return new THREE.Vector3(newX, pos.y, newZ);
     }
 }
 
