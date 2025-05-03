@@ -736,7 +736,7 @@ function TerrainBuilder(
             return;
         }
         if (!modeRef.current || !isPlacingRef.current) return;
-        if (currentBlockTypeRef.current?.isEnvironment) {
+        if (currentBlockTypeRef.current?.isEnvironment && placedEnvironmentCountRef.current < 1) {
             if (isFirstBlockRef.current) {
                 if (
                     environmentBuilderRef.current &&
