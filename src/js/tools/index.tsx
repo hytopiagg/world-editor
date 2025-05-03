@@ -7,6 +7,8 @@ import GroundTool from "./GroundTool";
 import PipeTool from "./PipeTool";
 import ToolManager from "./ToolManager";
 import SchematicPlacementTool from "./SchematicPlacementTool";
+import SelectionTool from "./SelectionTool";
+
 export {
     BaseTool,
     WallTool,
@@ -14,4 +16,5 @@ export {
     PipeTool,
     ToolManager,
     SchematicPlacementTool,
+    SelectionTool,
 };

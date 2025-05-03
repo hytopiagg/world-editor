@@ -48,6 +48,7 @@ import {
     SchematicPlacementTool,
     ToolManager,
     WallTool,
+    SelectionTool,
 } from "./tools";
 import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorTool import
 import {
@@ -61,7 +62,6 @@ import {
     handleTerrainMouseDown,
 } from "./utils/TerrainMouseUtils";
 import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
-
 
 function optimizeRenderer(gl) {
     if (gl) {
@@ -124,15 +124,12 @@ function TerrainBuilder(
     const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
     const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
 
-
     useEffect(() => {
         const setupAutoSave = () => {
-
             if (autoSaveIntervalRef.current) {
                 clearInterval(autoSaveIntervalRef.current);
                 autoSaveIntervalRef.current = null;
             }
-
 
             if (isAutoSaveEnabledRef.current) {
                 console.log(
@@ -141,7 +138,6 @@ function TerrainBuilder(
                     } seconds`
                 );
                 autoSaveIntervalRef.current = setInterval(() => {
-
                     if (
                         pendingChangesRef.current?.terrain &&
                         (Object.keys(
@@ -160,9 +156,7 @@ function TerrainBuilder(
             }
         };
 
-
         setupAutoSave();
-
 
         return () => {
             if (autoSaveIntervalRef.current) {
@@ -171,15 +165,12 @@ function TerrainBuilder(
         };
     }, []); // Empty dependency array means this runs once on mount
 
-
     useEffect(() => {
-
         let reloadJustPrevented = false;
 
         const currentUrl = window.location.href;
 
         const handleBeforeUnload = (event) => {
-
             if (localStorage.getItem("IS_DATABASE_CLEARING")) {
                 console.log(
                     "Database is being cleared, skipping unsaved changes check"
@@ -187,12 +178,10 @@ function TerrainBuilder(
                 return;
             }
 
-
             if (!pendingChangesRef || !pendingChangesRef.current) {
                 console.log("No pending changes ref available");
                 return;
             }
-
 
             const hasTerrainChanges =
                 pendingChangesRef.current.terrain &&
@@ -201,11 +190,8 @@ function TerrainBuilder(
                     Object.keys(pendingChangesRef.current.terrain.removed || {})
                         .length > 0);
 
-
             if (hasTerrainChanges) {
                 localStorage.setItem("reload_attempted", "true");
-
-
 
                 reloadJustPrevented = true;
                 event.preventDefault();
@@ -229,7 +215,6 @@ function TerrainBuilder(
 
         const handleVisibilityChange = () => {
             if (document.visibilityState === "visible") {
-
                 const reloadAttempted =
                     localStorage.getItem("reload_attempted") === "true";
                 if (reloadAttempted) {
@@ -259,9 +244,7 @@ function TerrainBuilder(
         window.addEventListener("popstate", handlePopState);
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
-
         window.history.pushState(null, document.title, currentUrl);
-
 
         localStorage.removeItem("reload_attempted");
 
@@ -275,14 +258,10 @@ function TerrainBuilder(
         };
     }, []);
 
-
     const efficientTerrainSave = async () => {
-
-
         if (localStorage.getItem("IS_DATABASE_CLEARING")) {
             return false;
         }
-
 
         if (
             !pendingChangesRef.current ||
@@ -295,9 +274,7 @@ function TerrainBuilder(
             return true;
         }
 
-
         const changesToSave = { ...pendingChangesRef.current.terrain };
-
 
         resetPendingChanges();
 
@@ -305,7 +282,6 @@ function TerrainBuilder(
             const db = await DatabaseManager.getDBConnection();
             const tx = db.transaction(STORES.TERRAIN, "readwrite");
             const store = tx.objectStore(STORES.TERRAIN);
-
 
             if (
                 changesToSave.removed &&
@@ -327,14 +303,12 @@ function TerrainBuilder(
                 );
             }
 
-
             if (
                 changesToSave.added &&
                 Object.keys(changesToSave.added).length > 0
             ) {
                 await Promise.all(
                     Object.entries(changesToSave.added).map(([key, value]) => {
-
                         const putRequest = store.put(value, key);
                         return new Promise((resolve, reject) => {
                             putRequest.onsuccess = resolve;
@@ -348,7 +322,6 @@ function TerrainBuilder(
                     } blocks in DB`
                 );
             }
-
 
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
@@ -364,7 +337,6 @@ function TerrainBuilder(
         }
     };
 
-
     useEffect(() => {
         console.log("Initializing incremental terrain save system");
 
@@ -377,7 +349,6 @@ function TerrainBuilder(
             "Last save time initialized to:",
             new Date(lastSaveTimeRef.current).toLocaleTimeString()
         );
-
 
         const validateTerrain = async () => {
             try {
@@ -405,7 +376,6 @@ function TerrainBuilder(
 
         validateTerrain();
     }, []);
-
 
     const {
         scene,
@@ -736,7 +706,10 @@ function TerrainBuilder(
             return;
         }
         if (!modeRef.current || !isPlacingRef.current) return;
-        if (currentBlockTypeRef.current?.isEnvironment && placedEnvironmentCountRef.current < 1) {
+        if (
+            currentBlockTypeRef.current?.isEnvironment &&
+            placedEnvironmentCountRef.current < 1
+        ) {
             if (isFirstBlockRef.current) {
                 if (
                     environmentBuilderRef.current &&
@@ -789,10 +762,13 @@ function TerrainBuilder(
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
                     if (!terrainRef.current[blockKey]) {
                         addedBlocks[blockKey] = currentBlockTypeRef.current.id;
-                        terrainRef.current[blockKey] = currentBlockTypeRef.current.id;
+                        terrainRef.current[blockKey] =
+                            currentBlockTypeRef.current.id;
                         recentlyPlacedBlocksRef.current.add(blockKey);
-                        placementChangesRef.current.terrain.added[blockKey] = currentBlockTypeRef.current.id;
-                        pendingChangesRef.current.terrain.added[blockKey] = currentBlockTypeRef.current.id;
+                        placementChangesRef.current.terrain.added[blockKey] =
+                            currentBlockTypeRef.current.id;
+                        pendingChangesRef.current.terrain.added[blockKey] =
+                            currentBlockTypeRef.current.id;
                         blockWasPlaced = true;
                     }
                 });
@@ -921,8 +897,6 @@ function TerrainBuilder(
             }
             potentialNewPosition.copy(blockIntersection.point);
 
-
-
             const hitBlock = blockIntersection.block || {
                 x: Math.floor(blockIntersection.point.x),
                 y: Math.floor(blockIntersection.point.y),
@@ -947,7 +921,6 @@ function TerrainBuilder(
                 potentialNewPosition.z = Math.round(potentialNewPosition.z);
             }
 
-
             if (blockIntersection.isGroundPlane) {
                 potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
             } else {
@@ -968,7 +941,6 @@ function TerrainBuilder(
                 }
             }
 
-
             if (axisLockEnabledRef.current) {
                 const originalPos = previewPositionRef.current.clone();
                 const axisLock = lockedAxisRef.current;
@@ -983,7 +955,6 @@ function TerrainBuilder(
                     potentialNewPosition.y = originalPos.y;
                 }
             }
-
 
             let shouldUpdatePreview = true;
             let thresholdMet = false; // Flag to track if raw ground threshold was met
@@ -1560,6 +1531,8 @@ function TerrainBuilder(
             "schematic",
             schematicPlacementTool
         );
+        const selectionTool = new SelectionTool(terrainBuilderProps);
+        toolManagerRef.current.registerTool("selection", selectionTool);
         initialize();
         window.addEventListener("keydown", (event) => {
             if (!event.key) return;
