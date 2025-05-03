@@ -167,7 +167,7 @@ class SelectionTool extends BaseTool {
                         );
                         mesh.position.set(
                             originalPos.x + this.moveOffset.x,
-                            originalPos.y,
+                            originalPos.y + this.moveOffset.y,
                             originalPos.z + this.moveOffset.z
                         );
                         previewGroup.add(mesh);
@@ -190,7 +190,7 @@ class SelectionTool extends BaseTool {
                         );
                         mesh.position.set(
                             originalPos.x + this.moveOffset.x,
-                            originalPos.y,
+                            originalPos.y + this.moveOffset.y,
                             originalPos.z + this.moveOffset.z
                         );
                         mesh.scale.set(1.2, 1.2, 1.2); // Slightly larger to distinguish from blocks
@@ -292,7 +292,10 @@ class SelectionTool extends BaseTool {
 
         // Collect environment objects in the selection area
         console.log("environmentBuilderRef", this.environmentBuilderRef);
-        console.log("originalEnvironmentPositions", this.originalEnvironmentPositions);
+        console.log(
+            "originalEnvironmentPositions",
+            this.originalEnvironmentPositions
+        );
         console.log("selectedEnvironments", this.selectedEnvironments);
         if (this.environmentBuilderRef?.current?.getAllEnvironmentObjects) {
             const environmentObjects =
@@ -312,7 +315,10 @@ class SelectionTool extends BaseTool {
                 console.log("pos.z >= minZ", pos.z >= minZ);
                 console.log("pos.z <= maxZ", pos.z <= maxZ);
                 console.log("pos.y >= envBaseY", pos.y >= envBaseY);
-                console.log("pos.y < envBaseY + this.selectionHeight", pos.y < envBaseY + this.selectionHeight);
+                console.log(
+                    "pos.y < envBaseY + this.selectionHeight",
+                    pos.y < envBaseY + this.selectionHeight
+                );
                 if (
                     pos.x >= minX &&
                     pos.x <= maxX &&
@@ -321,10 +327,9 @@ class SelectionTool extends BaseTool {
                     pos.y >= envBaseY &&
                     pos.y < envBaseY + this.selectionHeight
                 ) {
-                    const envKey = `${envObj.id}`;
+                    const envKey = `${envObj.position.x},${envObj.position.y},${envObj.position.z}`;
                     this.selectedEnvironments.set(envKey, envObj);
                     this.originalEnvironmentPositions.set(envKey, { ...pos });
-
 
                     console.log("envObj", envObj);
                     // Remove the environment object immediately
@@ -364,7 +369,7 @@ class SelectionTool extends BaseTool {
 
         const newOffset = new THREE.Vector3(
             Math.round(currentPosition.x - this.selectionStartPosition.x),
-            0,
+            Math.round(currentPosition.y - this.selectionStartPosition.y),
             Math.round(currentPosition.z - this.selectionStartPosition.z)
         );
 
@@ -389,8 +394,9 @@ class SelectionTool extends BaseTool {
                 const originalPos = this.originalPositions.get(posKey);
                 if (originalPos) {
                     const newX = originalPos.x + this.moveOffset.x;
+                    const newY = originalPos.y + this.moveOffset.y;
                     const newZ = originalPos.z + this.moveOffset.z;
-                    const newPosKey = `${newX},${originalPos.y},${newZ}`;
+                    const newPosKey = `${newX},${newY},${newZ}`;
 
                     // Add new block
                     addedBlocks[newPosKey] = blockId;
@@ -409,24 +415,47 @@ class SelectionTool extends BaseTool {
         }
 
         // Place environment objects
+
+        console.log("selectedEnvironments", this.selectedEnvironments);
+        console.log("environmentBuilderRef", this.environmentBuilderRef);
         if (this.selectedEnvironments && this.environmentBuilderRef?.current) {
+            console.log("placing environment objects");
             for (const [envKey, envObj] of this.selectedEnvironments) {
+                console.log("envKey", envKey);
+                console.log("envObj", envObj);
                 const originalPos =
                     this.originalEnvironmentPositions.get(envKey);
+                console.log("originalPos", originalPos);
                 if (originalPos) {
                     const newPos = { ...originalPos };
                     newPos.x += this.moveOffset.x;
+                    newPos.y += this.moveOffset.y;
                     newPos.z += this.moveOffset.z;
 
-                    const modelType = this.environmentBuilderRef.current.getModelType(
-                        envObj.name,
-                        envObj.modelUrl
+                    const modelType =
+                        this.environmentBuilderRef.current.getModelType(
+                            envObj.name,
+                            envObj.modelUrl
+                        );
+
+                    // Create a new THREE.Object3D with the correct position, rotation, and scale
+                    const tempMesh = new THREE.Object3D();
+                    tempMesh.position.set(newPos.x, newPos.y, newPos.z);
+                    tempMesh.rotation.set(
+                        envObj.rotation.x,
+                        envObj.rotation.y,
+                        envObj.rotation.z
+                    );
+                    tempMesh.scale.set(
+                        envObj.scale.x,
+                        envObj.scale.y,
+                        envObj.scale.z
                     );
 
                     // Create a new environment object at the new position
                     this.environmentBuilderRef.current.placeEnvironmentModelWithoutSaving(
                         modelType,
-                        envObj,
+                        tempMesh,
                         envObj.instanceId
                     );
                 }
