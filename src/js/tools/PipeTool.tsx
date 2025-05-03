@@ -9,6 +9,22 @@ class PipeTool extends BaseTool {
     /**
      * Creates a new PipeTool instance
      */
+    pipeHeight: number;
+    pipeEdgeDepth: number;
+    pipeSides: number;
+    isCtrlPressed: boolean;
+    pipeStartPosition: THREE.Vector3 | null;
+    pipePreview: THREE.InstancedMesh | null;
+    terrainRef: React.RefObject<any>;
+    currentBlockTypeRef: React.RefObject<any>;
+    scene: THREE.Scene;
+    toolManagerRef: React.RefObject<any>;
+    terrainBuilderRef: React.RefObject<any>;
+    undoRedoManager: React.RefObject<any>;
+    placementChangesRef: React.RefObject<any>;
+    isPlacingRef: React.RefObject<any>;
+    previewPositionRef: React.RefObject<any>;
+    
     constructor(terrainBuilderProps) {
         console.log("PipeTool initialized");
         super(terrainBuilderProps);
@@ -806,8 +822,10 @@ class PipeTool extends BaseTool {
 
         const color = this.isCtrlPressed ? 0xff4e4e : 0x4e8eff;
 
+        console.log("PipeTool: Updating pipe preview material");
+        console.log(this.pipePreview);
         if (this.pipePreview.isInstancedMesh) {
-            this.pipePreview.material.color.set(color);
+            (this.pipePreview.material as THREE.MeshBasicMaterial).color.set(color);
         }
     }
     /**

@@ -5,6 +5,10 @@
  * All specific tools (like WallTool, PaintTool, etc.) should extend this class.
  */
 class BaseTool {
+    active: boolean;
+    name: string;
+    tooltip: string;
+    terrainBuilderProps: Object;
     constructor(terrainBuilderProps) {
 
         for (const key in terrainBuilderProps) {
@@ -65,7 +69,7 @@ class BaseTool {
      * @param {any} activationData - Optional data received from activate()
      * @returns {boolean} - Return true if activation is successful, false otherwise.
      */
-    onActivate(activationData) {
+    onActivate(activationData = null) {
 
         return true; // Default implementation assumes success
     }
