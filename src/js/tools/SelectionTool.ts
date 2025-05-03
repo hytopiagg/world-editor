@@ -121,6 +121,7 @@ class SelectionTool extends BaseTool {
                 this.selectedEnvironments = null;
                 this.isMovingSelection = false;
                 this.removeSelectionPreview();
+                this.rotation = 0; // Reset rotation on cancellation
             } else {
                 this.selectionStartPosition = null;
                 this.removeSelectionPreview();
@@ -553,6 +554,14 @@ class SelectionTool extends BaseTool {
                 }
             }
         }
+
+        this.selectedBlocks = null;
+        this.selectedEnvironments = null;
+        this.isMovingSelection = false;
+        this.moveOffset = new THREE.Vector3();
+        this.verticalOffset = 0;
+        this.rotation = 0;
+        this.removeSelectionPreview();
     }
 
     removeSelectionPreview() {
