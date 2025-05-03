@@ -26,8 +26,6 @@ class GroundTool extends BaseTool {
     previewPositionRef = null;
 
     constructor(terrainBuilderProps) {
-        
-
         console.log("GroundTool initialized");
         super(terrainBuilderProps);
 
@@ -82,7 +80,7 @@ class GroundTool extends BaseTool {
             );
         }
     }
-    
+
     onActivate(activationData) {
         super.onActivate(activationData);
 
@@ -117,7 +115,6 @@ class GroundTool extends BaseTool {
      * Handles mouse down events for ground placement
      */
     handleMouseDown(event, position, button) {
-
         if (!this.previewPositionRef || !this.previewPositionRef.current) {
             console.error(
                 "GroundTool: previewPositionRef is undefined in handleMouseDown"
@@ -129,7 +126,6 @@ class GroundTool extends BaseTool {
 
         if (button === 0) {
             if (this.groundStartPosition) {
-
                 if (!this.terrainRef) {
                     console.error(
                         "GroundTool: terrainRef is undefined when attempting to place ground"
@@ -191,15 +187,12 @@ class GroundTool extends BaseTool {
                         Object.keys(changes.terrain.added).length > 0 ||
                         Object.keys(changes.terrain.removed).length > 0;
                     if (hasChanges) {
-
                         if (this.undoRedoManager?.current?.saveUndo) {
                             console.log(
                                 "GroundTool: Calling saveUndo with undoRedoManager.current"
                             );
                             this.undoRedoManager.current.saveUndo(changes);
-                        }
-
-                        else if (
+                        } else if (
                             this.terrainBuilderRef?.current?.undoRedoManager
                                 ?.current?.saveUndo
                         ) {
@@ -238,7 +231,6 @@ class GroundTool extends BaseTool {
                     this.isPlacingRef.current = false;
                 }
             } else {
-
                 console.log("Setting ground start position:", currentPosition); // Use accurate position
                 this.groundStartPosition = currentPosition.clone();
 
@@ -269,7 +261,6 @@ class GroundTool extends BaseTool {
      * Handles mouse move events for ground preview
      */
     handleMouseMove(event, position) {
-
         if (
             this.groundStartPosition &&
             this.previewPositionRef &&
@@ -301,7 +292,7 @@ class GroundTool extends BaseTool {
         } else if (event.key === "6") {
             console.log("GroundTool: Increasing number of sides");
             this.setGroundSides(this.groundSides + 1);
-        } else if (event.key === "Escape" ) {
+        } else if (event.key === "Escape") {
             this.removeGroundPreview();
             this.groundStartPosition = null;
         }
@@ -342,11 +333,8 @@ class GroundTool extends BaseTool {
             });
         }
     }
-    /**
-     * Updates the number of sides for the ground shape
-     */
-    setGroundSides(sides) {
 
+    setGroundSides(sides) {
         const newSides = Math.max(4, Math.min(8, sides));
         if (newSides !== this.groundSides) {
             console.log("Setting ground sides to:", newSides);
@@ -364,26 +352,19 @@ class GroundTool extends BaseTool {
             }
         }
     }
-    /**
-     * Checks if a position is within the ground shape based on area dimensions and number of sides
-     * @param {number} x - X position to check
-     * @param {number} z - Z position to check
-     * @param {number} minX - Minimum X of the area
-     * @param {number} maxX - Maximum X of the area
-     * @param {number} minZ - Minimum Z of the area
-     * @param {number} maxZ - Maximum Z of the area
-     * @param {number} sides - Number of sides (4 = square, 5+ = polygon)
-     * @returns {boolean} True if this position should have a block
-     */
-    isInGroundShape(x, z, minX, maxX, minZ, maxZ, sides = 4) {
 
+    isInGroundShape(
+        x: number,
+        z: number,
+        minX: number,
+        maxX: number,
+        minZ: number,
+        maxZ: number,
+        sides = 4
+    ) {
         if (sides === 4) {
-
             return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
-        }
-
-        else {
-
+        } else {
             const width = maxX - minX + 1;
             const length = maxZ - minZ + 1;
 
@@ -408,34 +389,6 @@ class GroundTool extends BaseTool {
             if (sides >= 8) {
                 return true;
             }
-            /*
-
-
-			let angle = Math.atan2(distFromCenterZ, distFromCenterX);
-			if (angle < 0) angle += Math.PI * 2; // Convert to 0-2π range
-
-			const sectorAngle = (Math.PI * 2) / sides;
-			const sectorIndex = Math.floor(angle / sectorAngle);
-
-			const corner1Angle = sectorIndex * sectorAngle;
-			const corner2Angle = (sectorIndex + 1) * sectorAngle;
-
-			const corner1X = centerX + radius * Math.cos(corner1Angle);
-			const corner1Z = centerZ + radius * Math.sin(corner1Angle);
-			const corner2X = centerX + radius * Math.cos(corner2Angle);
-			const corner2Z = centerZ + radius * Math.sin(corner2Angle);
-
-
-
-			const edgeDistSquared = distanceToLineSegmentSquared(
-				x, z, corner1X, corner1Z, corner2X, corner2Z
-			);
-
-			const vectorX = distFromCenterX / Math.sqrt(distSquared);
-			const vectorZ = distFromCenterZ / Math.sqrt(distSquared);
-			*/
-
-
 
             return true;
         }
@@ -483,7 +436,6 @@ class GroundTool extends BaseTool {
 
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
-
                 if (
                     this.isInGroundShape(
                         x,
@@ -495,7 +447,6 @@ class GroundTool extends BaseTool {
                         this.groundSides
                     )
                 ) {
-
                     for (let y = 0; y < this.groundHeight; y++) {
                         const posKey = `${x},${baseY + y},${z}`;
 
@@ -612,7 +563,6 @@ class GroundTool extends BaseTool {
 
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
-
                 if (
                     this.isInGroundShape(
                         x,
@@ -624,7 +574,6 @@ class GroundTool extends BaseTool {
                         this.groundSides
                     )
                 ) {
-
                     for (let y = 0; y < this.groundHeight; y++) {
                         const posKey = `${x},${baseY + y},${z}`;
 
@@ -702,7 +651,6 @@ class GroundTool extends BaseTool {
      * Updates the ground preview visualization
      */
     updateGroundPreview(startPos, endPos) {
-
         if (!startPos || !endPos) {
             return;
         }
@@ -738,7 +686,6 @@ class GroundTool extends BaseTool {
         }
 
         if (totalBlocks > 0) {
-
             const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
 
             const previewMaterial = new THREE.MeshBasicMaterial({
@@ -793,7 +740,6 @@ class GroundTool extends BaseTool {
      * Updates the ground preview material based on current mode (add or erase)
      */
     updateGroundPreviewMaterial() {
-
         if (!this.groundPreview) {
             return;
         }

@@ -19,7 +19,7 @@ class SelectionTool extends BaseTool {
     terrainBuilderRef = null;
     previewPositionRef = null;
     environmentBuilderRef = null;
-
+    pendingChangesRef = null;
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
         this.name = "SelectionTool";
@@ -34,6 +34,7 @@ class SelectionTool extends BaseTool {
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
             this.environmentBuilderRef =
                 terrainBuilderProps.environmentBuilderRef;
+            this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
         }
     }
 
@@ -68,7 +69,7 @@ class SelectionTool extends BaseTool {
                 this.isMovingSelection
             ) {
                 // Place the selection
-                this.placeSelection(currentPosition);
+                this.placeSelection();
                 this.selectedBlocks = null;
                 this.selectedEnvironments = null;
                 this.isMovingSelection = false;
@@ -285,10 +286,18 @@ class SelectionTool extends BaseTool {
                         // Remove the block immediately
                         removedBlocksObj[posKey] = blockId;
                         delete this.terrainRef.current[posKey];
+                        delete this.pendingChangesRef.current.terrain.added[posKey];
                     }
                 }
             }
         }
+
+        this.pendingChangesRef.current.terrain.removed = {
+            ...this.pendingChangesRef.current.terrain.removed,
+            ...removedBlocksObj,
+        };
+
+        console.log("pendingChangesRef after removing blocks", this.pendingChangesRef.current);
 
         // Collect environment objects in the selection area
         console.log("environmentBuilderRef", this.environmentBuilderRef);
@@ -366,7 +375,7 @@ class SelectionTool extends BaseTool {
         }
     }
 
-    placeSelection(currentPosition) {
+    placeSelection() {
         if (!this.selectedBlocks && !this.selectedEnvironments) return;
 
         // Place terrain blocks
@@ -396,6 +405,11 @@ class SelectionTool extends BaseTool {
                     { skipUndoSave: true }
                 );
             }
+            this.pendingChangesRef.current.terrain.added = {
+                ...this.pendingChangesRef.current.terrain.added,
+                ...addedBlocks,
+            };
+            console.log("pendingChangesRef after adding blocks", this.pendingChangesRef.current);
         }
 
         // Place environment objects

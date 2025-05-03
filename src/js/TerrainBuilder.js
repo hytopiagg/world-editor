@@ -275,6 +275,7 @@ function TerrainBuilder(
         }
 
         const changesToSave = { ...pendingChangesRef.current.terrain };
+        console.log("changesToSave", changesToSave);
 
         resetPendingChanges();
 
