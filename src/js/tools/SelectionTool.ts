@@ -12,6 +12,7 @@ class SelectionTool extends BaseTool {
     originalPositions = new Map();
     originalEnvironmentPositions = new Map();
     selectionHeight = 1;
+    verticalOffset = 0;
 
     terrainRef = null;
     scene = null;
@@ -47,6 +48,7 @@ class SelectionTool extends BaseTool {
         this.selectedEnvironments = null;
         this.isMovingSelection = false;
         this.selectionHeight = 1;
+        this.verticalOffset = 0;
         return true;
     }
 
@@ -122,9 +124,25 @@ class SelectionTool extends BaseTool {
                 this.removeSelectionPreview();
             }
         } else if (event.key === "1") {
-            this.setSelectionHeight(Math.max(1, this.selectionHeight - 1));
+            if (this.isMovingSelection) {
+                this.verticalOffset -= 1;
+                this.updateSelectionPreview(
+                    this.previewPositionRef.current,
+                    this.previewPositionRef.current
+                );
+            } else {
+                this.setSelectionHeight(Math.max(1, this.selectionHeight - 1));
+            }
         } else if (event.key === "2") {
-            this.setSelectionHeight(this.selectionHeight + 1);
+            if (this.isMovingSelection) {
+                this.verticalOffset += 1;
+                this.updateSelectionPreview(
+                    this.previewPositionRef.current,
+                    this.previewPositionRef.current
+                );
+            } else {
+                this.setSelectionHeight(this.selectionHeight + 1);
+            }
         }
     }
 
@@ -169,7 +187,9 @@ class SelectionTool extends BaseTool {
                         );
                         mesh.position.set(
                             originalPos.x + this.moveOffset.x,
-                            originalPos.y + this.moveOffset.y,
+                            originalPos.y +
+                                this.moveOffset.y +
+                                this.verticalOffset,
                             originalPos.z + this.moveOffset.z
                         );
                         previewGroup.add(mesh);
@@ -192,7 +212,9 @@ class SelectionTool extends BaseTool {
                         );
                         mesh.position.set(
                             originalPos.x + this.moveOffset.x,
-                            originalPos.y + this.moveOffset.y,
+                            originalPos.y +
+                                this.moveOffset.y +
+                                this.verticalOffset,
                             originalPos.z + this.moveOffset.z
                         );
                         mesh.scale.set(1.2, 1.2, 1.2); // Slightly larger to distinguish from blocks
@@ -415,7 +437,8 @@ class SelectionTool extends BaseTool {
                 const originalPos = this.originalPositions.get(posKey);
                 if (originalPos) {
                     const newX = originalPos.x + this.moveOffset.x;
-                    const newY = originalPos.y + this.moveOffset.y;
+                    const newY =
+                        originalPos.y + this.moveOffset.y + this.verticalOffset;
                     const newZ = originalPos.z + this.moveOffset.z;
                     const newPosKey = `${newX},${newY},${newZ}`;
 
@@ -444,7 +467,6 @@ class SelectionTool extends BaseTool {
         }
 
         // Place environment objects
-
         console.log("selectedEnvironments", this.selectedEnvironments);
         console.log("environmentBuilderRef", this.environmentBuilderRef);
         if (this.selectedEnvironments && this.environmentBuilderRef?.current) {
@@ -458,7 +480,7 @@ class SelectionTool extends BaseTool {
                 if (originalPos) {
                     const newPos = { ...originalPos };
                     newPos.x += this.moveOffset.x;
-                    newPos.y += this.moveOffset.y;
+                    newPos.y += this.moveOffset.y + this.verticalOffset;
                     newPos.z += this.moveOffset.z;
 
                     const modelType =
