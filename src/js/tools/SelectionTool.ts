@@ -303,22 +303,6 @@ class SelectionTool extends BaseTool {
             console.log("environmentObjects", environmentObjects);
             for (const envObj of environmentObjects) {
                 const pos = envObj.position;
-                console.log("pos", pos);
-                console.log("minX", minX);
-                console.log("maxX", maxX);
-                console.log("minZ", minZ);
-                console.log("maxZ", maxZ);
-                console.log("baseY", baseY);
-                console.log("selectionHeight", this.selectionHeight);
-                console.log("pos.x >= minX", pos.x >= minX);
-                console.log("pos.x <= maxX", pos.x <= maxX);
-                console.log("pos.z >= minZ", pos.z >= minZ);
-                console.log("pos.z <= maxZ", pos.z <= maxZ);
-                console.log("pos.y >= envBaseY", pos.y >= envBaseY);
-                console.log(
-                    "pos.y < envBaseY + this.selectionHeight",
-                    pos.y < envBaseY + this.selectionHeight
-                );
                 if (
                     pos.x >= minX &&
                     pos.x <= maxX &&
