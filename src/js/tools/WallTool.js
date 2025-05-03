@@ -65,8 +65,6 @@ class WallTool extends BaseTool {
 
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
 
-            window.activeTool = this.name;
-
         } else {
             console.error(
                 "WallTool: terrainBuilderProps is undefined in constructor"

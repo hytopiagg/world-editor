@@ -23,8 +23,6 @@ class SeedGeneratorTool extends BaseTool {
             this.scene = terrainBuilderProps.scene;
             this.toolManagerRef = terrainBuilderProps.toolManagerRef;
             this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
-
-            window.activeTool = this.name;
         } else {
             console.error(
                 "SeedGeneratorTool: terrainBuilderProps is undefined in constructor"

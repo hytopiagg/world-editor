@@ -36,8 +36,6 @@ class PipeTool extends BaseTool {
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
 
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
-
-            window.activeTool = this.name;
         } else {
             console.error(
                 "PipeTool: terrainBuilderProps is undefined in constructor"

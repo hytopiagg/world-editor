@@ -9,7 +9,25 @@ class GroundTool extends BaseTool {
     /**
      * Creates a new GroundTool instance
      */
+    groundHeight = 1;
+    groundSides = 4; // Number of sides (4 = square, 5 = pentagon, etc.)
+    isCtrlPressed = false;
+    groundStartPosition = null;
+    groundPreview = null;
+
+    terrainRef = null;
+    currentBlockTypeRef = null;
+    scene = null;
+    toolManagerRef = null;
+    terrainBuilderRef = null;
+    undoRedoManager = null;
+    placementChangesRef = null;
+    isPlacingRef = null;
+    previewPositionRef = null;
+
     constructor(terrainBuilderProps) {
+        
+
         console.log("GroundTool initialized");
         super(terrainBuilderProps);
 
@@ -58,16 +76,15 @@ class GroundTool extends BaseTool {
             console.log("GroundTool: Got isPlacingRef:", !!this.isPlacingRef);
 
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
-
-            window.activeTool = this.name;
         } else {
             console.error(
                 "GroundTool: terrainBuilderProps is undefined in constructor"
             );
         }
     }
-    onActivate() {
-        super.onActivate();
+    
+    onActivate(activationData) {
+        super.onActivate(activationData);
 
         console.log("GroundTool activated");
 
