@@ -249,7 +249,7 @@
   background-color: #7B1FA2;
 }
 
-.generate-button {
+.controls-section > .generate-button {
   padding: 12px;
   background-color: #0084FF;
   color: white;
@@ -259,6 +259,7 @@
   font-weight: bold;
   font-size: 16px;
   transition: background-color 0.3s;
+  width: 100%;
 }
 
 .generate-button:hover {

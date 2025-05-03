@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
-import ChunkManager from "./ChunkManager";
 import { CHUNK_SIZE } from "./ChunkConstants";
+import ChunkManager from "./ChunkManager";
 /**
  * Integrates the chunk system with TerrainBuilder
  */
@@ -33,38 +33,22 @@ class ChunkSystem {
                     : true,
         };
     }
-    /**
-     * Initialize the chunk system
-     * @returns {Promise<void>}
-     */
-    async initialize() {
+
+    async initialize(): Promise<void> {
         if (this._initialized) {
             return;
         }
-        console.time("ChunkSystem.initialize");
-
         this.setupConsoleFiltering();
-
         await BlockTypeRegistry.instance.initialize();
-
-        console.log("Loading essential textures for chunk system...");
-
         await BlockTypeRegistry.instance.preload();
-
         this._chunkManager.setViewDistance(this._options.viewDistance);
         this._chunkManager.setViewDistanceEnabled(
             this._options.viewDistanceEnabled
         );
         this._initialized = true;
-        console.log("Chunk system initialized");
-        console.timeEnd("ChunkSystem.initialize");
-
         this._startBackgroundTasks();
     }
-    /**
-     * Start background tasks after initialization
-     * @private
-     */
+
     async _startBackgroundTasks() {
         setTimeout(async () => {
             try {
@@ -76,10 +60,7 @@ class ChunkSystem {
             }
         }, 1000); // Delay background tasks to prioritize user interaction
     }
-    /**
-     * Set up console filtering to reduce noise in the console output
-     * Call this method once during initialization
-     */
+
     setupConsoleFiltering() {
         const originalConsoleTime = console.time;
         const originalConsoleTimeEnd = console.timeEnd;
@@ -120,20 +101,15 @@ class ChunkSystem {
         };
         console.log("Console filtering set up to reduce noise");
     }
-    /**
-     * Process the render queue
-     */
+
     processRenderQueue() {
         if (!this._initialized) {
             return;
         }
         this._chunkManager.processRenderQueue();
     }
-    /**
-     * Update the chunk system from terrain data
-     * @param {Object} terrainData - The terrain data
-     */
-    updateFromTerrainData(terrainData) {
+
+    updateFromTerrainData(terrainData: Object) {
         if (!this._initialized) {
             return;
         }
@@ -271,11 +247,9 @@ class ChunkSystem {
                             if (ox !== 0 && !isNearXBoundary) continue;
                             if (oy !== 0 && !isNearYBoundary) continue;
                             if (oz !== 0 && !isNearZBoundary) continue;
-                            const neighborChunkId = `${
-                                originX + ox * CHUNK_SIZE
-                            },${originY + oy * CHUNK_SIZE},${
-                                originZ + oz * CHUNK_SIZE
-                            }`;
+                            const neighborChunkId = `${originX + ox * CHUNK_SIZE
+                                },${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE
+                                }`;
 
                             chunksToUpdate.add(neighborChunkId);
 
@@ -364,11 +338,9 @@ class ChunkSystem {
                             if (ox !== 0 && !isNearXBoundary) continue;
                             if (oy !== 0 && !isNearYBoundary) continue;
                             if (oz !== 0 && !isNearZBoundary) continue;
-                            const neighborChunkId = `${
-                                originX + ox * CHUNK_SIZE
-                            },${originY + oy * CHUNK_SIZE},${
-                                originZ + oz * CHUNK_SIZE
-                            }`;
+                            const neighborChunkId = `${originX + ox * CHUNK_SIZE
+                                },${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE
+                                }`;
 
                             chunksToUpdate.add(neighborChunkId);
 
@@ -577,8 +549,7 @@ class ChunkSystem {
             return;
         }
         console.log(
-            `Setting ChunkSystem bulk loading mode to: ${
-                isLoading ? "ON" : "OFF"
+            `Setting ChunkSystem bulk loading mode to: ${isLoading ? "ON" : "OFF"
             }`
         );
         this._chunkManager.setBulkLoadingMode(isLoading, priorityDistance);
@@ -595,8 +566,7 @@ class ChunkSystem {
         }
         const skipNeighbors = options.skipNeighbors === true;
         console.log(
-            `ChunkSystem: Forcing update for ${chunkKeys.length} chunks${
-                skipNeighbors ? " (skipping neighbors)" : ""
+            `ChunkSystem: Forcing update for ${chunkKeys.length} chunks${skipNeighbors ? " (skipping neighbors)" : ""
             }`
         );
 

@@ -5,11 +5,10 @@
  * with support for customization parameters like seed value, cave density,
  * biome size, mountain height, etc.
  */
-import * as THREE from "three";
-import BaseTool from "./BaseTool";
-import { generateHytopiaWorld } from "../utils/TerrainGenerator";
-import { getBlockTypes } from "../managers/BlockTypesManager";
 import "../../css/SeedGeneratorTool.css";
+import { getBlockTypes } from "../managers/BlockTypesManager";
+import { generateHytopiaWorld } from "../utils/TerrainGenerator";
+import BaseTool from "./BaseTool";
 class SeedGeneratorTool extends BaseTool {
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
@@ -1105,10 +1104,6 @@ class SeedGeneratorTool extends BaseTool {
                 terrainData
             );
             console.log("Terrain data saved successfully to database");
-
-            if (this.terrainBuilderRef && this.terrainBuilderRef.current) {
-                await this.terrainBuilderRef.current.refreshTerrainFromDB();
-            }
         } catch (error) {
             console.error("Error force saving terrain:", error);
         }
