@@ -398,10 +398,8 @@ class SelectionTool extends BaseTool {
 
         if (!newOffset.equals(this.moveOffset)) {
             this.moveOffset.copy(newOffset);
-            this.updateSelectionPreview(
-                this.selectionStartPosition.clone().add(this.moveOffset),
-                this.previewPositionRef.current
-            );
+            // Only update the preview with the current position
+            this.updateSelectionPreview(currentPosition, currentPosition);
         }
     }
 
