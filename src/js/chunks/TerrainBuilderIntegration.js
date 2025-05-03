@@ -1,5 +1,3 @@
-
-
 import * as THREE from "three";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
 import BlockMaterial from "../blocks/BlockMaterial";
@@ -44,14 +42,11 @@ let chunkSystem = null;
  */
 export const initChunkSystem = async (scene, options = {}) => {
     if (!chunkSystem) {
-
         chunkSystem = new ChunkSystem(scene, options);
 
         await chunkSystem.initialize();
 
-
         await rebuildTextureAtlas();
-
 
         const verifyTextures = async (attempt = 1) => {
             console.log(`Texture verification check #${attempt}`);
@@ -62,7 +57,6 @@ export const initChunkSystem = async (scene, options = {}) => {
                 );
                 await rebuildTextureAtlas();
             } else {
-
                 refreshChunkMaterials();
 
                 processChunkRenderQueue();
@@ -108,14 +102,7 @@ export const processChunkRenderQueue = () => {
         return;
     }
 
-    if (chunkSystem._scene.camera) {
-        chunkSystem.updateCamera(chunkSystem._scene.camera);
-    } else {
-        console.warn(
-            "No camera set in chunk system for render queue processing"
-        );
-    }
-
+    chunkSystem.updateCamera();
     chunkSystem.processRenderQueue(true);
 };
 /**
@@ -137,7 +124,6 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
         } blocks (defer: ${onlyVisibleChunks})`
     );
 
-
     console.log("onlyVisibleChunks", onlyVisibleChunks);
     console.log("chunkSystem._scene.camera", chunkSystem._scene.camera);
     if (onlyVisibleChunks && chunkSystem._scene.camera) {
@@ -148,18 +134,14 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
         );
         chunkSystem.setBulkLoadingMode(true, priorityDistance);
     } else {
-
         chunkSystem.setBulkLoadingMode(false);
     }
 
-
     chunkSystem.updateFromTerrainData(terrainData);
-
 
     if (!updateTerrainChunks.spatialHashUpdating) {
         updateTerrainChunks.spatialHashUpdating = true;
         try {
-
             import("../managers/SpatialGridManager")
                 .then(({ SpatialGridManager }) => {
                     const spatialGridManager = new SpatialGridManager();
@@ -207,7 +189,6 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
             console.log("Processing chunk render queue for nearby chunks...");
             chunkSystem._chunkManager.processRenderQueue(true);
 
-
             setTimeout(() => {
                 console.log("Loading complete, disabling bulk loading mode");
                 chunkSystem.setBulkLoadingMode(false);
@@ -241,15 +222,10 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
     }
     console.time("TerrainBuilderIntegration.updateTerrainBlocks");
 
-
     if (Object.keys(addedBlocks).length > 0) {
         const firstBlockKey = Object.keys(addedBlocks)[0];
         const [x, y, z] = firstBlockKey.split(",").map(Number);
-
-
-
     }
-
 
     const addedBlocksArray = Object.entries(addedBlocks).map(
         ([posKey, blockId]) => {
@@ -262,7 +238,6 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
     );
 
     if (addedBlocksArray.length > 0) {
-
         const blockIdsToPreload = new Set();
 
         addedBlocksArray.forEach((block) => {
@@ -273,12 +248,8 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
             blockIdsToPreload.size > 0 &&
             typeof BlockTypeRegistry !== "undefined"
         ) {
-
             setTimeout(async () => {
                 try {
-
-
-
                     const newBlockTypesToPreload = [];
 
                     blockIdsToPreload.forEach((id) => {
@@ -289,7 +260,6 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
                         if (!blockType) return;
 
                         BlockTypeRegistry.instance.markBlockTypeAsEssential(id);
-
 
                         const needsPreload =
                             blockType.needsTexturePreload?.() ?? false;
@@ -328,8 +298,6 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
             };
         }
     );
-
-
 
     chunkSystem.updateBlocks(addedBlocksArray, removedBlocksArray);
 
@@ -456,7 +424,6 @@ export const refreshChunkMaterials = () => {
         return false;
     }
     try {
-
         const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
 
         BlockMaterial.instance.setTextureAtlas(textureAtlas);
@@ -477,7 +444,6 @@ export const rebuildTextureAtlas = async () => {
 
     THREE.Texture.DEFAULT_FILTER = THREE.NearestFilter;
     try {
-
         const atlasTexture =
             await BlockTextureAtlas.instance.rebuildTextureAtlas();
 
@@ -499,11 +465,9 @@ export const rebuildTextureAtlas = async () => {
             processChunkRenderQueue();
         }
 
-
         const maxRetries = 3;
         const retryDelay = 500;
         const retryMissingTextures = async (attempt = 1) => {
-
             if (
                 BlockTextureAtlas.instance._missingTextureWarnings &&
                 BlockTextureAtlas.instance._missingTextureWarnings.size > 0

@@ -38,7 +38,6 @@ class ChunkSystem {
         if (this._initialized) {
             return;
         }
-        this.setupConsoleFiltering();
         await BlockTypeRegistry.instance.initialize();
         await BlockTypeRegistry.instance.preload();
         this._chunkManager.setViewDistance(this._options.viewDistance);
@@ -46,60 +45,6 @@ class ChunkSystem {
             this._options.viewDistanceEnabled
         );
         this._initialized = true;
-        this._startBackgroundTasks();
-    }
-
-    async _startBackgroundTasks() {
-        setTimeout(async () => {
-            try {
-                console.log("Starting background tasks...");
-
-                console.log("Background tasks completed");
-            } catch (error) {
-                console.warn("Error in background tasks:", error);
-            }
-        }, 1000); // Delay background tasks to prioritize user interaction
-    }
-
-    setupConsoleFiltering() {
-        const originalConsoleTime = console.time;
-        const originalConsoleTimeEnd = console.timeEnd;
-        const originalConsoleLog = console.log;
-
-        const timeFilterPatterns = [
-            /getTextureUVCoordinateSync/,
-            /calculateVertexColor/,
-        ];
-        const logFilterPatterns = [
-            /buildMeshes-.+-getTextureUVCoordinateSync/,
-            /buildMeshes-.+-calculateVertexColor/,
-        ];
-
-        console.time = function (label) {
-            if (timeFilterPatterns.some((pattern) => pattern.test(label))) {
-                return; // Skip this timer
-            }
-            originalConsoleTime.call(console, label);
-        };
-
-        console.timeEnd = function (label) {
-            if (timeFilterPatterns.some((pattern) => pattern.test(label))) {
-                return; // Skip this timer
-            }
-            originalConsoleTimeEnd.call(console, label);
-        };
-
-        console.log = function (...args) {
-            if (args.length > 0 && typeof args[0] === "string") {
-                if (
-                    logFilterPatterns.some((pattern) => pattern.test(args[0]))
-                ) {
-                    return; // Skip this log
-                }
-            }
-            originalConsoleLog.apply(console, args);
-        };
-        console.log("Console filtering set up to reduce noise");
     }
 
     processRenderQueue() {
@@ -113,9 +58,6 @@ class ChunkSystem {
         if (!this._initialized) {
             return;
         }
-        console.log("updateFromTerrainData()");
-        console.log(Object.keys(terrainData));
-        console.log(Object.keys(terrainData)[111700]);
         let chunks = [];
         const chunkBlocks = new Map();
 
@@ -140,15 +82,12 @@ class ChunkSystem {
             chunkBlocks.get(chunkId)[index] = blockId;
         }
 
-        console.log("chunkBlocks", chunkBlocks);
         for (const [chunkId, blocks] of chunkBlocks.entries()) {
-            console.log("chunkId", chunkId);
             const [x, y, z] = chunkId.split(",").map(Number);
             chunks.push({
                 originCoordinate: { x, y, z },
                 blocks,
             });
-            console.log("pushing chunk", chunks[chunks.length - 1]);
         }
 
         const validChunks = [];
@@ -168,7 +107,6 @@ class ChunkSystem {
                 validChunks.push(chunk);
             }
         }
-        console.log("validChunks", validChunks);
         chunks = validChunks;
 
         this._chunkManager.updateChunks(chunks);
@@ -185,7 +123,6 @@ class ChunkSystem {
         ) {
             return;
         }
-        console.time("ChunkSystem.updateBlocks");
 
         const chunksToUpdate = new Set();
         const chunkOptions = new Map();
@@ -278,7 +215,6 @@ class ChunkSystem {
             let chunk = this._chunkManager._chunks.get(chunkId);
 
             if (!chunk) {
-                console.log(`Creating new chunk for ${chunkId}`);
 
                 const blocks = new Uint8Array(
                     CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
@@ -369,7 +305,6 @@ class ChunkSystem {
                 this._chunkManager.queueChunkForRender(chunk, options);
             }
         }
-        console.timeEnd("ChunkSystem.updateBlocks");
     }
     /**
      * Check if a block is on the chunk boundary
@@ -483,7 +418,6 @@ class ChunkSystem {
         if (!this._initialized) {
             return;
         }
-        console.log("Clearing all chunks from the chunk system");
 
         const chunks = Array.from(this._chunkManager._chunks.values());
 
@@ -509,7 +443,6 @@ class ChunkSystem {
         if (this._scene) {
             this._scene.updateMatrixWorld(true);
         }
-        console.log("All chunks cleared from the chunk system");
     }
     /**
      * Force an update of chunk visibility
@@ -548,10 +481,6 @@ class ChunkSystem {
             );
             return;
         }
-        console.log(
-            `Setting ChunkSystem bulk loading mode to: ${isLoading ? "ON" : "OFF"
-            }`
-        );
         this._chunkManager.setBulkLoadingMode(isLoading, priorityDistance);
     }
     /**
@@ -565,12 +494,6 @@ class ChunkSystem {
             return;
         }
         const skipNeighbors = options.skipNeighbors === true;
-        console.log(
-            `ChunkSystem: Forcing update for ${chunkKeys.length} chunks${skipNeighbors ? " (skipping neighbors)" : ""
-            }`
-        );
-
-
 
         for (const chunkKey of chunkKeys) {
             const chunk = this._chunkManager.getChunkByKey(chunkKey);
@@ -578,62 +501,39 @@ class ChunkSystem {
                 this._chunkManager.queueChunkForRender(chunk, {
                     skipNeighbors,
                 });
-
-
-
-
-
-
-
-
-
-
-
-
             }
         }
 
         this.processRenderQueue();
     }
-    /**
-     * Update the camera position and matrices for visibility culling
-     * @param {THREE.Camera} camera - The camera to use for culling
-     */
-    updateCamera(camera) {
-        if (!camera) {
-            console.warn("No camera provided for chunk system");
-            return;
+
+    updateCamera() {
+        if ((this._scene as any).camera) {
+            const camera = (this._scene as any).camera;
+
+            camera.updateMatrixWorld(true);
+            camera.updateProjectionMatrix();
+
+            const projScreenMatrix = new THREE.Matrix4();
+            projScreenMatrix.multiplyMatrices(
+                camera.projectionMatrix,
+                camera.matrixWorldInverse
+            );
+            const frustum = new THREE.Frustum();
+            frustum.setFromProjectionMatrix(projScreenMatrix);
+
+            this._cameraPosition = camera.position.clone();
+            this._frustum = frustum;
         }
-
-        camera.updateMatrixWorld(true);
-        camera.updateProjectionMatrix();
-
-        const projScreenMatrix = new THREE.Matrix4();
-        projScreenMatrix.multiplyMatrices(
-            camera.projectionMatrix,
-            camera.matrixWorldInverse
-        );
-        const frustum = new THREE.Frustum();
-        frustum.setFromProjectionMatrix(projScreenMatrix);
-
-        this._cameraPosition = camera.position.clone();
-        this._frustum = frustum;
     }
-    /**
-     * Reset the chunk system - clear all chunks and prepare for new data
-     */
+
     reset() {
-        console.log("Resetting chunk system");
-
         this.clearChunks();
-
         if (this._nonVisibleBlocks) {
             this._nonVisibleBlocks = {};
         }
-
         this._chunkManager._renderChunkQueue = [];
         this._chunkManager._pendingRenderChunks.clear();
-        console.log("Chunk system reset complete");
     }
 }
 export default ChunkSystem;

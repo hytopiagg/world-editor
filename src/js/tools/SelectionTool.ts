@@ -1,13 +1,16 @@
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
+import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
 
 class SelectionTool extends BaseTool {
     selectionStartPosition = null;
     selectionPreview = null;
     selectedBlocks = null;
+    selectedEnvironments = null;
     isMovingSelection = false;
     moveOffset = new THREE.Vector3();
     originalPositions = new Map();
+    originalEnvironmentPositions = new Map();
     selectionHeight = 1;
 
     terrainRef = null;
@@ -15,6 +18,7 @@ class SelectionTool extends BaseTool {
     toolManagerRef = null;
     terrainBuilderRef = null;
     previewPositionRef = null;
+    environmentBuilderRef = null;
 
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
@@ -28,6 +32,8 @@ class SelectionTool extends BaseTool {
             this.toolManagerRef = terrainBuilderProps.toolManagerRef;
             this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
+            this.environmentBuilderRef =
+                terrainBuilderProps.environmentBuilderRef;
         }
     }
 
@@ -36,6 +42,7 @@ class SelectionTool extends BaseTool {
         this.selectionStartPosition = null;
         this.removeSelectionPreview();
         this.selectedBlocks = null;
+        this.selectedEnvironments = null;
         this.isMovingSelection = false;
         this.selectionHeight = 1;
         return true;
@@ -46,6 +53,7 @@ class SelectionTool extends BaseTool {
         this.removeSelectionPreview();
         this.selectionStartPosition = null;
         this.selectedBlocks = null;
+        this.selectedEnvironments = null;
         this.isMovingSelection = false;
     }
 
@@ -55,10 +63,14 @@ class SelectionTool extends BaseTool {
         const currentPosition = this.previewPositionRef.current;
 
         if (button === 0) {
-            if (this.selectedBlocks && this.isMovingSelection) {
+            if (
+                (this.selectedBlocks || this.selectedEnvironments) &&
+                this.isMovingSelection
+            ) {
                 // Place the selection
                 this.placeSelection(currentPosition);
                 this.selectedBlocks = null;
+                this.selectedEnvironments = null;
                 this.isMovingSelection = false;
                 this.removeSelectionPreview();
                 this.deactivate();
@@ -87,7 +99,10 @@ class SelectionTool extends BaseTool {
                 this.selectionStartPosition,
                 currentPosition
             );
-        } else if (this.selectedBlocks && this.isMovingSelection) {
+        } else if (
+            (this.selectedBlocks || this.selectedEnvironments) &&
+            this.isMovingSelection
+        ) {
             // Update selection position
             this.updateSelectionPosition(currentPosition);
         }
@@ -95,8 +110,9 @@ class SelectionTool extends BaseTool {
 
     handleKeyDown(event) {
         if (event.key === "Escape") {
-            if (this.selectedBlocks) {
+            if (this.selectedBlocks || this.selectedEnvironments) {
                 this.selectedBlocks = null;
+                this.selectedEnvironments = null;
                 this.isMovingSelection = false;
                 this.removeSelectionPreview();
             } else {
@@ -130,8 +146,8 @@ class SelectionTool extends BaseTool {
         // Create a group to hold all preview meshes
         const previewGroup = new THREE.Group();
 
-        // If we're in moving mode, use the actual selected blocks
-        if (this.isMovingSelection && this.selectedBlocks) {
+        // If we're in moving mode, use the actual selected blocks and environments
+        if (this.isMovingSelection) {
             const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
             const previewMaterial = new THREE.MeshBasicMaterial({
                 color: 0x4eff4e, // Green for moving
@@ -141,19 +157,45 @@ class SelectionTool extends BaseTool {
             });
 
             // Create preview for each selected block with offset
-            for (const [posKey, blockId] of this.selectedBlocks) {
-                const originalPos = this.originalPositions.get(posKey);
-                if (originalPos) {
-                    const mesh = new THREE.Mesh(
-                        previewGeometry,
-                        previewMaterial
-                    );
-                    mesh.position.set(
-                        originalPos.x + this.moveOffset.x,
-                        originalPos.y,
-                        originalPos.z + this.moveOffset.z
-                    );
-                    previewGroup.add(mesh);
+            if (this.selectedBlocks) {
+                for (const [posKey, blockId] of this.selectedBlocks) {
+                    const originalPos = this.originalPositions.get(posKey);
+                    if (originalPos) {
+                        const mesh = new THREE.Mesh(
+                            previewGeometry,
+                            previewMaterial
+                        );
+                        mesh.position.set(
+                            originalPos.x + this.moveOffset.x,
+                            originalPos.y,
+                            originalPos.z + this.moveOffset.z
+                        );
+                        previewGroup.add(mesh);
+                    }
+                }
+            }
+
+            // Create preview for each selected environment object
+            if (this.selectedEnvironments) {
+                const envPreviewMaterial = previewMaterial.clone();
+                envPreviewMaterial.color.setHex(0x4eff9e); // Slightly different green for environments
+
+                for (const [envKey, envObj] of this.selectedEnvironments) {
+                    const originalPos =
+                        this.originalEnvironmentPositions.get(envKey);
+                    if (originalPos) {
+                        const mesh = new THREE.Mesh(
+                            previewGeometry,
+                            envPreviewMaterial
+                        );
+                        mesh.position.set(
+                            originalPos.x + this.moveOffset.x,
+                            originalPos.y,
+                            originalPos.z + this.moveOffset.z
+                        );
+                        mesh.scale.set(1.2, 1.2, 1.2); // Slightly larger to distinguish from blocks
+                        previewGroup.add(mesh);
+                    }
                 }
             }
         } else {
@@ -192,7 +234,15 @@ class SelectionTool extends BaseTool {
     }
 
     completeSelection(endPos) {
-        if (!this.selectionStartPosition || !this.terrainRef?.current) return;
+        console.log("completeSelection", this.selectionStartPosition, endPos);
+        console.log("terrainBuilderRef", this.terrainBuilderRef);
+        console.log("environmentBuilderRef", this.environmentBuilderRef);
+        if (
+            !this.selectionStartPosition ||
+            !this.terrainRef?.current ||
+            !this.environmentBuilderRef?.current
+        )
+            return;
 
         const minX = Math.min(
             Math.round(this.selectionStartPosition.x),
@@ -211,9 +261,12 @@ class SelectionTool extends BaseTool {
             Math.round(endPos.z)
         );
         const baseY = Math.round(this.selectionStartPosition.y);
+        const envBaseY = baseY + ENVIRONMENT_OBJECT_Y_OFFSET;
 
         this.selectedBlocks = new Map();
+        this.selectedEnvironments = new Map();
         this.originalPositions = new Map();
+        this.originalEnvironmentPositions = new Map();
         const removedBlocksObj = {};
 
         // Collect all blocks in the selection area and remove them
@@ -237,7 +290,57 @@ class SelectionTool extends BaseTool {
             }
         }
 
-        if (this.selectedBlocks.size > 0) {
+        // Collect environment objects in the selection area
+        console.log("environmentBuilderRef", this.environmentBuilderRef);
+        console.log("originalEnvironmentPositions", this.originalEnvironmentPositions);
+        console.log("selectedEnvironments", this.selectedEnvironments);
+        if (this.environmentBuilderRef?.current?.getAllEnvironmentObjects) {
+            const environmentObjects =
+                this.environmentBuilderRef.current.getAllEnvironmentObjects();
+            console.log("environmentObjects", environmentObjects);
+            for (const envObj of environmentObjects) {
+                const pos = envObj.position;
+                console.log("pos", pos);
+                console.log("minX", minX);
+                console.log("maxX", maxX);
+                console.log("minZ", minZ);
+                console.log("maxZ", maxZ);
+                console.log("baseY", baseY);
+                console.log("selectionHeight", this.selectionHeight);
+                console.log("pos.x >= minX", pos.x >= minX);
+                console.log("pos.x <= maxX", pos.x <= maxX);
+                console.log("pos.z >= minZ", pos.z >= minZ);
+                console.log("pos.z <= maxZ", pos.z <= maxZ);
+                console.log("pos.y >= envBaseY", pos.y >= envBaseY);
+                console.log("pos.y < envBaseY + this.selectionHeight", pos.y < envBaseY + this.selectionHeight);
+                if (
+                    pos.x >= minX &&
+                    pos.x <= maxX &&
+                    pos.z >= minZ &&
+                    pos.z <= maxZ &&
+                    pos.y >= envBaseY &&
+                    pos.y < envBaseY + this.selectionHeight
+                ) {
+                    const envKey = `${envObj.id}`;
+                    this.selectedEnvironments.set(envKey, envObj);
+                    this.originalEnvironmentPositions.set(envKey, { ...pos });
+
+
+                    console.log("envObj", envObj);
+                    // Remove the environment object immediately
+                    this.environmentBuilderRef.current.removeInstance(
+                        envObj.modelUrl,
+                        envObj.instanceId,
+                        false
+                    );
+                }
+            }
+        }
+
+        if (
+            this.selectedBlocks.size > 0 ||
+            this.selectedEnvironments.size > 0
+        ) {
             // Update terrain to reflect removed blocks
             if (this.terrainBuilderRef?.current) {
                 this.terrainBuilderRef.current.updateTerrainBlocks(
@@ -257,7 +360,7 @@ class SelectionTool extends BaseTool {
     }
 
     updateSelectionPosition(currentPosition) {
-        if (!this.selectedBlocks || !this.selectionStartPosition) return;
+        if (!this.selectedBlocks && !this.selectedEnvironments) return;
 
         const newOffset = new THREE.Vector3(
             Math.round(currentPosition.x - this.selectionStartPosition.x),
@@ -275,31 +378,59 @@ class SelectionTool extends BaseTool {
     }
 
     placeSelection(currentPosition) {
-        if (!this.selectedBlocks || !this.terrainRef?.current) return;
+        if (!this.selectedBlocks && !this.selectedEnvironments) return;
 
-        const addedBlocks = {};
+        // Place terrain blocks
+        if (this.selectedBlocks && this.terrainRef?.current) {
+            const addedBlocks = {};
 
-        // Place blocks in new positions
-        for (const [posKey, blockId] of this.selectedBlocks) {
-            const originalPos = this.originalPositions.get(posKey);
-            if (originalPos) {
-                const newX = originalPos.x + this.moveOffset.x;
-                const newZ = originalPos.z + this.moveOffset.z;
-                const newPosKey = `${newX},${originalPos.y},${newZ}`;
+            // Place blocks in new positions
+            for (const [posKey, blockId] of this.selectedBlocks) {
+                const originalPos = this.originalPositions.get(posKey);
+                if (originalPos) {
+                    const newX = originalPos.x + this.moveOffset.x;
+                    const newZ = originalPos.z + this.moveOffset.z;
+                    const newPosKey = `${newX},${originalPos.y},${newZ}`;
 
-                // Add new block
-                addedBlocks[newPosKey] = blockId;
-                this.terrainRef.current[newPosKey] = blockId;
+                    // Add new block
+                    addedBlocks[newPosKey] = blockId;
+                    this.terrainRef.current[newPosKey] = blockId;
+                }
+            }
+
+            // Update terrain
+            if (this.terrainBuilderRef?.current) {
+                this.terrainBuilderRef.current.updateTerrainBlocks(
+                    addedBlocks,
+                    {},
+                    { skipUndoSave: true }
+                );
             }
         }
 
-        // Update terrain
-        if (this.terrainBuilderRef?.current) {
-            this.terrainBuilderRef.current.updateTerrainBlocks(
-                addedBlocks,
-                {},
-                { skipUndoSave: true }
-            );
+        // Place environment objects
+        if (this.selectedEnvironments && this.environmentBuilderRef?.current) {
+            for (const [envKey, envObj] of this.selectedEnvironments) {
+                const originalPos =
+                    this.originalEnvironmentPositions.get(envKey);
+                if (originalPos) {
+                    const newPos = { ...originalPos };
+                    newPos.x += this.moveOffset.x;
+                    newPos.z += this.moveOffset.z;
+
+                    const modelType = this.environmentBuilderRef.current.getModelType(
+                        envObj.name,
+                        envObj.modelUrl
+                    );
+
+                    // Create a new environment object at the new position
+                    this.environmentBuilderRef.current.placeEnvironmentModelWithoutSaving(
+                        modelType,
+                        envObj,
+                        envObj.instanceId
+                    );
+                }
+            }
         }
     }
 
@@ -314,6 +445,7 @@ class SelectionTool extends BaseTool {
         this.removeSelectionPreview();
         this.selectionStartPosition = null;
         this.selectedBlocks = null;
+        this.selectedEnvironments = null;
         this.isMovingSelection = false;
         super.dispose();
     }

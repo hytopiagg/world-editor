@@ -7,3 +7,5 @@ export const MIN_UNDO_STATES = 30;
 export const UNDO_THRESHOLD = 60;
 
 export const MAX_ENVIRONMENT_OBJECTS = 5000;
+
+export const ENVIRONMENT_OBJECT_Y_OFFSET = -0.5;

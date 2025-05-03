@@ -1501,6 +1501,7 @@ function TerrainBuilder(
             currentBlockTypeRef: currentBlockTypeRef,
             previewPositionRef: previewPositionRef,
             terrainBuilderRef: ref, // Add a reference to this component
+            environmentBuilderRef: environmentBuilderRef,
             undoRedoManager: undoRedoManager, // Pass undoRedoManager directly without wrapping
             placementChangesRef: placementChangesRef, // Add placement changes ref for tracking undo/redo
             isPlacingRef: isPlacingRef, // Add placing state ref

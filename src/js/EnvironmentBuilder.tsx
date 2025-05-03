@@ -9,7 +9,7 @@ import {
     forwardRef,
 } from "react";
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
-import { MAX_ENVIRONMENT_OBJECTS } from "./Constants";
+import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 import { CustomModel } from "./types/DatabaseTypes";
 export const environmentModels = (() => {
     try {
@@ -63,7 +63,7 @@ const EnvironmentBuilder = (
     const placeholderMeshRef = useRef(null);
     const loadedModels = useRef(new Map());
     const instancedMeshes = useRef(new Map());
-    const positionOffset = useRef(new THREE.Vector3(0, -0.5, 0));
+    const positionOffset = useRef(new THREE.Vector3(0, ENVIRONMENT_OBJECT_Y_OFFSET, 0));
     const placementSizeRef = useRef(placementSize);
     const lastPreviewTransform = useRef({
         scale: new THREE.Vector3(1, 1, 1),
@@ -555,26 +555,35 @@ const EnvironmentBuilder = (
         }
     };
 
+
+    const getModelType = (modelName, modelUrl) => {
+        return environmentModels.find(
+            (model) =>
+                model.name === modelName ||
+                model.modelUrl === modelUrl
+        );
+    };  
+
     const placeEnvironmentModelWithoutSaving = (
-        blockType,
+        modelType,
         mesh,
         savedInstanceId = null
     ) => {
         console.log(
             "placeEnvironmentModelWithoutSaving",
-            blockType,
+            modelType,
             mesh,
             savedInstanceId
         );
-        if (!blockType || !mesh) {
-            console.warn(`blockType and mesh null`);
+        if (!modelType || !mesh) {
+            console.warn(`modelType and mesh null`);
             return null;
         }
         const modelData = environmentModels.find(
-            (model) => model.id === blockType.id
+            (model) => model.id === modelType.id
         );
         if (!modelData) {
-            console.warn(`Could not find model with ID ${blockType.id}`);
+            console.warn(`Could not find model with ID ${modelType.id}`);
             return null;
         }
         const modelUrl = modelData.modelUrl;
@@ -811,6 +820,8 @@ const EnvironmentBuilder = (
             placeholderMeshRef.current.position,
             placementSizeRef.current
         );
+        console.log("placeholderMeshRef.current.position", placeholderMeshRef.current.position);
+        console.log("placementPositions", placementPositions);
         const addedObjects = [];
 
 
@@ -1221,6 +1232,7 @@ const EnvironmentBuilder = (
             rotatePreview,
             setScale,
             placeEnvironmentModel,
+            placeEnvironmentModelWithoutSaving,
             preloadModels,
             clearEnvironments,
             removeInstance,
@@ -1233,7 +1245,8 @@ const EnvironmentBuilder = (
             endUndoRedoOperation,
             updateLocalStorage,
             getAllEnvironmentObjects,
-            updateEnvironmentForUndoRedo
+            updateEnvironmentForUndoRedo,
+            getModelType
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );
