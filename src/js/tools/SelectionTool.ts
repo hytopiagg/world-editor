@@ -20,6 +20,7 @@ class SelectionTool extends BaseTool {
     previewPositionRef = null;
     environmentBuilderRef = null;
     pendingChangesRef = null;
+    selectionCenter = null;
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
         this.name = "SelectionTool";
@@ -270,6 +271,12 @@ class SelectionTool extends BaseTool {
         this.originalEnvironmentPositions = new Map();
         const removedBlocksObj = {};
 
+        // Calculate center of selection
+        let totalX = 0;
+        let totalY = 0;
+        let totalZ = 0;
+        let blockCount = 0;
+
         // Collect all blocks in the selection area and remove them
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
@@ -283,13 +290,30 @@ class SelectionTool extends BaseTool {
                             new THREE.Vector3(x, baseY + y, z)
                         );
 
+                        // Add to center calculation
+                        totalX += x;
+                        totalY += baseY + y;
+                        totalZ += z;
+                        blockCount++;
+
                         // Remove the block immediately
                         removedBlocksObj[posKey] = blockId;
                         delete this.terrainRef.current[posKey];
-                        delete this.pendingChangesRef.current.terrain.added[posKey];
+                        delete this.pendingChangesRef.current.terrain.added[
+                            posKey
+                        ];
                     }
                 }
             }
+        }
+
+        // Calculate center point
+        if (blockCount > 0) {
+            this.selectionCenter = new THREE.Vector3(
+                totalX / blockCount,
+                totalY / blockCount,
+                totalZ / blockCount
+            );
         }
 
         this.pendingChangesRef.current.terrain.removed = {
@@ -297,19 +321,10 @@ class SelectionTool extends BaseTool {
             ...removedBlocksObj,
         };
 
-        console.log("pendingChangesRef after removing blocks", this.pendingChangesRef.current);
-
         // Collect environment objects in the selection area
-        console.log("environmentBuilderRef", this.environmentBuilderRef);
-        console.log(
-            "originalEnvironmentPositions",
-            this.originalEnvironmentPositions
-        );
-        console.log("selectedEnvironments", this.selectedEnvironments);
         if (this.environmentBuilderRef?.current?.getAllEnvironmentObjects) {
             const environmentObjects =
                 this.environmentBuilderRef.current.getAllEnvironmentObjects();
-            console.log("environmentObjects", environmentObjects);
             for (const envObj of environmentObjects) {
                 const pos = envObj.position;
                 if (
@@ -324,7 +339,12 @@ class SelectionTool extends BaseTool {
                     this.selectedEnvironments.set(envKey, envObj);
                     this.originalEnvironmentPositions.set(envKey, { ...pos });
 
-                    console.log("envObj", envObj);
+                    // Add to center calculation
+                    totalX += pos.x;
+                    totalY += pos.y;
+                    totalZ += pos.z;
+                    blockCount++;
+
                     // Remove the environment object immediately
                     this.environmentBuilderRef.current.removeInstance(
                         envObj.modelUrl,
@@ -333,6 +353,15 @@ class SelectionTool extends BaseTool {
                     );
                 }
             }
+        }
+
+        // Update center point if we have environment objects
+        if (blockCount > 0) {
+            this.selectionCenter = new THREE.Vector3(
+                totalX / blockCount,
+                totalY / blockCount,
+                totalZ / blockCount
+            );
         }
 
         if (
@@ -360,10 +389,11 @@ class SelectionTool extends BaseTool {
     updateSelectionPosition(currentPosition) {
         if (!this.selectedBlocks && !this.selectedEnvironments) return;
 
+        // Calculate offset from the center of the selection to the current mouse position
         const newOffset = new THREE.Vector3(
-            Math.round(currentPosition.x - this.selectionStartPosition.x),
-            Math.round(currentPosition.y - this.selectionStartPosition.y),
-            Math.round(currentPosition.z - this.selectionStartPosition.z)
+            Math.round(currentPosition.x - this.selectionCenter.x),
+            Math.round(currentPosition.y - this.selectionCenter.y),
+            Math.round(currentPosition.z - this.selectionCenter.z)
         );
 
         if (!newOffset.equals(this.moveOffset)) {
@@ -409,7 +439,10 @@ class SelectionTool extends BaseTool {
                 ...this.pendingChangesRef.current.terrain.added,
                 ...addedBlocks,
             };
-            console.log("pendingChangesRef after adding blocks", this.pendingChangesRef.current);
+            console.log(
+                "pendingChangesRef after adding blocks",
+                this.pendingChangesRef.current
+            );
         }
 
         // Place environment objects
