@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
 import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
-
 class SelectionTool extends BaseTool {
     selectionStartPosition = null;
     selectionPreview = null;
@@ -14,6 +13,16 @@ class SelectionTool extends BaseTool {
     selectionHeight = 1;
     verticalOffset = 0;
     rotation = 0; // 0: 0°, 1: 90°, 2: 180°, 3: 270°
+    changes = {
+        terrain: {
+            added: {},
+            removed: {},
+        },
+        environment: {
+            added: [],
+            removed: [],
+        },
+    };
 
     terrainRef = null;
     scene = null;
@@ -23,6 +32,8 @@ class SelectionTool extends BaseTool {
     environmentBuilderRef = null;
     pendingChangesRef = null;
     selectionCenter = null;
+    undoRedoManager: React.RefObject<any>;
+
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
         this.name = "SelectionTool";
@@ -38,6 +49,7 @@ class SelectionTool extends BaseTool {
             this.environmentBuilderRef =
                 terrainBuilderProps.environmentBuilderRef;
             this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
+            this.undoRedoManager = terrainBuilderProps.undoRedoManager;
         }
     }
 
@@ -122,6 +134,16 @@ class SelectionTool extends BaseTool {
                 this.isMovingSelection = false;
                 this.removeSelectionPreview();
                 this.rotation = 0; // Reset rotation on cancellation
+                this.changes = {
+                    terrain: {
+                        added: {},
+                        removed: {},
+                    },
+                    environment: {
+                        added: [],
+                        removed: [],
+                    },
+                };
             } else {
                 this.selectionStartPosition = null;
                 this.removeSelectionPreview();
@@ -364,6 +386,8 @@ class SelectionTool extends BaseTool {
             ...removedBlocksObj,
         };
 
+        this.changes.terrain.removed = removedBlocksObj;
+
         // Collect environment objects in the selection area
         if (this.environmentBuilderRef?.current?.getAllEnvironmentObjects) {
             const environmentObjects =
@@ -394,6 +418,7 @@ class SelectionTool extends BaseTool {
                         envObj.instanceId,
                         false
                     );
+                    this.changes.environment.removed.push(envObj);
                 }
             }
         }
@@ -494,6 +519,7 @@ class SelectionTool extends BaseTool {
                 ...this.pendingChangesRef.current.terrain.added,
                 ...addedBlocks,
             };
+            this.changes.terrain.added = addedBlocks;
         }
 
         // Place environment objects
@@ -551,9 +577,13 @@ class SelectionTool extends BaseTool {
                         tempMesh,
                         envObj.instanceId
                     );
+                    this.changes.environment.added.push(envObj);
                 }
             }
         }
+
+        console.log("undoRedoManager", this.undoRedoManager);
+        this.undoRedoManager.current.saveUndo(this.changes);
 
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
@@ -561,6 +591,16 @@ class SelectionTool extends BaseTool {
         this.moveOffset = new THREE.Vector3();
         this.verticalOffset = 0;
         this.rotation = 0;
+        this.changes = {
+            terrain: {
+                added: {},
+                removed: {},
+            },
+            environment: {
+                added: [],
+                removed: [],
+            },
+        };
         this.removeSelectionPreview();
     }
 
