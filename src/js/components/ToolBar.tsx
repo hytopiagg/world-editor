@@ -547,7 +547,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. q cancels">
+                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
                             <button
                                 onClick={() => {
                                     handleToolToggle("wall");
@@ -560,7 +560,7 @@ const ToolBar = ({
                                 <FaDrawPolygon />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.">
+                        <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
                             <button
                                 onClick={() => {
                                     handleToolToggle("ground");
@@ -573,7 +573,7 @@ const ToolBar = ({
                                 <FaSquare />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.">
+                        <Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
                             <button
                                 onClick={() => {
                                     handleToolToggle("pipe");

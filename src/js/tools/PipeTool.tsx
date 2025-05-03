@@ -31,7 +31,7 @@ class PipeTool extends BaseTool {
 
         this.name = "PipeTool";
         this.tooltip =
-            "Pipe Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.";
+            "Pipe Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.";
         this.pipeHeight = 1;
         this.pipeEdgeDepth = 1; // How thick the pipe walls are
         this.pipeSides = 4; // Number of sides (4 = square, 5 = pentagon, etc.)
@@ -282,7 +282,7 @@ class PipeTool extends BaseTool {
         } else if (event.key === "6") {
             console.log("PipeTool: Increasing number of sides");
             this.setPipeSides(this.pipeSides + 1);
-        } else if (event.key === "q") {
+        } else if (event.key === "Escape" ) {
             this.removePipePreview();
             this.pipeStartPosition = null;
         }

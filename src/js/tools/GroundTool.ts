@@ -33,7 +33,7 @@ class GroundTool extends BaseTool {
 
         this.name = "GroundTool";
         this.tooltip =
-            "Ground Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Q to cancel.";
+            "Ground Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.";
         this.groundHeight = 1;
         this.groundSides = 4; // Number of sides (4 = square, 5 = pentagon, etc.)
         this.isCtrlPressed = false;
@@ -301,7 +301,7 @@ class GroundTool extends BaseTool {
         } else if (event.key === "6") {
             console.log("GroundTool: Increasing number of sides");
             this.setGroundSides(this.groundSides + 1);
-        } else if (event.key === "q") {
+        } else if (event.key === "Escape" ) {
             this.removeGroundPreview();
             this.groundStartPosition = null;
         }

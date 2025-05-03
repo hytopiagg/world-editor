@@ -15,7 +15,7 @@ class WallTool extends BaseTool {
 
         this.name = "WallTool";
         this.tooltip =
-            "Wall Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Hold Ctrl to erase. Press Q to cancel. ";
+            "Wall Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Hold Ctrl to erase. Press Escape to cancel. ";
         this.wallHeight = 1;
         this.isCtrlPressed = false;
         this.wallStartPosition = null;
@@ -30,39 +30,9 @@ class WallTool extends BaseTool {
             this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
 
             this.undoRedoManager = terrainBuilderProps.undoRedoManager;
-            console.log(
-                "WallTool: Got undoRedoManager reference:",
-                !!this.undoRedoManager
-            );
-            console.log(
-                "WallTool: undoRedoManager is ref:",
-                this.undoRedoManager && "current" in this.undoRedoManager
-            );
-            console.log(
-                "WallTool: undoRedoManager.current exists:",
-                this.undoRedoManager && !!this.undoRedoManager.current
-            );
-            console.log(
-                "WallTool: undoRedoManager.current has saveUndo:",
-                this.undoRedoManager &&
-                    this.undoRedoManager.current &&
-                    typeof this.undoRedoManager.current.saveUndo === "function"
-            );
-
             this.saveUndoFunction = terrainBuilderProps.saveUndoFunction;
-            console.log(
-                "WallTool: Got saveUndoFunction:",
-                !!this.saveUndoFunction
-            );
-
             this.placementChangesRef = terrainBuilderProps.placementChangesRef;
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
-            console.log(
-                "WallTool: Got placementChangesRef:",
-                !!this.placementChangesRef
-            );
-            console.log("WallTool: Got isPlacingRef:", !!this.isPlacingRef);
-
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
 
         } else {
@@ -73,8 +43,6 @@ class WallTool extends BaseTool {
     }
     onActivate() {
         super.onActivate();
-        console.log("WallTool activating...");
-
 
         if (!this.terrainRef) {
             console.error("WallTool Activation Error: terrainRef is missing.");
@@ -166,23 +134,14 @@ class WallTool extends BaseTool {
                     return;
                 }
                 if (!this.terrainRef.current) {
-                    console.log(
-                        "WallTool: terrainRef.current is undefined, initializing empty object"
-                    );
                     this.terrainRef.current = {};
                 }
 
                 if (this.isPlacingRef) {
-                    console.log(
-                        "WallTool: Setting isPlacingRef to true (directly)"
-                    );
                     this.isPlacingRef.current = true;
                 }
 
                 if (this.placementChangesRef) {
-                    console.log(
-                        "WallTool: Ensuring placementChangesRef is initialized (directly)"
-                    );
                     this.placementChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
@@ -199,13 +158,13 @@ class WallTool extends BaseTool {
                         this.wallStartPosition,
                         currentPosition,
                         this.wallHeight
-                    ); // Use accurate position
+                    );
                 } else {
                     actionPerformed = this.placeWall(
                         this.wallStartPosition,
                         currentPosition,
                         this.wallHeight
-                    ); // Use accurate position
+                    );
                 }
                 if (!actionPerformed) {
                     console.warn("WallTool: Wall action failed");
@@ -216,9 +175,8 @@ class WallTool extends BaseTool {
                 this.removeWallPreview();
             } else {
 
-                console.log("Setting wall start position:", currentPosition); // Use accurate position
                 this.wallStartPosition = currentPosition.clone();
-                this.updateWallPreview(this.wallStartPosition, currentPosition); // Use accurate position
+                this.updateWallPreview(this.wallStartPosition, currentPosition);
             }
         }
     }
@@ -242,17 +200,11 @@ class WallTool extends BaseTool {
                     );
 
                     if (this.undoRedoManager?.current?.saveUndo) {
-                        console.log(
-                            "WallTool: Calling saveUndo with undoRedoManager.current"
-                        );
                         this.undoRedoManager.current.saveUndo(changes);
                     } else if (
                         this.terrainBuilderRef?.current?.undoRedoManager
                             ?.current?.saveUndo
                     ) {
-                        console.log(
-                            "WallTool: Calling saveUndo with terrainBuilderRef fallback"
-                        );
                         this.terrainBuilderRef.current.undoRedoManager.current.saveUndo(
                             changes
                         );
@@ -318,18 +270,14 @@ class WallTool extends BaseTool {
      * Track Ctrl key state for erasing and handle wall height adjustments
      */
     handleKeyDown(event) {
-        console.log("WallTool: handleKeyDown event:", event);
         if (event.key === "Control") {
-            console.log("WallTool: Ctrl pressed, switching to erase mode");
             this.isCtrlPressed = true;
             this.updateWallPreviewMaterial();
         } else if (event.key === "1") {
-            console.log("WallTool: Decreasing wall height");
             this.setWallHeight(this.wallHeight - 1);
         } else if (event.key === "2") {
-            console.log("WallTool: Increasing wall height");
             this.setWallHeight(this.wallHeight + 1);
-        } else if (event.key === "q") {
+        } else if (event.key === "Escape" ) {
             this.removeWallPreview();
             this.wallStartPosition = null;
         }
