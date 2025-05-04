@@ -1,4 +1,4 @@
-import { version } from "../Constants";
+import { DB_VERSION } from "../Constants";
 import { loadingManager } from "./LoadingManager";
 export const STORES = {
     TERRAIN: "terrain",
@@ -12,15 +12,14 @@ export const STORES = {
     SCHEMATICS: "ai-schematics",
 };
 export class DatabaseManager {
-    static DB_NAME = "hytopia-world-editor-" + version;
-    static DB_VERSION = 2; // Incremented version number
+    static DB_NAME = "hytopia-world-editor-db-v" + DB_VERSION;
     static dbConnection = null; // Add static property to store connection
     static async openDB() {
         if (this.dbConnection) {
             return Promise.resolve(this.dbConnection);
         }
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+            const request = indexedDB.open(this.DB_NAME, DB_VERSION);
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
                 this.dbConnection = request.result;

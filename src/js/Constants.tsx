@@ -1,4 +1,4 @@
-
+export const DB_VERSION = 2; // Incremented version number
 export const version = "1.4.6";
 export const IS_UNDER_CONSTRUCTION = false;
 export const DISABLE_ASSET_PACK_IMPORT_EXPORT = true;
