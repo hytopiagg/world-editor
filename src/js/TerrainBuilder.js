@@ -726,7 +726,7 @@ function TerrainBuilder(
                         const result =
                             environmentBuilderRef.current.placeEnvironmentModel(
                                 modeRef.current,
-                                false
+                                true
                             );
                         if (result?.length > 0) {
                             placedEnvironmentCountRef.current += result.length;

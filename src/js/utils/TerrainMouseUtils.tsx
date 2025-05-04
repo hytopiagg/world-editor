@@ -48,44 +48,41 @@ function handleTerrainMouseUp(
             }
         }
 
-        if (placedEnvironmentCountRef.current > 0 || placedBlockCountRef.current > 0) {
-            // if (
-            //     placementChangesRef.current &&
-            //     (Object.keys(placementChangesRef.current.terrain.added || {})
-            //         .length > 0 ||
-            //         Object.keys(
-            //             placementChangesRef.current.terrain.removed || {}
-            //         ).length > 0 ||
-            //         (placementChangesRef.current.environment.added || [])
-            //             .length > 0 ||
-            //         (placementChangesRef.current.environment.removed || [])
-            //             .length > 0)
-            // ) {
-            //     if (undoRedoManager?.current?.saveUndo) {
-            //         undoRedoManager.current.saveUndo(
-            //             placementChangesRef.current
-            //         );
-            //     } else {
-            //         console.warn(
-            //             "No direct access to saveUndo function, trying fallbacks"
-            //         );
-            //         const tempRef = ref?.current;
-            //         if (
-            //             tempRef &&
-            //             tempRef.undoRedoManager &&
-            //             tempRef.undoRedoManager.current &&
-            //             tempRef.undoRedoManager.current.saveUndo
-            //         ) {
-            //             tempRef.undoRedoManager.current.saveUndo(
-            //                 placementChangesRef.current
-            //             );
-            //         } else {
-            //             console.error(
-            //                 "Could not find a way to save undo state, changes won't be tracked for undo/redo"
-            //             );
-            //         }
-            //     }
-            // }
+        if (placedBlockCountRef.current > 0) {
+            if (
+                placementChangesRef.current &&
+                (Object.keys(placementChangesRef.current.terrain.added || {})
+                    .length > 0 ||
+                    Object.keys(
+                        placementChangesRef.current.terrain.removed || {}
+                    ).length > 0
+                )
+            ) {
+                if (undoRedoManager?.current?.saveUndo) {
+                    undoRedoManager.current.saveUndo(
+                        placementChangesRef.current
+                    );
+                } else {
+                    console.warn(
+                        "No direct access to saveUndo function, trying fallbacks"
+                    );
+                    const tempRef = ref?.current;
+                    if (
+                        tempRef &&
+                        tempRef.undoRedoManager &&
+                        tempRef.undoRedoManager.current &&
+                        tempRef.undoRedoManager.current.saveUndo
+                    ) {
+                        tempRef.undoRedoManager.current.saveUndo(
+                            placementChangesRef.current
+                        );
+                    } else {
+                        console.error(
+                            "Could not find a way to save undo state, changes won't be tracked for undo/redo"
+                        );
+                    }
+                }
+            }
             placedEnvironmentCountRef.current = 0;
             placedBlockCountRef.current = 0;
         }

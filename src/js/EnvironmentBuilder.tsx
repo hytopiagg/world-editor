@@ -785,6 +785,9 @@ const EnvironmentBuilder = (
                     `Removed ${removedObjects.length} environment objects`
                 );
 
+                console.log("!isUndoRedoOperation.current", !isUndoRedoOperation.current);
+                console.log("saveUndo", saveUndo);
+
                 if (!isUndoRedoOperation.current && saveUndo) {
                     const changes = {
                         terrain: { added: {}, removed: {} }, // no terrain changes
