@@ -110,6 +110,15 @@ const EnvironmentBuilder = (
 
     const updateEnvironmentForUndoRedo = (added, removed, source: "undo" | "redo") => {
         console.log("updateEnvironmentForUndoRedo", added, removed, source);
+        if (removed && Object.keys(removed).length > 0) {
+            Object.values(removed).forEach((instance: {
+                instanceId: number;
+                modelUrl: string;
+            }) => {
+                console.log("removing", instance);
+                removeInstance(instance.modelUrl, instance.instanceId, false);
+            });
+        }
         if (added && Object.keys(added).length > 0) {
             Object.values(added).forEach((instance: {
                 instanceId: number;
@@ -147,15 +156,6 @@ const EnvironmentBuilder = (
                 } else {
                     console.log("no instanced meshes found for", instance.modelUrl);
                 }
-            });
-        }
-        if (removed && Object.keys(removed).length > 0) {
-            Object.values(removed).forEach((instance: {
-                instanceId: number;
-                modelUrl: string;
-            }) => {
-                console.log("removing", instance);
-                removeInstance(instance.modelUrl, instance.instanceId, false);
             });
         }
     };

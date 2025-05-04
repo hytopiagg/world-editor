@@ -703,7 +703,6 @@ function TerrainBuilder(
         [threeRaycaster.ray]
     );
     const handleBlockPlacement = () => {
-
         console.log("handleBlockPlacement");
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             return;
@@ -713,7 +712,9 @@ function TerrainBuilder(
             currentBlockTypeRef.current?.isEnvironment &&
             placedEnvironmentCountRef.current < 1
         ) {
-            console.log('currentBlockTypeRef.current?.isEnvironment && placedEnvironmentCountRef.current < 1')
+            console.log(
+                "currentBlockTypeRef.current?.isEnvironment && placedEnvironmentCountRef.current < 1"
+            );
             if (isFirstBlockRef.current) {
                 console.log("isFirstBlockRef.current");
                 if (
@@ -767,8 +768,11 @@ function TerrainBuilder(
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
                     if (!terrainRef.current[blockKey]) {
                         addedBlocks[blockKey] = currentBlockTypeRef.current.id;
-                        terrainRef.current[blockKey] =
-                            currentBlockTypeRef.current.id;
+
+                        if (!currentBlockTypeRef.current.isEnvironment) {
+                            terrainRef.current[blockKey] =
+                                currentBlockTypeRef.current.id;
+                        }
                         recentlyPlacedBlocksRef.current.add(blockKey);
                         placementChangesRef.current.terrain.added[blockKey] =
                             currentBlockTypeRef.current.id;

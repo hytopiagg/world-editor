@@ -312,6 +312,7 @@ function UndoRedoManager(
                     const removed = {};
 
                     if (changeData.added) {
+                        console.log("changeData.added", changeData.added);
                         Object.keys(changeData.added).forEach(
                             (key) => {
                                 removed[key] =
@@ -332,8 +333,9 @@ function UndoRedoManager(
                                     changeData.store,
                                     "readwrite"
                                 );
+                                console.log("tx - removed", tx);
                                 const store = tx.objectStore(changeData.store);
-
+                                console.log("store - removed", store);
                                 await Promise.all(
                                     Object.keys(removed).map((key) => {
                                         console.log("deleting", key);
@@ -372,6 +374,7 @@ function UndoRedoManager(
                     }
 
                     if (changeData.removed) {
+                        console.log("changeData.removed", changeData.removed);
                         Object.entries(changeData.removed).forEach(
                             ([key, value]) => {
                                 added[key] = value;
@@ -391,14 +394,17 @@ function UndoRedoManager(
                                     changeData.store,
                                     "readwrite"
                                 );
+                                console.log("tx - added", tx);
 
                                 console.log("changeData", changeData);
 
                                 const store = tx.objectStore(changeData.store);
+                                console.log("store - added", store);
 
                                 await Promise.all(
                                     Object.entries(added).map(
                                         ([key, value]) => {
+                                            console.log("adding", key, value);
                                             const putRequest = store.put(
                                                 value,
                                                 key
@@ -418,6 +424,9 @@ function UndoRedoManager(
                                     tx.oncomplete = resolve;
                                     tx.onerror = reject;
                                 });
+
+                                console.log("tx - added - oncomplete", tx.oncomplete);
+                                console.log("tx - added - onerror", tx.onerror);
                                 console.log(
                                     `Successfully added ${Object.keys(added).length} blocks directly to DB`
                                 );
