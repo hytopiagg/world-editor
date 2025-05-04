@@ -545,7 +545,7 @@ class SelectionTool extends BaseTool {
                             rotatedPos.y +
                                 this.moveOffset.y +
                                 this.verticalOffset
-                        ),
+                        ) + ENVIRONMENT_OBJECT_Y_OFFSET,
                         z: Math.round(rotatedPos.z + this.moveOffset.z),
                     };
 
@@ -577,7 +577,23 @@ class SelectionTool extends BaseTool {
                         tempMesh,
                         envObj.instanceId
                     );
-                    this.changes.environment.added.push(envObj);
+                    this.changes.environment.added.push({
+                        modelUrl: envObj.modelUrl,
+                        instanceId: envObj.instanceId,
+                        position: newPos,
+                        rotation: {
+                            x: envObj.rotation.x,
+                            y:
+                                envObj.rotation.y +
+                                (this.rotation * Math.PI) / 2,
+                            z: envObj.rotation.z,
+                        },
+                        scale: {
+                            x: envObj.scale.x,
+                            y: envObj.scale.y,
+                            z: envObj.scale.z,
+                        },
+                    });
                 }
             }
         }
