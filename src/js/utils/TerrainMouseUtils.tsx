@@ -56,7 +56,7 @@ function handleTerrainMouseUp(
                     Object.keys(
                         placementChangesRef.current.terrain.removed || {}
                     ).length > 0
-                )
+                ) && placedEnvironmentCountRef.current === 0
             ) {
                 if (undoRedoManager?.current?.saveUndo) {
                     undoRedoManager.current.saveUndo(
@@ -73,6 +73,7 @@ function handleTerrainMouseUp(
                         tempRef.undoRedoManager.current &&
                         tempRef.undoRedoManager.current.saveUndo
                     ) {
+                        console.log("mouse-up saveUndo");
                         tempRef.undoRedoManager.current.saveUndo(
                             placementChangesRef.current
                         );
