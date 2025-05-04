@@ -348,6 +348,9 @@ class SelectionTool extends BaseTool {
                 for (let y = 0; y < this.selectionHeight; y++) {
                     const posKey = `${x},${baseY + y},${z}`;
                     if (this.terrainRef.current[posKey]) {
+                        console.log("posKey", posKey);
+                        console.log("this.terrainRef.current", this.terrainRef.current);
+                        console.log("this.terrainRef.current[posKey]", this.terrainRef.current[posKey]);
                         const blockId = this.terrainRef.current[posKey];
                         this.selectedBlocks.set(posKey, blockId);
                         this.originalPositions.set(
@@ -372,6 +375,8 @@ class SelectionTool extends BaseTool {
             }
         }
 
+        console.log("removedBlocksObj", removedBlocksObj);
+
         // Calculate center point
         if (blockCount > 0) {
             this.selectionCenter = new THREE.Vector3(
@@ -379,6 +384,7 @@ class SelectionTool extends BaseTool {
                 totalY / blockCount,
                 totalZ / blockCount
             );
+            console.log("this.selectionCenter blocks", this.selectionCenter);
         }
 
         this.pendingChangesRef.current.terrain.removed = {
@@ -408,7 +414,7 @@ class SelectionTool extends BaseTool {
 
                     // Add to center calculation
                     totalX += pos.x;
-                    totalY += pos.y;
+                    totalY += pos.y - ENVIRONMENT_OBJECT_Y_OFFSET;
                     totalZ += pos.z;
                     blockCount++;
 
@@ -430,6 +436,7 @@ class SelectionTool extends BaseTool {
                 totalY / blockCount,
                 totalZ / blockCount
             );
+            console.log("this.selectionCenter env", this.selectionCenter);
         }
 
         if (
@@ -489,6 +496,7 @@ class SelectionTool extends BaseTool {
                     );
 
                     // Then apply the move offset
+                    console.log("this.moveOffset", this.moveOffset);
                     const finalPos = new THREE.Vector3(
                         rotatedPos.x + this.moveOffset.x,
                         rotatedPos.y + this.moveOffset.y + this.verticalOffset,
@@ -539,6 +547,7 @@ class SelectionTool extends BaseTool {
                     );
 
                     // Then apply the move offset
+                    console.log("this.moveOffset", this.moveOffset);
                     const newPos = {
                         x: rotatedPos.x + this.moveOffset.x,
                         y: rotatedPos.y + this.moveOffset.y + this.verticalOffset,
