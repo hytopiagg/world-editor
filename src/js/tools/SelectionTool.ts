@@ -540,13 +540,16 @@ class SelectionTool extends BaseTool {
 
                     // Then apply the move offset
                     const newPos = {
-                        x: Math.round(rotatedPos.x + this.moveOffset.x),
-                        y: Math.round(
-                            rotatedPos.y +
-                                this.moveOffset.y +
-                                this.verticalOffset
-                        ),
-                        z: Math.round(rotatedPos.z + this.moveOffset.z),
+                        x: rotatedPos.x + this.moveOffset.x,
+                        y: rotatedPos.y + this.moveOffset.y + this.verticalOffset,
+                        z: rotatedPos.z + this.moveOffset.z,
+                        // x: Math.round(rotatedPos.x + this.moveOffset.x),
+                        // y: Math.round(
+                        //     rotatedPos.y +
+                        //         this.moveOffset.y +
+                        //         this.verticalOffset
+                        // ),
+                        // z: Math.round(rotatedPos.z + this.moveOffset.z),
                     };
 
                     const modelType =
