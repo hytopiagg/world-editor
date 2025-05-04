@@ -388,7 +388,7 @@ function UndoRedoManager(
                                 const db =
                                     await DatabaseManager.getDBConnection();
                                 const tx = db.transaction(
-                                    STORES.TERRAIN,
+                                    changeData.store,
                                     "readwrite"
                                 );
 
@@ -493,8 +493,13 @@ function UndoRedoManager(
                                 );
                                 await terrainBuilderRef.current.refreshTerrainFromDB();
                             }
-                        } else if (changeData.store === STORES.ENVIRONMENT) {
-                            if (environmentBuilderRef?.current?.updateEnvironmentForUndoRedo) {
+                        } 
+                        
+                        if (changeData.store === STORES.ENVIRONMENT) {
+                                if (environmentBuilderRef?.current?.updateEnvironmentForUndoRedo) {
+                                console.log("Updating environment for undo redo");
+                                console.log("added", added);
+                                console.log("removed", removed);
                                 environmentBuilderRef.current.updateEnvironmentForUndoRedo(added, removed, "undo");
                             } else {
                                 console.warn(

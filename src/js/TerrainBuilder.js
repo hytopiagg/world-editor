@@ -703,6 +703,8 @@ function TerrainBuilder(
         [threeRaycaster.ray]
     );
     const handleBlockPlacement = () => {
+
+        console.log("handleBlockPlacement");
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             return;
         }
@@ -711,7 +713,9 @@ function TerrainBuilder(
             currentBlockTypeRef.current?.isEnvironment &&
             placedEnvironmentCountRef.current < 1
         ) {
+            console.log('currentBlockTypeRef.current?.isEnvironment && placedEnvironmentCountRef.current < 1')
             if (isFirstBlockRef.current) {
+                console.log("isFirstBlockRef.current");
                 if (
                     environmentBuilderRef.current &&
                     typeof environmentBuilderRef.current
