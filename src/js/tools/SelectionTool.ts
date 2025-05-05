@@ -389,18 +389,6 @@ class SelectionTool extends BaseTool {
             }
         }
 
-        console.log("removedBlocksObj", removedBlocksObj);
-
-        // Calculate center point
-        if (blockCount > 0) {
-            this.selectionCenter = new THREE.Vector3(
-                totalX / blockCount,
-                totalY / blockCount,
-                totalZ / blockCount
-            );
-            console.log("this.selectionCenter blocks", this.selectionCenter);
-        }
-
         this.pendingChangesRef.current.terrain.removed = {
             ...this.pendingChangesRef.current.terrain.removed,
             ...removedBlocksObj,
@@ -443,17 +431,13 @@ class SelectionTool extends BaseTool {
             }
         }
 
-        // Update center point if we have environment objects
         if (blockCount > 0) {
             this.selectionCenter = new THREE.Vector3(
                 totalX / blockCount,
-                totalY / blockCount,
+                baseY,
                 totalZ / blockCount
             );
-            console.log("this.selectionCenter env", this.selectionCenter);
         }
-
-        console.log("blockCount", blockCount);
 
         if (
             this.selectedBlocks.size > 0 ||
