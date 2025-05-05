@@ -187,7 +187,7 @@ class SelectionTool extends BaseTool {
                 this.previewPositionRef.current
             );
         } else if (event.key === "4") {
-            this.cycleSelectionMode();
+            // this.cycleSelectionMode();
         }
     }
 
