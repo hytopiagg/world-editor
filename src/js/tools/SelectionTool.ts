@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
 import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
+import QuickTipsManager from "../components/QuickTipsManager";
+
 class SelectionTool extends BaseTool {
     selectionStartPosition = null;
     selectionPreview = null;
@@ -33,12 +35,15 @@ class SelectionTool extends BaseTool {
     pendingChangesRef = null;
     selectionCenter = null;
     undoRedoManager: React.RefObject<any>;
+    originalTooltip = null;
+    tooltip = null;
 
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
         this.name = "SelectionTool";
-        this.tooltip =
+        this.originalTooltip =
             "Selection Tool: Click to start selection, click again to confirm. Use 1 | 2 to adjust height. Click and drag to move selection. Press Escape to cancel.";
+        this.tooltip = this.originalTooltip;
 
         if (terrainBuilderProps) {
             this.terrainRef = terrainBuilderProps.terrainRef;
@@ -144,6 +149,9 @@ class SelectionTool extends BaseTool {
                         removed: [],
                     },
                 };
+                // Revert to original tooltip on cancellation
+                this.tooltip = this.originalTooltip;
+                QuickTipsManager.setToolTip(this.tooltip);
             } else {
                 this.selectionStartPosition = null;
                 this.removeSelectionPreview();
@@ -349,8 +357,14 @@ class SelectionTool extends BaseTool {
                     const posKey = `${x},${baseY + y},${z}`;
                     if (this.terrainRef.current[posKey]) {
                         console.log("posKey", posKey);
-                        console.log("this.terrainRef.current", this.terrainRef.current);
-                        console.log("this.terrainRef.current[posKey]", this.terrainRef.current[posKey]);
+                        console.log(
+                            "this.terrainRef.current",
+                            this.terrainRef.current
+                        );
+                        console.log(
+                            "this.terrainRef.current[posKey]",
+                            this.terrainRef.current[posKey]
+                        );
                         const blockId = this.terrainRef.current[posKey];
                         this.selectedBlocks.set(posKey, blockId);
                         this.originalPositions.set(
@@ -455,6 +469,11 @@ class SelectionTool extends BaseTool {
             this.isMovingSelection = true;
             this.moveOffset = new THREE.Vector3();
             this.updateSelectionPreview(this.selectionStartPosition, endPos);
+
+            // Update tooltip with detailed instructions
+            this.tooltip =
+                "Selection Active: Click and drag to move. Use 1 | 2 to adjust height. Press 3 to rotate (0° → 90° → 180° → 270°). Click to place. Press Escape to cancel.";
+            QuickTipsManager.setToolTip(this.tooltip);
         } else {
             this.selectionStartPosition = null;
             this.removeSelectionPreview();
@@ -550,15 +569,11 @@ class SelectionTool extends BaseTool {
                     console.log("this.moveOffset", this.moveOffset);
                     const newPos = {
                         x: rotatedPos.x + this.moveOffset.x,
-                        y: rotatedPos.y + this.moveOffset.y + this.verticalOffset,
+                        y:
+                            rotatedPos.y +
+                            this.moveOffset.y +
+                            this.verticalOffset,
                         z: rotatedPos.z + this.moveOffset.z,
-                        // x: Math.round(rotatedPos.x + this.moveOffset.x),
-                        // y: Math.round(
-                        //     rotatedPos.y +
-                        //         this.moveOffset.y +
-                        //         this.verticalOffset
-                        // ),
-                        // z: Math.round(rotatedPos.z + this.moveOffset.z),
                     };
 
                     const modelType =
@@ -617,6 +632,10 @@ class SelectionTool extends BaseTool {
             },
         };
         this.removeSelectionPreview();
+
+        // Revert to original tooltip after placement
+        this.tooltip = this.originalTooltip;
+        QuickTipsManager.setToolTip(this.tooltip);
     }
 
     removeSelectionPreview() {
