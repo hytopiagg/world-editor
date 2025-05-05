@@ -3,12 +3,14 @@ import BaseTool from "./BaseTool";
 import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
 import QuickTipsManager from "../components/QuickTipsManager";
 
+type SelectionMode = "move" | "copy" | "delete";
 class SelectionTool extends BaseTool {
     selectionStartPosition = null;
     selectionPreview = null;
     selectedBlocks = null;
     selectedEnvironments = null;
     selectionActive = false;
+    selectionMode: SelectionMode = "move";
     moveOffset = new THREE.Vector3();
     originalPositions = new Map();
     originalEnvironmentPositions = new Map();
@@ -65,6 +67,7 @@ class SelectionTool extends BaseTool {
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
         this.selectionActive = false;
+        this.selectionMode = "move";
         this.selectionHeight = 1;
         this.verticalOffset = 0;
         this.rotation = 0;
@@ -78,6 +81,7 @@ class SelectionTool extends BaseTool {
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
         this.selectionActive = false;
+        this.selectionMode = "move";
     }
 
     handleMouseDown(event, position, button) {
@@ -182,7 +186,14 @@ class SelectionTool extends BaseTool {
                 this.previewPositionRef.current,
                 this.previewPositionRef.current
             );
+        } else if (event.key === "4") {
+            this.cycleSelectionMode();
         }
+    }
+
+    cycleSelectionMode() {
+        this.selectionMode =
+            this.selectionMode === "move" ? "copy" : "delete";
     }
 
     setSelectionHeight(height) {
@@ -431,7 +442,7 @@ class SelectionTool extends BaseTool {
             }
         }
 
-        if (blockCount > 0) {
+        if (blockCount > 0 && this.selectionMode !== "delete") {
             this.selectionCenter = new THREE.Vector3(
                 totalX / blockCount,
                 baseY,

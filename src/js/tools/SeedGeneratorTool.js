@@ -168,7 +168,7 @@ class SeedGeneratorTool extends BaseTool {
         seedInput.type = "text";
         seedInput.value = this.generationOptions.seed;
         seedInput.placeholder = "Enter seed value";
-        seedInput.className = "generator-input flex-grow";
+        seedInput.className = "flex-grow generator-input";
         seedInput.addEventListener("change", (e) => {
             this.generationOptions.seed = e.target.value;
         });
@@ -227,7 +227,7 @@ class SeedGeneratorTool extends BaseTool {
         sizes.forEach((size) => {
             const button = document.createElement("button");
             button.innerHTML = size.label;
-            button.className = "generator-button flex-grow";
+            button.className = "flex-grow generator-button";
             button.addEventListener("click", () => {
                 widthInput.value = size.width;
                 lengthInput.value = size.length;
@@ -886,44 +886,6 @@ class SeedGeneratorTool extends BaseTool {
             options.waterLevel
         );
 
-        if (settings.width < 100 || settings.length < 100) {
-            console.log(
-                "Small world detected, adjusting generation parameters..."
-            );
-            settings.scale *= 3; // Increase scale for small worlds
-            settings.caveDensity *= 0.5; // Fewer caves in small worlds
-        } else if (settings.width > 500 || settings.length > 500) {
-            console.log(
-                "Large world detected, enabling performance optimizations..."
-            );
-
-            settings.batchSize = 50000; // Process 50k blocks at a time
-            settings.useBatchProcessing = true;
-
-            settings.caveComplexity = 0.7;
-
-            settings.leafSkipProbability = 0.3;
-
-            settings.scale *= 1.2;
-            settings.caveDensity *= 0.8;
-        } else {
-            settings.batchSize = 0; // No batching needed
-            settings.useBatchProcessing = false;
-            settings.caveComplexity = 1.0;
-            settings.leafSkipProbability = 0.1;
-        }
-
-        console.log("Generation settings:", {
-            seed: options.seed,
-            seedNum,
-            width: settings.width,
-            length: settings.length,
-            caveDensity: settings.caveDensity,
-            roughness: settings.roughness,
-            seaLevel: settings.seaLevel,
-            scale: settings.scale,
-            useBatchProcessing: settings.useBatchProcessing,
-        });
 
         if (settings.clearMap) {
             this.terrainBuilderRef.current.clearMap();
@@ -990,19 +952,10 @@ class SeedGeneratorTool extends BaseTool {
             console.log("terrainData", terrainData);
             if (terrainData) {
                 let terrainDataToUse = terrainData?.current || terrainData;
-                if (settings.useBatchProcessing) {
-                    this.updateTerrainInBatches(
-                        terrainDataToUse,
-                        settings.batchSize
-                    );
-                } else {
-                    this.terrainBuilderRef.current.updateTerrainFromToolBar(
-                        terrainDataToUse
-                    );
-                    this.hideProgressUI();
-                }
-
-                setTimeout(() => this.forceSaveTerrain(terrainDataToUse), 1000);
+                this.terrainBuilderRef.current.updateTerrainFromToolBar(
+                    terrainDataToUse
+                );
+                this.hideProgressUI();
                 return terrainDataToUse;
             }
         } catch (error) {
@@ -1010,60 +963,6 @@ class SeedGeneratorTool extends BaseTool {
             this.resetGenerationUI(true);
         }
         return null;
-    }
-    /**
-     * Update terrain data in batches to prevent UI freezing for large worlds
-     * @param {Object} terrainData - The generated terrain data
-     * @param {number} batchSize - Number of blocks to process in each batch
-     */
-    updateTerrainInBatches(terrainData, batchSize) {
-        const keys = Object.keys(terrainData);
-        const totalBlocks = keys.length;
-        console.log(
-            `Processing ${totalBlocks} blocks in batches of ${batchSize}`
-        );
-        this.updateProgressUI(
-            `Processing terrain (0/${totalBlocks} blocks)...`,
-            0
-        );
-        let currentBatch = 0;
-        const totalBatches = Math.ceil(totalBlocks / batchSize);
-        const processBatch = () => {
-            const startIdx = currentBatch * batchSize;
-            const endIdx = Math.min(startIdx + batchSize, totalBlocks);
-
-            const batchData = {};
-            for (let i = startIdx; i < endIdx; i++) {
-                const key = keys[i];
-                batchData[key] = terrainData[key];
-            }
-
-            this.terrainBuilderRef.current.updateTerrainFromToolBar(batchData);
-
-            currentBatch++;
-            const progress = Math.floor((currentBatch / totalBatches) * 100);
-            this.updateProgressUI(
-                `Processing terrain (${endIdx}/${totalBlocks} blocks)...`,
-                progress
-            );
-            if (currentBatch < totalBatches) {
-                setTimeout(processBatch, 50);
-            } else {
-                console.log("All batches processed!");
-                this.updateProgressUI("World generation complete!", 100);
-                if (currentBatch >= totalBatches) {
-                    console.log(
-                        `Completed processing ${totalBlocks} blocks in ${totalBatches} batches`
-                    );
-                    this.hideProgressUI();
-
-                    this.forceSaveTerrain(terrainData);
-                    return;
-                }
-            }
-        };
-
-        setTimeout(processBatch, 100);
     }
     /**
      * Helper method to find a block type ID by name
@@ -1077,36 +976,6 @@ class SeedGeneratorTool extends BaseTool {
             return blockTypesList[0]?.id || 1;
         }
         return block.id;
-    }
-    /**
-     * Force save the terrain data to ensure it's in the database
-     * @param {Object} terrainData - The terrain data to save
-     */
-    async forceSaveTerrain(terrainData) {
-        if (!terrainData || Object.keys(terrainData).length === 0) {
-            console.warn("No terrain data to save");
-            return;
-        }
-        try {
-            console.log(
-                `Force saving ${
-                    Object.keys(terrainData).length
-                } blocks to database...`
-            );
-
-            const { DatabaseManager, STORES } = await import(
-                "../managers/DatabaseManager"
-            );
-
-            await DatabaseManager.saveData(
-                STORES.TERRAIN,
-                "current",
-                terrainData
-            );
-            console.log("Terrain data saved successfully to database");
-        } catch (error) {
-            console.error("Error force saving terrain:", error);
-        }
     }
 }
 export default SeedGeneratorTool;

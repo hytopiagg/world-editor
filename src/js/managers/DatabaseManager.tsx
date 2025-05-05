@@ -61,57 +61,69 @@ export class DatabaseManager {
 
                     const clearRequest = store.clear();
 
-                    clearRequest.onsuccess = () => {
+                    clearRequest.onsuccess = async () => {
+                        const entries = Object.entries(data);
+                        const totalEntries = entries.length;
+                        const CHUNK_SIZE = 500000; // Chunk size of 100,000
 
+                        console.log(`[DB] Cleared ${storeName}. Starting to save ${totalEntries} items in chunks of ${CHUNK_SIZE}...`);
 
-                        let promises: Promise<void>[] = [];
-                        if (storeName === STORES.TERRAIN) {
-                            promises = Object.entries(data).map(
-                                ([coordKey, blockId]) => {
-                                    return new Promise(
-                                        (resolveBlock, rejectBlock) => {
-                                            const putRequest = store.put(
-                                                blockId,
-                                                coordKey
-                                            );
-                                            putRequest.onsuccess = resolveBlock;
-                                            putRequest.onerror = rejectBlock;
-                                        }
-                                    );
-                                }
-                            );
-                        } else if (storeName === STORES.ENVIRONMENT) {
-                            promises = Object.entries(data).map(
-                                ([key, val]: [string, any]) => {
-                                    return new Promise(
-                                        (resolveBlock, rejectBlock) => {
-                                            const putRequest = store.put(
-                                                val,
-                                                key
-                                            );
-                                            putRequest.onsuccess = resolveBlock;
-                                            putRequest.onerror = rejectBlock;
-                                        }
-                                    );
-                                }
-                            )
+                        try {
+                            for (let i = 0; i < totalEntries; i += CHUNK_SIZE) {
+                                const chunk = entries.slice(i, i + CHUNK_SIZE);
+                                const chunkNum = i / CHUNK_SIZE + 1;
+                                const totalChunks = Math.ceil(totalEntries / CHUNK_SIZE);
+
+                                console.log(`[DB] Saving chunk ${chunkNum}/${totalChunks} (${chunk.length} items) for ${storeName}...`);
+
+                                // Start a new transaction for each chunk
+                                await new Promise<void>((resolveChunk, rejectChunk) => {
+                                    const chunkTransaction = db.transaction(storeName, "readwrite");
+                                    const chunkStore = chunkTransaction.objectStore(storeName);
+                                    let promisesInChunk: Promise<void>[] = [];
+
+                                    if (storeName === STORES.TERRAIN) {
+                                        promisesInChunk = chunk.map(([coordKey, blockId]) => {
+                                            return new Promise<void>((resolvePut, rejectPut) => {
+                                                const putRequest = chunkStore.put(blockId, coordKey);
+                                                // It's often better to rely on transaction completion/error
+                                                // rather than individual put success/error within a chunk transaction
+                                                // but we can keep them for finer-grained potential error reporting if needed.
+                                                putRequest.onsuccess = () => resolvePut();
+                                                putRequest.onerror = (e) => rejectPut(putRequest.error);
+                                            });
+                                        });
+                                    } else if (storeName === STORES.ENVIRONMENT) {
+                                        promisesInChunk = chunk.map(([key, val]) => {
+                                            return new Promise<void>((resolvePut, rejectPut) => {
+                                                const putRequest = chunkStore.put(val, key);
+                                                putRequest.onsuccess = () => resolvePut();
+                                                putRequest.onerror = (e) => rejectPut(putRequest.error);
+                                            });
+                                        });
+                                    }
+
+                                    // Wait for all puts in the chunk *within the context of the transaction*
+                                    Promise.all(promisesInChunk).catch(rejectChunk); // Catch potential individual put errors
+
+                                    chunkTransaction.oncomplete = () => {
+                                        console.log(`[DB] Chunk ${chunkNum}/${totalChunks} for ${storeName} saved successfully.`);
+                                        resolveChunk();
+                                    };
+                                    chunkTransaction.onerror = (event) => {
+                                        console.error(`[DB] Error saving chunk ${chunkNum}/${totalChunks} for ${storeName}:`, event.target.error);
+                                        rejectChunk(event.target.error); // Reject the chunk promise
+                                    };
+                                });
+                                // If we reach here, the chunk transaction completed successfully
+                            }
+
+                            console.log(`[DB] Successfully saved all ${totalEntries} items to ${storeName} in chunks.`);
+                            resolve(); // Resolve the main saveData promise
+                        } catch (error) {
+                            console.error(`[DB] Error during chunked save process for ${storeName}:`, error);
+                            reject(error); // Reject the main saveData promise if any chunk fails
                         }
-
-                        Promise.all(promises)
-                            .then(() => {
-                                console.log(
-                                    `[DB] Saved ${Object.keys(data).length
-                                    } ${storeName} data`
-                                );
-                                resolve();
-                            })
-                            .catch((error) => {
-                                console.error(
-                                    `[DB] Error saving ${storeName} data:`,
-                                    error
-                                );
-                                reject(error);
-                            });
                     };
 
                     clearRequest.onerror = (event) => {
