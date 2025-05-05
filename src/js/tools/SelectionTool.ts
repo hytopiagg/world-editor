@@ -453,6 +453,8 @@ class SelectionTool extends BaseTool {
             console.log("this.selectionCenter env", this.selectionCenter);
         }
 
+        console.log("blockCount", blockCount);
+
         if (
             this.selectedBlocks.size > 0 ||
             this.selectedEnvironments.size > 0
@@ -477,6 +479,7 @@ class SelectionTool extends BaseTool {
         } else {
             this.selectionStartPosition = null;
             this.removeSelectionPreview();
+            this.deactivate();
         }
     }
 
