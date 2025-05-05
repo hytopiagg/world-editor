@@ -8,7 +8,7 @@ class SelectionTool extends BaseTool {
     selectionPreview = null;
     selectedBlocks = null;
     selectedEnvironments = null;
-    isMovingSelection = false;
+    selectionActive = false;
     moveOffset = new THREE.Vector3();
     originalPositions = new Map();
     originalEnvironmentPositions = new Map();
@@ -64,7 +64,7 @@ class SelectionTool extends BaseTool {
         this.removeSelectionPreview();
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
-        this.isMovingSelection = false;
+        this.selectionActive = false;
         this.selectionHeight = 1;
         this.verticalOffset = 0;
         this.rotation = 0;
@@ -77,7 +77,7 @@ class SelectionTool extends BaseTool {
         this.selectionStartPosition = null;
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
-        this.isMovingSelection = false;
+        this.selectionActive = false;
     }
 
     handleMouseDown(event, position, button) {
@@ -88,13 +88,13 @@ class SelectionTool extends BaseTool {
         if (button === 0) {
             if (
                 (this.selectedBlocks || this.selectedEnvironments) &&
-                this.isMovingSelection
+                this.selectionActive
             ) {
                 // Place the selection
                 this.placeSelection();
                 this.selectedBlocks = null;
                 this.selectedEnvironments = null;
-                this.isMovingSelection = false;
+                this.selectionActive = false;
                 this.removeSelectionPreview();
                 this.deactivate();
             } else if (this.selectionStartPosition) {
@@ -124,7 +124,7 @@ class SelectionTool extends BaseTool {
             );
         } else if (
             (this.selectedBlocks || this.selectedEnvironments) &&
-            this.isMovingSelection
+            this.selectionActive
         ) {
             // Update selection position
             this.updateSelectionPosition(currentPosition);
@@ -136,7 +136,7 @@ class SelectionTool extends BaseTool {
             if (this.selectedBlocks || this.selectedEnvironments) {
                 this.selectedBlocks = null;
                 this.selectedEnvironments = null;
-                this.isMovingSelection = false;
+                this.selectionActive = false;
                 this.removeSelectionPreview();
                 this.rotation = 0; // Reset rotation on cancellation
                 this.changes = {
@@ -157,7 +157,7 @@ class SelectionTool extends BaseTool {
                 this.removeSelectionPreview();
             }
         } else if (event.key === "1") {
-            if (this.isMovingSelection) {
+            if (this.selectionActive) {
                 this.verticalOffset -= 1;
                 this.updateSelectionPreview(
                     this.previewPositionRef.current,
@@ -167,7 +167,7 @@ class SelectionTool extends BaseTool {
                 this.setSelectionHeight(Math.max(1, this.selectionHeight - 1));
             }
         } else if (event.key === "2") {
-            if (this.isMovingSelection) {
+            if (this.selectionActive) {
                 this.verticalOffset += 1;
                 this.updateSelectionPreview(
                     this.previewPositionRef.current,
@@ -176,7 +176,7 @@ class SelectionTool extends BaseTool {
             } else {
                 this.setSelectionHeight(this.selectionHeight + 1);
             }
-        } else if (event.key === "3" && this.isMovingSelection) {
+        } else if (event.key === "3" && this.selectionActive) {
             this.rotation = (this.rotation + 1) % 4;
             this.updateSelectionPreview(
                 this.previewPositionRef.current,
@@ -206,7 +206,7 @@ class SelectionTool extends BaseTool {
         const previewGroup = new THREE.Group();
 
         // If we're in moving mode, use the actual selected blocks and environments
-        if (this.isMovingSelection) {
+        if (this.selectionActive) {
             const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
             const previewMaterial = new THREE.MeshBasicMaterial({
                 color: 0x4eff4e, // Green for moving
@@ -452,7 +452,7 @@ class SelectionTool extends BaseTool {
                 );
             }
 
-            this.isMovingSelection = true;
+            this.selectionActive = true;
             this.moveOffset = new THREE.Vector3();
             this.updateSelectionPreview(this.selectionStartPosition, endPos);
 
@@ -604,7 +604,7 @@ class SelectionTool extends BaseTool {
 
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
-        this.isMovingSelection = false;
+        this.selectionActive = false;
         this.moveOffset = new THREE.Vector3();
         this.verticalOffset = 0;
         this.rotation = 0;
@@ -637,7 +637,7 @@ class SelectionTool extends BaseTool {
         this.selectionStartPosition = null;
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
-        this.isMovingSelection = false;
+        this.selectionActive = false;
         super.dispose();
     }
 
