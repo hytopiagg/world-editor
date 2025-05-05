@@ -163,7 +163,7 @@ export class DatabaseManager {
                         console.log(
                             `[DB] ${storeName} store contains ${count} items.`
                         );
-                        const SIZE_THRESHOLD = 1000000; // Example: Use bulk get below 100k items
+                        const SIZE_THRESHOLD = 2000000; // Example: Use bulk get below 2 million items
 
 
 
