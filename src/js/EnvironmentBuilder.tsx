@@ -562,7 +562,7 @@ const EnvironmentBuilder = (
                 model.name === modelName ||
                 model.modelUrl === modelUrl
         );
-    };  
+    };
 
     const placeEnvironmentModelWithoutSaving = (
         modelType,
@@ -780,7 +780,7 @@ const EnvironmentBuilder = (
                 });
             });
 
-            if (removedObjects.length > 0 ) {
+            if (removedObjects.length > 0) {
                 console.log(
                     `Removed ${removedObjects.length} environment objects`
                 );
@@ -808,7 +808,7 @@ const EnvironmentBuilder = (
         );
         if (!modelData) {
             console.warn(`Could not find model with ID ${currentBlockType.id}`);
-            return;
+            return [];
         }
         const modelUrl = modelData.modelUrl;
         let instancedData = instancedMeshes.current.get(modelUrl);
@@ -816,7 +816,7 @@ const EnvironmentBuilder = (
             console.warn(
                 `Could not find instanced data for model ${modelData.modelUrl}`
             );
-            return;
+            return [];
         }
 
         const placementPositions = getPlacementPositions(
@@ -837,27 +837,20 @@ const EnvironmentBuilder = (
             return [];
         }
 
-        let highestInstanceId = -1;
-        for (const [_, data] of instancedMeshes.current) {
-            if (data.instances.size > 0) {
-                const maxId = Math.max(...Array.from(data.instances.keys()) as number[]);
-                highestInstanceId = Math.max(highestInstanceId, maxId);
-            }
-        }
-
-        let nextInstanceId = highestInstanceId + 1;
-
-        const totalNeededInstances = nextInstanceId + validPlacementPositions.length;
-
-        if (totalNeededInstances > MAX_ENVIRONMENT_OBJECTS) {
+        const currentTotalObjects = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+        if (currentTotalObjects + validPlacementPositions.length > MAX_ENVIRONMENT_OBJECTS) {
             alert(
-                `Maximum Environment Objects (${MAX_ENVIRONMENT_OBJECTS}) Exceeded! Please clear the environment and try again.`
+                `Placing these objects would exceed the maximum limit of ${MAX_ENVIRONMENT_OBJECTS}. Current: ${currentTotalObjects}, Trying to add: ${validPlacementPositions.length}`
             );
-            return;
+            return [];
         }
 
         validPlacementPositions.forEach((placementPosition) => {
-            const instanceId = nextInstanceId++;
+            let instanceId = 0;
+            const existingIds = new Set(Array.from(instancedData.instances.keys()) as number[]);
+            while (existingIds.has(instanceId)) {
+                instanceId++;
+            }
 
             const transform = getPlacementTransform();
             const position = new THREE.Vector3(
@@ -872,67 +865,88 @@ const EnvironmentBuilder = (
                 transform.scale
             );
 
+            let placementSuccessful = true;
             instancedData.meshes.forEach((mesh) => {
+                if (!placementSuccessful) return;
+
                 if (!mesh) {
                     console.error("Invalid mesh encountered");
+                    placementSuccessful = false;
                     return;
                 }
-                mesh.count = Math.max(mesh.count, instanceId + 1);
+                const capacity = mesh.instanceMatrix.count;
+                if (instanceId >= capacity) {
+                    console.error(`Cannot place object: Instance ID ${instanceId} exceeds mesh capacity ${capacity} for model ${modelUrl}.`);
+                    alert(`Maximum instances reached for model type ${modelData.name}.`);
+                    placementSuccessful = false;
+                    return;
+                }
+
                 mesh.setMatrixAt(instanceId, matrix);
+                mesh.count = Math.max(mesh.count, instanceId + 1);
                 mesh.instanceMatrix.needsUpdate = true;
             });
 
-            const newObject = {
-                modelUrl,
-                instanceId,
-                position: { x: position.x, y: position.y, z: position.z },
-                rotation: {
-                    x: transform.rotation.x,
-                    y: transform.rotation.y,
-                    z: transform.rotation.z,
-                },
-                scale: {
-                    x: transform.scale.x,
-                    y: transform.scale.y,
-                    z: transform.scale.z,
-                },
-            };
-            addedObjects.push(newObject);
+            if (placementSuccessful) {
+                instancedData.instances.set(instanceId, {
+                    position: position.clone(),
+                    rotation: transform.rotation.clone(),
+                    scale: transform.scale.clone(),
+                    matrix: matrix.clone(),
+                });
 
-            instancedData.instances.set(instanceId, {
-                position: position.clone(),
-                rotation: transform.rotation.clone(),
-                scale: transform.scale.clone(),
-                matrix: matrix.clone(),
-            });
+                const newObject = {
+                    modelUrl,
+                    instanceId,
+                    position: { x: position.x, y: position.y, z: position.z },
+                    rotation: {
+                        x: transform.rotation.x,
+                        y: transform.rotation.y,
+                        z: transform.rotation.z,
+                    },
+                    scale: {
+                        x: transform.scale.x,
+                        y: transform.scale.y,
+                        z: transform.scale.z,
+                    },
+                };
+                addedObjects.push(newObject);
+            } else {
+                console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);
+            }
         });
 
-        if (!isUndoRedoOperation.current) {
-            const changes = {
-                terrain: { added: {}, removed: {} }, // no terrain changes
-                environment: { added: addedObjects, removed: [] },
-            };
-            if (undoRedoManager?.current?.saveUndo) {
-                undoRedoManager.current.saveUndo(changes);
-            } else {
-                console.warn(
-                    "EnvironmentBuilder: No undoRedoManager available, changes won't be tracked for undo/redo"
-                );
+        if (addedObjects.length > 0) {
+            if (!isUndoRedoOperation.current && saveUndo) {
+                const changes = {
+                    terrain: { added: {}, removed: {} },
+                    environment: { added: addedObjects, removed: [] },
+                };
+                if (undoRedoManager?.current?.saveUndo) {
+                    undoRedoManager.current.saveUndo(changes);
+                } else {
+                    console.warn(
+                        "EnvironmentBuilder: No undoRedoManager available, changes won't be tracked for undo/redo"
+                    );
+                }
+            }
+
+            setTotalEnvironmentObjects((prev) => prev + addedObjects.length);
+
+            if (
+                placementSettingsRef.current?.randomScale ||
+                placementSettingsRef.current?.randomRotation
+            ) {
+                const nextTransform = getPlacementTransform();
+                lastPreviewTransform.current = nextTransform;
+
+                if (placeholderMeshRef.current) {
+                    placeholderMeshRef.current.scale.copy(nextTransform.scale);
+                    placeholderMeshRef.current.rotation.copy(nextTransform.rotation);
+                }
             }
         }
 
-        setTotalEnvironmentObjects((prev) => prev + validPlacementPositions.length);
-
-        if (
-            placementSettingsRef.current?.randomScale ||
-            placementSettingsRef.current?.randomRotation
-        ) {
-            const nextTransform = getPlacementTransform();
-            lastPreviewTransform.current = nextTransform;
-
-            placeholderMeshRef.current.scale.copy(nextTransform.scale);
-            placeholderMeshRef.current.rotation.copy(nextTransform.rotation);
-        }
         return addedObjects;
     };
 
