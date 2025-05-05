@@ -488,7 +488,7 @@
     cursor: pointer;
 }
 
-.block-button:hover .delete-button {
+.block-button:hover .delete-button, .environment-button:hover .delete-button {
     color: #ffffff;
     opacity: 1;
     background-color: #ff2222;

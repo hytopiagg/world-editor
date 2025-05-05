@@ -11,7 +11,6 @@ import "../../css/BlockToolsSidebar.css";
 const ModelPreview = ({ modelUrl, onRenderComplete }) => {
     const { scene } = useGLTF(modelUrl);
     React.useEffect(() => {
-
         const clonedScene = scene.clone();
 
         return () => {
@@ -57,7 +56,6 @@ const MAX_SIMULTANEOUS_RENDERS = 1; // Only render one at a time
 let activeRenders = 0;
 let renderQueue = [];
 const startNextRender = () => {
-
     setTimeout(() => {
         if (
             renderQueue.length > 0 &&
@@ -75,7 +73,6 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
     const [isQueued, setIsQueued] = React.useState(false);
     const getCacheKey = useCallback(() => {
         if (envType.modelUrl.startsWith("blob:")) {
-
             return envType.name;
         }
 
@@ -180,9 +177,7 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
                 if (gl && gl.getExtension("WEBGL_lose_context")) {
                     gl.getExtension("WEBGL_lose_context").loseContext();
                 }
-            } catch (error) {
-
-            }
+            } catch (error) {}
             startNextRender();
         }
     };
@@ -195,18 +190,6 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
                     playUIClick();
                 }}
             >
-                {envType.isCustom && (
-                    <div
-                        className="delete-button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            playUIClick();
-                            onDelete(envType.id);
-                        }}
-                    >
-                        <FaTrash />
-                    </div>
-                )}
                 <div className="object-preview" id={`preview-${envType.name}`}>
                     {showCanvas ? (
                         <Canvas camera={{ fov: 20, position: [0, 0, 8] }}>
@@ -237,6 +220,22 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
                         {envType.name}
                     </div>
                 </div>
+                {envType.isCustom && (
+                    <div
+                        className="delete-button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            playUIClick();
+                            onDelete(envType.id);
+                        }}
+                        style={{
+                            marginLeft: "auto",
+                            marginRight: "10px",
+                        }}
+                    >
+                        <FaTrash />
+                    </div>
+                )}
             </button>
         </Tooltip>
     );
