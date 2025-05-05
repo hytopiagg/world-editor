@@ -737,6 +737,9 @@ const EnvironmentBuilder = (
 
                 collidingInstances.forEach((instance) => {
                     const instancedData = instancedMeshes.current.get(instance.modelUrl);
+                    if (!instancedData || !instancedData.instances.has(instance.instanceId)) {
+                        return;
+                    }
                     const objectData = instancedData.instances.get(instance.instanceId);
 
                     const removedObject = {
@@ -764,7 +767,8 @@ const EnvironmentBuilder = (
                     instancedData.meshes.forEach((mesh) => {
                         mesh.setMatrixAt(
                             instance.instanceId,
-                            new THREE.Matrix4()
+                            // new THREE.Matrix4()
+                            new THREE.Matrix4().scale(new THREE.Vector3(0, 0, 0))
                         );
 
                         mesh.count =
@@ -776,31 +780,35 @@ const EnvironmentBuilder = (
                             ) + 1;
                         mesh.instanceMatrix.needsUpdate = true;
                     });
+
                     removedObjects.push(removedObject);
                 });
             });
 
             if (removedObjects.length > 0) {
+                setTotalEnvironmentObjects(prev => prev - removedObjects.length);
+
                 console.log(
                     `Removed ${removedObjects.length} environment objects`
                 );
 
-                console.log("!isUndoRedoOperation.current", !isUndoRedoOperation.current);
-                console.log("saveUndo", saveUndo);
-
                 if (!isUndoRedoOperation.current && saveUndo) {
                     const changes = {
-                        terrain: { added: {}, removed: {} }, // no terrain changes
+                        terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: removedObjects },
                     };
                     if (undoRedoManager?.current?.saveUndo) {
                         undoRedoManager.current.saveUndo(changes);
+                    } else {
+                        console.warn(
+                            "EnvironmentBuilder: No undoRedoManager available, removal won't be tracked for undo/redo"
+                        );
                     }
                 }
 
                 return removedObjects;
             }
-            return []; // No objects were removed
+            return [];
         }
 
         const modelData = environmentModels.find(
