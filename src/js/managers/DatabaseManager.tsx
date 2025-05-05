@@ -64,7 +64,7 @@ export class DatabaseManager {
                     clearRequest.onsuccess = async () => {
                         const entries = Object.entries(data);
                         const totalEntries = entries.length;
-                        const CHUNK_SIZE = 500000; // Chunk size of 100,000
+                        const CHUNK_SIZE = 500000;
 
                         console.log(`[DB] Cleared ${storeName}. Starting to save ${totalEntries} items in chunks of ${CHUNK_SIZE}...`);
 
