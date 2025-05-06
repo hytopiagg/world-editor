@@ -16,7 +16,7 @@ class SelectionTool extends BaseTool {
     originalEnvironmentPositions = new Map();
     selectionHeight = 1;
     verticalOffset = 0;
-    rotation = 0; // 0: 0°, 1: 90°, 2: 180°, 3: 270°
+    rotation = 0;
     changes = {
         terrain: {
             added: {},
@@ -67,7 +67,6 @@ class SelectionTool extends BaseTool {
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
         this.selectionActive = false;
-        this.selectionMode = "move";
         this.selectionHeight = 1;
         this.verticalOffset = 0;
         this.rotation = 0;
@@ -81,7 +80,6 @@ class SelectionTool extends BaseTool {
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
         this.selectionActive = false;
-        this.selectionMode = "move";
     }
 
     handleMouseDown(event, position, button) {
@@ -203,6 +201,11 @@ class SelectionTool extends BaseTool {
                 ? "delete"
                 : "move";
 
+        this.updateSelectionPreview(
+            this.selectionStartPosition,
+            this.previewPositionRef.current
+        );
+
         this.tooltip = `Selection Mode: ${this.selectionMode}`;
         QuickTipsManager.setToolTip(this.tooltip);
     }
@@ -305,7 +308,12 @@ class SelectionTool extends BaseTool {
 
             const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
             const previewMaterial = new THREE.MeshBasicMaterial({
-                color: 0x4e8eff, // Blue for selection
+                color:
+                    this.selectionMode === "copy"
+                        ? 0xffff00 // yellow for copy
+                        : this.selectionMode === "delete"
+                        ? 0xff4e4e // red for delete
+                        : 0x4e8eff, // blue for move
                 transparent: true,
                 opacity: 0.5,
                 wireframe: false,
