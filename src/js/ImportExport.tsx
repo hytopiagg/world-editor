@@ -448,11 +448,11 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     textureUriForJson = block.textureUri; // Keep data URI as is
                 } else if (isMulti) {
                     // Multi-texture blocks point to their folder in the zip
-                    textureUriForJson = `textures/${block.name}`; // Represents the folder
+                    textureUriForJson = `blocks/${block.name}`; // Represents the folder
                 } else if (block.textureUri) {
                     // Single-texture blocks point to the file in the root textures folder
                     const fileName = block.textureUri.split('/').pop();
-                    textureUriForJson = `textures/${fileName}`;
+                    textureUriForJson = `blocks/${fileName}`;
                 } else {
                     textureUriForJson = undefined; // No texture URI provided
                 }
@@ -466,8 +466,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                             const fileName = uri.split('/').pop();
                             if (fileName) {
                                 acc[side] = isMulti
-                                    ? `textures/${block.name}/${fileName}` // Path within block's subfolder
-                                    : `textures/${fileName}`; // Path in root textures folder
+                                    ? `blocks/${block.name}/${fileName}` // Path within block's subfolder
+                                    : `blocks/${fileName}`; // Path in root textures folder
                             }
                         }
                     }
@@ -513,7 +513,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     } else {
                         modelUriForJson = entityType.isCustom
                             ? `models/environment/${entityType.name}.gltf` // Standard path for custom models
-                            : `models/${entityType.modelUrl.split('/').pop()}`; // Path for standard models (just filename in models folder)
+                            : `models/environment/${entityType.modelUrl.split('/').pop()}`; // Path for standard models (just filename in models folder)
 
                     }
 
@@ -550,8 +550,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         // --- Fetch Assets and Create ZIP ---
         loadingManager.updateLoading("Fetching assets...", 80);
         const zip = new JSZip();
-        const texturesRootFolder = zip.folder("textures"); // Changed variable name for clarity
-        const modelsFolder = zip.folder("models");
+        const blocksRootFolder = zip.folder("blocks"); // Changed from textures to blocks
+        const modelsFolder = zip.folder("models/environment"); // Changed to models/environment
         const fetchPromises: Promise<void>[] = [];
 
         const fetchedAssetUrls = new Set<string>(); // Keep track of URLs already being fetched/added
@@ -561,11 +561,11 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 fetchedAssetUrls.add(texInfo.uri);
                 const fileName = texInfo.uri.split('/').pop();
 
-                if (fileName && texturesRootFolder) {
+                if (fileName && blocksRootFolder) {
                     // Determine the target folder within the zip
                     const targetFolder = texInfo.isMulti && texInfo.blockName
-                        ? texturesRootFolder.folder(texInfo.blockName) // Get or create subfolder
-                        : texturesRootFolder; // Use root textures folder
+                        ? blocksRootFolder.folder(texInfo.blockName) // Get or create subfolder
+                        : blocksRootFolder; // Use root textures folder
 
                     if (!targetFolder) {
                         console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
