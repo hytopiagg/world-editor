@@ -397,22 +397,26 @@ class SelectionTool extends BaseTool {
                         blockCount++;
 
                         // Remove the block immediately
-                        removedBlocksObj[posKey] = blockId;
-                        delete this.terrainRef.current[posKey];
-                        delete this.pendingChangesRef.current.terrain.added[
-                            posKey
-                        ];
+                        if (this.selectionMode !== "copy") {
+                            removedBlocksObj[posKey] = blockId;
+                            delete this.terrainRef.current[posKey];
+                            delete this.pendingChangesRef.current.terrain.added[
+                                posKey
+                            ];
+                        }
                     }
                 }
             }
         }
 
-        this.pendingChangesRef.current.terrain.removed = {
-            ...this.pendingChangesRef.current.terrain.removed,
-            ...removedBlocksObj,
-        };
+        if (this.selectionMode !== "copy") {
+            this.pendingChangesRef.current.terrain.removed = {
+                ...this.pendingChangesRef.current.terrain.removed,
+                ...removedBlocksObj,
+            };
 
-        this.changes.terrain.removed = removedBlocksObj;
+            this.changes.terrain.removed = removedBlocksObj;
+        }
 
         // Collect environment objects in the selection area
         if (this.environmentBuilderRef?.current?.getAllEnvironmentObjects) {
@@ -439,15 +443,19 @@ class SelectionTool extends BaseTool {
                     blockCount++;
 
                     // Remove the environment object immediately
-                    this.environmentBuilderRef.current.removeInstance(
-                        envObj.modelUrl,
-                        envObj.instanceId,
-                        false
-                    );
-                    this.changes.environment.removed.push(envObj);
+                    if (this.selectionMode !== "copy") {
+                        this.environmentBuilderRef.current.removeInstance(
+                            envObj.modelUrl,
+                            envObj.instanceId,
+                            false
+                        );
+                        this.changes.environment.removed.push(envObj);
+                    }
                 }
             }
         }
+
+        console.log("selectedEnvironments", this.selectedEnvironments);
 
         if (blockCount > 0 && this.selectionMode !== "delete") {
             this.selectionCenter = new THREE.Vector3(
@@ -462,7 +470,10 @@ class SelectionTool extends BaseTool {
             this.selectedEnvironments.size > 0
         ) {
             // Update terrain to reflect removed blocks
-            if (this.terrainBuilderRef?.current) {
+            if (
+                this.terrainBuilderRef?.current &&
+                this.selectionMode !== "copy"
+            ) {
                 this.terrainBuilderRef.current.updateTerrainBlocks(
                     {},
                     removedBlocksObj,
@@ -596,7 +607,6 @@ class SelectionTool extends BaseTool {
                     );
 
                     // Then apply the move offset
-                    console.log("this.moveOffset", this.moveOffset);
                     const newPos = {
                         x: rotatedPos.x + this.moveOffset.x,
                         y:
@@ -628,15 +638,23 @@ class SelectionTool extends BaseTool {
                         envObj.scale.z
                     );
 
+                    // If we're copying, use null for instanceId to generate a new one
+                    // If we're moving, keep the original instanceId
+                    const instanceId =
+                        this.selectionMode === "copy"
+                            ? null
+                            : envObj.instanceId;
+
                     // Create a new environment object at the new position
                     this.environmentBuilderRef.current.placeEnvironmentModelWithoutSaving(
                         modelType,
                         tempMesh,
-                        envObj.instanceId
+                        instanceId
                     );
                     this.changes.environment.added.push({
                         ...envObj,
                         position: newPos,
+                        instanceId: instanceId, // This will be updated by placeEnvironmentModelWithoutSaving if it's a copy
                     });
                 }
             }
