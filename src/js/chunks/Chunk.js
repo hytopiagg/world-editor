@@ -185,16 +185,12 @@ class Chunk {
      * @returns {Promise<Object>} The meshes
      */
     async buildMeshes(chunkManager, options = {}) {
-        const skipNeighbors = options && options.skipNeighbors === true;
         const forceCompleteRebuild =
             options && options.forceCompleteRebuild === true;
         const hasAddedBlocks =
             options && options.added && options.added.length > 0;
         const hasRemovedBlocks =
             options && options.removed && options.removed.length > 0;
-        const perfId = `buildMeshes-${this.chunkId}${
-            skipNeighbors ? "-fast" : ""
-        }`;
 
 
         if (
@@ -208,16 +204,6 @@ class Chunk {
                 return;
             }
         }
-
-        try {
-            console.time(perfId);
-        } catch (e) {
-
-            console.warn(
-                `Timer '${perfId}' already exists, continuing with mesh build`
-            );
-        }
-
 
         if (this._solidMesh) {
             chunkManager.chunkMeshManager.removeSolidMesh(this);
@@ -245,7 +231,6 @@ class Chunk {
         const { x: originX, y: originY, z: originZ } = this.originCoordinate;
 
         this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
-        let verticesProcessed = 0;
 
         for (let y = 0; y < CHUNK_SIZE; y++) {
             const globalY = originY + y;
@@ -426,11 +411,6 @@ class Chunk {
 
         delete this._extendedBlockTypes;
 
-        try {
-            console.timeEnd(perfId);
-        } catch (e) {
-
-        }
 
         if (chunkManager._scene) {
             if (this._solidMesh) {
