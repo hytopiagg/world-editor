@@ -187,13 +187,20 @@ class SelectionTool extends BaseTool {
                 this.previewPositionRef.current
             );
         } else if (event.key === "4") {
-            // this.cycleSelectionMode();
+            this.cycleSelectionMode();
         }
     }
 
     cycleSelectionMode() {
         this.selectionMode =
-            this.selectionMode === "move" ? "copy" : "delete";
+            this.selectionMode === "move"
+                ? "copy"
+                : this.selectionMode === "copy"
+                ? "delete"
+                : "move";
+
+        this.tooltip = `Selection Mode: ${this.selectionMode}`;
+        QuickTipsManager.setToolTip(this.tooltip);
     }
 
     setSelectionHeight(height) {
@@ -461,6 +468,31 @@ class SelectionTool extends BaseTool {
                     removedBlocksObj,
                     { skipUndoSave: true }
                 );
+            }
+
+            if (this.selectionMode === "delete") {
+                this.undoRedoManager.current.saveUndo(this.changes);
+                this.selectionHeight = 1;
+                this.changes = {
+                    terrain: {
+                        added: {},
+                        removed: {},
+                    },
+                    environment: {
+                        added: [],
+                        removed: [],
+                    },
+                };
+                this.removeSelectionPreview();
+                this.selectionStartPosition = null;
+                this.selectedBlocks = null;
+                this.selectedEnvironments = null;
+                this.selectionActive = false;
+                this.moveOffset = new THREE.Vector3();
+                this.verticalOffset = 0;
+                this.rotation = 0;
+                this.deactivate();
+                return;
             }
 
             this.selectionActive = true;
