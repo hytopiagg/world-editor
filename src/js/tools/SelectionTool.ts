@@ -44,7 +44,7 @@ class SelectionTool extends BaseTool {
         super(terrainBuilderProps);
         this.name = "SelectionTool";
         this.originalTooltip =
-            "Selection Tool: Click to start selection, click again to confirm. Use 1 | 2 to adjust height. Click and drag to move selection. Press Escape to cancel.";
+            "Selection Tool: Click to start selection, click again to confirm. Use 1 | 2 to adjust height. Press 3 to switch between move, copy and delete mode. Click and drag to move selection. Press Escape to cancel.";
         this.tooltip = this.originalTooltip;
 
         if (terrainBuilderProps) {
@@ -186,7 +186,11 @@ class SelectionTool extends BaseTool {
                 this.previewPositionRef.current,
                 this.previewPositionRef.current
             );
-        } else if (event.key === "4") {
+        } else if (
+            event.key === "3" &&
+            !this.selectionActive &&
+            this.selectionStartPosition
+        ) {
             this.cycleSelectionMode();
         }
     }
