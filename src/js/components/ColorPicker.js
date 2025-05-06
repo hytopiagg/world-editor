@@ -7,11 +7,11 @@ import {
 } from "@adobe/react-spectrum";
 import styles from "../../css/ColorPicker.module.css";
 
-// Simple number input that doesn't cause update loops
+
 const CustomNumberInput = ({ label, value, onChange, min, max, step = 1 }) => {
     const [localValue, setLocalValue] = useState(value);
     
-    // Only update local value when prop changes significantly
+
     useEffect(() => {
         if (Math.abs(localValue - value) > 0.1) {
             setLocalValue(value);
@@ -24,7 +24,7 @@ const CustomNumberInput = ({ label, value, onChange, min, max, step = 1 }) => {
     };
     
     const handleBlur = () => {
-        // Only notify parent on blur (not every keystroke)
+
         onChange(localValue);
     };
     
@@ -48,11 +48,11 @@ const CustomNumberInput = ({ label, value, onChange, min, max, step = 1 }) => {
     );
 };
 
-// Simple hex input component
+
 const CustomHexInput = ({ label, hexValue, onChange }) => {
     const [localValue, setLocalValue] = useState(hexValue);
     
-    // Only update when prop changes
+
     useEffect(() => {
         if (localValue !== hexValue) {
             setLocalValue(hexValue);
@@ -65,21 +65,21 @@ const CustomHexInput = ({ label, hexValue, onChange }) => {
     
     const handleBlur = () => {
         try {
-            // Check if it's a valid hex color
+
             let formattedValue = localValue;
             if (!formattedValue.startsWith('#')) {
                 formattedValue = '#' + formattedValue;
             }
             
-            // Simple validation
+
             if (/^#([0-9A-F]{3}){1,2}$/i.test(formattedValue)) {
                 onChange(formattedValue);
             } else {
-                // Invalid format, revert to previous value
+
                 setLocalValue(hexValue);
             }
         } catch (error) {
-            // Revert on error
+
             setLocalValue(hexValue);
         }
     };
@@ -99,12 +99,11 @@ const CustomHexInput = ({ label, hexValue, onChange }) => {
         </div>
     );
 };
-
 /**
  * A color picker component with stable update behavior
  */
 export default function CustomColorPicker({ value = "#000000", onChange }) {
-    // Parse the incoming hex value to an HSB object once
+
     const [internalColor, setInternalColor] = useState(() => {
         try {
             return parseColor(value).toFormat("hsb");
@@ -113,7 +112,7 @@ export default function CustomColorPicker({ value = "#000000", onChange }) {
         }
     });
 
-    // When value prop changes from parent, update internal state
+
     useEffect(() => {
         try {
             const newColor = parseColor(value).toFormat("hsb");
@@ -121,26 +120,26 @@ export default function CustomColorPicker({ value = "#000000", onChange }) {
                 setInternalColor(newColor);
             }
         } catch (e) {
-            // Handle invalid colors gracefully
+
             console.warn("Invalid color value:", value);
         }
     }, [value]);
 
-    // Update parent only when color area or slider changes
+
     const handleColorChange = useCallback((newColor) => {
         setInternalColor(newColor);
         const hexValue = newColor.toString("hex");
         onChange(hexValue);
     }, [onChange]);
 
-    // Handle individual HSB channel changes
+
     const updateChannel = useCallback((channel, value) => {
         const newColor = internalColor.withChannelValue(channel, value);
         setInternalColor(newColor);
         onChange(newColor.toString("hex"));
     }, [internalColor, onChange]);
 
-    // Separate handlers for RGB to avoid conversion issues
+
     const updateRgbChannel = useCallback((channel, value) => {
         const rgbColor = internalColor.toFormat("rgb").withChannelValue(channel, value);
         const newColor = rgbColor.toFormat("hsb");
@@ -148,14 +147,14 @@ export default function CustomColorPicker({ value = "#000000", onChange }) {
         onChange(newColor.toString("hex"));
     }, [internalColor, onChange]);
 
-    // Get current RGB values
+
     const rgbValues = {
         red: internalColor.toFormat("rgb").getChannelValue("red"),
         green: internalColor.toFormat("rgb").getChannelValue("green"),
         blue: internalColor.toFormat("rgb").getChannelValue("blue")
     };
 
-    // Handle hex input changes
+
     const handleHexChange = useCallback((hexValue) => {
         try {
             const newColor = parseColor(hexValue).toFormat("hsb");

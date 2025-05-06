@@ -1,42 +1,33 @@
-// Default mapping from Minecraft to HYTOPIA blocks
+
 import { blockTypes, getBlockTypes } from "../../TerrainBuilder";
 
-// First, let's create a function to find a block ID by name pattern
 function findBlockIdByName(pattern) {
-    // Get the latest block types to ensure we have up-to-date data
-    const currentBlockTypes = getBlockTypes();
 
+    const currentBlockTypes = getBlockTypes();
     if (!currentBlockTypes || !currentBlockTypes.length) {
-        // Use fallbacks if editor blocks aren't available
+
         return getFallbackBlockId(pattern);
     }
 
-    // Convert pattern to lowercase for case-insensitive matching
     const patternLower = pattern.toLowerCase();
 
-    // First try exact match
     const exactMatch = currentBlockTypes.find(
         (block) => block.name.toLowerCase() === patternLower
     );
-
     if (exactMatch) {
         return exactMatch.id;
     }
 
-    // Then try includes match
     const includesMatch = currentBlockTypes.find((block) =>
         block.name.toLowerCase().includes(patternLower)
     );
-
     if (includesMatch) {
         return includesMatch.id;
     }
 
-    // If no matches, use fallbacks
     return getFallbackBlockId(pattern);
 }
 
-// Fallback block IDs if we can't find a match in the editor blocks
 function getFallbackBlockId(pattern) {
     const fallbacks = {
         grass: 7,
@@ -50,17 +41,14 @@ function getFallbackBlockId(pattern) {
         dragon: 5,
         default: 1,
     };
-
     for (const [key, id] of Object.entries(fallbacks)) {
         if (pattern.toLowerCase().includes(key)) {
             return id;
         }
     }
-
     return fallbacks.default;
 }
 
-// Define key block ID constants based on available blocks
 const BLOCK_IDS = {
     BRICKS: findBlockIdByName("bricks"),
     DIRT: findBlockIdByName("dirt"),
@@ -74,9 +62,8 @@ const BLOCK_IDS = {
     OAK_PLANKS: findBlockIdByName("oak-planks"),
     SAND: findBlockIdByName("sand"),
 };
-
 export const DEFAULT_BLOCK_MAPPINGS = {
-    // Stone and variants
+
     "minecraft:stone": {
         id: BLOCK_IDS.STONE || 1,
         name: "Stone",
@@ -123,7 +110,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Dirt and variants
     "minecraft:dirt": { id: BLOCK_IDS.DIRT || 4, name: "Dirt", action: "map" },
     "minecraft:grass_block": {
         id: BLOCK_IDS.GRASS || 7,
@@ -162,7 +148,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Sand and variants
     "minecraft:sand": { id: BLOCK_IDS.SAND || 4, name: "Sand", action: "map" },
     "minecraft:red_sand": {
         id: BLOCK_IDS.SAND || 4,
@@ -175,7 +160,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Wood and variants
     "minecraft:oak_log": {
         id: findBlockIdByName("log") || 1,
         name: "Log",
@@ -217,7 +201,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Planks
     "minecraft:oak_planks": {
         id: BLOCK_IDS.OAK_PLANKS || 1,
         name: "Oak Planks",
@@ -259,7 +242,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Leaves
     "minecraft:oak_leaves": {
         id: findBlockIdByName("oak-leaves") || BLOCK_IDS.GRASS || 7,
         name: "Leaves",
@@ -301,7 +283,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Ores and mineral blocks
     "minecraft:coal_ore": {
         id: findBlockIdByName("coal-ore") || BLOCK_IDS.DIAMOND_ORE || 3,
         name: "Coal Ore",
@@ -343,7 +324,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Building blocks
     "minecraft:bricks": {
         id: BLOCK_IDS.BRICKS || 1,
         name: "Bricks",
@@ -386,7 +366,6 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
 
-    // Fluids
     "minecraft:water": {
         id: BLOCK_IDS.WATER || 6,
         name: "Water",
@@ -400,21 +379,17 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         isLiquid: true,
     },
 
-    // Default action for unmapped blocks
     default: { action: "skip" },
 };
 
-// Suggested mappings for Minecraft blocks to HYTOPIA
 export function suggestMapping(minecraftBlockName) {
-    // First check for direct mappings in DEFAULT_BLOCK_MAPPINGS
+
     if (DEFAULT_BLOCK_MAPPINGS[minecraftBlockName]) {
         return DEFAULT_BLOCK_MAPPINGS[minecraftBlockName];
     }
 
-    // If no direct mapping, try to determine based on block name
     const blockName = minecraftBlockName.toLowerCase();
 
-    // Try to find a match in the blockTypes array first
     const matchingBlock = findMatchingBlock(blockName);
     if (matchingBlock) {
         return {
@@ -424,56 +399,43 @@ export function suggestMapping(minecraftBlockName) {
         };
     }
 
-    // Only do simple matches for obvious block types
-    // This is intentionally limited to very clear matches
 
-    // Exact matches for common materials - be very conservative
+
     if (blockName === "stone" || blockName === "cobblestone") {
         return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
     }
-
     if (blockName === "dirt") {
         return { id: BLOCK_IDS.DIRT || 4, name: "Dirt", action: "map" };
     }
-
     if (blockName === "grass_block" || blockName === "grass") {
         return { id: BLOCK_IDS.GRASS || 7, name: "Grass", action: "map" };
     }
-
     if (blockName === "oak_log" || blockName === "oak_planks") {
         return { id: 2, name: "Wood", action: "map" };
     }
-
     if (blockName === "water") {
         return { id: BLOCK_IDS.WATER || 6, name: "Water", action: "map" };
     }
 
-    // Default to skip for non-obvious matches - let user decide
     return { action: "skip" };
 }
 
-// Helper function to find matching block in blockTypes array
 function findMatchingBlock(blockNamePattern) {
-    // Get the latest block types
-    const currentBlockTypes = getBlockTypes();
 
+    const currentBlockTypes = getBlockTypes();
     if (!currentBlockTypes || !currentBlockTypes.length) {
         return null;
     }
 
-    // First try exact match without minecraft: prefix
     const nameWithoutPrefix = blockNamePattern.replace("minecraft:", "");
 
-    // Try direct match
     let match = currentBlockTypes.find(
         (block) => block.name.toLowerCase() === nameWithoutPrefix.toLowerCase()
     );
-
     if (match) {
         return match;
     }
 
-    // Try contains match
     match = currentBlockTypes.find((block) => {
         const normalizedBlockName = block.name.toLowerCase();
         return (
@@ -481,11 +443,9 @@ function findMatchingBlock(blockNamePattern) {
             nameWithoutPrefix.includes(normalizedBlockName)
         );
     });
-
     return match || null;
 }
 
-// Default HYTOPIA block types
 export const DEFAULT_HYTOPIA_BLOCKS = [
     { id: 1, name: "Bricks", textureUri: "blocks/bricks.png" },
     {
@@ -501,15 +461,13 @@ export const DEFAULT_HYTOPIA_BLOCKS = [
     { id: 7, name: "Grass", textureUri: "blocks/grass" },
 ];
 
-// Get all available HYTOPIA blocks
 export function getHytopiaBlocks() {
     try {
-        // Use the editor's block types if available (for better variety)
-        if (blockTypes && blockTypes.length > 0) {
-            // Log block types for debugging
-            //console.log("Available editor blocks:", blockTypes.map(b => `${b.name} (ID: ${b.id})`));
 
-            // Format them to match the expected structure
+        if (blockTypes && blockTypes.length > 0) {
+
+
+
             return blockTypes.map((block) => ({
                 id: block.id,
                 name:
@@ -522,19 +480,16 @@ export function getHytopiaBlocks() {
         console.warn("Could not load editor block types:", error);
     }
 
-    // Fall back to default block types if editor blocks aren't available
     return DEFAULT_HYTOPIA_BLOCKS;
 }
 
-// Generate a unique ID for a new block type
 export function generateUniqueBlockId(existingBlockTypes) {
     const existingIds = existingBlockTypes.map((block) => block.id);
     return Math.max(0, ...existingIds) + 1;
 }
 
-// Find a HYTOPIA block by ID
 export function getHytopiaBlockById(id) {
-    // Use the same source as getHytopiaBlocks
+
     const blocks = getHytopiaBlocks();
     return blocks.find((block) => block.id === id);
 }

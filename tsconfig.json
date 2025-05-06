@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "lib": ["DOM", "DOM.Iterable", "ESNext"],
+        "allowJs": true, // Allows existing JS files
+        "skipLibCheck": true, // Speeds up build by skipping type checks on node_modules
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "strict": false, // You can enable this later for full type safety
+        "forceConsistentCasingInFileNames": true,
+        "noEmit": true, // Don't output compiled files, just type-check
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "jsx": "react-jsx", // Use "react" if you're on React <17
+        "noFallthroughCasesInSwitch": true
+    },
+    "include": ["src"],
+    "exclude": ["node_modules"]
+}

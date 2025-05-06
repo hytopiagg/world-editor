@@ -6,16 +6,12 @@ import { FaPlay } from "react-icons/fa";
 import { FaPause } from "react-icons/fa";
 import * as THREE from "three";
 
-// Order expected by Box geometry: +X (right), -X (left), +Y (top), -Y (bottom), +Z (front), -Z (back)
 const FACE_ORDER = ["right", "left", "top", "bottom", "front", "back"];
-
 const PreviewCube = ({ textureObjects }) => {
     const meshRef = useRef();
 
-    // Memoize the array of materials using the passed texture objects
     const materials = useMemo(() => {
         const fallbackTexture = textureObjects?.all; // Get the actual fallback texture object
-
         return FACE_ORDER.map((faceKey) => {
             const texture = textureObjects?.[faceKey] || fallbackTexture;
             if (texture) {
@@ -29,21 +25,18 @@ const PreviewCube = ({ textureObjects }) => {
                 depthWrite: true, // Prevent depth buffer issues with transparency
             });
         });
-        // Depend on the textureObjects state itself
-    }, [textureObjects]);
 
+    }, [textureObjects]);
     return <Box ref={meshRef} args={[1, 1, 1]} material={materials} />;
 };
-
 PreviewCube.propTypes = {
-    // Expects { all: THREE.Texture, top: THREE.Texture, ... }
+
     textureObjects: PropTypes.object.isRequired,
 };
-
 const BlockPreview3D = ({ textureObjects }) => {
     const [isRotating, setIsRotating] = useState(true);
     
-    // Keying the canvas might not be strictly necessary now, but doesn't hurt
+
     const previewKey = useMemo(
         () =>
             Object.values(textureObjects)
@@ -95,9 +88,7 @@ const BlockPreview3D = ({ textureObjects }) => {
                     shadow-mapSize-width={1024}
                     shadow-mapSize-height={1024}
                 />
-
                 <PreviewCube textureObjects={textureObjects} />
-
                 <OrbitControls
                     enableZoom={true}
                     enablePan={false}
@@ -122,9 +113,7 @@ const BlockPreview3D = ({ textureObjects }) => {
         </div>
     );
 };
-
 BlockPreview3D.propTypes = {
     textureObjects: PropTypes.object.isRequired,
 };
-
 export default BlockPreview3D;
