@@ -93,9 +93,6 @@ export class SpatialHashGrid {
             this.HASH_PRIME2 = hashConstants.HASH_PRIME2;
             this.HASH_PRIME3 = hashConstants.HASH_PRIME3;
         }
-        console.log(
-            `SpatialHashGrid: Rebuilding grid from binary data with ${size} blocks...`
-        );
 
         this.clear();
 
@@ -122,11 +119,6 @@ export class SpatialHashGrid {
         }
 
         this.size = addedCount;
-
-        console.log(
-            `SpatialHashGrid: Rebuilt grid from binary data. Final size: ${this.size} blocks.`
-        );
-        this.logSampleBlocks(3);
     }
     /**
      * Validate grid data to ensure it's properly formed
@@ -182,27 +174,6 @@ export class SpatialHashGrid {
             }
         }
         return true;
-    }
-    /**
-     * Log sample blocks for debugging
-     * @param {number} count - Number of blocks to sample
-     */
-    logSampleBlocks(count = 5) {
-        if (!this._blocks || !this._coords || this.size === 0) {
-            console.log("SpatialHashGrid: No blocks to sample (empty grid)");
-            return;
-        }
-        const sampleCount = Math.min(count, this.size);
-        console.log(
-            `SpatialHashGrid: Sample of ${sampleCount} blocks from grid:`
-        );
-        for (let i = 0; i < sampleCount; i++) {
-            const x = this._coords[i * 3];
-            const y = this._coords[i * 3 + 1];
-            const z = this._coords[i * 3 + 2];
-            const blockId = this._blocks[i];
-            console.log(`  Block ${i}: (${x},${y},${z}) ID=${blockId}`);
-        }
     }
     /**
      * Generate a spatial hash from coordinates
@@ -500,43 +471,6 @@ export class SpatialHashGrid {
 
         this.initializeArrays(1000);
         console.log("SpatialHashGrid: Reset to initial state");
-    }
-    /**
-     * Dump debug information about the grid state
-     * @returns {Object} Debug info object
-     */
-    getDebugInfo() {
-        return {
-            size: this.size,
-            capacity: this._capacity,
-            hashTableSize: this.hashTable ? this.hashTable.length : 0,
-            initialized: this._blocks !== null && this._coords !== null,
-            sampleBlocks: this.getSampleBlocks(5),
-        };
-    }
-    /**
-     * Get sample blocks for debugging
-     * @param {number} count Number of blocks to sample
-     * @returns {Array} Sample blocks
-     */
-    getSampleBlocks(count = 5) {
-        const samples = [];
-        if (!this._blocks || !this._coords || this.size === 0) {
-            return samples;
-        }
-        const sampleCount = Math.min(count, this.size);
-        for (let i = 0; i < sampleCount; i++) {
-            samples.push({
-                index: i,
-                position: [
-                    this._coords[i * 3],
-                    this._coords[i * 3 + 1],
-                    this._coords[i * 3 + 2],
-                ],
-                blockId: this._blocks[i],
-            });
-        }
-        return samples;
     }
     /**
      * Expand the capacity of the grid's internal arrays

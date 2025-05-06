@@ -1,21 +1,20 @@
-import React, { useState, useEffect } from "react";
-import BlockButton from "./BlockButton";
-import EnvironmentButton from "./EnvironmentButton";
-import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import { saveAs } from "file-saver";
+import JSZip from "jszip";
+import { useEffect, useState } from "react";
+import { FaDownload } from "react-icons/fa";
+import "../../css/BlockToolsSidebar.css";
 import { environmentModels } from "../EnvironmentBuilder";
 import {
-    blockTypes,
-    processCustomBlock,
     batchProcessCustomBlocks,
+    blockTypes,
     getCustomBlocks,
-    removeCustomBlock,
-    getBlockTypes,
+    processCustomBlock,
+    removeCustomBlock
 } from "../managers/BlockTypesManager";
-import JSZip from "jszip";
-import { saveAs } from "file-saver";
-import "../../css/BlockToolsSidebar.css";
+import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import BlockButton from "./BlockButton";
+import EnvironmentButton from "./EnvironmentButton";
 import ModelPreview from "./ModelPreview";
-import { FaDownload } from "react-icons/fa";
 
 const SCALE_MIN = 0.1;
 const SCALE_MAX = 5.0;
@@ -280,11 +279,17 @@ const BlockToolsSidebar = ({
                     originalId: blockType.id, // Store the original ID for potential future recovery
                 };
 
+                const errorId = errorBlock.id;
+
+                console.log('blockType', blockType)
                 Object.entries(newTerrain).forEach(([position, block]) => {
-                    if (block.id === blockType.id) {
-                        newTerrain[position] = errorBlock;
+                    console.log('block', block)
+                    console.log('blockType.id == block.id', blockType.id == block.id)
+                    if (block === blockType.id) {
+                        newTerrain[position] = errorId;
                     }
                 });
+                console.log('newTerrain', newTerrain)
                 await DatabaseManager.saveData(
                     STORES.TERRAIN,
                     "current",
