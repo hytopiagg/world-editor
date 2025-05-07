@@ -3,7 +3,7 @@ import HCaptcha from "@hcaptcha/react-hcaptcha";
 import "../../css/AIAssistantPanel.css";
 
 // Helper to generate unique IDs
-const generateUniqueId = (): string => {
+export const generateUniqueId = (): string => {
     return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
