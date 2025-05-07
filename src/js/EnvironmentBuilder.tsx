@@ -462,18 +462,20 @@ const EnvironmentBuilder = (
             );
         }
     };
-
+ 
     const updateEnvironmentToMatch = (targetState) => {
         console.log("updateEnvironmentToMatch", targetState);
         try {
             isUndoRedoOperation.current = true;
 
-            const currentObjects = new Map(); // Map<instanceId, {modelUrl, position, rotation, scale}>
-            const targetObjects = new Map(); // Map<instanceId, {modelUrl, position, rotation, scale}>
+            const currentObjects = new Map();
+            const targetObjects = new Map();
+            const createCompositeKey = (modelUrl, instanceId) => `${modelUrl}:${instanceId}`;
 
             for (const [modelUrl, instancedData] of instancedMeshes.current) {
                 instancedData.instances.forEach((data, instanceId) => {
-                    currentObjects.set(instanceId, {
+                    const compositeKey = createCompositeKey(modelUrl, instanceId);
+                    currentObjects.set(compositeKey, {
                         modelUrl,
                         instanceId,
                         position: data.position,
@@ -489,15 +491,16 @@ const EnvironmentBuilder = (
                         model.name === obj.name ||
                         model.modelUrl === obj.modelUrl
                 );
+                console.log("modelType", modelType);
                 if (modelType) {
-
                     const eulerRotation = new THREE.Euler(
                         obj.rotation?.x || 0,
                         obj.rotation?.y || 0,
                         obj.rotation?.z || 0
                     );
 
-                    targetObjects.set(obj.instanceId, {
+                    const compositeKey = createCompositeKey(modelType.modelUrl, obj.instanceId);
+                    targetObjects.set(compositeKey, {
                         ...obj,
                         modelUrl: modelType.modelUrl, // Use the current modelUrl from environmentModels
                         position: new THREE.Vector3(
@@ -519,14 +522,19 @@ const EnvironmentBuilder = (
                 }
             });
 
-            for (const [instanceId, obj] of currentObjects) {
-                if (!targetObjects.has(instanceId)) {
-                    removeInstance(obj.modelUrl, instanceId);
+            console.log("targetObjects", targetObjects);
+
+            // Remove objects that are no longer in the target state
+            for (const [compositeKey, obj] of currentObjects) {
+                if (!targetObjects.has(compositeKey)) {
+                    removeInstance(obj.modelUrl, obj.instanceId);
                 }
             }
 
-            for (const [instanceId, obj] of targetObjects) {
-                if (!currentObjects.has(instanceId)) {
+            // Add new objects from the target state
+            for (const [compositeKey, obj] of targetObjects) {
+                if (!currentObjects.has(compositeKey)) {
+                    console.log("obj has instance", obj);
                     const modelType = environmentModels.find(
                         (model) =>
                             model.modelUrl === obj.modelUrl ||
@@ -540,12 +548,11 @@ const EnvironmentBuilder = (
                         placeEnvironmentModelWithoutSaving(
                             modelType,
                             tempMesh,
-                            instanceId
+                            obj.instanceId
                         );
                     }
                 }
             }
-
 
             setTotalEnvironmentObjects(targetObjects.size);
         } catch (error) {
