@@ -756,7 +756,7 @@ function TerrainBuilder(
                 }
             }
         } else {
-            if (modeRef.current === "add" && !currentBlockTypeRef.current.isEnvironment) {
+            if (modeRef.current === "add" && !currentBlockTypeRef?.current?.isEnvironment) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
                 const positions = getPlacementPositions(
