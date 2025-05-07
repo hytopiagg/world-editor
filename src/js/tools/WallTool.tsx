@@ -23,6 +23,7 @@ class WallTool extends BaseTool {
     isPlacingRef: React.RefObject<any>;
     previewPositionRef: React.RefObject<any>;
     wallPreview: THREE.InstancedMesh | null;
+    pendingChangesRef: React.RefObject<any>;
 
     constructor(terrainBuilderProps) {
         console.log("WallTool initialized");
@@ -49,7 +50,7 @@ class WallTool extends BaseTool {
             this.placementChangesRef = terrainBuilderProps.placementChangesRef;
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
-
+            this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
         } else {
             console.error(
                 "WallTool: terrainBuilderProps is undefined in constructor"
@@ -357,6 +358,8 @@ class WallTool extends BaseTool {
                 if (this.terrainRef.current[posKey]) continue;
 
                 addedBlocks[posKey] = blockTypeId;
+                this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
+                delete this.pendingChangesRef.current.terrain.removed[posKey];
             }
         }
 

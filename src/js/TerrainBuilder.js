@@ -2074,7 +2074,6 @@ function TerrainBuilder(
             Object.keys(removedBlocks).length === 0
         )
             return;
-        console.time("updateTerrainBlocks");
         trackTerrainChanges(addedBlocks, removedBlocks);
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             if (!isNaN(parseInt(blockId))) {
@@ -2158,7 +2157,6 @@ function TerrainBuilder(
                 force: true,
             });
         }
-        console.timeEnd("updateTerrainBlocks");
     };
     const applyDeferredSpatialHashUpdates = async () => {
         return spatialHashUpdateManager.applyDeferredSpatialHashUpdates(
