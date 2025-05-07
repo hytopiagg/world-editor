@@ -301,10 +301,11 @@
   margin-bottom: 10px;
 }
 
-.upload-icon,
+.block-tools-container .block-tools-sidebar .upload-icon,
 .block-icon {
-    width: 20px;
-    height: 20px;
+  color: #fff;
+  width: 20px;
+  height: 20px;
 }
 
 .texture-drop-zone.drag-over .upload-icon,
