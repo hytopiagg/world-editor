@@ -159,26 +159,74 @@
     background-color: transparent; /* Default state */
 }
 
-.tab-button:not(:last-child) {
-    border-right: none; /* Remove right border for buttons not at the end */
-}
-
-.tab-button:first-child {
-    border-radius: 12px 0 0 12px;
-}
-
-.tab-button:last-child {
-    border-radius: 0 12px 12px 0;
-}
-
-/* Middle tab button needs no specific border radius if sides are handled */
-
 .tab-button:hover {
-    background-color: rgba(80, 80, 80, 0.5);
+  background-color: rgba(80, 80, 80, 0.5);
 }
 
 .tab-button.active {
-    background-color: rgba(241, 241, 241, 0.2);
+  background-color: rgba(241, 241, 241, 0.2);
+}
+
+.tab-button.active:hover {
+  background-color: rgba(241, 241, 241, 0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-button-middle {
+    border-radius: 0;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-left: none;
+    border-right: none;
+}
+
+.tab-button-middle.active,
+.tab-button-middle:active:hover,
+.tab-button-middle.toggle-active {
+    border-top: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-left: none;
+    border-right: none;
+}
+
+/* The middle button's specific hover behaviors take precedence */
+.tab-button-middle.active:hover {
+    border-top: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-left: none;
+    border-right: none;
+}
+
+.tab-button-middle:hover {
+    border-top: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-left: none;
+    border-right: none;
+}
+
+.tab-button-start {
+    border-radius: 12px 0 0 12px;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-button-start.active,
+.tab-button-start:hover,
+.tab-button-start:active:hover,
+.tab-button-start.toggle-active {
+    border-radius: 12px 0 0 12px;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-button-end {
+    border-radius: 0 12px 12px 0;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-button-end.active,
+.tab-button-end:hover,
+.tab-button-end:active:hover,
+.tab-button-end.toggle-active {
+    border-radius: 0 12px 12px 0;
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Environment Button Styles */

@@ -891,7 +891,7 @@ const BlockToolsSidebar = ({
             <div className="block-tools-sidebar">
                 <div className="tab-button-wrapper">
                     <button
-                        className={`tab-button ${
+                        className={`tab-button tab-button-start ${
                             activeTab === "blocks" ? "active" : ""
                         }`}
                         onClick={() => handleTabChange("blocks")}
@@ -899,7 +899,7 @@ const BlockToolsSidebar = ({
                         Blocks
                     </button>
                     <button
-                        className={`tab-button ${
+                        className={`tab-button tab-button-middle ${
                             activeTab === "environment" ? "active" : ""
                         }`}
                         onClick={() => handleTabChange("environment")}
@@ -907,7 +907,7 @@ const BlockToolsSidebar = ({
                         Models
                     </button>
                     <button
-                        className={`tab-button ${
+                        className={`tab-button tab-button-end ${
                             activeTab === "schematics" ? "active" : ""
                         }`}
                         onClick={() => handleTabChange("schematics")}
