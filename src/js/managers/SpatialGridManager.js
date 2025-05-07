@@ -413,6 +413,7 @@ class SpatialGridManager {
                     continue;
                 }
 
+                console.log("setting block in spatial hash grid:", x, y, z, blockId);
                 this.spatialHashGrid.set(x, y, z, blockId);
             }
         }

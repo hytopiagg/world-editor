@@ -56,6 +56,7 @@ const EnvironmentBuilder = (
         placementSize = "single",
         placementSettings,
         undoRedoManager,
+        terrainBuilderRef,
     },
     ref
 ) => {
@@ -462,7 +463,7 @@ const EnvironmentBuilder = (
             );
         }
     };
- 
+
     const updateEnvironmentToMatch = (targetState) => {
         console.log("updateEnvironmentToMatch", targetState);
         try {
@@ -652,6 +653,16 @@ const EnvironmentBuilder = (
             scale,
             matrix,
         });
+        if (terrainBuilderRef.current) {
+            terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                x: position.x,
+                y: position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                z: position.z,
+                blockId: 1000,
+            }], [], {
+                force: true,
+            });
+        }
         return {
             modelUrl,
             instanceId,
@@ -789,6 +800,16 @@ const EnvironmentBuilder = (
                     });
 
                     removedObjects.push(removedObject);
+                    if (terrainBuilderRef.current && removedObject.position) {
+                        terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+                            x: removedObject.position.x,
+                            y: removedObject.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                            z: removedObject.position.z,
+                            blockId: 1000,
+                        }], {
+                            force: true,
+                        });
+                    }
                 });
             });
 
@@ -925,6 +946,16 @@ const EnvironmentBuilder = (
                         z: transform.scale.z,
                     },
                 };
+                if (terrainBuilderRef.current && newObject.position) {
+                    terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                        x: newObject.position.x,
+                        y: newObject.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                        z: newObject.position.z,
+                        blockId: 1000,
+                    }], [], {
+                        force: true,
+                    });
+                }
                 addedObjects.push(newObject);
             } else {
                 console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);

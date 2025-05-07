@@ -442,6 +442,7 @@ function App() {
                         previewPositionFromAppJS={currentPreviewPosition}
                         placementSettings={placementSettings}
                         undoRedoManager={undoRedoManagerRef}
+                        terrainBuilderRef={terrainBuilderRef}
                     />
                 </Canvas>
 
