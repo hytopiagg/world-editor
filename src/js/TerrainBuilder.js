@@ -703,7 +703,8 @@ function TerrainBuilder(
         [threeRaycaster.ray]
     );
     const handleBlockPlacement = () => {
-        console.log("handleBlockPlacement");
+        console.log("********handleBlockPlacement********");
+        console.log("currentBlockTypeRef.current", currentBlockTypeRef.current);
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             return;
         }
@@ -755,7 +756,7 @@ function TerrainBuilder(
                 }
             }
         } else {
-            if (modeRef.current === "add") {
+            if (modeRef.current === "add" && !currentBlockTypeRef.current.isEnvironment) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
                 const positions = getPlacementPositions(
