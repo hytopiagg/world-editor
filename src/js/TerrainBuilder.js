@@ -259,6 +259,8 @@ function TerrainBuilder(
     }, []);
 
     const efficientTerrainSave = async () => {
+        console.log("efficientTerrainSave");
+        console.log("pendingChangesRef", pendingChangesRef.current);
         if (localStorage.getItem("IS_DATABASE_CLEARING")) {
             return false;
         }
@@ -826,6 +828,8 @@ function TerrainBuilder(
                         removedBlocks[blockKey] = terrainRef.current[blockKey];
                         delete terrainRef.current[blockKey];
                         placementChangesRef.current.terrain.removed[blockKey] =
+                            removedBlocks[blockKey];
+                        pendingChangesRef.current.terrain.removed[blockKey] =
                             removedBlocks[blockKey];
                         blockWasRemoved = true;
                     }
