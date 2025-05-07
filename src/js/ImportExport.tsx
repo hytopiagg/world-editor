@@ -240,8 +240,22 @@ export const importMap = async (
                                             entity.modelScale) /
                                         2;
                                     const adjustedY = y - 0.5 - verticalOffset;
+                                    
+                                    const boundingBoxWidth = 
+                                        matchingModel?.boundingBoxWidth || 1;
+                                    const boundingBoxDepth =
+                                        matchingModel?.boundingBoxDepth || 1;
+                                        
+                                    const horizontalOffsetX = 
+                                        (boundingBoxWidth * entity.modelScale) / 2;
+                                    const horizontalOffsetZ =
+                                        (boundingBoxDepth * entity.modelScale) / 2;
+                                        
+                                    const adjustedX = x - horizontalOffsetX;
+                                    const adjustedZ = z - horizontalOffsetZ;
+                                    
                                     return {
-                                        position: { x, y: adjustedY, z },
+                                        position: { x: adjustedX, y: adjustedY, z: adjustedZ },
                                         rotation: {
                                             x: euler.x,
                                             y: euler.y,
@@ -523,7 +537,16 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                         (boundingBoxHeight * obj.scale.y) / 2;
                     const adjustedY = obj.position.y + 0.5 + verticalOffset;
 
-                    const key = `${obj.position.x},${adjustedY},${obj.position.z}`;
+                    const boundingBoxWidth = entityType.boundingBoxWidth || 1;
+                    const boundingBoxDepth = entityType.boundingBoxDepth || 1;
+                    
+                    const horizontalOffsetX = (boundingBoxWidth * obj.scale.x) / 2;
+                    const horizontalOffsetZ = (boundingBoxDepth * obj.scale.z) / 2;
+                    
+                    const adjustedX = obj.position.x + horizontalOffsetX;
+                    const adjustedZ = obj.position.z + horizontalOffsetZ;
+
+                    const key = `${adjustedX},${adjustedY},${adjustedZ}`;
                     acc[key] = {
                         modelUri: modelUriForJson, // Use adjusted relative path
                         modelLoopedAnimations: entityType.animations || [
