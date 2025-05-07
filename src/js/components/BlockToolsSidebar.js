@@ -1,6 +1,6 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { FaDownload, FaWrench } from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
 import { environmentModels } from "../EnvironmentBuilder";
@@ -16,6 +16,7 @@ import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
 import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
 import ModelPreview from "./ModelPreview";
+import { cameraManager } from "../Camera";
 
 const SCALE_MIN = 0.1;
 const SCALE_MAX = 5.0;
@@ -107,6 +108,10 @@ const BlockToolsSidebar = ({
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
+    const schematicPreviewsRef = useRef(schematicPreviews);
+    const schematicListStateRef = useRef(schematicList);
+    const isGeneratingPreviews = useRef(false);
+    const currentPreviewIndex = useRef(0);
 
     const loadSchematicsFromDB = useCallback(async () => {
         console.log("[BlockToolsSidebar] Loading schematics from DB...");
@@ -143,10 +148,37 @@ const BlockToolsSidebar = ({
                     cursor.continue();
                 } else {
                     loadedSchematics.sort((a, b) => b.timestamp - a.timestamp);
-                    setSchematicList(loadedSchematics);
-                    console.log(
-                        `[BlockToolsSidebar] Loaded ${loadedSchematics.length} schematics.`
-                    );
+
+                    const currentSchematicListFromState =
+                        schematicListStateRef.current;
+                    let listsAreIdentical =
+                        currentSchematicListFromState.length ===
+                        loadedSchematics.length;
+
+                    if (listsAreIdentical && loadedSchematics.length > 0) {
+                        for (let i = 0; i < loadedSchematics.length; i++) {
+                            if (
+                                currentSchematicListFromState[i].id !==
+                                    loadedSchematics[i].id ||
+                                currentSchematicListFromState[i].timestamp !==
+                                    loadedSchematics[i].timestamp
+                            ) {
+                                listsAreIdentical = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!listsAreIdentical) {
+                        console.log(
+                            `[BlockToolsSidebar] Schematic list changed or initial load. Updating state with ${loadedSchematics.length} schematics.`
+                        );
+                        setSchematicList(loadedSchematics);
+                    } else {
+                        console.log(
+                            `[BlockToolsSidebar] Loaded ${loadedSchematics.length} schematics from DB, list content (IDs, timestamps) is unchanged. Skipping state update.`
+                        );
+                    }
                 }
             };
             cursorRequest.onerror = (event) => {
@@ -248,58 +280,140 @@ const BlockToolsSidebar = ({
     }, []);
 
     useEffect(() => {
-        // Generate previews when schematicList changes
-        const generatePreviews = async () => {
-            if (schematicList.length > 0) {
-                const newPreviews = { ...schematicPreviews };
-                let updateNeeded = false;
-                for (const entry of schematicList) {
-                    if (!newPreviews[entry.id] && entry.schematic) {
-                        try {
+        schematicPreviewsRef.current = schematicPreviews;
+    }, [schematicPreviews]);
+
+    useEffect(() => {
+        schematicListStateRef.current = schematicList;
+    }, [schematicList]);
+
+    useEffect(() => {
+        const processQueue = async () => {
+            if (
+                currentPreviewIndex.current >= schematicList.length ||
+                !isGeneratingPreviews.current
+            ) {
+                isGeneratingPreviews.current = false;
+                console.log(
+                    "[BlockToolsSidebar] Finished preview generation queue or queue stopped."
+                );
+                if (currentPreviewIndex.current > 0) {
+                    requestAnimationFrame(() => {
+                        if (cameraManager) {
+                            cameraManager.loadSavedState();
                             console.log(
-                                `[BlockToolsSidebar] Generating preview for schematic: ${entry.prompt.substring(
-                                    0,
-                                    30
-                                )}...`
+                                "[BlockToolsSidebar] Camera state restored after preview generation batch."
                             );
-                            const dataUrl = await generateSchematicPreview(
-                                entry.schematic,
-                                {
-                                    width: 48,
-                                    height: 48,
-                                    background: "transparent",
-                                }
-                            );
-                            if (dataUrl) {
-                                newPreviews[entry.id] = dataUrl;
-                                updateNeeded = true;
-                            } else {
-                                console.warn(
-                                    `[BlockToolsSidebar] Preview generation returned empty for ${entry.id}`
-                                );
-                                newPreviews[entry.id] = null; // Mark as attempted but failed
-                                updateNeeded = true;
-                            }
-                        } catch (error) {
-                            console.error(
-                                `[BlockToolsSidebar] Error generating preview for schematic ${entry.id}:`,
-                                error
-                            );
-                            newPreviews[entry.id] = null; // Mark as attempted but failed
-                            updateNeeded = true;
                         }
+                    });
+                }
+                currentPreviewIndex.current = 0;
+                return;
+            }
+
+            const entry = schematicList[currentPreviewIndex.current];
+
+            if (!entry.schematic) {
+                console.log(
+                    `[BlockToolsSidebar] No schematic data for entry ${entry.id} (index ${currentPreviewIndex.current}), marking as null.`
+                );
+                setSchematicPreviews((prevPreviews) => ({
+                    ...prevPreviews,
+                    [entry.id]: null,
+                }));
+            } else if (
+                schematicPreviewsRef.current[entry.id] === undefined ||
+                schematicPreviewsRef.current[entry.id] === null
+            ) {
+                // Schematic data exists, and preview is missing or previously failed. Try/Retry generating.
+                let newPreviewDataUrl = null;
+                let errorOccurred = false;
+                try {
+                    console.log(
+                        `[BlockToolsSidebar] Generating preview for schematic (index ${
+                            currentPreviewIndex.current
+                        }): ${entry.prompt.substring(0, 30)}...`
+                    );
+                    newPreviewDataUrl = await generateSchematicPreview(
+                        entry.schematic,
+                        {
+                            width: 48,
+                            height: 48,
+                            background: "transparent",
+                        }
+                    );
+                } catch (error) {
+                    console.error(
+                        `[BlockToolsSidebar] Error generating preview for schematic ${entry.id}:`,
+                        error
+                    );
+                    errorOccurred = true;
+                }
+
+                setSchematicPreviews((prevPreviews) => ({
+                    ...prevPreviews,
+                    [entry.id]: errorOccurred
+                        ? null
+                        : newPreviewDataUrl || null,
+                }));
+            } else {
+                // Preview already exists and is valid (not undefined or null), or no schematic data (handled above)
+                console.log(
+                    `[BlockToolsSidebar] Skipping preview for schematic (index ${
+                        currentPreviewIndex.current
+                    }): ${entry.prompt.substring(
+                        0,
+                        30
+                    )} - already processed or no retry needed.`
+                );
+            }
+
+            currentPreviewIndex.current++;
+            requestAnimationFrame(processQueue);
+        };
+
+        if (schematicList.length > 0) {
+            if (!isGeneratingPreviews.current) {
+                let needsProcessing = false;
+                for (const entry of schematicList) {
+                    // If preview is undefined (never processed) or null (failed/no data), it needs processing.
+                    if (
+                        schematicPreviewsRef.current[entry.id] === undefined ||
+                        schematicPreviewsRef.current[entry.id] === null
+                    ) {
+                        needsProcessing = true;
+                        break;
                     }
                 }
-                if (updateNeeded) {
+
+                if (needsProcessing) {
                     console.log(
-                        "[BlockToolsSidebar] Updating schematic previews state."
+                        "[BlockToolsSidebar] Starting/Restarting preview generation queue as items need processing."
                     );
-                    setSchematicPreviews(newPreviews);
+                    isGeneratingPreviews.current = true;
+                    currentPreviewIndex.current = 0;
+                    requestAnimationFrame(processQueue);
+                } else {
+                    console.log(
+                        "[BlockToolsSidebar] All schematics processed or no new items/failures."
+                    );
                 }
+            } else {
+                // console.log("[BlockToolsSidebar] Preview generation already in progress."); // Can be noisy
             }
+        } else if (schematicList.length === 0) {
+            setSchematicPreviews({});
+            isGeneratingPreviews.current = false;
+            currentPreviewIndex.current = 0;
+        }
+
+        return () => {
+            isGeneratingPreviews.current = false;
+            console.log(
+                "[BlockToolsSidebar] Preview generation queue stopped due to cleanup or schematicList change."
+            );
         };
-        generatePreviews();
-    }, [schematicList]); // Removed schematicPreviews from dependency array to avoid potential loop
+    }, [schematicList]);
 
     const updateSettings = (updates) => {
         const newSettings = { ...settings, ...updates };
