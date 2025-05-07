@@ -2,8 +2,12 @@ import * as THREE from "three";
 import BaseTool from "./BaseTool";
 import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
 import QuickTipsManager from "../components/QuickTipsManager";
+import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import { SchematicData } from "../utils/SchematicPreviewRenderer";
+import { generateUniqueId } from "../components/AIAssistantPanel";
 
 type SelectionMode = "move" | "copy" | "delete";
+
 class SelectionTool extends BaseTool {
     selectionStartPosition = null;
     selectionPreview = null;
@@ -190,6 +194,9 @@ class SelectionTool extends BaseTool {
             this.selectionStartPosition
         ) {
             this.cycleSelectionMode();
+        } else if (event.key.toLowerCase() === "t" && this.selectionActive) {
+            event.preventDefault();
+            this.handleSaveSelectionAsSchematic();
         }
     }
 
@@ -524,7 +531,7 @@ class SelectionTool extends BaseTool {
 
             // Update tooltip with detailed instructions
             this.tooltip =
-                "Selection Active: Click and drag to move. Use 1 | 2 to adjust height. Press 3 to rotate (0° → 90° → 180° → 270°). Click to place. Press Escape to cancel.";
+                "Selection Active: Click and drag to move. Use 1 | 2 to adjust height. Press 3 to rotate (0° → 90° → 180° → 270°). Click to place. Press Escape to cancel. Press T to save as schematic.";
             QuickTipsManager.setToolTip(this.tooltip);
         } else {
             this.selectionStartPosition = null;
@@ -738,6 +745,156 @@ class SelectionTool extends BaseTool {
         }
 
         return new THREE.Vector3(newX, pos.y, newZ);
+    }
+
+    areSchematicsIdentical(s1: SchematicData, s2: SchematicData): boolean {
+        const keys1 = Object.keys(s1);
+        const keys2 = Object.keys(s2);
+
+        if (keys1.length !== keys2.length) {
+            return false;
+        }
+
+        for (const key of keys1) {
+            if (s1[key] !== s2[key]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    async handleSaveSelectionAsSchematic() {
+        if (
+            !this.selectionActive ||
+            !this.selectedBlocks ||
+            this.selectedBlocks.size === 0
+        ) {
+            QuickTipsManager.setToolTip("No blocks selected to save.");
+            setTimeout(() => QuickTipsManager.setToolTip(this.tooltip), 2000);
+            return;
+        }
+
+        const schematicName = window.prompt(
+            "Enter a name for the schematic:",
+            "My Schematic"
+        );
+        if (!schematicName) {
+            QuickTipsManager.setToolTip("Save cancelled.");
+            setTimeout(() => QuickTipsManager.setToolTip(this.tooltip), 1500);
+            return;
+        }
+
+        const schematicDataToSave: SchematicData = {};
+        let minX = Infinity,
+            minY = Infinity,
+            minZ = Infinity;
+
+        for (const posKey of this.selectedBlocks.keys()) {
+            const [x, y, z] = posKey.split(",").map(Number);
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            minZ = Math.min(minZ, z);
+        }
+
+        for (const [posKey, blockId] of this.selectedBlocks) {
+            const [x, y, z] = posKey.split(",").map(Number);
+            const relX = x - minX;
+            const relY = y - minY;
+            const relZ = z - minZ;
+            schematicDataToSave[`${relX},${relY},${relZ}`] = blockId;
+        }
+
+        try {
+            const db = await DatabaseManager.getDBConnection();
+            const readTx = db.transaction(STORES.SCHEMATICS, "readonly");
+            const store = readTx.objectStore(STORES.SCHEMATICS);
+            const getAllRequest = store.getAll();
+
+            getAllRequest.onerror = (event) => {
+                console.error(
+                    "Error fetching existing schematics:",
+                    (event.target as IDBRequest).error
+                );
+                QuickTipsManager.setToolTip(
+                    "Error checking schematics. See console."
+                );
+                setTimeout(
+                    () => QuickTipsManager.setToolTip(this.tooltip),
+                    3000
+                );
+            };
+
+            getAllRequest.onsuccess = async (event) => {
+                const existingSchematics = (event.target as IDBRequest).result;
+                if (existingSchematics && Array.isArray(existingSchematics)) {
+                    for (const existing of existingSchematics) {
+                        if (
+                            existing.schematic &&
+                            this.areSchematicsIdentical(
+                                schematicDataToSave,
+                                existing.schematic
+                            )
+                        ) {
+                            console.log(
+                                "Duplicate schematic found:",
+                                existing.prompt
+                            );
+                            QuickTipsManager.setToolTip(
+                                `Schematic "${existing.prompt}" already exists.`
+                            );
+                            setTimeout(
+                                () => QuickTipsManager.setToolTip(this.tooltip),
+                                3000
+                            );
+                            return;
+                        }
+                    }
+                }
+
+                // If no duplicate found, proceed to save
+                const newSchematicEntry = {
+                    prompt: schematicName,
+                    schematic: schematicDataToSave,
+                    timestamp: Date.now(),
+                };
+
+                try {
+                    const writeTx = db.transaction(
+                        STORES.SCHEMATICS,
+                        "readwrite"
+                    );
+                    const writeStore = writeTx.objectStore(STORES.SCHEMATICS);
+                    const newId = generateUniqueId();
+                    await writeStore.add(newSchematicEntry, newId);
+                    await writeTx.done;
+
+                    console.log(
+                        `Schematic "${schematicName}" (ID: ${newId}) saved successfully!`
+                    );
+                    QuickTipsManager.setToolTip(
+                        `Schematic "${schematicName}" saved!`
+                    );
+                    setTimeout(
+                        () => QuickTipsManager.setToolTip(this.tooltip),
+                        2000
+                    );
+                    window.dispatchEvent(
+                        new CustomEvent("schematicsDbUpdated")
+                    );
+                } catch (writeError) {
+                    console.error("Error saving new schematic:", writeError);
+                    QuickTipsManager.setToolTip("Error saving. See console.");
+                    setTimeout(
+                        () => QuickTipsManager.setToolTip(this.tooltip),
+                        3000
+                    );
+                }
+            };
+        } catch (error) {
+            console.error("Error saving schematic:", error);
+            QuickTipsManager.setToolTip("Error saving. See console.");
+            setTimeout(() => QuickTipsManager.setToolTip(this.tooltip), 3000);
+        }
     }
 }
 

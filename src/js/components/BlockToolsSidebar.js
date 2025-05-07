@@ -1,7 +1,7 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
-import { useEffect, useState } from "react";
-import { FaDownload } from "react-icons/fa";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { FaDownload, FaWrench } from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
 import { environmentModels } from "../EnvironmentBuilder";
 import {
@@ -9,12 +9,14 @@ import {
     blockTypes,
     getCustomBlocks,
     processCustomBlock,
-    removeCustomBlock
+    removeCustomBlock,
 } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
 import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
 import ModelPreview from "./ModelPreview";
+import { cameraManager } from "../Camera";
 
 const SCALE_MIN = 0.1;
 const SCALE_MAX = 5.0;
@@ -59,14 +61,28 @@ const createPlaceholderBlob = () => {
         ctx.fillStyle = "#FF00FF"; // Magenta
         ctx.fillRect(0, 0, 16, 16);
 
-
-
         return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     }
     return Promise.resolve(null); // Fallback
 };
 const firstDefaultModel = environmentModels.find((m) => !m.isCustom);
 const initialPreviewUrl = firstDefaultModel?.modelUrl ?? null;
+
+/**
+ * @typedef {"blocks" | "environment" | "schematics"} ActiveTabType
+ */
+
+/**
+ * @param {object} props
+ * @param {ActiveTabType} props.activeTab
+ * @param {React.RefObject<any>} props.terrainBuilderRef
+ * @param {(tab: ActiveTabType) => void} props.setActiveTab
+ * @param {(block: any | null) => void} props.setCurrentBlockType
+ * @param {React.RefObject<any>} props.environmentBuilder
+ * @param {(settings: any) => void} [props.onPlacementSettingsChange]
+ * @param {() => void} props.onOpenTextureModal
+ * @param {(schematic: import("./AIAssistantPanel").RawSchematicType) => void} props.onLoadSchematicFromHistory
+ */
 const BlockToolsSidebar = ({
     activeTab,
     terrainBuilderRef,
@@ -75,6 +91,7 @@ const BlockToolsSidebar = ({
     environmentBuilder,
     onPlacementSettingsChange,
     onOpenTextureModal,
+    onLoadSchematicFromHistory,
 }) => {
     const [settings, setSettings] = useState({
         randomScale: false,
@@ -88,17 +105,127 @@ const BlockToolsSidebar = ({
     });
     const [customBlocks, setCustomBlocks] = useState([]);
     const [previewModelUrl, setPreviewModelUrl] = useState(initialPreviewUrl);
+    /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
+    const [schematicList, setSchematicList] = useState([]);
+    const [schematicPreviews, setSchematicPreviews] = useState({});
+    const schematicPreviewsRef = useRef(schematicPreviews);
+    const schematicListStateRef = useRef(schematicList);
+    const isGeneratingPreviews = useRef(false);
+    const currentPreviewIndex = useRef(0);
+
+    const loadSchematicsFromDB = useCallback(async () => {
+        console.log("[BlockToolsSidebar] Loading schematics from DB...");
+        try {
+            const { DatabaseManager, STORES } = await import(
+                "../managers/DatabaseManager"
+            );
+            const db = await DatabaseManager.getDBConnection();
+            const tx = db.transaction(STORES.SCHEMATICS, "readonly");
+            const store = tx.objectStore(STORES.SCHEMATICS);
+            const cursorRequest = store.openCursor();
+            /** @type {import("./AIAssistantPanel").SchematicHistoryEntry[]} */
+            const loadedSchematics = [];
+
+            cursorRequest.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const dbKey = cursor.key;
+                    const dbValue = cursor.value;
+                    // Basic check for V2 schematic structure
+                    if (
+                        dbValue &&
+                        typeof dbValue.prompt === "string" &&
+                        dbValue.schematic &&
+                        typeof dbValue.timestamp === "number"
+                    ) {
+                        loadedSchematics.push({
+                            id: dbKey,
+                            prompt: dbValue.prompt,
+                            schematic: dbValue.schematic,
+                            timestamp: dbValue.timestamp,
+                        });
+                    }
+                    cursor.continue();
+                } else {
+                    loadedSchematics.sort((a, b) => b.timestamp - a.timestamp);
+
+                    const currentSchematicListFromState =
+                        schematicListStateRef.current;
+                    let listsAreIdentical =
+                        currentSchematicListFromState.length ===
+                        loadedSchematics.length;
+
+                    if (listsAreIdentical && loadedSchematics.length > 0) {
+                        for (let i = 0; i < loadedSchematics.length; i++) {
+                            if (
+                                currentSchematicListFromState[i].id !==
+                                    loadedSchematics[i].id ||
+                                currentSchematicListFromState[i].timestamp !==
+                                    loadedSchematics[i].timestamp
+                            ) {
+                                listsAreIdentical = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!listsAreIdentical) {
+                        console.log(
+                            `[BlockToolsSidebar] Schematic list changed or initial load. Updating state with ${loadedSchematics.length} schematics.`
+                        );
+                        setSchematicList(loadedSchematics);
+                    } else {
+                        console.log(
+                            `[BlockToolsSidebar] Loaded ${loadedSchematics.length} schematics from DB, list content (IDs, timestamps) is unchanged. Skipping state update.`
+                        );
+                    }
+                }
+            };
+            cursorRequest.onerror = (event) => {
+                console.error(
+                    "[BlockToolsSidebar] Error reading schematics store:",
+                    event.target.error
+                );
+            };
+        } catch (err) {
+            console.error(
+                "[BlockToolsSidebar] Error accessing DB for schematics:",
+                err
+            );
+        }
+    }, []);
 
     useEffect(() => {
+        if (activeTab === "schematics") {
+            loadSchematicsFromDB();
+        }
+        const handleSchematicsUpdated = () => {
+            console.log(
+                "[BlockToolsSidebar] schematicsDbUpdated event received."
+            );
+            if (
+                document.visibilityState === "visible" &&
+                activeTab === "schematics"
+            ) {
+                loadSchematicsFromDB();
+            }
+        };
+        window.addEventListener("schematicsDbUpdated", handleSchematicsUpdated);
 
+        return () => {
+            window.removeEventListener(
+                "schematicsDbUpdated",
+                handleSchematicsUpdated
+            );
+        };
+    }, [activeTab, loadSchematicsFromDB]);
+
+    useEffect(() => {
         if (activeTab === "environment" && initialPreviewUrl) {
             const model = environmentModels.find(
                 (m) => m.modelUrl === initialPreviewUrl
             );
             if (model) {
-
-
-
                 selectedBlockID = model.id;
                 setCurrentBlockType({
                     ...model,
@@ -108,13 +235,10 @@ const BlockToolsSidebar = ({
                     "Initial environment model auto-selected:",
                     model.name
                 );
-
-
             }
         }
+    }, []);
 
-
-    }, []); // Run once on mount
     useEffect(() => {
         const handleRefresh = () => {
             console.log("Handling refresh event in BlockToolsSidebar");
@@ -154,12 +278,149 @@ const BlockToolsSidebar = ({
             window.removeEventListener("textureAtlasUpdated", handleRefresh);
         };
     }, []);
+
+    useEffect(() => {
+        schematicPreviewsRef.current = schematicPreviews;
+    }, [schematicPreviews]);
+
+    useEffect(() => {
+        schematicListStateRef.current = schematicList;
+    }, [schematicList]);
+
+    useEffect(() => {
+        const processQueue = async () => {
+            if (
+                currentPreviewIndex.current >= schematicList.length ||
+                !isGeneratingPreviews.current
+            ) {
+                isGeneratingPreviews.current = false;
+                console.log(
+                    "[BlockToolsSidebar] Finished preview generation queue or queue stopped."
+                );
+                if (currentPreviewIndex.current > 0) {
+                    requestAnimationFrame(() => {
+                        if (cameraManager) {
+                            cameraManager.loadSavedState();
+                            console.log(
+                                "[BlockToolsSidebar] Camera state restored after preview generation batch."
+                            );
+                        }
+                    });
+                }
+                currentPreviewIndex.current = 0;
+                return;
+            }
+
+            const entry = schematicList[currentPreviewIndex.current];
+
+            if (!entry.schematic) {
+                console.log(
+                    `[BlockToolsSidebar] No schematic data for entry ${entry.id} (index ${currentPreviewIndex.current}), marking as null.`
+                );
+                setSchematicPreviews((prevPreviews) => ({
+                    ...prevPreviews,
+                    [entry.id]: null,
+                }));
+            } else if (
+                schematicPreviewsRef.current[entry.id] === undefined ||
+                schematicPreviewsRef.current[entry.id] === null
+            ) {
+                // Schematic data exists, and preview is missing or previously failed. Try/Retry generating.
+                let newPreviewDataUrl = null;
+                let errorOccurred = false;
+                try {
+                    console.log(
+                        `[BlockToolsSidebar] Generating preview for schematic (index ${
+                            currentPreviewIndex.current
+                        }): ${entry.prompt.substring(0, 30)}...`
+                    );
+                    newPreviewDataUrl = await generateSchematicPreview(
+                        entry.schematic,
+                        {
+                            width: 48,
+                            height: 48,
+                            background: "transparent",
+                        }
+                    );
+                } catch (error) {
+                    console.error(
+                        `[BlockToolsSidebar] Error generating preview for schematic ${entry.id}:`,
+                        error
+                    );
+                    errorOccurred = true;
+                }
+
+                setSchematicPreviews((prevPreviews) => ({
+                    ...prevPreviews,
+                    [entry.id]: errorOccurred
+                        ? null
+                        : newPreviewDataUrl || null,
+                }));
+            } else {
+                // Preview already exists and is valid (not undefined or null), or no schematic data (handled above)
+                console.log(
+                    `[BlockToolsSidebar] Skipping preview for schematic (index ${
+                        currentPreviewIndex.current
+                    }): ${entry.prompt.substring(
+                        0,
+                        30
+                    )} - already processed or no retry needed.`
+                );
+            }
+
+            currentPreviewIndex.current++;
+            requestAnimationFrame(processQueue);
+        };
+
+        if (schematicList.length > 0) {
+            if (!isGeneratingPreviews.current) {
+                let needsProcessing = false;
+                for (const entry of schematicList) {
+                    // If preview is undefined (never processed) or null (failed/no data), it needs processing.
+                    if (
+                        schematicPreviewsRef.current[entry.id] === undefined ||
+                        schematicPreviewsRef.current[entry.id] === null
+                    ) {
+                        needsProcessing = true;
+                        break;
+                    }
+                }
+
+                if (needsProcessing) {
+                    console.log(
+                        "[BlockToolsSidebar] Starting/Restarting preview generation queue as items need processing."
+                    );
+                    isGeneratingPreviews.current = true;
+                    currentPreviewIndex.current = 0;
+                    requestAnimationFrame(processQueue);
+                } else {
+                    console.log(
+                        "[BlockToolsSidebar] All schematics processed or no new items/failures."
+                    );
+                }
+            } else {
+                // console.log("[BlockToolsSidebar] Preview generation already in progress."); // Can be noisy
+            }
+        } else if (schematicList.length === 0) {
+            setSchematicPreviews({});
+            isGeneratingPreviews.current = false;
+            currentPreviewIndex.current = 0;
+        }
+
+        return () => {
+            isGeneratingPreviews.current = false;
+            console.log(
+                "[BlockToolsSidebar] Preview generation queue stopped due to cleanup or schematicList change."
+            );
+        };
+    }, [schematicList]);
+
     const updateSettings = (updates) => {
         const newSettings = { ...settings, ...updates };
         setSettings(newSettings);
-
         onPlacementSettingsChange?.(newSettings);
     };
+
     const handleDragStart = (blockId) => {
         console.log("Drag started with block:", blockId);
     };
@@ -224,8 +485,8 @@ const BlockToolsSidebar = ({
         }
     };
 
+    /** @param {ActiveTabType} newTab */
     const handleTabChange = (newTab) => {
-
         if (newTab === "blocks") {
             setCurrentBlockType(blockTypes[0]);
             setPreviewModelUrl(null);
@@ -239,17 +500,19 @@ const BlockToolsSidebar = ({
                 setCurrentBlockType(null);
                 setPreviewModelUrl(null);
             }
+        } else if (newTab === "schematics") {
+            setPreviewModelUrl(null);
+            setCurrentBlockType(null);
+            loadSchematicsFromDB();
         }
         setActiveTab(newTab);
     };
+
     const handleDeleteCustomBlock = async (blockType) => {
         const confirmMessage = `Deleting "${blockType.name}" will replace any instances of this block with an error texture. Are you sure you want to proceed?`;
         if (window.confirm(confirmMessage)) {
-
             removeCustomBlock(blockType.id);
-
             setCustomBlocks(getCustomBlocks());
-
             try {
                 await DatabaseManager.saveData(
                     STORES.CUSTOM_BLOCKS,
@@ -263,33 +526,32 @@ const BlockToolsSidebar = ({
                 );
             }
             try {
-
                 const currentTerrain =
                     (await DatabaseManager.getData(
                         STORES.TERRAIN,
                         "current"
                     )) || {};
                 const newTerrain = { ...currentTerrain };
-
                 const errorBlock = {
-                    id: 999, // Special ID for error blocks
+                    id: 999,
                     name: `missing_${blockType.name}`,
                     textureUri: "./assets/blocks/error.png",
                     hasMissingTexture: true,
-                    originalId: blockType.id, // Store the original ID for potential future recovery
+                    originalId: blockType.id,
                 };
-
                 const errorId = errorBlock.id;
-
-                console.log('blockType', blockType)
+                console.log("blockType", blockType);
                 Object.entries(newTerrain).forEach(([position, block]) => {
-                    console.log('block', block)
-                    console.log('blockType.id == block.id', blockType.id == block.id)
+                    console.log("block", block);
+                    console.log(
+                        "blockType.id == block.id",
+                        blockType.id == block.id
+                    );
                     if (block === blockType.id) {
                         newTerrain[position] = errorId;
                     }
                 });
-                console.log('newTerrain', newTerrain)
+                console.log("newTerrain", newTerrain);
                 await DatabaseManager.saveData(
                     STORES.TERRAIN,
                     "current",
@@ -302,10 +564,10 @@ const BlockToolsSidebar = ({
                     error
                 );
             }
-
             refreshBlockTools();
         }
     };
+
     const handleDeleteEnvironmentModel = async (modelId) => {
         if (
             window.confirm("Are you sure you want to delete this custom model?")
@@ -320,14 +582,12 @@ const BlockToolsSidebar = ({
                     (model) => model.id === modelId
                 );
                 if (!modelToDelete) return;
-
                 const modelIndex = environmentModels.findIndex(
                     (model) => model.id === modelId
                 );
                 if (modelIndex !== -1) {
                     environmentModels.splice(modelIndex, 1);
                 }
-
                 const updatedModels = existingModels.filter(
                     (model) => model.name !== modelToDelete.name
                 );
@@ -336,7 +596,6 @@ const BlockToolsSidebar = ({
                     "models",
                     updatedModels
                 );
-
                 const currentEnvironment =
                     (await DatabaseManager.getData(
                         STORES.ENVIRONMENT,
@@ -345,13 +604,11 @@ const BlockToolsSidebar = ({
                 const updatedEnvironment = currentEnvironment.filter(
                     (obj) => obj.name !== modelToDelete.name
                 );
-
                 await DatabaseManager.saveData(
                     STORES.ENVIRONMENT,
                     "current",
                     updatedEnvironment
                 );
-
                 if (environmentBuilder && environmentBuilder.current) {
                     await environmentBuilder.current.refreshEnvironmentFromDB();
                 }
@@ -366,6 +623,7 @@ const BlockToolsSidebar = ({
             }
         }
     };
+
     const handleEnvironmentSelect = (envType) => {
         console.log("Environment selected:", envType);
         setCurrentBlockType({
@@ -375,30 +633,32 @@ const BlockToolsSidebar = ({
         selectedBlockID = envType.id;
         setPreviewModelUrl(envType.modelUrl);
     };
-    const handleBlockSelect = (blockType) => {
 
+    const handleBlockSelect = (blockType) => {
         setCurrentBlockType({
             ...blockType,
             isEnvironment: false,
         });
         selectedBlockID = blockType.id;
     };
+
+    /** @param {import("./AIAssistantPanel").SchematicHistoryEntry} schematicEntry */
+    const handleSchematicSelect = (schematicEntry) => {
+        console.log("Schematic selected:", schematicEntry.prompt);
+        onLoadSchematicFromHistory(schematicEntry.schematic);
+    };
+
     const handleCustomAssetDropUpload = async (e) => {
         e.preventDefault();
         e.currentTarget.classList.remove("drag-over");
         const files = Array.from(e.dataTransfer.files);
-
         if (activeTab === "blocks") {
             const imageFiles = files.filter((file) =>
                 file.type.startsWith("image/")
             );
-
             if (imageFiles.length > 0) {
-
                 if (imageFiles.length > 1) {
-
                     try {
-
                         const blockPromises = imageFiles.map((file) => {
                             return new Promise((resolve) => {
                                 const reader = new FileReader();
@@ -406,7 +666,7 @@ const BlockToolsSidebar = ({
                                     const blockName = file.name.replace(
                                         /\.[^/.]+$/,
                                         ""
-                                    ); // Remove file extension
+                                    );
                                     resolve({
                                         name: blockName,
                                         textureUri: reader.result,
@@ -415,18 +675,14 @@ const BlockToolsSidebar = ({
                                 reader.readAsDataURL(file);
                             });
                         });
-
                         const blocks = await Promise.all(blockPromises);
-
                         await batchProcessCustomBlocks(blocks);
-
                         const updatedCustomBlocks = getCustomBlocks();
                         await DatabaseManager.saveData(
                             STORES.CUSTOM_BLOCKS,
                             "blocks",
                             updatedCustomBlocks
                         );
-
                         refreshBlockTools();
                     } catch (error) {
                         console.error(
@@ -435,7 +691,6 @@ const BlockToolsSidebar = ({
                         );
                     }
                 } else {
-
                     const filePromises = imageFiles.map((file) => {
                         return new Promise((resolve) => {
                             const reader = new FileReader();
@@ -443,21 +698,18 @@ const BlockToolsSidebar = ({
                                 const blockName = file.name.replace(
                                     /\.[^/.]+$/,
                                     ""
-                                ); // Remove file extension
+                                );
                                 const block = {
                                     name: blockName,
                                     textureUri: reader.result,
                                 };
-
                                 processCustomBlock(block);
                                 resolve();
                             };
                             reader.readAsDataURL(file);
                         });
                     });
-
                     await Promise.all(filePromises);
-
                     try {
                         const updatedCustomBlocks = getCustomBlocks();
                         await DatabaseManager.saveData(
@@ -471,18 +723,14 @@ const BlockToolsSidebar = ({
                             error
                         );
                     }
-
                     refreshBlockTools();
                 }
             }
-        }
-
-        else if (activeTab === "environment") {
+        } else if (activeTab === "environment") {
             const modelFiles = files.filter(
                 (file) =>
                     file.name.endsWith(".gltf") || file.name.endsWith(".glb")
             );
-
             if (modelFiles.length > 0) {
                 const existingModels =
                     (await DatabaseManager.getData(
@@ -495,20 +743,17 @@ const BlockToolsSidebar = ({
                 const newModelsForDB = [];
                 const newModelsForUI = [];
                 const duplicateFileNames = new Set();
-                const processedFileNames = new Set(); // Track names within the current batch
-
-
+                const processedFileNames = new Set();
                 const fileReadPromises = modelFiles.map((file) => {
                     return new Promise((resolve, reject) => {
                         const fileName = file.name.replace(/\.[^/.]+$/, "");
                         const lowerCaseFileName = fileName.toLowerCase();
-
                         if (existingModelNames.has(lowerCaseFileName)) {
                             duplicateFileNames.add(fileName);
                             console.warn(
                                 `Duplicate model skipped: ${fileName} (already exists)`
                             );
-                            reject(new Error(`Duplicate model: ${fileName}`)); // Reject to skip processing
+                            reject(new Error(`Duplicate model: ${fileName}`));
                             return;
                         }
                         if (processedFileNames.has(lowerCaseFileName)) {
@@ -520,11 +765,10 @@ const BlockToolsSidebar = ({
                                 new Error(
                                     `Duplicate model in batch: ${fileName}`
                                 )
-                            ); // Reject to skip processing
+                            );
                             return;
                         }
-                        processedFileNames.add(lowerCaseFileName); // Add to batch tracking
-
+                        processedFileNames.add(lowerCaseFileName);
                         const reader = new FileReader();
                         reader.onload = () =>
                             resolve({ file, fileName, data: reader.result });
@@ -532,11 +776,7 @@ const BlockToolsSidebar = ({
                         reader.readAsArrayBuffer(file);
                     });
                 });
-
-
                 const results = await Promise.allSettled(fileReadPromises);
-
-
                 if (duplicateFileNames.size > 0) {
                     alert(
                         `The following model names already exist or were duplicated in the drop:\n- ${Array.from(
@@ -546,42 +786,36 @@ const BlockToolsSidebar = ({
                         )}\n\nPlease rename the files and try again.`
                     );
                 }
-
-
                 results.forEach((result) => {
                     if (result.status === "fulfilled") {
                         const { file, fileName, data } = result.value;
-
                         try {
-
                             const modelDataForDB = {
                                 name: fileName,
-                                data: data, // Store ArrayBuffer
+                                data: data,
                                 timestamp: Date.now(),
                             };
                             newModelsForDB.push(modelDataForDB);
-
-
                             const blob = new Blob([data], {
                                 type: file.type || "model/gltf-binary",
-                            }); // Use file.type or default for glb
+                            });
                             const fileUrl = URL.createObjectURL(blob);
                             const newEnvironmentModel = {
                                 id:
                                     Math.max(
-                                        0, // Start from 0 if no custom models exist yet
+                                        0,
                                         ...environmentModels
                                             .filter((model) => model.isCustom)
                                             .map((model) => model.id),
-                                        299 // Ensure IDs start after default range
+                                        299
                                     ) +
                                     1 +
-                                    newModelsForUI.length, // Increment ID based on successful additions
+                                    newModelsForUI.length,
                                 name: fileName,
                                 modelUrl: fileUrl,
                                 isEnvironment: true,
                                 isCustom: true,
-                                animations: ["idle"], // Default animation assumption
+                                animations: ["idle"],
                             };
                             newModelsForUI.push(newEnvironmentModel);
                         } catch (error) {
@@ -589,26 +823,20 @@ const BlockToolsSidebar = ({
                                 `Error processing model ${fileName}:`,
                                 error
                             );
-
                         }
                     } else {
-
                         console.error(
                             "Failed to process a model file:",
                             result.reason?.message || result.reason
                         );
                     }
                 });
-
-
                 if (newModelsForDB.length > 0) {
                     try {
-
                         const updatedModelsForDB = [
                             ...existingModels,
                             ...newModelsForDB,
                         ];
-
                         await DatabaseManager.saveData(
                             STORES.CUSTOM_MODELS,
                             "models",
@@ -617,11 +845,7 @@ const BlockToolsSidebar = ({
                         console.log(
                             `Saved ${newModelsForDB.length} new models to DB.`
                         );
-
-
                         environmentModels.push(...newModelsForUI);
-
-
                         if (environmentBuilder && environmentBuilder.current) {
                             for (const model of newModelsForUI) {
                                 try {
@@ -639,8 +863,6 @@ const BlockToolsSidebar = ({
                                 }
                             }
                         }
-
-
                         refreshBlockTools();
                     } catch (error) {
                         console.error(
@@ -650,13 +872,11 @@ const BlockToolsSidebar = ({
                         alert(
                             "An error occurred while saving or loading the new models. Check the console for details."
                         );
-
                     }
                 } else if (
                     duplicateFileNames.size === 0 &&
                     modelFiles.length > 0
                 ) {
-
                     alert(
                         "Could not process any of the dropped model files. Check the console for errors."
                     );
@@ -664,13 +884,14 @@ const BlockToolsSidebar = ({
             }
         }
     };
+
     return (
         <div className="block-tools-container">
             <div className="dead-space"></div>
             <div className="block-tools-sidebar">
                 <div className="tab-button-wrapper">
                     <button
-                        className={`tab-button-left ${
+                        className={`tab-button ${
                             activeTab === "blocks" ? "active" : ""
                         }`}
                         onClick={() => handleTabChange("blocks")}
@@ -678,12 +899,20 @@ const BlockToolsSidebar = ({
                         Blocks
                     </button>
                     <button
-                        className={`tab-button-right ${
+                        className={`tab-button ${
                             activeTab === "environment" ? "active" : ""
                         }`}
                         onClick={() => handleTabChange("environment")}
                     >
                         Models
+                    </button>
+                    <button
+                        className={`tab-button ${
+                            activeTab === "schematics" ? "active" : ""
+                        }`}
+                        onClick={() => handleTabChange("schematics")}
+                    >
+                        Schematics
                     </button>
                 </div>
                 <div className="block-buttons-grid">
@@ -748,7 +977,7 @@ const BlockToolsSidebar = ({
                                     />
                                 ))}
                         </>
-                    ) : (
+                    ) : activeTab === "environment" ? (
                         <>
                             <div className="environment-preview-container">
                                 {previewModelUrl ? (
@@ -814,7 +1043,58 @@ const BlockToolsSidebar = ({
                                     ))}
                             </div>
                         </>
-                    )}
+                    ) : activeTab === "schematics" ? (
+                        <>
+                            <div className="block-tools-section-label">
+                                Saved Schematics
+                            </div>
+                            {schematicList.length === 0 && (
+                                <div className="no-schematics-text">
+                                    No schematics saved yet. Generate some using
+                                    the AI Assistant!
+                                </div>
+                            )}
+                            {schematicList.map((entry) => (
+                                <div
+                                    key={entry.id}
+                                    className="schematic-button"
+                                    onClick={() => handleSchematicSelect(entry)}
+                                    title={`Load: ${entry.prompt}`}
+                                >
+                                    <div className="schematic-button-icon">
+                                        {typeof schematicPreviews[entry.id] ===
+                                        "string" ? (
+                                            <img
+                                                src={
+                                                    schematicPreviews[entry.id]
+                                                }
+                                                alt="Schematic preview"
+                                                style={{
+                                                    width: "48px",
+                                                    height: "48px",
+                                                    objectFit: "contain",
+                                                }}
+                                            />
+                                        ) : schematicPreviews[entry.id] ===
+                                          null ? (
+                                            <FaWrench title="Preview unavailable" />
+                                        ) : (
+                                            <div
+                                                className="schematic-loading-spinner"
+                                                title="Loading preview..."
+                                            ></div>
+                                        )}
+                                    </div>
+                                    <div className="schematic-button-prompt">
+                                        {entry.prompt.length > 50
+                                            ? entry.prompt.substring(0, 47) +
+                                              "..."
+                                            : entry.prompt}
+                                    </div>
+                                </div>
+                            ))}
+                        </>
+                    ) : null}
                 </div>
                 {activeTab === "environment" && (
                     <div className="placement-tools">
@@ -1148,11 +1428,12 @@ const BlockToolsSidebar = ({
                         <div className="drop-zone-text">
                             {activeTab === "blocks"
                                 ? "Drag textures here to add new blocks or fix missing textures"
-                                : "Drag .gltf files here to add custom models"}
+                                : activeTab === "environment"
+                                ? "Drag .gltf files here to add custom models"
+                                : "Use AI Assistant to generate schematics"}
                         </div>
                     </div>
                 </div>
-                {/* Create Texture Button - Added Here */}
                 <button
                     className="create-texture-button"
                     onClick={onOpenTextureModal}

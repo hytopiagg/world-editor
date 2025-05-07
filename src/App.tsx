@@ -14,6 +14,7 @@ import TerrainBuilder, {
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
 import BlockToolsSidebar, {
+    ActiveTabType,
     refreshBlockTools,
 } from "./js/components/BlockToolsSidebar";
 import DebugInfo from "./js/components/DebugInfo";
@@ -40,7 +41,7 @@ function App() {
     const [cameraReset, setCameraReset] = useState(false);
     const [cameraAngle, setCameraAngle] = useState(0);
     const [placementSize, setPlacementSize] = useState("single");
-    const [activeTab, setActiveTab] = useState("blocks");
+    const [activeTab, setActiveTab] = useState<ActiveTabType>("blocks");
     const [pageIsLoaded, setPageIsLoaded] = useState(false);
     const [scene, setScene] = useState(null);
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
@@ -189,7 +190,7 @@ function App() {
     const LoadingScreen = () => (
         <div className="loading-screen">
             <img
-                src={'/assets/img/hytopia_logo_white.png'}
+                src={"/assets/img/hytopia_logo_white.png"}
                 alt="Hytopia Logo"
                 className="loading-logo"
             />
@@ -330,7 +331,10 @@ function App() {
 
                 {/* Hytopia Logo */}
                 <div className="hytopia-logo-wrapper">
-                    <img src={'/assets/img/hytopia_logo_white.png'} alt="Hytopia Logo" />
+                    <img
+                        src={"/assets/img/hytopia_logo_white.png"}
+                        alt="Hytopia Logo"
+                    />
                     <p className="hytopia-version-text">
                         World Editor Version {version}
                     </p>
@@ -348,6 +352,7 @@ function App() {
                     onOpenTextureModal={() => setIsTextureModalOpen(true)}
                     terrainBuilderRef={terrainBuilderRef}
                     activeTab={activeTab}
+                    onLoadSchematicFromHistory={handleLoadAISchematic}
                     setActiveTab={setActiveTab}
                     setCurrentBlockType={setCurrentBlockType}
                     environmentBuilder={environmentBuilderRef.current}
@@ -477,8 +482,9 @@ function App() {
                         <Tooltip text={isMuted ? "Unmute" : "Mute"}>
                             <button
                                 onClick={toggleMute}
-                                className={`camera-control-button ${!isMuted ? "active" : ""
-                                    }`}
+                                className={`camera-control-button ${
+                                    !isMuted ? "active" : ""
+                                }`}
                             >
                                 <FaVolumeMute />
                             </button>

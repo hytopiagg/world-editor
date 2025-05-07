@@ -705,6 +705,12 @@ function TerrainBuilder(
     const handleBlockPlacement = () => {
         console.log("********handleBlockPlacement********");
         console.log("currentBlockTypeRef.current", currentBlockTypeRef.current);
+
+        if (!currentBlockTypeRef.current) {
+            console.log("currentBlockTypeRef.current is undefined");
+            return;
+        }
+
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
             return;
         }
@@ -756,7 +762,7 @@ function TerrainBuilder(
                 }
             }
         } else {
-            if (modeRef.current === "add" && !currentBlockTypeRef.current.isEnvironment) {
+            if (modeRef.current === "add" && !currentBlockTypeRef?.current?.isEnvironment) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
                 const positions = getPlacementPositions(
@@ -803,7 +809,7 @@ function TerrainBuilder(
                         Object.keys(addedBlocks).length;
                     lastPlacementTimeRef.current = now;
                 }
-            } else if (modeRef.current === "remove") {
+            } else if (modeRef.current === "remove" && !currentBlockTypeRef?.current?.isEnvironment) {
                 const now = performance.now();
                 if (now - lastDeletionTimeRef.current < 50) {
                     return; // Exit if the delay hasn't passed

@@ -35,6 +35,10 @@ class SchematicPlacementTool extends BaseTool {
         this.previewGroup = new THREE.Group();
         this.previewMeshes = {}; // Store meshes by relative position string "x,y,z"
         this.anchorOffset = new THREE.Vector3(0, 0, 0); // Offset from cursor to schematic anchor (e.g., corner)
+        this.currentRotation = 0; // 0: 0°, 1: 90°, 2: 180°, 3: 270°
+
+        this.tooltip =
+            "Schematic Placement Tool: Click to place. Tap R to rotate. Press Escape to cancel.";
 
         if (this.scene) {
             this.scene.add(this.previewGroup);
@@ -58,6 +62,7 @@ class SchematicPlacementTool extends BaseTool {
 
         this.schematicData = schematicData;
         this.previewGroup.visible = true;
+        this.currentRotation = 0; // Reset rotation on new schematic activation
         console.log(
             "SchematicPlacementTool specific activation with data:",
             this.schematicData
@@ -71,17 +76,42 @@ class SchematicPlacementTool extends BaseTool {
         this.schematicData = null;
         this.previewGroup.visible = false;
         this.clearPreviewMeshes();
+        this.currentRotation = 0; // Reset rotation
         console.log("SchematicPlacementTool specific deactivation");
 
         if (this.terrainBuilderProps.clearAISchematic) {
             this.terrainBuilderProps.clearAISchematic();
         }
     }
+
+    getRotatedRelativePosition(relX, relY, relZ) {
+        let rotatedX = relX;
+        let rotatedZ = relZ;
+        // Rotate around Y axis, relative to schematic anchor (0,0,0 locally)
+        switch (this.currentRotation) {
+            case 1: // 90 degrees (clockwise if looking down Y axis, typical for screen coordinates)
+                rotatedX = -relZ;
+                rotatedZ = relX;
+                break;
+            case 2: // 180 degrees
+                rotatedX = -relX;
+                rotatedZ = -relZ;
+                break;
+            case 3: // 270 degrees
+                rotatedX = relZ;
+                rotatedZ = -relX;
+                break;
+            // case 0: // 0 degrees - no change, initial values are fine
+        }
+        return { x: rotatedX, y: relY, z: rotatedZ };
+    }
+
     handleMouseMove(event, intersectionPoint) {
         if (!this.isActive || !this.schematicData) return; // Use the getter from BaseTool
 
         this.updatePreview();
     }
+
     updatePreview() {
         if (
             !this.isActive || // Use the getter
@@ -93,9 +123,15 @@ class SchematicPlacementTool extends BaseTool {
 
         for (const [relPosStr, blockId] of Object.entries(this.schematicData)) {
             const [relX, relY, relZ] = relPosStr.split(",").map(Number);
-            const worldX = basePosition.x + relX + this.anchorOffset.x;
-            const worldY = basePosition.y + relY + this.anchorOffset.y;
-            const worldZ = basePosition.z + relZ + this.anchorOffset.z;
+            const rotatedRel = this.getRotatedRelativePosition(
+                relX,
+                relY,
+                relZ
+            );
+
+            const worldX = basePosition.x + rotatedRel.x + this.anchorOffset.x;
+            const worldY = basePosition.y + rotatedRel.y + this.anchorOffset.y;
+            const worldZ = basePosition.z + rotatedRel.z + this.anchorOffset.z;
             if (this.previewMeshes[relPosStr]) {
                 this.previewMeshes[relPosStr].position.set(
                     worldX,
@@ -146,6 +182,10 @@ class SchematicPlacementTool extends BaseTool {
         if (event.key === "Escape") {
             console.log("Schematic placement cancelled by Escape key.");
             this.onDeactivate();
+        } else if (event.key.toLowerCase() === "r") {
+            this.currentRotation = (this.currentRotation + 1) % 4;
+            console.log(`Schematic rotation: ${this.currentRotation * 90}°`);
+            this.updatePreview();
         }
     }
 
@@ -158,7 +198,8 @@ class SchematicPlacementTool extends BaseTool {
         const addedBlocks = {};
         const removedBlocks = {};
         const terrain = this.terrainRef.current;
-        const pendingChanges = this.terrainBuilderProps?.pendingChangesRef?.current || {
+        const pendingChanges = this.terrainBuilderProps?.pendingChangesRef
+            ?.current || {
             terrain: { added: {}, removed: {} },
             environment: { added: [], removed: [] },
         };
@@ -170,15 +211,20 @@ class SchematicPlacementTool extends BaseTool {
         );
         for (const [relPosStr, blockId] of Object.entries(this.schematicData)) {
             const [relX, relY, relZ] = relPosStr.split(",").map(Number);
+            const rotatedRel = this.getRotatedRelativePosition(
+                relX,
+                relY,
+                relZ
+            );
 
             const worldX = Math.round(
-                basePosition.x + relX + this.anchorOffset.x
+                basePosition.x + rotatedRel.x + this.anchorOffset.x
             );
             const worldY = Math.round(
-                basePosition.y + relY + this.anchorOffset.y
+                basePosition.y + rotatedRel.y + this.anchorOffset.y
             );
             const worldZ = Math.round(
-                basePosition.z + relZ + this.anchorOffset.z
+                basePosition.z + rotatedRel.z + this.anchorOffset.z
             );
             const worldPosStr = `${worldX},${worldY},${worldZ}`;
             if (terrain[worldPosStr]) {
