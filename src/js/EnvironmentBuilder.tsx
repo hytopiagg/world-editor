@@ -109,6 +109,12 @@ const EnvironmentBuilder = (
         return instances;
     };
 
+    // Check if any instance has this position, if so, return the true
+    const hasInstanceAtPosition = (position) => {
+        const instances = getAllEnvironmentObjects();
+        return instances.some((instance) => instance.position.x === position.x && instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET === position.y && instance.position.z === position.z);
+    };
+
     const updateEnvironmentForUndoRedo = (added, removed, source: "undo" | "redo") => {
         console.log("updateEnvironmentForUndoRedo", added, removed, source);
         if (removed && Object.keys(removed).length > 0) {
@@ -1312,7 +1318,8 @@ const EnvironmentBuilder = (
             updateLocalStorage,
             getAllEnvironmentObjects,
             updateEnvironmentForUndoRedo,
-            getModelType
+            getModelType,
+            hasInstanceAtPosition
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

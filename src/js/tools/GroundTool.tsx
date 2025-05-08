@@ -25,7 +25,7 @@ class GroundTool extends BaseTool {
     isPlacingRef = null;
     previewPositionRef = null;
     pendingChangesRef = null;
-
+    environmentBuilderRef = null;
     constructor(terrainBuilderProps) {
         console.log("GroundTool initialized");
         super(terrainBuilderProps);
@@ -45,6 +45,7 @@ class GroundTool extends BaseTool {
             this.scene = terrainBuilderProps.scene;
             this.toolManagerRef = terrainBuilderProps.toolManagerRef;
             this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
+            this.environmentBuilderRef = terrainBuilderProps.environmentBuilderRef;
             this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
             this.undoRedoManager = terrainBuilderProps.undoRedoManager;
             console.log(
@@ -451,7 +452,7 @@ class GroundTool extends BaseTool {
                     for (let y = 0; y < this.groundHeight; y++) {
                         const posKey = `${x},${baseY + y},${z}`;
 
-                        if (this.terrainRef.current[posKey]) continue;
+                        if (this.terrainRef.current[posKey] || this.environmentBuilderRef.current.hasInstanceAtPosition(posKey)) continue;
 
                         addedBlocks[posKey] = blockTypeId;
                         this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;

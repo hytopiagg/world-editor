@@ -767,15 +767,25 @@ function TerrainBuilder(
             if (modeRef.current === "add" && !currentBlockTypeRef?.current?.isEnvironment) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
+                console.log('1')
                 const positions = getPlacementPositions(
                     previewPositionRef.current,
                     placementSizeRef.current
                 );
+                console.log('2')
+                console.log("positions", positions);
                 const addedBlocks = {};
                 let blockWasPlaced = false; // Flag to track if any block was actually placed
                 positions.forEach((pos) => {
+                    console.log('3')
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
-                    if (!terrainRef.current[blockKey]) {
+                    console.log('4')
+                    const hasInstance = environmentBuilderRef.current.hasInstanceAtPosition(pos);
+                    console.log('5')
+                    console.log("pos", pos);
+                    console.log("hasInstance", hasInstance);
+                    console.log("terrainRef.current[blockKey]", terrainRef.current[blockKey]);
+                    if (!terrainRef.current[blockKey] && !hasInstance) {
                         addedBlocks[blockKey] = currentBlockTypeRef.current.id;
 
                         if (!currentBlockTypeRef.current.isEnvironment) {

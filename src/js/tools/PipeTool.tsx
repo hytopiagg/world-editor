@@ -25,7 +25,7 @@ class PipeTool extends BaseTool {
     isPlacingRef: React.RefObject<any>;
     previewPositionRef: React.RefObject<any>;
     pendingChangesRef: React.RefObject<any>;
-    
+    environmentBuilderRef: React.RefObject<any>;
     constructor(terrainBuilderProps) {
         console.log("PipeTool initialized");
         super(terrainBuilderProps);
@@ -53,6 +53,7 @@ class PipeTool extends BaseTool {
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
             this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
+            this.environmentBuilderRef = terrainBuilderProps.environmentBuilderRef;
         } else {
             console.error(
                 "PipeTool: terrainBuilderProps is undefined in constructor"
@@ -517,7 +518,7 @@ class PipeTool extends BaseTool {
                     for (let y = 0; y < this.pipeHeight; y++) {
                         const posKey = `${x},${baseY + y},${z}`;
 
-                        if (this.terrainRef.current[posKey]) continue;
+                        if (this.terrainRef.current[posKey] || this.environmentBuilderRef.current.hasInstanceAtPosition(posKey)) continue;
 
                         addedBlocks[posKey] = blockTypeId;
                         this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
