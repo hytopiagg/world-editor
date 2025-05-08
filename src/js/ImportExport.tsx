@@ -549,13 +549,14 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     const key = `${adjustedX},${adjustedY},${adjustedZ}`;
                     acc[key] = {
                         modelUri: modelUriForJson, // Use adjusted relative path
+                        modelPreferredShape: "trimesh",
                         modelLoopedAnimations: entityType.animations || [
                             "idle",
                         ],
                         modelScale: obj.scale.x, // Assuming uniform scale for simplicity
                         name: entityType.name,
                         rigidBodyOptions: {
-                            type: "kinematic_velocity",
+                            type: "fixed",
                             rotation: {
                                 x: quaternion.x,
                                 y: quaternion.y,
