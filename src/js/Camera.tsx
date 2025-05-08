@@ -16,6 +16,7 @@ class CameraManager {
     _isInputDisabled: boolean;
     isRotateMode: boolean;
     lastFrameTime: number;
+    normalizedFps: number;
     constructor() {
         this.camera = null;
         this.controls = null;
@@ -30,7 +31,13 @@ class CameraManager {
         this._eventsInitialized = false;
         this._isInputDisabled = false;
         this.lastFrameTime = performance.now();
+        this.normalizedFps = 120; // Default to 60 FPS
     }
+
+    setNormalizedFps(fps: number) {
+        this.normalizedFps = Math.max(1, fps);
+    }
+    
     initialize(camera, controls) {
         if (this._eventsInitialized) return;
         this._eventsInitialized = true;
@@ -80,7 +87,7 @@ class CameraManager {
 
         const animate = () => {
             const currentTime = performance.now();
-            const deltaTime = (currentTime - this.lastFrameTime) / 16.67; // normalize to 60fps
+            const deltaTime = (currentTime - this.lastFrameTime) / (1000 / this.normalizedFps); // normalize to configured FPS
             this.lastFrameTime = currentTime;
 
             this.updateCameraMovement(deltaTime);
