@@ -51,7 +51,6 @@ const EnvironmentBuilder = (
         scene,
         previewPositionFromAppJS,
         currentBlockType,
-        mode,
         onTotalObjectsChange,
         placementSize = "single",
         placementSettings,
@@ -433,6 +432,7 @@ const EnvironmentBuilder = (
                     .add(positionOffset.current);
             }
 
+            console.log("setupPreview", placeholderMeshRef.current.rotation);
             if (placeholderMeshRef.current) {
                 removePreview();
             }
@@ -568,7 +568,6 @@ const EnvironmentBuilder = (
             isUndoRedoOperation.current = false;
         }
     };
-
 
     const getModelType = (modelName, modelUrl) => {
         return environmentModels.find(
@@ -1226,19 +1225,6 @@ const EnvironmentBuilder = (
         }
     };
 
-    const rotatePreview = (angle) => {
-        if (placeholderMeshRef.current) {
-            placeholderMeshRef.current.rotation.y += angle;
-        }
-    };
-
-    const setScale = (scale) => {
-        setScale(scale);
-        if (placeholderMeshRef.current) {
-            placeholderMeshRef.current.scale.set(scale, scale, scale);
-        }
-    };
-
     useEffect(() => {
         onTotalObjectsChange?.(totalEnvironmentObjects);
     }, [totalEnvironmentObjects, onTotalObjectsChange]);
@@ -1266,13 +1252,14 @@ const EnvironmentBuilder = (
     }, [previewPositionFromAppJS, currentBlockType]);
 
     useEffect(() => {
+        placementSettingsRef.current = placementSettings;
         if (placeholderMeshRef.current && currentBlockType?.isEnvironment) {
             const transform = getPlacementTransform();
 
             placeholderMeshRef.current.scale.copy(transform.scale);
             placeholderMeshRef.current.rotation.copy(transform.rotation);
         }
-    }, [placementSettings]); // Watch for changes in placement settings
+    }, [placementSettings]);
 
     useEffect(() => {
         placementSizeRef.current = placementSize;
@@ -1286,10 +1273,6 @@ const EnvironmentBuilder = (
         }
     }, [placementSize]);
 
-    useEffect(() => {
-        placementSettingsRef.current = placementSettings;
-    }, [placementSettings]);
-
     const beginUndoRedoOperation = () => {
         isUndoRedoOperation.current = true;
     };
@@ -1301,8 +1284,6 @@ const EnvironmentBuilder = (
         () => ({
             updateModelPreview,
             removePreview,
-            rotatePreview,
-            setScale,
             placeEnvironmentModel,
             placeEnvironmentModelWithoutSaving,
             preloadModels,

@@ -1,6 +1,6 @@
 import { OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import React, {
+import {
     forwardRef,
     useCallback,
     useEffect,
@@ -30,25 +30,25 @@ import {
     MAX_SELECTION_DISTANCE,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
-import { DatabaseManager, STORES } from "./managers/DatabaseManager";
-import { loadingManager } from "./managers/LoadingManager";
 import { processCustomBlock } from "./managers/BlockTypesManager";
 import { cameraMovementTracker } from "./managers/CameraMovementTracker";
+import { DatabaseManager, STORES } from "./managers/DatabaseManager";
+import { loadingManager } from "./managers/LoadingManager";
+import {
+    cleanupMouseButtonTracking,
+    initializeMouseButtonTracking,
+} from "./managers/MouseButtonManager";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
-import {
-    initializeMouseButtonTracking,
-    cleanupMouseButtonTracking,
-} from "./managers/MouseButtonManager";
-import { playPlaceSound } from "./Sound";
 import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
+import { playPlaceSound } from "./Sound";
 import {
     GroundTool,
     PipeTool,
     SchematicPlacementTool,
+    SelectionTool,
     ToolManager,
     WallTool,
-    SelectionTool,
 } from "./tools";
 import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorTool import
 import {
@@ -58,8 +58,8 @@ import {
     setDeferredChunkMeshing,
 } from "./utils/ChunkUtils"; // <<< Add this import
 import {
-    handleTerrainMouseUp,
     handleTerrainMouseDown,
+    handleTerrainMouseUp,
 } from "./utils/TerrainMouseUtils";
 import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
@@ -2351,5 +2351,6 @@ export {
     blockTypes,
     getBlockTypes,
     getCustomBlocks,
-    processCustomBlock,
+    processCustomBlock
 } from "./managers/BlockTypesManager";
+
