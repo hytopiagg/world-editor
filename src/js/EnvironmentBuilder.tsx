@@ -432,7 +432,6 @@ const EnvironmentBuilder = (
                     .add(positionOffset.current);
             }
 
-            console.log("setupPreview", placeholderMeshRef.current.rotation);
             if (placeholderMeshRef.current) {
                 removePreview();
             }
@@ -452,20 +451,20 @@ const EnvironmentBuilder = (
             return;
         }
 
-        if (
-            !placeholderMeshRef.current ||
-            placeholderMeshRef.current.userData.modelId !== currentBlockType.id
-        ) {
+        if (!placeholderMeshRef.current || placeholderMeshRef.current.userData.modelId !== currentBlockType.id) {
             await setupPreview(position);
         } else if (position) {
+            const currentRotation = placeholderMeshRef.current.rotation.clone();
+            const currentScale = placeholderMeshRef.current.scale.clone();
+
             placeholderMeshRef.current.position.copy(
                 position.clone().add(positionOffset.current)
             );
             placeholderMeshRef.current.scale.copy(
-                lastPreviewTransform.current.scale
+                currentScale
             );
             placeholderMeshRef.current.rotation.copy(
-                lastPreviewTransform.current.rotation
+                currentRotation
             );
         }
     };
