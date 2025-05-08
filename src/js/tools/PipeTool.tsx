@@ -24,6 +24,7 @@ class PipeTool extends BaseTool {
     placementChangesRef: React.RefObject<any>;
     isPlacingRef: React.RefObject<any>;
     previewPositionRef: React.RefObject<any>;
+    pendingChangesRef: React.RefObject<any>;
     
     constructor(terrainBuilderProps) {
         console.log("PipeTool initialized");
@@ -50,7 +51,7 @@ class PipeTool extends BaseTool {
 
             this.placementChangesRef = terrainBuilderProps.placementChangesRef;
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
-
+            this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
         } else {
             console.error(
@@ -519,6 +520,8 @@ class PipeTool extends BaseTool {
                         if (this.terrainRef.current[posKey]) continue;
 
                         addedBlocks[posKey] = blockTypeId;
+                        this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
+                        delete this.pendingChangesRef.current.terrain.removed[posKey];
                     }
                 }
             }

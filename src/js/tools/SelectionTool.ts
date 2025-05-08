@@ -393,15 +393,6 @@ class SelectionTool extends BaseTool {
                 for (let y = 0; y < this.selectionHeight; y++) {
                     const posKey = `${x},${baseY + y},${z}`;
                     if (this.terrainRef.current[posKey]) {
-                        console.log("posKey", posKey);
-                        console.log(
-                            "this.terrainRef.current",
-                            this.terrainRef.current
-                        );
-                        console.log(
-                            "this.terrainRef.current[posKey]",
-                            this.terrainRef.current[posKey]
-                        );
                         const blockId = this.terrainRef.current[posKey];
                         this.selectedBlocks.set(posKey, blockId);
                         this.originalPositions.set(

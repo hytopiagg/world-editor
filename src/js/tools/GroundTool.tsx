@@ -24,6 +24,7 @@ class GroundTool extends BaseTool {
     placementChangesRef = null;
     isPlacingRef = null;
     previewPositionRef = null;
+    pendingChangesRef = null;
 
     constructor(terrainBuilderProps) {
         console.log("GroundTool initialized");
@@ -44,7 +45,7 @@ class GroundTool extends BaseTool {
             this.scene = terrainBuilderProps.scene;
             this.toolManagerRef = terrainBuilderProps.toolManagerRef;
             this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
-
+            this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
             this.undoRedoManager = terrainBuilderProps.undoRedoManager;
             console.log(
                 "GroundTool: Got undoRedoManager reference:",
@@ -453,6 +454,8 @@ class GroundTool extends BaseTool {
                         if (this.terrainRef.current[posKey]) continue;
 
                         addedBlocks[posKey] = blockTypeId;
+                        this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
+                        delete this.pendingChangesRef.current.terrain.removed[posKey];
                     }
                 }
             }
