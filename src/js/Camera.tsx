@@ -15,6 +15,7 @@ class CameraManager {
     _eventsInitialized: boolean;
     _isInputDisabled: boolean;
     isRotateMode: boolean;
+    lastFrameTime: number;
     constructor() {
         this.camera = null;
         this.controls = null;
@@ -28,6 +29,7 @@ class CameraManager {
         this.onCameraAngleChange = null;
         this._eventsInitialized = false;
         this._isInputDisabled = false;
+        this.lastFrameTime = performance.now();
     }
     initialize(camera, controls) {
         if (this._eventsInitialized) return;
@@ -43,6 +45,7 @@ class CameraManager {
         this.animationFrameId = null;
         this.onCameraAngleChange = null;
         this.isRotateMode = true;
+        this.lastFrameTime = performance.now();
         this.controls.enableZoom = false;
         this.controls.panSpeed = 10;
 
@@ -76,7 +79,11 @@ class CameraManager {
         window.addEventListener("keyup", this.handleKeyUp);
 
         const animate = () => {
-            this.updateCameraMovement();
+            const currentTime = performance.now();
+            const deltaTime = (currentTime - this.lastFrameTime) / 16.67; // normalize to 60fps
+            this.lastFrameTime = currentTime;
+
+            this.updateCameraMovement(deltaTime);
             this.animationFrameId = requestAnimationFrame(animate);
         };
         animate();
@@ -136,9 +143,13 @@ class CameraManager {
             this.saveState();
         }
     }
-    updateCameraMovement() {
+    updateCameraMovement(deltaTime = 1) {
         if (!this.controls || !this.camera || this._isInputDisabled) return;
         let moved = false;
+
+        // Apply deltaTime to make movement frame-rate independent
+        const frameAdjustedMoveSpeed = this.moveSpeed * deltaTime;
+        const frameAdjustedRotateSpeed = this.rotateSpeed * deltaTime;
 
         if (
             this.keys.has("w") ||
@@ -155,14 +166,14 @@ class CameraManager {
             const moveDirection =
                 this.keys.has("w") || this.keys.has("arrowup") ? 1 : -1;
             this.camera.position.add(
-                direction.multiplyScalar(this.moveSpeed * moveDirection)
+                direction.multiplyScalar(frameAdjustedMoveSpeed * moveDirection)
             );
             moved = true;
         }
 
         if (this.keys.has("a") || this.keys.has("arrowleft")) {
             if (this.isRotateMode) {
-                this.camera.rotateY(this.rotateSpeed);
+                this.camera.rotateY(frameAdjustedRotateSpeed);
             } else {
                 const direction = new THREE.Vector3();
                 this.camera.getWorldDirection(direction);
@@ -174,7 +185,7 @@ class CameraManager {
                     -direction.x
                 );
                 this.camera.position.add(
-                    leftVector.multiplyScalar(this.moveSpeed)
+                    leftVector.multiplyScalar(frameAdjustedMoveSpeed)
                 );
             }
 
@@ -182,7 +193,7 @@ class CameraManager {
         }
         if (this.keys.has("d") || this.keys.has("arrowright")) {
             if (this.isRotateMode) {
-                this.camera.rotateY(-this.rotateSpeed);
+                this.camera.rotateY(-frameAdjustedRotateSpeed);
             } else {
                 const direction = new THREE.Vector3();
                 this.camera.getWorldDirection(direction);
@@ -194,18 +205,18 @@ class CameraManager {
                     direction.x
                 );
                 this.camera.position.add(
-                    rightVector.multiplyScalar(this.moveSpeed)
+                    rightVector.multiplyScalar(frameAdjustedMoveSpeed)
                 );
             }
             moved = true;
         }
 
         if (this.keys.has(" ")) {
-            this.camera.position.y += this.moveSpeed;
+            this.camera.position.y += frameAdjustedMoveSpeed;
             moved = true;
         }
         if (this.keys.has("shift")) {
-            this.camera.position.y -= this.moveSpeed;
+            this.camera.position.y -= frameAdjustedMoveSpeed;
             moved = true;
         }
 
