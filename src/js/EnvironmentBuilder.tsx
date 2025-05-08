@@ -120,9 +120,18 @@ const EnvironmentBuilder = (
             Object.values(removed).forEach((instance: {
                 instanceId: number;
                 modelUrl: string;
+                position: { x: number; y: number; z: number };
             }) => {
                 console.log("removing", instance);
                 removeInstance(instance.modelUrl, instance.instanceId, false);
+                terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+                    x: instance.position.x,
+                    y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                    z: instance.position.z,
+                    blockId: 1000,
+                }], {
+                    force: true,
+                });
             });
         }
         if (added && Object.keys(added).length > 0) {
@@ -158,6 +167,15 @@ const EnvironmentBuilder = (
                         rotation,
                         scale,
                         matrix
+                    });
+
+                    terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                        x: instance.position.x,
+                        y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                        z: instance.position.z,
+                        blockId: 1000,
+                    }], [], {
+                        force: true,
                     });
                 } else {
                     console.log("no instanced meshes found for", instance.modelUrl);
