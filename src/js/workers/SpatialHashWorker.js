@@ -39,7 +39,7 @@ self.onmessage = function (event) {
             );
             result = buildSpatialGrid(blocks, actualChunkSize);
 
-
+            console.log('spatialHashworker - postMessage')
             self.postMessage({
                 result: "gridBuilt",
 

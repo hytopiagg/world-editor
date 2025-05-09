@@ -27,7 +27,6 @@ class GroundTool extends BaseTool {
     pendingChangesRef = null;
     environmentBuilderRef = null;
     constructor(terrainBuilderProps) {
-        console.log("GroundTool initialized");
         super(terrainBuilderProps);
 
         this.name = "GroundTool";
@@ -48,33 +47,8 @@ class GroundTool extends BaseTool {
             this.environmentBuilderRef = terrainBuilderProps.environmentBuilderRef;
             this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
             this.undoRedoManager = terrainBuilderProps.undoRedoManager;
-            console.log(
-                "GroundTool: Got undoRedoManager reference:",
-                !!this.undoRedoManager
-            );
-            console.log(
-                "GroundTool: undoRedoManager is ref:",
-                this.undoRedoManager && "current" in this.undoRedoManager
-            );
-            console.log(
-                "GroundTool: undoRedoManager.current exists:",
-                this.undoRedoManager && !!this.undoRedoManager.current
-            );
-            console.log(
-                "GroundTool: undoRedoManager.current has saveUndo:",
-                this.undoRedoManager &&
-                    this.undoRedoManager.current &&
-                    typeof this.undoRedoManager.current.saveUndo === "function"
-            );
-
             this.placementChangesRef = terrainBuilderProps.placementChangesRef;
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
-            console.log(
-                "GroundTool: Got placementChangesRef:",
-                !!this.placementChangesRef
-            );
-            console.log("GroundTool: Got isPlacingRef:", !!this.isPlacingRef);
-
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
         } else {
             console.error(
@@ -86,10 +60,7 @@ class GroundTool extends BaseTool {
     onActivate(activationData) {
         super.onActivate(activationData);
 
-        console.log("GroundTool activated");
-
         if (this.terrainRef && !this.terrainRef.current) {
-            console.log("Initializing empty terrainRef.current in onActivate");
             this.terrainRef.current = {};
         }
 
@@ -137,23 +108,14 @@ class GroundTool extends BaseTool {
                     return;
                 }
                 if (!this.terrainRef.current) {
-                    console.log(
-                        "GroundTool: terrainRef.current is undefined, initializing empty object"
-                    );
                     this.terrainRef.current = {};
                 }
 
                 if (this.isPlacingRef) {
-                    console.log(
-                        "GroundTool: Setting isPlacingRef to true (directly)"
-                    );
                     this.isPlacingRef.current = true;
                 }
 
                 if (this.placementChangesRef) {
-                    console.log(
-                        "GroundTool: Ensuring placementChangesRef is initialized (directly)"
-                    );
                     this.placementChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
@@ -181,7 +143,6 @@ class GroundTool extends BaseTool {
                     return;
                 }
 
-                console.log("GroundTool: Saving undo state directly");
                 if (this.placementChangesRef) {
                     const changes = this.placementChangesRef.current;
 
@@ -190,17 +151,11 @@ class GroundTool extends BaseTool {
                         Object.keys(changes.terrain.removed).length > 0;
                     if (hasChanges) {
                         if (this.undoRedoManager?.current?.saveUndo) {
-                            console.log(
-                                "GroundTool: Calling saveUndo with undoRedoManager.current"
-                            );
                             this.undoRedoManager.current.saveUndo(changes);
                         } else if (
                             this.terrainBuilderRef?.current?.undoRedoManager
                                 ?.current?.saveUndo
                         ) {
-                            console.log(
-                                "GroundTool: Calling saveUndo with terrainBuilderRef fallback"
-                            );
                             this.terrainBuilderRef.current.undoRedoManager.current.saveUndo(
                                 changes
                             );
@@ -227,9 +182,6 @@ class GroundTool extends BaseTool {
                 this.removeGroundPreview();
 
                 if (this.isPlacingRef) {
-                    console.log(
-                        "GroundTool: Setting isPlacingRef to false (directly)"
-                    );
                     this.isPlacingRef.current = false;
                 }
             } else {
@@ -237,18 +189,12 @@ class GroundTool extends BaseTool {
                 this.groundStartPosition = currentPosition.clone();
 
                 if (this.placementChangesRef) {
-                    console.log(
-                        "GroundTool: Initializing placementChangesRef for new ground area (directly)"
-                    );
                     this.placementChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
                     };
 
                     if (this.isPlacingRef) {
-                        console.log(
-                            "GroundTool: Setting isPlacingRef to true for new ground area (directly)"
-                        );
                         this.isPlacingRef.current = true;
                     }
                 } else {
@@ -279,20 +225,15 @@ class GroundTool extends BaseTool {
      */
     handleKeyDown(event) {
         if (event.key === "Control") {
-            console.log("GroundTool: Ctrl pressed, switching to erase mode");
             this.isCtrlPressed = true;
             this.updateGroundPreviewMaterial();
         } else if (event.key === "1") {
-            console.log("GroundTool: Decreasing ground height");
             this.setGroundHeight(this.groundHeight - 1);
         } else if (event.key === "2") {
-            console.log("GroundTool: Increasing ground height");
             this.setGroundHeight(this.groundHeight + 1);
         } else if (event.key === "5") {
-            console.log("GroundTool: Decreasing number of sides");
             this.setGroundSides(this.groundSides - 1);
         } else if (event.key === "6") {
-            console.log("GroundTool: Increasing number of sides");
             this.setGroundSides(this.groundSides + 1);
         } else if (event.key === "Escape") {
             this.removeGroundPreview();
@@ -304,7 +245,6 @@ class GroundTool extends BaseTool {
      */
     handleKeyUp(event) {
         if (event.key === "Control") {
-            console.log("GroundTool: Ctrl released, switching to build mode");
             this.isCtrlPressed = false;
             this.updateGroundPreviewMaterial();
         }
@@ -313,7 +253,6 @@ class GroundTool extends BaseTool {
      * Updates the ground height
      */
     setGroundHeight(height) {
-        console.log("Setting ground height to:", Math.max(1, height));
         this.groundHeight = Math.max(1, height);
 
         if (
@@ -325,21 +264,12 @@ class GroundTool extends BaseTool {
                 this.groundStartPosition,
                 this.previewPositionRef.current
             );
-        } else {
-            console.log("Ground preview not updated - missing references:", {
-                groundStartPosition: !!this.groundStartPosition,
-                previewPositionRef: !!this.previewPositionRef,
-                previewPositionRefCurrent:
-                    this.previewPositionRef &&
-                    !!this.previewPositionRef.current,
-            });
         }
     }
 
     setGroundSides(sides) {
         const newSides = Math.max(4, Math.min(8, sides));
         if (newSides !== this.groundSides) {
-            console.log("Setting ground sides to:", newSides);
             this.groundSides = newSides;
 
             if (
@@ -402,16 +332,6 @@ class GroundTool extends BaseTool {
      * @returns {boolean} True if the ground was placed, false otherwise
      */
     placeGround(startPos, endPos) {
-        console.log(
-            "GroundTool: Placing ground from",
-            startPos,
-            "to",
-            endPos,
-            "with height",
-            this.groundHeight,
-            "and sides",
-            this.groundSides
-        );
         if (!startPos || !endPos) {
             console.error("Invalid start or end position for ground placement");
             return false;
@@ -468,11 +388,6 @@ class GroundTool extends BaseTool {
             );
             return false;
         }
-        console.log(
-            `GroundTool: Adding ${
-                Object.keys(addedBlocks).length
-            } blocks in batch`
-        );
 
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             this.terrainRef.current[posKey] = blockId;
@@ -596,8 +511,7 @@ class GroundTool extends BaseTool {
             return false;
         }
         console.log(
-            `GroundTool: Removing ${
-                Object.keys(removedBlocks).length
+            `GroundTool: Removing ${Object.keys(removedBlocks).length
             } blocks in batch`
         );
 

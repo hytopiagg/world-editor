@@ -108,6 +108,40 @@ const EnvironmentBuilder = (
         return instances;
     };
 
+    const getAllEnvironmentPositionsAsObject = () => {
+        const positions = {};
+        let instanceData = [];
+        console.log("getAllEnvironmentPositionsAsObject - instancedMeshes.current", instancedMeshes.current);
+        console.log("getAllEnvironmentPositionsAsObject - instancedMeshes.current.entries()", instancedMeshes.current.size);
+        for (const x of [...instancedMeshes.current]) {
+            instanceData.push(...x[1].instances);
+            console.log("instanceData", instanceData);
+            instanceData.forEach((instance) => {
+                console.log("instance", instance);
+                positions[`${instance[1]?.position?.x}-${instance[1]?.position?.y}-${instance[1]?.position?.z}`] = 1000;
+            });
+        }
+        console.log("getAllEnvironmentPositionsAsObject - positions", positions);
+        return positions;
+    }
+
+    const forceRebuildSpatialHash = () => {
+        console.log("forceRebuildSpatialHash - env builder");
+        const instances = getAllEnvironmentObjects();
+        console.log("instances", instances);
+        instances.forEach((instance) => {
+            terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                x: instance.position.x,
+                y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                z: instance.position.z,
+                blockId: 1000,
+            }], [], {
+                force: true,
+            });
+        });
+    };
+    
+
     // Check if any instance has this position, if so, return the true
     const hasInstanceAtPosition = (position) => {
         const instances = getAllEnvironmentObjects();
@@ -1315,9 +1349,11 @@ const EnvironmentBuilder = (
             endUndoRedoOperation,
             updateLocalStorage,
             getAllEnvironmentObjects,
+            getAllEnvironmentPositionsAsObject,
             updateEnvironmentForUndoRedo,
             getModelType,
-            hasInstanceAtPosition
+            hasInstanceAtPosition,
+            forceRebuildSpatialHash
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

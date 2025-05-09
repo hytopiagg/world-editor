@@ -9,9 +9,7 @@ import { SpatialHashGrid } from "../chunks/SpatialHashGrid";
 let managerInstance = null;
 class SpatialGridManager {
     constructor(loadingManager) {
-
         if (managerInstance) {
-
             if (loadingManager && !managerInstance.loadingManager) {
                 managerInstance.loadingManager = loadingManager;
             }
@@ -67,11 +65,9 @@ class SpatialGridManager {
 
         chunksInFrustum.add(`${cameraChunkX},${cameraChunkY},${cameraChunkZ}`);
 
-
         const maxChunks = Math.ceil(maxDistance / CHUNK_SIZE);
 
         for (let shell = 0; shell <= 2; shell++) {
-
             const shellSize = shell * Math.ceil(maxChunks / 3);
 
             for (
@@ -89,7 +85,6 @@ class SpatialGridManager {
                         dz <= shellSize;
                         dz += shell === 0 ? 1 : 2
                     ) {
-
                         if (
                             shell > 0 &&
                             Math.abs(dx) < shellSize &&
@@ -132,7 +127,9 @@ class SpatialGridManager {
         const duration = end - start;
         if (duration > 5) {
             console.log(
-                `Frustum check took ${duration.toFixed(2)}ms for ${chunksInFrustum.size} chunks`
+                `Frustum check took ${duration.toFixed(2)}ms for ${
+                    chunksInFrustum.size
+                } chunks`
             );
         }
         return chunksInFrustum;
@@ -158,6 +155,7 @@ class SpatialGridManager {
      * @param {Object} options - Options for updating
      */
     updateInFrustum(terrainBlocks, camera, options = {}) {
+        console.log("SpatialGridManager: Updating blocks in frustum");
         if (!camera) {
             console.warn("No camera provided for updateInFrustum");
             return Promise.resolve();
@@ -170,7 +168,6 @@ class SpatialGridManager {
 
         this.isProcessing = true;
         try {
-
             this.updateFrustumCache(camera, options.maxDistance || 64);
 
             if (this.chunksInFrustum.size === 0) {
@@ -180,7 +177,6 @@ class SpatialGridManager {
 
             const frustumBlocks = {};
             let blockCount = 0;
-            let skipCount = 0;
 
             const chunksInFrustumSet = this.chunksInFrustum;
 
@@ -195,16 +191,7 @@ class SpatialGridManager {
                 if (chunksInFrustumSet.has(chunkKey)) {
                     frustumBlocks[posKey] = blockId;
                     blockCount++;
-                } else {
-                    skipCount++;
                 }
-            }
-            const filterTime = performance.now() - start;
-
-            if (blockCount > 0 && !options.silent) {
-                console.log(
-                    `Filtered ${blockCount} blocks in frustum (${skipCount} skipped) in ${filterTime.toFixed(2)}ms`
-                );
             }
 
             if (blockCount === 0) {
@@ -215,19 +202,11 @@ class SpatialGridManager {
             const self = this;
 
             return this.updateFromTerrain(frustumBlocks, options)
-                .then(() => {
-                    const totalTime = performance.now() - start;
-                    if (totalTime > 50 && !options.silent) {
-                        console.log(
-                            `Total frustum update took ${totalTime.toFixed(2)}ms for ${blockCount} blocks`
-                        );
-                    }
-                })
+                .then(() => {})
                 .catch((error) => {
                     console.error("Error in updateInFrustum:", error);
                 })
                 .finally(() => {
-
                     self.isProcessing = false;
                 });
         } catch (error) {
@@ -269,7 +248,9 @@ class SpatialGridManager {
 
         const blocks = Object.entries(terrainBlocks);
         console.log(
-            `SpatialGridManager: Updating from terrain with ${blocks.length.toLocaleString()} blocks ${force ? "(FORCED)" : ""}`
+            `SpatialGridManager: Updating from terrain with ${blocks.length.toLocaleString()} blocks ${
+                force ? "(FORCED)" : ""
+            }`
         );
 
         if (force) {
@@ -358,7 +339,6 @@ class SpatialGridManager {
      */
     processBatch(batch) {
         for (const [posKey, blockId] of batch) {
-
             if (blockId === 0 || blockId === null || blockId === undefined) {
                 continue;
             }
@@ -373,11 +353,9 @@ class SpatialGridManager {
      * @param {Object} options - Options for updating
      */
     updateBlocks(addedBlocks = [], removedBlocks = [], options = {}) {
-
         if (addedBlocks.length === 0 && removedBlocks.length === 0) {
             return;
         }
-
 
         if (!this.spatialHashGrid) {
             console.warn("Creating new spatial hash grid");
@@ -389,16 +367,13 @@ class SpatialGridManager {
                 let blockId, x, y, z;
 
                 if (Array.isArray(block)) {
-
                     const [posKey, id] = block;
                     [x, y, z] = posKey.split(",").map(Number);
                     blockId = id;
                 } else if (block.position) {
-
                     [x, y, z] = block.position;
                     blockId = block.id;
                 } else if (block.x !== undefined) {
-
                     x = block.x;
                     y = block.y;
                     z = block.z;
@@ -413,7 +388,13 @@ class SpatialGridManager {
                     continue;
                 }
 
-                console.log("setting block in spatial hash grid:", x, y, z, blockId);
+                console.log(
+                    "setting block in spatial hash grid:",
+                    x,
+                    y,
+                    z,
+                    blockId
+                );
                 this.spatialHashGrid.set(x, y, z, blockId);
             }
         }
@@ -423,14 +404,11 @@ class SpatialGridManager {
                 let x, y, z;
 
                 if (Array.isArray(block)) {
-
                     const [posKey] = block;
                     [x, y, z] = posKey.split(",").map(Number);
                 } else if (block.position) {
-
                     [x, y, z] = block.position;
                 } else if (block.x !== undefined) {
-
                     x = block.x;
                     y = block.y;
                     z = block.z;
@@ -439,7 +417,6 @@ class SpatialGridManager {
                 this.spatialHashGrid.remove(x, y, z);
             }
         }
-
     }
     /**
      * Perform a raycast against the spatial hash grid
@@ -480,7 +457,6 @@ class SpatialGridManager {
             groundIntersectionDistance > 0 &&
             groundIntersectionDistance < maxDistance
         ) {
-
             groundTarget
                 .copy(rayOrigin)
                 .addScaledVector(rayDirection, groundIntersectionDistance);
@@ -490,7 +466,6 @@ class SpatialGridManager {
                 Math.abs(groundTarget.x) <= gridSizeHalf &&
                 Math.abs(groundTarget.z) <= gridSizeHalf
             ) {
-
                 groundIntersection = {
                     point: groundTarget.clone(),
                     normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
@@ -506,7 +481,6 @@ class SpatialGridManager {
             }
         }
 
-
         if (!prioritizeBlocks || this.spatialHashGrid.size === 0) {
             return groundIntersection;
         }
@@ -514,14 +488,9 @@ class SpatialGridManager {
         const stepSize = 0.005; // Reduced for better accuracy with thin walls
         const maxSteps = Math.ceil(maxDistance / stepSize);
 
-
         let currentX = rayOrigin.x + 0.5;
         let currentY = rayOrigin.y + 0.5;
         let currentZ = rayOrigin.z + 0.5;
-
-
-
-
 
         const dirNormalized = rayDirection.clone().normalize();
 
@@ -534,10 +503,6 @@ class SpatialGridManager {
         let foundHitPoint = new THREE.Vector3();
         let foundFace = null;
 
-
-
-
-
         let crossedBoundary = false;
         let previousBlockX = Math.floor(currentX);
         let previousBlockY = Math.floor(currentY);
@@ -548,15 +513,20 @@ class SpatialGridManager {
         const isDebugEnabled = false; //debug && isPlacing;
         if (isDebugEnabled) {
             console.log(
-                `RAYCAST: Starting ray from (${rayOrigin.x.toFixed(2)}, ${rayOrigin.y.toFixed(2)}, ${rayOrigin.z.toFixed(2)})`
+                `RAYCAST: Starting ray from (${rayOrigin.x.toFixed(
+                    2
+                )}, ${rayOrigin.y.toFixed(2)}, ${rayOrigin.z.toFixed(2)})`
             );
             console.log(
-                `RAYCAST: Ray direction (${dirNormalized.x.toFixed(2)}, ${dirNormalized.y.toFixed(2)}, ${dirNormalized.z.toFixed(2)})`
+                `RAYCAST: Ray direction (${dirNormalized.x.toFixed(
+                    2
+                )}, ${dirNormalized.y.toFixed(2)}, ${dirNormalized.z.toFixed(
+                    2
+                )})`
             );
         }
 
         for (let step = 0; step < maxSteps; step++) {
-
             const blockX = Math.floor(currentX);
             const blockY = Math.floor(currentY);
             const blockZ = Math.floor(currentZ);
@@ -566,11 +536,6 @@ class SpatialGridManager {
                 blockY !== previousBlockY ||
                 blockZ !== previousBlockZ;
             if (crossedBoundary) {
-
-
-
-
-
                 previousBlockX = blockX;
                 previousBlockY = blockY;
                 previousBlockZ = blockZ;
@@ -584,7 +549,6 @@ class SpatialGridManager {
             const key = `${blockX},${blockY},${blockZ}`;
 
             if (recentlyPlacedBlocks && recentlyPlacedBlocks.has(key)) {
-
                 lastEmptyPosition.set(currentX, currentY, currentZ);
 
                 currentX += dirNormalized.x * stepSize;
@@ -604,10 +568,7 @@ class SpatialGridManager {
                         `RAYCAST: Empty at (${blockX}, ${blockY}, ${blockZ}), step=${step}`
                     );
                 }
-            }
-
-            else {
-
+            } else {
                 const blockPos = new THREE.Vector3(
                     blockX + 0.5,
                     blockY + 0.5,
@@ -616,15 +577,20 @@ class SpatialGridManager {
                 const exactDistance = rayOrigin.distanceTo(blockPos);
 
                 if (exactDistance < foundDistance) {
-
-
                     const hitPointRaw = lastEmptyPosition.clone();
                     if (isDebugEnabled) {
                         console.log(
-                            `RAYCAST: Ray trajectory between (${lastEmptyPosition.x.toFixed(2)}, ${lastEmptyPosition.y.toFixed(2)}, ${lastEmptyPosition.z.toFixed(2)}) and (${currentX.toFixed(2)}, ${currentY.toFixed(2)}, ${currentZ.toFixed(2)})`
+                            `RAYCAST: Ray trajectory between (${lastEmptyPosition.x.toFixed(
+                                2
+                            )}, ${lastEmptyPosition.y.toFixed(
+                                2
+                            )}, ${lastEmptyPosition.z.toFixed(
+                                2
+                            )}) and (${currentX.toFixed(2)}, ${currentY.toFixed(
+                                2
+                            )}, ${currentZ.toFixed(2)})`
                         );
                     }
-
 
                     const faceInfo = this._determineBlockFaceAdvanced(
                         hitPointRaw,
@@ -667,7 +633,6 @@ class SpatialGridManager {
         }
 
         if (foundBlockId !== null) {
-
             return {
                 point: foundHitPoint.clone(),
                 normal: foundNormal,
@@ -678,7 +643,6 @@ class SpatialGridManager {
                 face: foundFace,
             };
         }
-
 
         return groundIntersection;
     }
@@ -703,12 +667,9 @@ class SpatialGridManager {
         lastEmptyPos,
         currentPos
     ) {
-
         const trajectory = new THREE.Vector3()
             .subVectors(currentPos, lastEmptyPos)
             .normalize();
-
-
 
         const blockMinX = blockX;
         const blockMinY = blockY;
@@ -717,11 +678,9 @@ class SpatialGridManager {
         const blockMaxY = blockY + 1;
         const blockMaxZ = blockZ + 1;
 
-
         const blockFractionX = lastEmptyPos.x - blockMinX;
         const blockFractionY = lastEmptyPos.y - blockMinY;
         const blockFractionZ = lastEmptyPos.z - blockMinZ;
-
 
         const distToMinX = blockFractionX;
         const distToMaxX = blockMaxX - lastEmptyPos.x;
@@ -731,7 +690,6 @@ class SpatialGridManager {
         const distToMaxZ = blockMaxZ - lastEmptyPos.z;
 
         const faces = [
-
             {
                 name: "minX",
                 normal: new THREE.Vector3(-1, 0, 0),
@@ -803,9 +761,7 @@ class SpatialGridManager {
 
         const validFaces = faces.filter((face) => face.valid);
 
-
         if (validFaces.length > 0) {
-
             validFaces.sort((a, b) => a.tValue - b.tValue);
 
             return {
@@ -813,7 +769,6 @@ class SpatialGridManager {
                 face: validFaces[0].name,
             };
         }
-
 
         faces.sort((a, b) => b.perpendicular - a.perpendicular);
 
@@ -834,8 +789,6 @@ class SpatialGridManager {
      */
     _adjustHitPointToFace(rawPoint, blockX, blockY, blockZ, face) {
         const adjustedPoint = rawPoint.clone();
-
-
 
         const blockMinX = blockX;
         const blockMinY = blockY;
@@ -924,8 +877,6 @@ class SpatialGridManager {
     getChunksAlongRay(ray, maxDistance) {
         const chunksToCheck = new Set();
 
-
-
         const startPos = ray.origin.clone();
         const dir = ray.direction.clone().normalize();
 
@@ -938,7 +889,6 @@ class SpatialGridManager {
         const stepX = dir.x > 0 ? 1 : dir.x < 0 ? -1 : 0;
         const stepY = dir.y > 0 ? 1 : dir.y < 0 ? -1 : 0;
         const stepZ = dir.z > 0 ? 1 : dir.z < 0 ? -1 : 0;
-
 
         const nextBoundaryX = (currentX + (stepX > 0 ? 1 : 0)) * CHUNK_SIZE;
         const nextBoundaryY = (currentY + (stepY > 0 ? 1 : 0)) * CHUNK_SIZE;
@@ -970,17 +920,14 @@ class SpatialGridManager {
             iterations++;
 
             if (tMaxX < tMaxY && tMaxX < tMaxZ) {
-
                 currentX += stepX;
                 totalDistance = tMaxX;
                 tMaxX += tDeltaX;
             } else if (tMaxY < tMaxZ) {
-
                 currentY += stepY;
                 totalDistance = tMaxY;
                 tMaxY += tDeltaY;
             } else {
-
                 currentZ += stepZ;
                 totalDistance = tMaxZ;
                 tMaxZ += tDeltaZ;
@@ -1080,10 +1027,8 @@ class SpatialGridManager {
      */
     getBlock(key, y, z) {
         if (arguments.length === 3) {
-
             return this.spatialHashGrid.get(key, y, z) || 0;
         } else {
-
             if (typeof key === "string") {
                 const [x, y, z] = key.split(",").map(Number);
                 return this.spatialHashGrid.get(x, y, z) || 0;
@@ -1105,10 +1050,8 @@ class SpatialGridManager {
             typeof z === "number" &&
             id !== undefined
         ) {
-
             this.spatialHashGrid.set(key, blockId, z, id);
         } else if (typeof key === "string" && blockId !== undefined) {
-
             const [x, y, z] = key.split(",").map(Number);
             this.spatialHashGrid.set(x, y, z, blockId);
         } else {
@@ -1125,10 +1068,8 @@ class SpatialGridManager {
     deleteBlock(key, y, z) {
         console.log(`SpatialGridManager.deleteBlock: Deleting block at ${key}`);
         if (arguments.length === 3) {
-
             return this.spatialHashGrid.set(key, y, z, 0);
         } else {
-
             if (typeof key === "string") {
                 const [x, y, z] = key.split(",").map(Number);
                 return this.spatialHashGrid.set(x, y, z, 0);
@@ -1156,9 +1097,7 @@ class SpatialGridManager {
 
         if (typeof this.spatialHashGrid.clear === "function") {
             this.spatialHashGrid.clear();
-        }
-
-        else {
+        } else {
             console.log("SpatialGridManager: Recreating spatial hash grid");
             this.spatialHashGrid = new SpatialHashGrid({
                 chunkSize: CHUNK_SIZE,
@@ -1264,7 +1203,6 @@ class SpatialGridManager {
      * This is useful when loading a new world or switching modes
      */
     reset() {
-
         this.spatialHashGrid.reset();
 
         this.isProcessing = false;
@@ -1278,12 +1216,7 @@ class SpatialGridManager {
         };
         console.log("SpatialGridManager: Reset to initial state");
     }
-    /**
-     * Process blocks with web worker
-     * @param {Array} blocks - Block entries to process
-     * @returns {Promise<boolean>} Promise resolving to true if successful
-     * @private
-     */
+
     processWithWorker(blocks) {
         return new Promise((resolve) => {
             try {
@@ -1298,6 +1231,10 @@ class SpatialGridManager {
                 const workerStartTime = performance.now();
 
                 worker.onmessage = (event) => {
+                    console.log(
+                        "SpatialGridManager: Web worker message received",
+                        event
+                    );
                     const data = event.data;
                     if (data.error) {
                         console.error("Web worker error:", data.error);
@@ -1306,7 +1243,6 @@ class SpatialGridManager {
                         return;
                     }
                     if (data.result === "gridBuilt") {
-
                         const workerElapsedTime = (
                             (performance.now() - workerStartTime) /
                             1000
@@ -1322,7 +1258,6 @@ class SpatialGridManager {
                             this.spatialHashGrid = new SpatialHashGrid();
                         }
                         try {
-
                             const success = this.deserializeWorkerGrid(data);
                             if (success) {
                                 console.log(
@@ -1331,7 +1266,11 @@ class SpatialGridManager {
 
                                 if (data.stats) {
                                     console.log(
-                                        `Worker processed ${data.size.toLocaleString()} blocks in ${data.stats?.processTime?.toFixed(1) || "unknown"}s`
+                                        `Worker processed ${data.size.toLocaleString()} blocks in ${
+                                            data.stats?.processTime?.toFixed(
+                                                1
+                                            ) || "unknown"
+                                        }s`
                                     );
                                 }
                             } else {
@@ -1366,6 +1305,7 @@ class SpatialGridManager {
                     resolve(false);
                 };
 
+                console.log("processWithWorker - build grid sent")
                 worker.postMessage({
                     operation: "buildGrid",
                     blocks: blocks,

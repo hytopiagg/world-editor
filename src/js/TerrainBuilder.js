@@ -582,9 +582,8 @@ function TerrainBuilder(
             });
             if (useProvidedBlocks) {
                 if (getChunkSystem() && updateTerrainChunks) {
-                    console.time("updateTerrainChunks");
+                    console.log("buildUpdateTerrain - updateTerrainChunks");
                     updateTerrainChunks(terrainBlocks, deferMeshBuilding);
-                    console.timeEnd("updateTerrainChunks");
                     if (Object.keys(terrainRef.current).length === 0) {
                         const blockEntries = Object.entries(terrainBlocks);
                         const BATCH_SIZE = 10000;
@@ -617,9 +616,7 @@ function TerrainBuilder(
                 }
             } else {
                 if (getChunkSystem() && updateTerrainChunks) {
-                    console.time("updateTerrainChunks");
                     updateTerrainChunks(terrainBlocks, deferMeshBuilding);
-                    console.timeEnd("updateTerrainChunks");
                 } else {
                     console.warn(
                         "Chunk system or updateTerrainChunks not available"
@@ -764,27 +761,24 @@ function TerrainBuilder(
                 }
             }
         } else {
-            if (modeRef.current === "add" && !currentBlockTypeRef?.current?.isEnvironment) {
+            if (
+                modeRef.current === "add" &&
+                !currentBlockTypeRef?.current?.isEnvironment
+            ) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
-                console.log('1')
                 const positions = getPlacementPositions(
                     previewPositionRef.current,
                     placementSizeRef.current
                 );
-                console.log('2')
-                console.log("positions", positions);
                 const addedBlocks = {};
                 let blockWasPlaced = false; // Flag to track if any block was actually placed
                 positions.forEach((pos) => {
-                    console.log('3')
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
-                    console.log('4')
-                    const hasInstance = environmentBuilderRef.current.hasInstanceAtPosition(pos);
-                    console.log('5')
-                    console.log("pos", pos);
-                    console.log("hasInstance", hasInstance);
-                    console.log("terrainRef.current[blockKey]", terrainRef.current[blockKey]);
+                    const hasInstance =
+                        environmentBuilderRef.current.hasInstanceAtPosition(
+                            pos
+                        );
                     if (!terrainRef.current[blockKey] && !hasInstance) {
                         addedBlocks[blockKey] = currentBlockTypeRef.current.id;
 
@@ -821,7 +815,10 @@ function TerrainBuilder(
                         Object.keys(addedBlocks).length;
                     lastPlacementTimeRef.current = now;
                 }
-            } else if (modeRef.current === "remove" && !currentBlockTypeRef?.current?.isEnvironment) {
+            } else if (
+                modeRef.current === "remove" &&
+                !currentBlockTypeRef?.current?.isEnvironment
+            ) {
                 const now = performance.now();
                 if (now - lastDeletionTimeRef.current < 50) {
                     return; // Exit if the delay hasn't passed
@@ -1489,7 +1486,7 @@ function TerrainBuilder(
                                     await BlockTypeRegistry.instance.preload();
                                 }
                                 await rebuildTextureAtlas();
-                                updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
+                                updateTerrainChunks(terrainRef.current, true, environmentBuilderRef); // Set true to only load visible chunks
                                 processChunkRenderQueue();
                                 window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();
@@ -1910,6 +1907,7 @@ function TerrainBuilder(
             });
         },
         forceRebuildSpatialHash: (options = {}) => {
+            console.log("forceRebuildSpatialHash - terrain builder");
             if (!spatialGridManagerRef.current) {
                 console.warn(
                     "TerrainBuilder: Cannot rebuild spatial hash - spatial grid manager not available"
@@ -2003,6 +2001,9 @@ function TerrainBuilder(
                                 skipIfBusy: false,
                             }
                         );
+
+                        environmentBuilderRef.current.forceRebuildSpatialHash();
+
                         setTimeout(() => resolve(), 0);
                     });
                 };
@@ -2351,6 +2352,5 @@ export {
     blockTypes,
     getBlockTypes,
     getCustomBlocks,
-    processCustomBlock
+    processCustomBlock,
 } from "./managers/BlockTypesManager";
-
