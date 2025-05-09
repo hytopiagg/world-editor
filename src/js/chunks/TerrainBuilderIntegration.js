@@ -4,34 +4,6 @@ import BlockMaterial from "../blocks/BlockMaterial";
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
 import ChunkSystem from "./ChunkSystem";
 import { CHUNK_SIZE } from "./ChunkConstants";
-/**
- * Integrates the chunk system with TerrainBuilder
- *
- * Usage in TerrainBuilder:
- *
- * 1. Import this file:
- *    import { initChunkSystem, updateTerrainChunks, updateTerrainBlocks, processChunkRenderQueue } from './chunks/TerrainBuilderIntegration';
- *
- * 2. Initialize the chunk system in the TerrainBuilder component:
- *    useEffect(() => {
- *      const scene = sceneRef.current;
- *      if (scene) {
- *        initChunkSystem(scene, { viewDistance: getViewDistance() });
- *      }
- *    }, [sceneRef.current]);
- *
- * 3. Update the chunk system when terrain changes:
- *    updateTerrainChunks(terrainRef.current);
- *
- * 4. Update the chunk system when blocks are added or removed:
- *    updateTerrainBlocks(addedBlocks, removedBlocks);
- *
- * 5. Process the render queue in the animation loop:
- *    const animate = () => {
- *      processChunkRenderQueue();
- *      // ... other animation code
- *    };
- */
 
 let chunkSystem = null;
 /**
@@ -111,27 +83,20 @@ export const processChunkRenderQueue = () => {
  * @param {boolean} onlyVisibleChunks - If true, only create meshes for chunks within view distance
  * @returns {Object} Statistics about loaded blocks
  */
-export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
+export const updateTerrainChunks = (
+    terrainData,
+    onlyVisibleChunks = false,
+    environmentBuilderRef = null
+) => {
     if (!chunkSystem) {
         console.error(
             "Chunk system not initialized, can't update terrain chunks"
         );
         return { totalBlocks: 0, visibleBlocks: 0 };
     }
-    console.log(
-        `Loading terrain data with ${
-            Object.keys(terrainData).length
-        } blocks (defer: ${onlyVisibleChunks})`
-    );
-
-    console.log("onlyVisibleChunks", onlyVisibleChunks);
-    console.log("chunkSystem._scene.camera", chunkSystem._scene.camera);
     if (onlyVisibleChunks && chunkSystem._scene.camera) {
         const viewDistance = chunkSystem._viewDistance || 96; // Default 6 chunks
         const priorityDistance = viewDistance * 0.5;
-        console.log(
-            `Setting bulk loading mode temporarily during initial load with priority distance ${priorityDistance}`
-        );
         chunkSystem.setBulkLoadingMode(true, priorityDistance);
     } else {
         chunkSystem.setBulkLoadingMode(false);
@@ -145,7 +110,10 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
             import("../managers/SpatialGridManager")
                 .then(({ SpatialGridManager }) => {
                     const spatialGridManager = new SpatialGridManager();
-                    console.log("Updating spatial hash grid from terrain data");
+                    console.log(
+                        "Updating spatial hash grid from terrain data",
+                        terrainData
+                    );
 
                     spatialGridManager
                         .updateFromTerrain(terrainData, {
@@ -157,6 +125,9 @@ export const updateTerrainChunks = (terrainData, onlyVisibleChunks = false) => {
                             console.log(
                                 "Spatial hash grid updated successfully with worker"
                             );
+                            if (environmentBuilderRef.current) {
+                                environmentBuilderRef.current.forceRebuildSpatialHash();
+                            }
                             updateTerrainChunks.spatialHashUpdating = false;
                         })
                         .catch((error) => {

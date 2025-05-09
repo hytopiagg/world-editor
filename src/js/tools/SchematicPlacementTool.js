@@ -277,8 +277,7 @@ class SchematicPlacementTool extends BaseTool {
         }
 
         if (this.terrainBuilderProps.activateTool) {
-            console.log("Schematic placed, activating Brush tool...");
-            this.terrainBuilderProps.activateTool("brush");
+            this.terrainBuilderProps.activateTool(null);
         } else {
             console.warn(
                 "activateTool not found in props, deactivating schematic tool."

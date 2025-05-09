@@ -273,6 +273,10 @@ export class SpatialHashGrid {
         this._coords[blockIndex * 3 + 1] = y;
         this._coords[blockIndex * 3 + 2] = z;
 
+        if (blockId >= 1000) {
+            console.log("SpatialHashGrid: Setting block at", x, y, z, "with blockId", blockId);
+        }
+
         const prevHeadIndex = this.hashTable[hashIndex];
         this.hashTable[hashIndex] = blockIndex;
         this.collisionTable[blockIndex] = prevHeadIndex;
@@ -457,7 +461,7 @@ export class SpatialHashGrid {
      * Useful when loading a new world
      */
     reset() {
-
+        console.log("SpatialHashGrid: Resetting to initial state");
         this.clear();
 
         this.size = 0;

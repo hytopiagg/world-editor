@@ -51,7 +51,6 @@ const EnvironmentBuilder = (
         scene,
         previewPositionFromAppJS,
         currentBlockType,
-        mode,
         onTotalObjectsChange,
         placementSize = "single",
         placementSettings,
@@ -109,15 +108,64 @@ const EnvironmentBuilder = (
         return instances;
     };
 
+    const getAllEnvironmentPositionsAsObject = () => {
+        const positions = {};
+        let instanceData = [];
+        console.log("getAllEnvironmentPositionsAsObject - instancedMeshes.current", instancedMeshes.current);
+        console.log("getAllEnvironmentPositionsAsObject - instancedMeshes.current.entries()", instancedMeshes.current.size);
+        for (const x of [...instancedMeshes.current]) {
+            instanceData.push(...x[1].instances);
+            console.log("instanceData", instanceData);
+            instanceData.forEach((instance) => {
+                console.log("instance", instance);
+                positions[`${instance[1]?.position?.x}-${instance[1]?.position?.y}-${instance[1]?.position?.z}`] = 1000;
+            });
+        }
+        console.log("getAllEnvironmentPositionsAsObject - positions", positions);
+        return positions;
+    }
+
+    const forceRebuildSpatialHash = () => {
+        console.log("forceRebuildSpatialHash - env builder");
+        const instances = getAllEnvironmentObjects();
+        console.log("instances", instances);
+        instances.forEach((instance) => {
+            terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                x: instance.position.x,
+                y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                z: instance.position.z,
+                blockId: 1000,
+            }], [], {
+                force: true,
+            });
+        });
+    };
+    
+
+    // Check if any instance has this position, if so, return the true
+    const hasInstanceAtPosition = (position) => {
+        const instances = getAllEnvironmentObjects();
+        return instances.some((instance) => instance.position.x === position.x && instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET === position.y && instance.position.z === position.z);
+    };
+
     const updateEnvironmentForUndoRedo = (added, removed, source: "undo" | "redo") => {
         console.log("updateEnvironmentForUndoRedo", added, removed, source);
         if (removed && Object.keys(removed).length > 0) {
             Object.values(removed).forEach((instance: {
                 instanceId: number;
                 modelUrl: string;
+                position: { x: number; y: number; z: number };
             }) => {
                 console.log("removing", instance);
                 removeInstance(instance.modelUrl, instance.instanceId, false);
+                terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+                    x: instance.position.x,
+                    y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                    z: instance.position.z,
+                    blockId: 1000,
+                }], {
+                    force: true,
+                });
             });
         }
         if (added && Object.keys(added).length > 0) {
@@ -153,6 +201,15 @@ const EnvironmentBuilder = (
                         rotation,
                         scale,
                         matrix
+                    });
+
+                    terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                        x: instance.position.x,
+                        y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                        z: instance.position.z,
+                        blockId: 1000,
+                    }], [], {
+                        force: true,
                     });
                 } else {
                     console.log("no instanced meshes found for", instance.modelUrl);
@@ -446,20 +503,20 @@ const EnvironmentBuilder = (
             return;
         }
 
-        if (
-            !placeholderMeshRef.current ||
-            placeholderMeshRef.current.userData.modelId !== currentBlockType.id
-        ) {
+        if (!placeholderMeshRef.current || placeholderMeshRef.current.userData.modelId !== currentBlockType.id) {
             await setupPreview(position);
         } else if (position) {
+            const currentRotation = placeholderMeshRef.current.rotation.clone();
+            const currentScale = placeholderMeshRef.current.scale.clone();
+
             placeholderMeshRef.current.position.copy(
                 position.clone().add(positionOffset.current)
             );
             placeholderMeshRef.current.scale.copy(
-                lastPreviewTransform.current.scale
+                currentScale
             );
             placeholderMeshRef.current.rotation.copy(
-                lastPreviewTransform.current.rotation
+                currentRotation
             );
         }
     };
@@ -562,7 +619,6 @@ const EnvironmentBuilder = (
             isUndoRedoOperation.current = false;
         }
     };
-
 
     const getModelType = (modelName, modelUrl) => {
         return environmentModels.find(
@@ -1220,19 +1276,6 @@ const EnvironmentBuilder = (
         }
     };
 
-    const rotatePreview = (angle) => {
-        if (placeholderMeshRef.current) {
-            placeholderMeshRef.current.rotation.y += angle;
-        }
-    };
-
-    const setScale = (scale) => {
-        setScale(scale);
-        if (placeholderMeshRef.current) {
-            placeholderMeshRef.current.scale.set(scale, scale, scale);
-        }
-    };
-
     useEffect(() => {
         onTotalObjectsChange?.(totalEnvironmentObjects);
     }, [totalEnvironmentObjects, onTotalObjectsChange]);
@@ -1260,13 +1303,14 @@ const EnvironmentBuilder = (
     }, [previewPositionFromAppJS, currentBlockType]);
 
     useEffect(() => {
+        placementSettingsRef.current = placementSettings;
         if (placeholderMeshRef.current && currentBlockType?.isEnvironment) {
             const transform = getPlacementTransform();
 
             placeholderMeshRef.current.scale.copy(transform.scale);
             placeholderMeshRef.current.rotation.copy(transform.rotation);
         }
-    }, [placementSettings]); // Watch for changes in placement settings
+    }, [placementSettings]);
 
     useEffect(() => {
         placementSizeRef.current = placementSize;
@@ -1280,10 +1324,6 @@ const EnvironmentBuilder = (
         }
     }, [placementSize]);
 
-    useEffect(() => {
-        placementSettingsRef.current = placementSettings;
-    }, [placementSettings]);
-
     const beginUndoRedoOperation = () => {
         isUndoRedoOperation.current = true;
     };
@@ -1295,8 +1335,6 @@ const EnvironmentBuilder = (
         () => ({
             updateModelPreview,
             removePreview,
-            rotatePreview,
-            setScale,
             placeEnvironmentModel,
             placeEnvironmentModelWithoutSaving,
             preloadModels,
@@ -1311,8 +1349,11 @@ const EnvironmentBuilder = (
             endUndoRedoOperation,
             updateLocalStorage,
             getAllEnvironmentObjects,
+            getAllEnvironmentPositionsAsObject,
             updateEnvironmentForUndoRedo,
-            getModelType
+            getModelType,
+            hasInstanceAtPosition,
+            forceRebuildSpatialHash
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

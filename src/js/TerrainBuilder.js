@@ -1,6 +1,6 @@
 import { OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import React, {
+import {
     forwardRef,
     useCallback,
     useEffect,
@@ -30,25 +30,25 @@ import {
     MAX_SELECTION_DISTANCE,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
-import { DatabaseManager, STORES } from "./managers/DatabaseManager";
-import { loadingManager } from "./managers/LoadingManager";
 import { processCustomBlock } from "./managers/BlockTypesManager";
 import { cameraMovementTracker } from "./managers/CameraMovementTracker";
+import { DatabaseManager, STORES } from "./managers/DatabaseManager";
+import { loadingManager } from "./managers/LoadingManager";
+import {
+    cleanupMouseButtonTracking,
+    initializeMouseButtonTracking,
+} from "./managers/MouseButtonManager";
 import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
-import {
-    initializeMouseButtonTracking,
-    cleanupMouseButtonTracking,
-} from "./managers/MouseButtonManager";
-import { playPlaceSound } from "./Sound";
 import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
+import { playPlaceSound } from "./Sound";
 import {
     GroundTool,
     PipeTool,
     SchematicPlacementTool,
+    SelectionTool,
     ToolManager,
     WallTool,
-    SelectionTool,
 } from "./tools";
 import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorTool import
 import {
@@ -58,8 +58,8 @@ import {
     setDeferredChunkMeshing,
 } from "./utils/ChunkUtils"; // <<< Add this import
 import {
-    handleTerrainMouseUp,
     handleTerrainMouseDown,
+    handleTerrainMouseUp,
 } from "./utils/TerrainMouseUtils";
 import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
@@ -582,9 +582,8 @@ function TerrainBuilder(
             });
             if (useProvidedBlocks) {
                 if (getChunkSystem() && updateTerrainChunks) {
-                    console.time("updateTerrainChunks");
+                    console.log("buildUpdateTerrain - updateTerrainChunks");
                     updateTerrainChunks(terrainBlocks, deferMeshBuilding);
-                    console.timeEnd("updateTerrainChunks");
                     if (Object.keys(terrainRef.current).length === 0) {
                         const blockEntries = Object.entries(terrainBlocks);
                         const BATCH_SIZE = 10000;
@@ -617,9 +616,7 @@ function TerrainBuilder(
                 }
             } else {
                 if (getChunkSystem() && updateTerrainChunks) {
-                    console.time("updateTerrainChunks");
                     updateTerrainChunks(terrainBlocks, deferMeshBuilding);
-                    console.timeEnd("updateTerrainChunks");
                 } else {
                     console.warn(
                         "Chunk system or updateTerrainChunks not available"
@@ -764,7 +761,10 @@ function TerrainBuilder(
                 }
             }
         } else {
-            if (modeRef.current === "add" && !currentBlockTypeRef?.current?.isEnvironment) {
+            if (
+                modeRef.current === "add" &&
+                !currentBlockTypeRef?.current?.isEnvironment
+            ) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
                 const positions = getPlacementPositions(
@@ -775,7 +775,11 @@ function TerrainBuilder(
                 let blockWasPlaced = false; // Flag to track if any block was actually placed
                 positions.forEach((pos) => {
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
-                    if (!terrainRef.current[blockKey]) {
+                    const hasInstance =
+                        environmentBuilderRef.current.hasInstanceAtPosition(
+                            pos
+                        );
+                    if (!terrainRef.current[blockKey] && !hasInstance) {
                         addedBlocks[blockKey] = currentBlockTypeRef.current.id;
 
                         if (!currentBlockTypeRef.current.isEnvironment) {
@@ -811,7 +815,10 @@ function TerrainBuilder(
                         Object.keys(addedBlocks).length;
                     lastPlacementTimeRef.current = now;
                 }
-            } else if (modeRef.current === "remove" && !currentBlockTypeRef?.current?.isEnvironment) {
+            } else if (
+                modeRef.current === "remove" &&
+                !currentBlockTypeRef?.current?.isEnvironment
+            ) {
                 const now = performance.now();
                 if (now - lastDeletionTimeRef.current < 50) {
                     return; // Exit if the delay hasn't passed
@@ -1479,7 +1486,7 @@ function TerrainBuilder(
                                     await BlockTypeRegistry.instance.preload();
                                 }
                                 await rebuildTextureAtlas();
-                                updateTerrainChunks(terrainRef.current, true); // Set true to only load visible chunks
+                                updateTerrainChunks(terrainRef.current, true, environmentBuilderRef); // Set true to only load visible chunks
                                 processChunkRenderQueue();
                                 window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();
@@ -1900,6 +1907,7 @@ function TerrainBuilder(
             });
         },
         forceRebuildSpatialHash: (options = {}) => {
+            console.log("forceRebuildSpatialHash - terrain builder");
             if (!spatialGridManagerRef.current) {
                 console.warn(
                     "TerrainBuilder: Cannot rebuild spatial hash - spatial grid manager not available"
@@ -1993,6 +2001,9 @@ function TerrainBuilder(
                                 skipIfBusy: false,
                             }
                         );
+
+                        environmentBuilderRef.current.forceRebuildSpatialHash();
+
                         setTimeout(() => resolve(), 0);
                     });
                 };

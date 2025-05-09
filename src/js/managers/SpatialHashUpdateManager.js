@@ -19,6 +19,7 @@ class SpatialHashUpdateManager {
         removedBlocks = [],
         options = {}
     ) {
+        console.log("updateSpatialHashForBlocks");
         if (this.disableSpatialHashUpdatesRef.current) {
             return;
         }

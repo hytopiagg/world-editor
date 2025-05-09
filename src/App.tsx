@@ -1,17 +1,15 @@
 import { defaultTheme, Provider } from "@adobe/react-spectrum";
 import { Canvas } from "@react-three/fiber";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaCamera, FaDatabase, FaVolumeMute } from "react-icons/fa";
 import "./css/App.css";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
-import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
 import { isMuted, toggleMute } from "./js/Sound";
 import TerrainBuilder, {
     blockTypes,
     getCustomBlocks,
 } from "./js/TerrainBuilder";
-import UndoRedoManager from "./js/managers/UndoRedoManager";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
 import BlockToolsSidebar, {
     ActiveTabType,
@@ -25,8 +23,10 @@ import ToolBar from "./js/components/ToolBar";
 import Tooltip from "./js/components/Tooltip";
 import UnderConstruction from "./js/components/UnderConstruction";
 import { processCustomBlock } from "./js/managers/BlockTypesManager";
-import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
+import UndoRedoManager from "./js/managers/UndoRedoManager";
+import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 function App() {
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
@@ -48,7 +48,6 @@ function App() {
     const [gridSize, setGridSize] = useState(100);
     const [currentPreviewPosition, setCurrentPreviewPosition] = useState(null);
     const environmentBuilderRef = useRef(null);
-    const blockToolsRef = useRef(null);
     const terrainBuilderRef = useRef(null);
     const [placementSettings, setPlacementSettings] = useState({
         randomScale: false,
@@ -436,7 +435,6 @@ function App() {
                         ref={environmentBuilderRef}
                         scene={scene}
                         currentBlockType={currentBlockType}
-                        mode={mode}
                         onTotalObjectsChange={setTotalEnvironmentObjects}
                         placementSize={placementSize}
                         previewPositionFromAppJS={currentPreviewPosition}
