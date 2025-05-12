@@ -69,7 +69,7 @@ const firstDefaultModel = environmentModels.find((m) => !m.isCustom);
 const initialPreviewUrl = firstDefaultModel?.modelUrl ?? null;
 
 /**
- * @typedef {"blocks" | "models" | "schematics"} ActiveTabType
+ * @typedef {"blocks" | "models" | "components"} ActiveTabType
  */
 
 /**
@@ -203,7 +203,7 @@ const BlockToolsSidebar = ({
     }, []);
 
     useEffect(() => {
-        if (activeTab === "schematics") {
+        if (activeTab === "components") {
             loadSchematicsFromDB();
         }
         const handleSchematicsUpdated = () => {
@@ -212,7 +212,7 @@ const BlockToolsSidebar = ({
             );
             if (
                 document.visibilityState === "visible" &&
-                activeTab === "schematics"
+                activeTab === "components"
             ) {
                 loadSchematicsFromDB();
             }
@@ -501,7 +501,7 @@ const BlockToolsSidebar = ({
             setPreviewModelUrl(null);
         } else if (newTab === "models") {
             const defaultEnvModel = environmentModels.find((m) => !m.isCustom);
-                console.log("defaultEnvModel", defaultEnvModel);
+            console.log("defaultEnvModel", defaultEnvModel);
             if (defaultEnvModel) {
                 setCurrentBlockType({
                     ...defaultEnvModel,
@@ -514,7 +514,7 @@ const BlockToolsSidebar = ({
                 selectedBlockID = 0;
                 setPreviewModelUrl(null);
             }
-        } else if (newTab === "schematics") {
+        } else if (newTab === "components") {
             setPreviewModelUrl(null);
             setCurrentBlockType(null);
             selectedBlockID = 0;
@@ -915,7 +915,7 @@ const BlockToolsSidebar = ({
             <div className="block-tools-sidebar">
                 <div className="tab-button-outer-wrapper">
                     <div className="tab-button-inner-wrapper">
-                        {["blocks", "models", "schematics"].map(
+                        {["blocks", "models", "components"].map(
                             (tab, index) => (
                                 <div className="tab-button-wrapper" key={index}>
                                     <button
@@ -1080,7 +1080,7 @@ const BlockToolsSidebar = ({
                                     ))}
                             </div>
                         </>
-                    ) : activeTab === "schematics" ? (
+                    ) : activeTab === "components" ? (
                         <>
                             <div className="block-tools-section-label">
                                 Saved Schematics
