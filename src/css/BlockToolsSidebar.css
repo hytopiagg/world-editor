@@ -49,7 +49,7 @@
     font-size: 12px;
     width: 100%; /* Ensure full width */
     text-align: left;
-    color: #828282;
+    color: rgba(255, 255, 255, 0.8);
 }
 
 /* Block Button Styles */
@@ -139,7 +139,6 @@ button.block-button {
     display: flex;
     justify-content: center;
     align-items: center;
-    color: #fff;
     cursor: pointer;
     transition: all 0.2s ease;
     font-weight: normal;
@@ -148,6 +147,7 @@ button.block-button {
     border: 1px solid rgba(255, 255, 255, 0);
     position: relative;
     padding: 8px 0;
+    color: rgba(255, 255, 255, 0.5);
 }
 
 .tab-button:hover {
@@ -156,6 +156,7 @@ button.block-button {
 
 .tab-button.active {
     background-color: rgba(255, 255, 255, 0.05);
+    color: #fff;
 }
 
 /* Active tab indicator */

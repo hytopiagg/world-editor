@@ -113,6 +113,7 @@ const BlockToolsSidebar = ({
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
 
+
     const loadSchematicsFromDB = useCallback(async () => {
         console.log("[BlockToolsSidebar] Loading schematics from DB...");
         try {
@@ -635,6 +636,7 @@ const BlockToolsSidebar = ({
     };
 
     const handleBlockSelect = (blockType) => {
+        console.log("Block selected:", blockType);
         setCurrentBlockType({
             ...blockType,
             isEnvironment: false,
