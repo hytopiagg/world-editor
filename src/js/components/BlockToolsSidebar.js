@@ -1442,6 +1442,7 @@ const BlockToolsSidebar = ({
                         </div>
                     </div>
                 )}
+                
                 <div
                     className="texture-drop-zone"
                     onDragOver={(e) => {

@@ -530,7 +530,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Single block placement">
+                        {/* <Tooltip text="Single block placement">
                             <button
                                 onClick={() => setPlacementSize("single")}
                                 className={`control-button ${placementSize === "single" ? "selected" : ""
@@ -541,7 +541,7 @@ const ToolBar = ({
                                 />
                             </button>
                         </Tooltip>
-                        <div className="control-divider-vertical"></div>
+                        <div className="control-divider-vertical"></div> */}
                         <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
                             <button
                                 onClick={() => {

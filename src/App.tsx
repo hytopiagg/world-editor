@@ -359,7 +359,12 @@ function App() {
                     onPlacementSettingsChange={setPlacementSettings}
                 />
 
-                <BlockToolOptions />
+                <BlockToolOptions
+                    debugInfo={debugInfo}
+                    totalBlocks={totalBlocks}
+                    totalEnvironmentObjects={totalEnvironmentObjects}
+                    terrainBuilderRef={terrainBuilderRef}
+                />
 
                 {/* Texture Generation Modal */}
                 <TextureGenerationModal
@@ -447,13 +452,6 @@ function App() {
                     />
                 </Canvas>
 
-                <DebugInfo
-                    debugInfo={debugInfo}
-                    totalBlocks={totalBlocks}
-                    totalEnvironmentObjects={totalEnvironmentObjects}
-                    terrainBuilderRef={terrainBuilderRef}
-                />
-
                 <ToolBar
                     terrainBuilderRef={terrainBuilderRef}
                     environmentBuilderRef={environmentBuilderRef}
@@ -484,9 +482,8 @@ function App() {
                         <Tooltip text={isMuted ? "Unmute" : "Mute"}>
                             <button
                                 onClick={toggleMute}
-                                className={`camera-control-button ${
-                                    !isMuted ? "active" : ""
-                                }`}
+                                className={`camera-control-button ${!isMuted ? "active" : ""
+                                    }`}
                             >
                                 <FaVolumeMute />
                             </button>

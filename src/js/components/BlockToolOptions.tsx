@@ -1,7 +1,13 @@
 import "../../css/BlockToolsOptions.css";
 import "../../css/BlockToolsSidebar.css";
+import DebugInfo from "./DebugInfo";
 
-export function BlockToolOptions() {
+export function BlockToolOptions({
+    debugInfo,
+    totalBlocks,
+    totalEnvironmentObjects,
+    terrainBuilderRef,
+}) {
     return (
         <div className="block-tool-options-container" style={{
             display: "flex",
@@ -11,6 +17,12 @@ export function BlockToolOptions() {
         }}>
             <div className="block-tools-options-sidebar">
                 <h1>Block Tool Options</h1>
+                <DebugInfo
+                    debugInfo={debugInfo}
+                    totalBlocks={totalBlocks}
+                    totalEnvironmentObjects={totalEnvironmentObjects}
+                    terrainBuilderRef={terrainBuilderRef}
+                />
             </div>
         </div>
     );

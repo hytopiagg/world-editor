@@ -75,16 +75,25 @@
 
 /* Button Styles */
 .control-button {
-    margin: 0 2px;
+    margin: 0 1px;
     padding: 6px;
     border-radius: 8px;
-    border: 1px solid rgba(241, 241, 241, 0.15);
+    border: 1px solid rgba(241, 241, 241, 0);
+    background-color: rgba(241, 241, 241, 0);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 33px;
-    height: 33px;
+    width: 30px;
+    height: 30px;
+}
+
+.control-button:hover {
+    border: 1px solid rgba(241, 241, 241, 1);
+}
+
+.control-button.selected {
+    background-color: rgba(241, 241, 241, 0.15);
 }
 
 .import-export-button {
