@@ -27,6 +27,7 @@ import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { BlockToolOptions } from "./js/components/BlockToolOptions";
 function App() {
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
@@ -357,6 +358,8 @@ function App() {
                     environmentBuilder={environmentBuilderRef.current}
                     onPlacementSettingsChange={setPlacementSettings}
                 />
+
+                <BlockToolOptions />
 
                 {/* Texture Generation Modal */}
                 <TextureGenerationModal

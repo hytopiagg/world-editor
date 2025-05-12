@@ -911,7 +911,6 @@ const BlockToolsSidebar = ({
                 width: "100%",
             }}
         >
-            <div className="dead-space"></div>
             <div className="block-tools-sidebar">
                 <div className="tab-button-outer-wrapper">
                     <div className="tab-button-inner-wrapper">
@@ -1478,7 +1477,6 @@ const BlockToolsSidebar = ({
                     Create Texture
                 </button>
             </div>
-            <div className="dead-space"></div>
         </div>
     );
 };

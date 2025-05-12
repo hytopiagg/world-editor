@@ -24,7 +24,7 @@ const disposeObject = (object) => {
   }
 };
 
-const ModelPreview = ({ modelUrl, skybox }) => {
+const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Texture | null }) => {
   const mountRef = useRef(null);
 
   const sceneRef = useRef(new THREE.Scene());

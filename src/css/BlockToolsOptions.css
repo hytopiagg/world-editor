@@ -1,0 +1,29 @@
+.block-tool-options-container {
+    position: absolute;
+    display: flex;
+    flex-direction: row;
+    height: 100%; /* Ensure container takes full height */
+    width: 450px;
+    z-index: 100;
+    min-height: 400px; /* Add minimum height to prevent too much compression */
+    pointer-events: none;
+}
+
+.block-tools-options-sidebar {
+    position: absolute;
+    width: 300px;
+    background-color: rgba(13, 13, 13, 0.95);
+    border-radius: 12px;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    min-height: 450px;
+    height: 98vh;
+    overflow: hidden;
+    pointer-events: all;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    top: 50%;
+    right: 1vh;
+    transform: translateY(-50%);
+}
