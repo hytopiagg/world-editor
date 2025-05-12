@@ -16,7 +16,7 @@ export function BlockToolOptions({
             width: "100%",
         }}>
             <div className="block-tools-options-sidebar">
-                <h1>Block Tool Options</h1>
+                <h1 className="text-2xl font-medium text-white">Block Tool Options</h1>
                 <DebugInfo
                     debugInfo={debugInfo}
                     totalBlocks={totalBlocks}

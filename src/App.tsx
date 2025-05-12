@@ -3,6 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FaCamera, FaDatabase, FaVolumeMute } from "react-icons/fa";
 import "./css/App.css";
+import "./css/output.css";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
 import { isMuted, toggleMute } from "./js/Sound";
