@@ -90,7 +90,7 @@ function App() {
                                 ...envModel,
                                 isEnvironment: true,
                             });
-                            setActiveTab("environment");
+                            setActiveTab("models");
                         }
                     }
                 }
@@ -329,7 +329,7 @@ function App() {
                 <GlobalLoadingScreen />
 
                 {/* Hytopia Logo */}
-                <div className="hytopia-logo-wrapper">
+                {/* <div className="hytopia-logo-wrapper">
                     <img
                         src={"/assets/img/hytopia_logo_white.png"}
                         alt="Hytopia Logo"
@@ -337,7 +337,7 @@ function App() {
                     <p className="hytopia-version-text">
                         World Editor Version {version}
                     </p>
-                </div>
+                </div> */}
 
                 {pageIsLoaded && <QuickTips />}
 

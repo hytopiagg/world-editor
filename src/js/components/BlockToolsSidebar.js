@@ -69,7 +69,7 @@ const firstDefaultModel = environmentModels.find((m) => !m.isCustom);
 const initialPreviewUrl = firstDefaultModel?.modelUrl ?? null;
 
 /**
- * @typedef {"blocks" | "environment" | "schematics"} ActiveTabType
+ * @typedef {"blocks" | "models" | "schematics"} ActiveTabType
  */
 
 /**
@@ -886,35 +886,56 @@ const BlockToolsSidebar = ({
     };
 
     return (
-        <div className="block-tools-container">
+        <div
+            className="block-tools-container"
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+                width: "100%",
+            }}
+        >
             <div className="dead-space"></div>
             <div className="block-tools-sidebar">
-                <div className="tab-button-wrapper">
-                    <button
-                        className={`tab-button tab-button-start ${
-                            activeTab === "blocks" ? "active" : ""
-                        }`}
-                        onClick={() => handleTabChange("blocks")}
-                    >
-                        Blocks
-                    </button>
-                    <button
-                        className={`tab-button tab-button-middle ${
-                            activeTab === "environment" ? "active" : ""
-                        }`}
-                        onClick={() => handleTabChange("environment")}
-                    >
-                        Models
-                    </button>
-                    <button
-                        className={`tab-button tab-button-end ${
-                            activeTab === "schematics" ? "active" : ""
-                        }`}
-                        onClick={() => handleTabChange("schematics")}
-                    >
-                        Schematics
-                    </button>
+                <div className="tab-button-outer-wrapper">
+                    <div className="tab-button-inner-wrapper">
+                        {["blocks", "models", "schematics"].map(
+                            (tab, index) => (
+                                <div className="tab-button-wrapper" key={index}>
+                                    <button
+                                        onClick={() => handleTabChange(tab)}
+                                        className={`tab-button ${
+                                            activeTab === tab ? "active" : ""
+                                        }`}
+                                    >
+                                        {tab}
+                                    </button>
+                                </div>
+                            )
+                        )}
+                        <div
+                            className="tab-indicator"
+                            style={{
+                                left: `${
+                                    activeTab === "blocks"
+                                        ? "calc(0%)"
+                                        : activeTab === "models"
+                                        ? "calc(33.333% + 2px)"
+                                        : "calc(66.666% + 4px)"
+                                }`,
+                            }}
+                        />
+                    </div>
                 </div>
+                <div
+                    className="block-tools-divider"
+                    style={{
+                        width: "100%",
+                        height: "1px",
+                        backgroundColor: "rgba(255, 255, 255, 0.15)",
+                        marginBottom: "15px",
+                    }}
+                />
                 <div className="block-buttons-grid">
                     {activeTab === "blocks" ? (
                         <>
@@ -977,7 +998,7 @@ const BlockToolsSidebar = ({
                                     />
                                 ))}
                         </>
-                    ) : activeTab === "environment" ? (
+                    ) : activeTab === "models" ? (
                         <>
                             <div className="environment-preview-container">
                                 {previewModelUrl ? (

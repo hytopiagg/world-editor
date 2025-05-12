@@ -34,10 +34,13 @@ const BlockButton = ({
         <Tooltip text={blockType.name}>
             <button
                 className={`block-button ${isSelected ? "selected" : ""}`}
+                style={{
+                    border: isSelected ? "2px solid #fff" : "2px solid rgba(255, 255, 255, 0.1)",
+                }}
                 onClick={() => {
                     if (isMissingTexture && !blockType.isCustom) {
                         alert(
-                            "Missing Texture! \n \nThis means the map has this block, but the texture hasn't been added yet. Please select a different block, or upload the correct texture of the same name.\n \nTexture Name: \"" +
+                            "Missing system texture! \n \nThis means the map has this block, but the texture hasn't been added yet. Please select a different block, or upload the correct texture of the same name.\n \nTexture Name: \"" +
                                 blockType.name +
                                 '"'
                         );

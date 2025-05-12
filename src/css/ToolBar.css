@@ -87,11 +87,6 @@
     height: 33px;
 }
 
-button {
-    border-radius: 5px;
-    padding: 8px 15px;
-}
-
 .import-export-button {
     width: 90px;
 }
