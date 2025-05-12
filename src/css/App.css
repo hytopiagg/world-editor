@@ -35,18 +35,17 @@ body {
 
 /* Body-specific styles */
 body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  font-weight: 400;
-  font-size: 14px;
-  text-shadow: 0 1px 3px #00000079;
-  color: white;
+    margin: 0;
+    font-family: "Inter", sans-serif;
+    font-weight: 400;
+    font-size: 14px;
+    text-shadow: 0 1px 3px #00000079;
+    color: white;
 }
 
 a {
     cursor: pointer;
 }
-
 
 .vignette-gradient {
     width: 100%;
@@ -322,5 +321,20 @@ a {
     }
     100% {
         transform: rotate(360deg);
+    }
+}
+
+.fade-up {
+    animation: fadeUp 0.6s ease-out forwards;
+}
+
+@keyframes fadeUp {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
     }
 }

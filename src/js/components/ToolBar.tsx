@@ -1,9 +1,9 @@
 import { generatePerlinNoise } from "perlin-noise";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
     FaBorderAll,
     FaBorderStyle,
-    FaCircle,
+    FaCloud,
     FaCube,
     FaCubes,
     FaDrawPolygon,
@@ -12,6 +12,7 @@ import {
     FaLockOpen,
     FaMinus,
     FaMountain,
+    FaMousePointer,
     FaPlus,
     FaRedo,
     FaRobot,
@@ -19,15 +20,14 @@ import {
     FaSeedling,
     FaSquare,
     FaTrash,
-    FaUndo,
-    FaMousePointer,
+    FaUndo
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
-import Tooltip from "./Tooltip";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
 import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
+import Tooltip from "./Tooltip";
 const ToolBar = ({
     terrainBuilderRef,
     mode,
@@ -46,6 +46,7 @@ const ToolBar = ({
 }) => {
     const [newGridSize, setNewGridSize] = useState(100);
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
+    const [showImportExportMenu, setShowImportExportMenu] = useState(false);
     const [dimensions, setDimensions] = useState({
         width: 1,
         length: 1,
@@ -402,6 +403,33 @@ const ToolBar = ({
             <div className="controls-container">
                 <div className="control-group contol-group-start">
                     <div className="control-button-wrapper">
+                        <div className="relative">
+                            <Tooltip text="Import / Export Map">
+                                <button
+                                    className={`relative control-button import-export-button ${showImportExportMenu ? 'selected' : ''}`}
+                                    onClick={() => setShowImportExportMenu(!showImportExportMenu)}
+                                    style={{ animationDelay: '0.1s' }}
+                                >
+                                    <FaCloud />
+                                </button>
+                            </Tooltip>
+
+                            <div className={`absolute -top-12 h-full flex w-fit items-center gap-x-2 justify-center -translate-x-1/2 left-1/2 ${showImportExportMenu ? 'visible' : 'invisible'}`}>
+                                <button
+                                    className={`w-fit flex items-center justify-center bg-black/60 text-white rounded-md px-2 py-1 border border-white/0 hover:border-white ${showImportExportMenu ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200 cursor-pointer`}
+                                    onClick={() => document.getElementById("mapFileInput").click()}
+                                    style={{ animationDelay: '0.2s' }}
+                                >
+                                    {"Import"}
+                                </button>
+                                <button
+                                    className={`w-fit flex items-center justify-center bg-black/50 text-white rounded-md px-2 py-1 border border-white/0 hover:border-white ${showImportExportMenu ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200 cursor-pointer`}
+                                    onClick={handleExportMap}
+                                >
+                                    {"Export"}
+                                </button>
+                            </div>
+                        </div>
                         <Tooltip text="Import just the map file">
                             <button
                                 onClick={() =>
@@ -442,28 +470,9 @@ const ToolBar = ({
                             </Tooltip>
                         )}
                     </div>
-                    <div className="control-label">Import</div>
+                    {/* <div className="control-label">Import</div> */}
                 </div>
-                <div className="control-group">
-                    <div className="control-button-wrapper">
-                        {!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
-                            <Tooltip text="Export map and assets as a complete package">
-                                <button className="control-button import-export-button">
-                                    Asset Pack
-                                </button>
-                            </Tooltip>
-                        )}
-                        <Tooltip text="Export just the map file">
-                            <button
-                                onClick={() => handleExportMap()}
-                                className="control-button import-export-button"
-                            >
-                                Map
-                            </button>
-                        </Tooltip>
-                    </div>
-                    <div className="control-label">Export</div>
-                </div>
+                
                 <div className="control-group">
                     <div className="control-button-wrapper">
                         <Tooltip text="Add blocks">
@@ -591,7 +600,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                     </div>
-                    <div className="control-label">Placement Tools</div>
+                    {/* <div className="control-label">Placement Tools</div> */}
                 </div>
                 <div className="control-group">
                     <div className="control-button-wrapper">
@@ -620,7 +629,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                     </div>
-                    <div className="control-label">Generative Tools</div>
+                    {/* <div className="control-label">Generative Tools</div> */}
                 </div>
                 <div className="control-group">
                     <div className="control-button-wrapper">
@@ -678,7 +687,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                     </div>
-                    <div className="control-label">Map Tools</div>
+                    {/* <div className="control-label">Map Tools</div> */}
                 </div>
                 <div className="control-group contol-group-end">
                     <div className="control-button-wrapper">
@@ -704,7 +713,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                     </div>
-                    <div className="control-label">Save</div>
+                    {/* <div className="control-label">Save</div> */}
                 </div>
             </div>
             {showDimensionsModal && (

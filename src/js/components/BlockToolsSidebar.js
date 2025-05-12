@@ -912,20 +912,22 @@ const BlockToolsSidebar = ({
             }}
         >
             <div className="block-tools-sidebar">
-                <div className="tab-button-outer-wrapper">
-                    <div className="tab-button-inner-wrapper">
+                <div className="tab-button-outer-wrapper w-full flex">
+                    <div
+                        className="tab-button-inner-wrapper flex w-full"
+                        style={{ width: "100%" }}
+                    >
                         {["blocks", "models", "components"].map(
                             (tab, index) => (
-                                <div className="tab-button-wrapper" key={index}>
-                                    <button
-                                        onClick={() => handleTabChange(tab)}
-                                        className={`tab-button ${
-                                            activeTab === tab ? "active" : ""
-                                        }`}
-                                    >
-                                        {tab}
-                                    </button>
-                                </div>
+                                <button
+                                    key={index}
+                                    onClick={() => handleTabChange(tab)}
+                                    className={`tab-button w-full ${
+                                        activeTab === tab ? "active" : ""
+                                    }`}
+                                >
+                                    {tab}
+                                </button>
                             )
                         )}
                         <div
@@ -1133,42 +1135,229 @@ const BlockToolsSidebar = ({
                     ) : null}
                 </div>
                 {activeTab === "models" && (
-                    <div className="placement-tools">
-                        <div className="placement-tools-grid">
-                            <div className="placement-tool full-width">
-                                <div className="randomize-header">
-                                    <input
-                                        type="checkbox"
-                                        id="randomScale"
-                                        className="placement-checkbox"
-                                        checked={settings.randomScale}
-                                        onChange={(e) =>
-                                            updateSettings({
-                                                randomScale: e.target.checked,
-                                            })
-                                        }
-                                    />
-                                    <label
-                                        id="randomScaleLabel"
-                                        htmlFor="randomScale"
-                                    >
-                                        Randomize Scale
-                                    </label>
+                    <div className="flex w-full px-3">
+                        <div className="placement-tools">
+                            <div className="placement-tools-grid">
+                                <div className="placement-tool full-width">
+                                    <div className="randomize-header">
+                                        <input
+                                            type="checkbox"
+                                            id="randomScale"
+                                            className="placement-checkbox"
+                                            checked={settings.randomScale}
+                                            onChange={(e) =>
+                                                updateSettings({
+                                                    randomScale:
+                                                        e.target.checked,
+                                                })
+                                            }
+                                        />
+                                        <label
+                                            id="randomScaleLabel"
+                                            htmlFor="randomScale"
+                                        >
+                                            Randomize Scale
+                                        </label>
+                                    </div>
+                                    <div className="min-max-inputs">
+                                        <div className="min-max-input">
+                                            <label>Range: </label>
+                                            <input
+                                                type="number"
+                                                className="slider-value-input"
+                                                value={settings.minScale}
+                                                min={SCALE_MIN}
+                                                max={SCALE_MAX}
+                                                step="0.1"
+                                                disabled={!settings.randomScale}
+                                                onChange={(e) =>
+                                                    updateSettings({
+                                                        minScale: Number(
+                                                            e.target.value
+                                                        ),
+                                                    })
+                                                }
+                                                onBlur={(e) => {
+                                                    const value = Number(
+                                                        e.target.value
+                                                    );
+                                                    if (
+                                                        value < SCALE_MIN ||
+                                                        value > SCALE_MAX
+                                                    ) {
+                                                        alert(
+                                                            `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
+                                                        );
+                                                        updateSettings({
+                                                            minScale: 0.5,
+                                                        });
+                                                    }
+                                                }}
+                                                onKeyDown={(e) =>
+                                                    e.stopPropagation()
+                                                }
+                                            />
+                                        </div>
+                                        <div className="min-max-input">
+                                            <label>-</label>
+                                            <input
+                                                type="number"
+                                                className="slider-value-input"
+                                                value={settings.maxScale}
+                                                min={SCALE_MIN}
+                                                max={SCALE_MAX}
+                                                step="0.1"
+                                                disabled={!settings.randomScale}
+                                                onChange={(e) =>
+                                                    updateSettings({
+                                                        maxScale: Number(
+                                                            e.target.value
+                                                        ),
+                                                    })
+                                                }
+                                                onBlur={(e) => {
+                                                    const value = Number(
+                                                        e.target.value
+                                                    );
+                                                    if (
+                                                        value < SCALE_MIN ||
+                                                        value > SCALE_MAX
+                                                    ) {
+                                                        alert(
+                                                            `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
+                                                        );
+                                                        updateSettings({
+                                                            maxScale: 1.5,
+                                                        });
+                                                    }
+                                                }}
+                                                onKeyDown={(e) =>
+                                                    e.stopPropagation()
+                                                }
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="min-max-inputs">
-                                    <div className="min-max-input">
-                                        <label>Range: </label>
+                                <div className="placement-tool full-width">
+                                    <div className="randomize-header">
+                                        <input
+                                            type="checkbox"
+                                            id="randomRotation"
+                                            className="placement-checkbox"
+                                            checked={settings.randomRotation}
+                                            onChange={(e) =>
+                                                updateSettings({
+                                                    randomRotation:
+                                                        e.target.checked,
+                                                })
+                                            }
+                                        />
+                                        <label
+                                            id="randomRotationLabel"
+                                            htmlFor="randomRotation"
+                                        >
+                                            Randomize Rotation
+                                        </label>
+                                    </div>
+                                    <div className="min-max-inputs">
+                                        <div className="min-max-input">
+                                            <label>Range: </label>
+                                            <input
+                                                type="number"
+                                                className="slider-value-input"
+                                                value={settings.minRotation}
+                                                min={ROTATION_MIN}
+                                                max={ROTATION_MAX}
+                                                step="15"
+                                                disabled={
+                                                    !settings.randomRotation
+                                                }
+                                                onChange={(e) =>
+                                                    updateSettings({
+                                                        minRotation: Number(
+                                                            e.target.value
+                                                        ),
+                                                    })
+                                                }
+                                                onBlur={(e) => {
+                                                    const value = Number(
+                                                        e.target.value
+                                                    );
+                                                    if (
+                                                        value < ROTATION_MIN ||
+                                                        value > ROTATION_MAX
+                                                    ) {
+                                                        alert(
+                                                            `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
+                                                        );
+                                                        updateSettings({
+                                                            minRotation: 0,
+                                                        });
+                                                    }
+                                                }}
+                                                onKeyDown={(e) =>
+                                                    e.stopPropagation()
+                                                }
+                                            />
+                                        </div>
+                                        <div className="min-max-input">
+                                            <label>-</label>
+                                            <input
+                                                type="number"
+                                                className="slider-value-input"
+                                                value={settings.maxRotation}
+                                                min={ROTATION_MIN}
+                                                max={ROTATION_MAX}
+                                                step="15"
+                                                disabled={
+                                                    !settings.randomRotation
+                                                }
+                                                onChange={(e) =>
+                                                    updateSettings({
+                                                        maxRotation: Number(
+                                                            e.target.value
+                                                        ),
+                                                    })
+                                                }
+                                                onBlur={(e) => {
+                                                    const value = Number(
+                                                        e.target.value
+                                                    );
+                                                    if (
+                                                        value < ROTATION_MIN ||
+                                                        value > ROTATION_MAX
+                                                    ) {
+                                                        alert(
+                                                            `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
+                                                        );
+                                                        updateSettings({
+                                                            maxRotation: 360,
+                                                        });
+                                                    }
+                                                }}
+                                                onKeyDown={(e) =>
+                                                    e.stopPropagation()
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="placement-tool-slider">
+                                    <div className="slider-header">
+                                        <label htmlFor="placementScale">
+                                            Object Scale
+                                        </label>
                                         <input
                                             type="number"
                                             className="slider-value-input"
-                                            value={settings.minScale}
+                                            value={settings.scale}
                                             min={SCALE_MIN}
                                             max={SCALE_MAX}
                                             step="0.1"
-                                            disabled={!settings.randomScale}
+                                            disabled={settings.randomScale}
                                             onChange={(e) =>
                                                 updateSettings({
-                                                    minScale: Number(
+                                                    scale: Number(
                                                         e.target.value
                                                     ),
                                                 })
@@ -1185,7 +1374,7 @@ const BlockToolsSidebar = ({
                                                         `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
                                                     );
                                                     updateSettings({
-                                                        minScale: 0.5,
+                                                        scale: 1.0,
                                                     });
                                                 }
                                             }}
@@ -1194,210 +1383,72 @@ const BlockToolsSidebar = ({
                                             }
                                         />
                                     </div>
-                                    <div className="min-max-input">
-                                        <label>-</label>
-                                        <input
-                                            type="number"
-                                            className="slider-value-input"
-                                            value={settings.maxScale}
-                                            min={SCALE_MIN}
-                                            max={SCALE_MAX}
-                                            step="0.1"
-                                            disabled={!settings.randomScale}
-                                            onChange={(e) =>
-                                                updateSettings({
-                                                    maxScale: Number(
-                                                        e.target.value
-                                                    ),
-                                                })
-                                            }
-                                            onBlur={(e) => {
-                                                const value = Number(
-                                                    e.target.value
-                                                );
-                                                if (
-                                                    value < SCALE_MIN ||
-                                                    value > SCALE_MAX
-                                                ) {
-                                                    alert(
-                                                        `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
-                                                    );
-                                                    updateSettings({
-                                                        maxScale: 1.5,
-                                                    });
-                                                }
-                                            }}
-                                            onKeyDown={(e) =>
-                                                e.stopPropagation()
-                                            }
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="placement-tool full-width">
-                                <div className="randomize-header">
                                     <input
-                                        type="checkbox"
-                                        id="randomRotation"
-                                        className="placement-checkbox"
-                                        checked={settings.randomRotation}
-                                        onChange={(e) =>
-                                            updateSettings({
-                                                randomRotation:
-                                                    e.target.checked,
-                                            })
-                                        }
-                                    />
-                                    <label
-                                        id="randomRotationLabel"
-                                        htmlFor="randomRotation"
-                                    >
-                                        Randomize Rotation
-                                    </label>
-                                </div>
-                                <div className="min-max-inputs">
-                                    <div className="min-max-input">
-                                        <label>Range: </label>
-                                        <input
-                                            type="number"
-                                            className="slider-value-input"
-                                            value={settings.minRotation}
-                                            min={ROTATION_MIN}
-                                            max={ROTATION_MAX}
-                                            step="15"
-                                            disabled={!settings.randomRotation}
-                                            onChange={(e) =>
-                                                updateSettings({
-                                                    minRotation: Number(
-                                                        e.target.value
-                                                    ),
-                                                })
-                                            }
-                                            onBlur={(e) => {
-                                                const value = Number(
-                                                    e.target.value
-                                                );
-                                                if (
-                                                    value < ROTATION_MIN ||
-                                                    value > ROTATION_MAX
-                                                ) {
-                                                    alert(
-                                                        `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
-                                                    );
-                                                    updateSettings({
-                                                        minRotation: 0,
-                                                    });
-                                                }
-                                            }}
-                                            onKeyDown={(e) =>
-                                                e.stopPropagation()
-                                            }
-                                        />
-                                    </div>
-                                    <div className="min-max-input">
-                                        <label>-</label>
-                                        <input
-                                            type="number"
-                                            className="slider-value-input"
-                                            value={settings.maxRotation}
-                                            min={ROTATION_MIN}
-                                            max={ROTATION_MAX}
-                                            step="15"
-                                            disabled={!settings.randomRotation}
-                                            onChange={(e) =>
-                                                updateSettings({
-                                                    maxRotation: Number(
-                                                        e.target.value
-                                                    ),
-                                                })
-                                            }
-                                            onBlur={(e) => {
-                                                const value = Number(
-                                                    e.target.value
-                                                );
-                                                if (
-                                                    value < ROTATION_MIN ||
-                                                    value > ROTATION_MAX
-                                                ) {
-                                                    alert(
-                                                        `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
-                                                    );
-                                                    updateSettings({
-                                                        maxRotation: 360,
-                                                    });
-                                                }
-                                            }}
-                                            onKeyDown={(e) =>
-                                                e.stopPropagation()
-                                            }
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="placement-tool-slider">
-                                <div className="slider-header">
-                                    <label htmlFor="placementScale">
-                                        Object Scale
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="slider-value-input"
-                                        value={settings.scale}
+                                        type="range"
+                                        id="placementScale"
                                         min={SCALE_MIN}
                                         max={SCALE_MAX}
                                         step="0.1"
-                                        disabled={settings.randomScale}
+                                        value={settings.scale}
+                                        className="placement-slider"
                                         onChange={(e) =>
                                             updateSettings({
                                                 scale: Number(e.target.value),
                                             })
                                         }
-                                        onBlur={(e) => {
-                                            const value = Number(
-                                                e.target.value
-                                            );
-                                            if (
-                                                value < SCALE_MIN ||
-                                                value > SCALE_MAX
-                                            ) {
-                                                alert(
-                                                    `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
-                                                );
-                                                updateSettings({ scale: 1.0 });
-                                            }
-                                        }}
-                                        onKeyDown={(e) => e.stopPropagation()}
+                                        disabled={settings.randomScale}
                                     />
                                 </div>
-                                <input
-                                    type="range"
-                                    id="placementScale"
-                                    min={SCALE_MIN}
-                                    max={SCALE_MAX}
-                                    step="0.1"
-                                    value={settings.scale}
-                                    className="placement-slider"
-                                    onChange={(e) =>
-                                        updateSettings({
-                                            scale: Number(e.target.value),
-                                        })
-                                    }
-                                    disabled={settings.randomScale}
-                                />
-                            </div>
-                            <div className="placement-tool-slider">
-                                <div className="slider-header">
-                                    <label htmlFor="placementRotation">
-                                        Rotation
-                                    </label>
+                                <div className="placement-tool-slider">
+                                    <div className="slider-header">
+                                        <label htmlFor="placementRotation">
+                                            Rotation
+                                        </label>
+                                        <input
+                                            type="number"
+                                            className="slider-value-input"
+                                            value={settings.rotation}
+                                            min={ROTATION_MIN}
+                                            max={ROTATION_MAX}
+                                            step="15"
+                                            disabled={settings.randomRotation}
+                                            onChange={(e) =>
+                                                updateSettings({
+                                                    rotation: Number(
+                                                        e.target.value
+                                                    ),
+                                                })
+                                            }
+                                            onBlur={(e) => {
+                                                const value = Number(
+                                                    e.target.value
+                                                );
+                                                if (
+                                                    value < ROTATION_MIN ||
+                                                    value > ROTATION_MAX
+                                                ) {
+                                                    alert(
+                                                        `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
+                                                    );
+                                                    updateSettings({
+                                                        rotation: 0,
+                                                    });
+                                                }
+                                            }}
+                                            onKeyDown={(e) =>
+                                                e.stopPropagation()
+                                            }
+                                        />
+                                        <span className="degree-symbol">°</span>
+                                    </div>
                                     <input
-                                        type="number"
-                                        className="slider-value-input"
-                                        value={settings.rotation}
+                                        type="range"
+                                        id="placementRotation"
                                         min={ROTATION_MIN}
                                         max={ROTATION_MAX}
                                         step="15"
-                                        disabled={settings.randomRotation}
+                                        value={settings.rotation}
+                                        className="placement-slider"
                                         onChange={(e) =>
                                             updateSettings({
                                                 rotation: Number(
@@ -1405,78 +1456,51 @@ const BlockToolsSidebar = ({
                                                 ),
                                             })
                                         }
-                                        onBlur={(e) => {
-                                            const value = Number(
-                                                e.target.value
-                                            );
-                                            if (
-                                                value < ROTATION_MIN ||
-                                                value > ROTATION_MAX
-                                            ) {
-                                                alert(
-                                                    `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
-                                                );
-                                                updateSettings({ rotation: 0 });
-                                            }
-                                        }}
-                                        onKeyDown={(e) => e.stopPropagation()}
+                                        disabled={settings.randomRotation}
                                     />
-                                    <span className="degree-symbol">°</span>
                                 </div>
-                                <input
-                                    type="range"
-                                    id="placementRotation"
-                                    min={ROTATION_MIN}
-                                    max={ROTATION_MAX}
-                                    step="15"
-                                    value={settings.rotation}
-                                    className="placement-slider"
-                                    onChange={(e) =>
-                                        updateSettings({
-                                            rotation: Number(e.target.value),
-                                        })
-                                    }
-                                    disabled={settings.randomRotation}
-                                />
                             </div>
                         </div>
                     </div>
                 )}
-                
-                <div
-                    className="texture-drop-zone"
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.add("drag-over");
-                    }}
-                    onDragLeave={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.remove("drag-over");
-                    }}
-                    onDrop={handleCustomAssetDropUpload}
-                >
-                    <div className="drop-zone-content">
-                        <div className="drop-zone-icons">
-                            <img
-                                className="upload-icon"
-                                src="./assets/ui/icons/upload-icon.png"
-                            />
-                        </div>
-                        <div className="drop-zone-text">
-                            {activeTab === "blocks"
-                                ? "Drag textures here to add new blocks or fix missing textures"
-                                : activeTab === "models"
-                                ? "Drag .gltf files here to add custom models"
-                                : "Use AI Assistant to generate schematics"}
+                <div className="flex w-full px-3">
+                    <div
+                        className="texture-drop-zone w-full"
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.add("drag-over");
+                        }}
+                        onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove("drag-over");
+                        }}
+                        onDrop={handleCustomAssetDropUpload}
+                    >
+                        <div className="drop-zone-content">
+                            <div className="drop-zone-icons">
+                                <img
+                                    className="upload-icon"
+                                    src="./assets/ui/icons/upload-icon.png"
+                                />
+                            </div>
+                            <div className="drop-zone-text">
+                                {activeTab === "blocks"
+                                    ? "Drag textures here to add new blocks or fix missing textures"
+                                    : activeTab === "models"
+                                    ? "Drag .gltf files here to add custom models"
+                                    : "Use AI Assistant to generate schematics"}
+                            </div>
                         </div>
                     </div>
                 </div>
-                <button
-                    className="create-texture-button"
-                    onClick={onOpenTextureModal}
-                >
-                    Create Texture
-                </button>
+                <div className="flex px-3 w-full my-3">
+                    <button
+                        className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"
+                        onClick={onOpenTextureModal}
+                    >
+                        Create Texture
+                    </button>
+                </div>
             </div>
         </div>
     );

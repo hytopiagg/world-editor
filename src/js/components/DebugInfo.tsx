@@ -106,7 +106,7 @@ const DebugInfo = ({
         setShowPerformanceDetails(!showPerformanceDetails);
     };
     return (
-        <div className="debug-info">
+        <div className="w-full h-fit mt-auto px-3 text-xs font-normal">
             <div className="debug-row">
                 <span className="debug-label">FPS:</span>
                 <span className="debug-value">
@@ -123,25 +123,26 @@ const DebugInfo = ({
                     </b>
                 </span>
             </div>
-            <div className="single-line"></div>
             <div className="debug-row">
-                <span className="debug-label">{`Preview Pos: ${debugInfo?.preview?.x}, ${debugInfo?.preview?.y}, ${debugInfo?.preview?.z}`}</span>
+                <span className="debug-label whitespace-nowrap">{`Preview Position:`}</span>
+                <span className="debug-value w-full">
+                    <b className="w-auto" style={{
+                        width: "auto"
+                    }}>{`${debugInfo?.preview?.x}, ${debugInfo?.preview?.y}, ${debugInfo?.preview?.z}`}</b>
+                </span>
             </div>
-            <div className="single-line"></div>
             <div className="debug-row">
                 <span className="debug-label">Total Blocks:</span>
                 <span className="debug-value">
                     <b>{totalBlocks || 0}</b>
                 </span>
             </div>
-            <div className="single-line"></div>
             <div className="debug-row">
                 <span className="debug-label">Total Env. Objects:</span>
                 <span className="debug-value">
                     <b>{totalEnvironmentObjects}</b>
                 </span>
             </div>
-            <div className="single-line"></div>
             <div className="debug-row performance-settings">
                 <span
                     className="debug-label"

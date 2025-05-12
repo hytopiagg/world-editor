@@ -7,7 +7,7 @@
   color: white;
   border-radius: 10px;
   font-family: monospace;
-  font-size: 12px;
+  font-size: 10px;
   z-index: 1000;
   width: calc(100% - 24px);
   height: fit-content;
@@ -33,7 +33,7 @@
 
 .debug-value b {
   color: rgb(255, 255, 255);
-  font-weight: bold;
+  font-weight: normal;
   position: relative;
   display: inline-block;
   width: 40px;
@@ -66,7 +66,7 @@
     color: #fff;
     border: 1px solid #555;
     border-radius: 3px;
-    font-size: 9px;
+    font-size: 10px;
     width: 15px;
     height: 15px;
     padding: 0;
@@ -102,7 +102,7 @@
     align-items: center;
     margin-bottom: 3px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .toggle-label input[type="checkbox"] {
@@ -111,7 +111,7 @@
 
 .performance-settings .debug-label {
   text-align: center;
-  font-weight: bold;
+  font-weight: normal;
   margin-bottom: 3px;
   color: rgb(255, 255, 255);
 }
@@ -125,7 +125,7 @@
 }
 
 .slider-label {
-    font-size: 11px;
+    font-size: 10px;
     margin-bottom: 3px;
     color: #bbb;
 }
