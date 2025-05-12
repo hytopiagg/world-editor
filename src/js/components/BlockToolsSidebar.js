@@ -113,6 +113,12 @@ const BlockToolsSidebar = ({
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
 
+    useEffect(() => {
+        const savedBlockId = localStorage.getItem("selectedBlock");
+        if (savedBlockId) {
+            selectedBlockID = parseInt(savedBlockId);
+        }
+    }, []);
 
     const loadSchematicsFromDB = useCallback(async () => {
         console.log("[BlockToolsSidebar] Loading schematics from DB...");
@@ -489,21 +495,29 @@ const BlockToolsSidebar = ({
     /** @param {ActiveTabType} newTab */
     const handleTabChange = (newTab) => {
         if (newTab === "blocks") {
-            setCurrentBlockType(blockTypes[0]);
+            const defaultBlock = blockTypes[0];
+            setCurrentBlockType(defaultBlock);
+            selectedBlockID = defaultBlock.id;
             setPreviewModelUrl(null);
-        } else if (newTab === "environment") {
+        } else if (newTab === "models") {
             const defaultEnvModel = environmentModels.find((m) => !m.isCustom);
+                console.log("defaultEnvModel", defaultEnvModel);
             if (defaultEnvModel) {
-                setCurrentBlockType(defaultEnvModel);
-                setPreviewModelUrl(defaultEnvModel.modelUrl);
+                setCurrentBlockType({
+                    ...defaultEnvModel,
+                    isEnvironment: true,
+                });
                 selectedBlockID = defaultEnvModel.id;
+                setPreviewModelUrl(defaultEnvModel.modelUrl);
             } else {
                 setCurrentBlockType(null);
+                selectedBlockID = 0;
                 setPreviewModelUrl(null);
             }
         } else if (newTab === "schematics") {
             setPreviewModelUrl(null);
             setCurrentBlockType(null);
+            selectedBlockID = 0;
             loadSchematicsFromDB();
         }
         setActiveTab(newTab);
@@ -728,7 +742,7 @@ const BlockToolsSidebar = ({
                     refreshBlockTools();
                 }
             }
-        } else if (activeTab === "environment") {
+        } else if (activeTab === "models") {
             const modelFiles = files.filter(
                 (file) =>
                     file.name.endsWith(".gltf") || file.name.endsWith(".glb")
@@ -1119,7 +1133,7 @@ const BlockToolsSidebar = ({
                         </>
                     ) : null}
                 </div>
-                {activeTab === "environment" && (
+                {activeTab === "models" && (
                     <div className="placement-tools">
                         <div className="placement-tools-grid">
                             <div className="placement-tool full-width">
@@ -1451,7 +1465,7 @@ const BlockToolsSidebar = ({
                         <div className="drop-zone-text">
                             {activeTab === "blocks"
                                 ? "Drag textures here to add new blocks or fix missing textures"
-                                : activeTab === "environment"
+                                : activeTab === "models"
                                 ? "Drag .gltf files here to add custom models"
                                 : "Use AI Assistant to generate schematics"}
                         </div>
