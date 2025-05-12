@@ -7,8 +7,6 @@ const DebugInfo = ({
     terrainBuilderRef,
 }) => {
     const [fps, setFps] = useState(0);
-    const [frameTime, setFrameTime] = useState(0);
-    const [maxFrameTime, setMaxFrameTime] = useState(0);
     const [showPerformanceDetails, setShowPerformanceDetails] = useState(false);
     const [selectionDistance, setSelectionDistance] = useState(128);
     const [viewDistance, setViewDistance] = useState(128);
@@ -57,13 +55,8 @@ const DebugInfo = ({
                 frameTimesRef.current.reduce((sum, time) => sum + time, 0) /
                 frameTimesRef.current.length;
             const currentFps = Math.round(1000 / avg);
-            const currentFrameTime = avg;
 
-            if (currentFrameTime > maxFrameTime) {
-                setMaxFrameTime(currentFrameTime);
-            }
             setFps(currentFps);
-            setFrameTime(currentFrameTime);
         }
         frameRef.current = requestAnimationFrame(measureFps);
     };
@@ -112,9 +105,6 @@ const DebugInfo = ({
     const togglePerformanceDetails = () => {
         setShowPerformanceDetails(!showPerformanceDetails);
     };
-    const resetMaxFrameTime = () => {
-        setMaxFrameTime(0);
-    };
     return (
         <div className="debug-info">
             <div className="debug-row">
@@ -133,55 +123,9 @@ const DebugInfo = ({
                     </b>
                 </span>
             </div>
-            <div className="debug-row">
-                <span className="debug-label">Frame Time:</span>
-                <span className="debug-value">
-                    <b
-                        className={
-                            frameTime > 33
-                                ? "fps-low"
-                                : frameTime > 20
-                                ? "fps-medium"
-                                : "fps-high"
-                        }
-                    >
-                        {frameTime.toFixed(1)}ms
-                    </b>
-                </span>
-            </div>
-            <div className="debug-row">
-                <span className="debug-label">Max Frame:</span>
-                <span className="debug-value">
-                    <b
-                        className={
-                            maxFrameTime > 100
-                                ? "fps-low"
-                                : maxFrameTime > 50
-                                ? "fps-medium"
-                                : "fps-high"
-                        }
-                    >
-                        {maxFrameTime.toFixed(1)}ms
-                    </b>
-                    <button
-                        className="small-button"
-                        onClick={resetMaxFrameTime}
-                        title="Reset max frame time"
-                    >
-                        R
-                    </button>
-                </span>
-            </div>
             <div className="single-line"></div>
             <div className="debug-row">
-                <span className="debug-label">Preview Position:</span>
-                <span className="debug-value">
-                    x: <b>{(debugInfo?.preview?.x || 0).toFixed(1)}</b>
-                    <br></br>
-                    y: <b>{(debugInfo?.preview?.y || 0).toFixed(1)}</b>
-                    <br></br>
-                    z: <b>{(debugInfo?.preview?.z || 0).toFixed(1)}</b>
-                </span>
+                <span className="debug-label">{`Preview Pos: ${debugInfo?.preview?.x}, ${debugInfo?.preview?.y}, ${debugInfo?.preview?.z}`}</span>
             </div>
             <div className="single-line"></div>
             <div className="debug-row">
@@ -195,13 +139,6 @@ const DebugInfo = ({
                 <span className="debug-label">Total Env. Objects:</span>
                 <span className="debug-value">
                     <b>{totalEnvironmentObjects}</b>
-                </span>
-            </div>
-            <div className="single-line"></div>
-            <div className="debug-row">
-                <span className="debug-label">View Distance:</span>
-                <span className="debug-value">
-                    <b>{viewDistance}</b> blocks
                 </span>
             </div>
             <div className="single-line"></div>
