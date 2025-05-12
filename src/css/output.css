@@ -365,6 +365,9 @@
   .gap-4 {
     gap: calc(var(--spacing) * 4);
   }
+  .gap-x-1 {
+    column-gap: calc(var(--spacing) * 1);
+  }
   .gap-x-2 {
     column-gap: calc(var(--spacing) * 2);
   }
@@ -608,6 +611,13 @@
     -webkit-user-select: none;
     user-select: none;
   }
+  .group-hover\:scale-\[1\.02\] {
+    &:is(:where(.group):hover *) {
+      @media (hover: hover) {
+        scale: 1.02;
+      }
+    }
+  }
   .hover\:scale-\[1\.01\] {
     &:hover {
       @media (hover: hover) {
@@ -657,6 +667,12 @@
   .active\:translate-y-1 {
     &:active {
       --tw-translate-y: calc(var(--spacing) * 1);
+      translate: var(--tw-translate-x) var(--tw-translate-y);
+    }
+  }
+  .active\:translate-y-\[1px\] {
+    &:active {
+      --tw-translate-y: 1px;
       translate: var(--tw-translate-x) var(--tw-translate-y);
     }
   }

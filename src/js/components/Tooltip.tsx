@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
-const Tooltip = ({ children, text }) => {
+const Tooltip = ({ children, text, hideTooltip = false }) => {
     const [isVisible, setIsVisible] = useState(false);
     const [mousePosition, setMousePosition] = useState({
         x: 0,
@@ -83,7 +83,7 @@ const Tooltip = ({ children, text }) => {
 
         const bgColor = "rgba(13, 13, 13, 0.7)";
         return ReactDOM.createPortal(
-            <div
+            hideTooltip ? null : <div
                 ref={tooltipRef}
                 style={{
                     position: "fixed",
@@ -114,13 +114,13 @@ const Tooltip = ({ children, text }) => {
                         ...arrowPosition,
                         ...(isAboveCursor
                             ? {
-                                  bottom: "-6px",
-                                  borderTop: `6px solid ${bgColor}`,
-                              }
+                                bottom: "-6px",
+                                borderTop: `6px solid ${bgColor}`,
+                            }
                             : {
-                                  top: "-6px",
-                                  borderBottom: `6px solid ${bgColor}`,
-                              }),
+                                top: "-6px",
+                                borderBottom: `6px solid ${bgColor}`,
+                            }),
                     }}
                 />
                 {text}
