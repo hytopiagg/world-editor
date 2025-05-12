@@ -106,7 +106,7 @@ const DebugInfo = ({
         setShowPerformanceDetails(!showPerformanceDetails);
     };
     return (
-        <div className="w-full h-fit mt-auto px-3 text-xs font-normal">
+        <div className="w-full h-fit px-3 text-xs font-normal">
             <div className="debug-row">
                 <span className="debug-label">FPS:</span>
                 <span className="debug-value">
