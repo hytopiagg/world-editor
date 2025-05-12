@@ -56,6 +56,7 @@ export function setMuted(muted) {
 export function toggleMute() {
     setMuted(!isMuted);
 }
+
 export function cleanup() {
     document.removeEventListener("click", handleClick);
     if (clickTimeout) {

@@ -12,11 +12,11 @@ import TerrainBuilder, {
     getCustomBlocks,
 } from "./js/TerrainBuilder";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
+import { BlockToolOptions } from "./js/components/BlockToolOptions";
 import BlockToolsSidebar, {
     ActiveTabType,
     refreshBlockTools,
 } from "./js/components/BlockToolsSidebar";
-import DebugInfo from "./js/components/DebugInfo";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import QuickTips from "./js/components/QuickTips";
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
@@ -28,7 +28,6 @@ import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
-import { BlockToolOptions } from "./js/components/BlockToolOptions";
 function App() {
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
@@ -67,6 +66,11 @@ function App() {
     // AI Assistant State
     const [currentSchematic, setCurrentSchematic] = useState(null);
     const [isAIAssistantVisible, setIsAIAssistantVisible] = useState(false);
+
+    // Add new state variables for UI visibility
+    const [showBlockSidebar, setShowBlockSidebar] = useState(true);
+    const [showOptionsPanel, setShowOptionsPanel] = useState(true);
+    const [showToolbar, setShowToolbar] = useState(true);
 
     useEffect(() => {
         const loadSavedToolSelection = () => {
@@ -349,23 +353,33 @@ function App() {
                     environmentBuilderRef={environmentBuilderRef}
                 />
 
-                <BlockToolsSidebar
-                    onOpenTextureModal={() => setIsTextureModalOpen(true)}
-                    terrainBuilderRef={terrainBuilderRef}
-                    activeTab={activeTab}
-                    onLoadSchematicFromHistory={handleLoadAISchematic}
-                    setActiveTab={setActiveTab}
-                    setCurrentBlockType={setCurrentBlockType}
-                    environmentBuilder={environmentBuilderRef.current}
-                    onPlacementSettingsChange={setPlacementSettings}
-                />
+                {/* Block Tools Sidebar - Now conditionally rendered */}
+                {showBlockSidebar && (
+                    <BlockToolsSidebar
+                        onOpenTextureModal={() => setIsTextureModalOpen(true)}
+                        terrainBuilderRef={terrainBuilderRef}
+                        activeTab={activeTab}
+                        onLoadSchematicFromHistory={handleLoadAISchematic}
+                        setActiveTab={setActiveTab}
+                        setCurrentBlockType={setCurrentBlockType}
+                        environmentBuilder={environmentBuilderRef.current}
+                        onPlacementSettingsChange={setPlacementSettings}
+                    />
+                )}
 
-                <BlockToolOptions
-                    debugInfo={debugInfo}
-                    totalBlocks={totalBlocks}
-                    totalEnvironmentObjects={totalEnvironmentObjects}
-                    terrainBuilderRef={terrainBuilderRef}
-                />
+                {/* Block Tool Options - Now conditionally rendered */}
+                {showOptionsPanel && (
+                    <BlockToolOptions
+                        debugInfo={debugInfo}
+                        totalBlocks={totalBlocks}
+                        totalEnvironmentObjects={totalEnvironmentObjects}
+                        terrainBuilderRef={terrainBuilderRef}
+                        onResetCamera={() => setCameraReset(prev => !prev)}
+                        onToggleSidebar={() => setShowBlockSidebar(prev => !prev)}
+                        onToggleOptions={() => setShowOptionsPanel(prev => !prev)}
+                        onToggleToolbar={() => setShowToolbar(prev => !prev)}
+                    />
+                )}
 
                 {/* Texture Generation Modal */}
                 <TextureGenerationModal
@@ -403,7 +417,7 @@ function App() {
                             fontFamily: "Arial, sans-serif",
                             fontSize: "14px",
                             fontWeight: "bold",
-                            pointerEvents: "none", // Ensure it doesn't interfere with clicks
+                            pointerEvents: "none",
                         }}
                     >
                         <div
@@ -453,22 +467,25 @@ function App() {
                     />
                 </Canvas>
 
-                <ToolBar
-                    terrainBuilderRef={terrainBuilderRef}
-                    environmentBuilderRef={environmentBuilderRef}
-                    mode={mode}
-                    handleModeChange={setMode}
-                    axisLockEnabled={axisLockEnabled}
-                    setAxisLockEnabled={setAxisLockEnabled}
-                    placementSize={placementSize}
-                    setPlacementSize={setPlacementSize}
-                    setGridSize={setGridSize}
-                    undoRedoManager={undoRedoManagerRef}
-                    currentBlockType={currentBlockType}
-                    toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
-                    isAIAssistantVisible={isAIAssistantVisible}
-                    setIsSaving={setIsSaving}
-                />
+                {/* Toolbar - Now conditionally rendered */}
+                {showToolbar && (
+                    <ToolBar
+                        terrainBuilderRef={terrainBuilderRef}
+                        environmentBuilderRef={environmentBuilderRef}
+                        mode={mode}
+                        handleModeChange={setMode}
+                        axisLockEnabled={axisLockEnabled}
+                        setAxisLockEnabled={setAxisLockEnabled}
+                        placementSize={placementSize}
+                        setPlacementSize={setPlacementSize}
+                        setGridSize={setGridSize}
+                        undoRedoManager={undoRedoManagerRef}
+                        currentBlockType={currentBlockType}
+                        toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
+                        isAIAssistantVisible={isAIAssistantVisible}
+                        setIsSaving={setIsSaving}
+                    />
+                )}
 
                 <div className="camera-controls-wrapper">
                     <div className="camera-buttons">
@@ -483,8 +500,7 @@ function App() {
                         <Tooltip text={isMuted ? "Unmute" : "Mute"}>
                             <button
                                 onClick={toggleMute}
-                                className={`camera-control-button ${!isMuted ? "active" : ""
-                                    }`}
+                                className={`camera-control-button ${!isMuted ? "active" : ""}`}
                             >
                                 <FaVolumeMute />
                             </button>
