@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "../../css/DebugInfo.css";
 const DebugInfo = ({
-    totalBlocks,
     totalEnvironmentObjects,
     terrainBuilderRef,
 }) => {
@@ -80,7 +79,7 @@ const DebugInfo = ({
             >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Total Blocks:</span>
                 <span className="">
-                    {totalBlocks || 0}
+                    {terrainBuilderRef?.current?.totalBlocksRef || 0}
                 </span>
             </div>
             <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"

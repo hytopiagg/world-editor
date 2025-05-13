@@ -3,8 +3,6 @@ import { DatabaseManager, STORES } from "./DatabaseManager";
 class TerrainUndoRedoManager {
     terrainRef: React.MutableRefObject<any>;
     totalBlocksRef: React.MutableRefObject<any>;
-    sendTotalBlocks: (totalBlocks: number) => void;
-    updateDebugInfo: () => void;
     importedUpdateTerrainBlocks: (added: any, removed: any) => void;
     updateSpatialHashForBlocks: (added: any, removed: any, options: any) => void;
     customBlocks: any;
@@ -13,8 +11,6 @@ class TerrainUndoRedoManager {
     constructor({
         terrainRef,
         totalBlocksRef,
-        sendTotalBlocks,
-        updateDebugInfo,
         importedUpdateTerrainBlocks,
         updateSpatialHashForBlocks,
         customBlocks,
@@ -22,8 +18,6 @@ class TerrainUndoRedoManager {
     }) {
         this.terrainRef = terrainRef;
         this.totalBlocksRef = totalBlocksRef;
-        this.sendTotalBlocks = sendTotalBlocks;
-        this.updateDebugInfo = updateDebugInfo;
         this.importedUpdateTerrainBlocks = importedUpdateTerrainBlocks;
         this.updateSpatialHashForBlocks = updateSpatialHashForBlocks;
         this.customBlocks = customBlocks;
@@ -47,8 +41,6 @@ class TerrainUndoRedoManager {
             console.log("Database is being cleared, skipping tracking changes");
             return;
         }
-
-
         if (!this.pendingChangesRef.current) {
             this.pendingChangesRef.current = {
                 terrain: {
@@ -61,33 +53,24 @@ class TerrainUndoRedoManager {
                 },
             };
         }
-
-
         if (!this.pendingChangesRef.current.terrain) {
             this.pendingChangesRef.current.terrain = {
                 added: {},
                 removed: {},
             };
         }
-
-
         if (!this.pendingChangesRef.current.environment) {
             this.pendingChangesRef.current.environment = {
                 added: [],
                 removed: [],
             };
         }
-
-
         const safeAdded = added || {};
         const safeRemoved = removed || {};
-
-
         Object.entries(safeAdded).forEach(([key, value]) => {
             if (this.pendingChangesRef.current?.terrain?.added) {
                 this.pendingChangesRef.current.terrain.added[key] = value;
             }
-
             if (
                 this.pendingChangesRef.current?.terrain?.removed &&
                 this.pendingChangesRef.current.terrain.removed[key]
@@ -95,10 +78,7 @@ class TerrainUndoRedoManager {
                 delete this.pendingChangesRef.current.terrain.removed[key];
             }
         });
-
-
         Object.entries(safeRemoved).forEach(([key, value]) => {
-
             if (
                 this.pendingChangesRef.current?.terrain?.added &&
                 this.pendingChangesRef.current.terrain.added[key]
@@ -193,11 +173,6 @@ class TerrainUndoRedoManager {
         this.totalBlocksRef.current = Object.keys(
             this.terrainRef.current
         ).length;
-        if (this.sendTotalBlocks) {
-            this.sendTotalBlocks(this.totalBlocksRef.current);
-        }
-
-        this.updateDebugInfo();
         this.importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
 
 

@@ -83,7 +83,6 @@ function TerrainBuilder(
         currentBlockType,
         undoRedoManager,
         mode,
-        sendTotalBlocks,
         axisLockEnabled,
         gridSize,
         cameraReset,
@@ -489,11 +488,6 @@ function TerrainBuilder(
     const toolManagerRef = useRef(null);
     const disableSpatialHashUpdatesRef = useRef(false);
     const deferSpatialHashUpdatesRef = useRef(false);
-    const updateDebugInfo = () => {
-        if (sendTotalBlocks) {
-            sendTotalBlocks(totalBlocksRef.current);
-        }
-    };
     const updateSpatialHashForBlocks = (
         addedBlocks = [],
         removedBlocks = [],
@@ -509,8 +503,6 @@ function TerrainBuilder(
     const terrainUndoRedoManager = new TerrainUndoRedoManager({
         terrainRef,
         totalBlocksRef,
-        sendTotalBlocks,
-        updateDebugInfo,
         importedUpdateTerrainBlocks,
         updateSpatialHashForBlocks,
         customBlocks,
@@ -1109,9 +1101,6 @@ function TerrainBuilder(
                             totalBlocksRef.current = Object.keys(
                                 terrainRef.current
                             ).length;
-                            if (sendTotalBlocks) {
-                                sendTotalBlocks(totalBlocksRef.current);
-                            }
                             loadingManager.updateLoading(
                                 "Building terrain meshes...",
                                 85
@@ -1123,7 +1112,6 @@ function TerrainBuilder(
                             );
                             setTimeout(() => {
                                 loadingManager.hideLoading();
-                                updateDebugInfo();
                             }, 500);
                         } catch (error) {
                             console.error("Error during map import:", error);
@@ -1177,9 +1165,6 @@ function TerrainBuilder(
             try {
                 terrainRef.current = {};
                 totalBlocksRef.current = 0;
-                if (sendTotalBlocks) {
-                    sendTotalBlocks(0);
-                }
                 clearChunks();
                 if (spatialGridManagerRef.current) {
                     spatialGridManagerRef.current.clear();
@@ -1214,7 +1199,6 @@ function TerrainBuilder(
                     }
                 };
                 clearUndoRedo(); // Call async clear
-                updateDebugInfo();
                 DatabaseManager.clearStore(STORES.TERRAIN)
                     .then(() => {
                         resetPendingChanges();
@@ -1486,7 +1470,6 @@ function TerrainBuilder(
             updateSpatialHashForBlocks, // Direct access to spatial hash update function
             updateTerrainForUndoRedo, // <<< Add this function explicitly
             totalBlocksRef, // Provide access to the total block count ref
-            sendTotalBlocks, // Provide the function to update the total block count in the UI
             activateTool: (toolName, activationData) =>
                 toolManagerRef.current?.activateTool(toolName, activationData),
             pendingChangesRef,
@@ -1639,10 +1622,6 @@ function TerrainBuilder(
                 getChunkSystem().processRenderQueue(true);
             }
             totalBlocksRef.current = Object.keys(terrainRef.current).length;
-            if (sendTotalBlocks) {
-                sendTotalBlocks(totalBlocksRef.current);
-            }
-            updateDebugInfo();
         };
         window.addEventListener(
             "textureAtlasUpdated",
@@ -1706,7 +1685,6 @@ function TerrainBuilder(
         updateTerrainForUndoRedo, // Optimized version specifically for undo/redo operations
         updateSpatialHashForBlocks, // Expose for external spatial hash updates
         fastUpdateBlock, // Ultra-optimized function for drag operations
-        updateDebugInfo, // Expose debug info updates for tools
         forceChunkUpdate, // Direct chunk updating for tools
         forceRefreshAllChunks, // Force refresh of all chunks
         updateGridSize, // Expose for updating grid size when importing maps
@@ -1727,6 +1705,9 @@ function TerrainBuilder(
         },
         get previewPositionRef() {
             return previewPositionRef.current;
+        },
+        get totalBlocksRef() {
+            return totalBlocksRef.current;
         },
         setDeferredChunkMeshing,
         deferSpatialHashUpdates: (defer) => {
@@ -2091,10 +2072,6 @@ function TerrainBuilder(
             delete terrainRef.current[posKey];
         });
         totalBlocksRef.current = Object.keys(terrainRef.current).length;
-        if (sendTotalBlocks) {
-            sendTotalBlocks(totalBlocksRef.current);
-        }
-        updateDebugInfo();
         importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
         if (!options.skipSpatialHash) {
             const addedBlocksArray = Object.entries(addedBlocks).map(
