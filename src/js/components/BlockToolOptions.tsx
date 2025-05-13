@@ -24,6 +24,41 @@ interface BlockToolOptionsProps {
     onToggleToolbar: () => void;
 }
 
+interface DebugMenuProps {
+    debugInfo: any;
+    totalBlocks: any;
+    totalEnvironmentObjects: any;
+    terrainBuilderRef: any;
+}
+
+function DebugMenu({ debugInfo, totalBlocks, totalEnvironmentObjects, terrainBuilderRef }: DebugMenuProps) {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <div className="px-3">
+            <button
+                className="w-full flex items-center gap-2 rounded-md text-white text-xs transition-all cursor-pointer outline-none ring-0"
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span className="text-white/50">Debug</span>
+                <div className="border-b border-white/10 w-full ml-auto"></div>
+                <FaAngleUp className={`ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+                <div className="mt-3">
+                    <DebugInfo
+                        debugInfo={debugInfo}
+                        totalBlocks={totalBlocks}
+                        totalEnvironmentObjects={totalEnvironmentObjects}
+                        terrainBuilderRef={terrainBuilderRef}
+                    />
+                </div>
+            )}
+        </div>
+    );
+}
+
 function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar }: SettingsMenuProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [viewDistance, setViewDistance] = useState(128);
@@ -181,7 +216,7 @@ export function BlockToolOptions({
             <div className="block-tools-options-sidebar" style={{
                 padding: "12px 0px",
             }}>
-                <DebugInfo
+                <DebugMenu
                     debugInfo={debugInfo}
                     totalBlocks={totalBlocks}
                     totalEnvironmentObjects={totalEnvironmentObjects}
