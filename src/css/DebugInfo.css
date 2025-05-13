@@ -7,7 +7,7 @@
   color: white;
   border-radius: 10px;
   font-family: monospace;
-  font-size: 10px;
+  
   z-index: 1000;
   width: calc(100% - 24px);
   height: fit-content;
@@ -66,7 +66,6 @@
     color: #fff;
     border: 1px solid #555;
     border-radius: 3px;
-    font-size: 10px;
     width: 15px;
     height: 15px;
     padding: 0;
@@ -102,7 +101,6 @@
     align-items: center;
     margin-bottom: 3px;
     cursor: pointer;
-    font-size: 10px;
 }
 
 .toggle-label input[type="checkbox"] {
@@ -125,7 +123,6 @@
 }
 
 .slider-label {
-    font-size: 10px;
     margin-bottom: 3px;
     color: #bbb;
 }

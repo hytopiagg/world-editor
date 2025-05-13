@@ -409,7 +409,7 @@ const ToolBar = ({
                                     className={`relative control-button import-export-button active:translate-y-[1px] group transition-all ${showImportExportMenu ? 'selected' : ''}`}
                                     onClick={() => setShowImportExportMenu(!showImportExportMenu)}
                                 >
-                                    <FaCloud className="text-white group-hover:scale-[1.02] transition-all" />
+                                    <FaCloud className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
                             </Tooltip>
 
@@ -422,14 +422,14 @@ const ToolBar = ({
                                     style={{ display: "none" }}
                                 />
                                 <button
-                                    className={`w-fit flex items-center justify-center bg-black/60 text-white rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
+                                    className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
                                     onClick={() => document.getElementById("mapFileInput").click()}
                                     style={{ animationDelay: '0.1s' }}
                                 >
                                     {"Import"}
                                 </button>
                                 <button
-                                    className={`w-fit flex items-center justify-center bg-black/50 text-white rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
+                                    className={`w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
                                     onClick={handleExportMap}
                                     style={{ animationDelay: '0.2s' }}
                                 >

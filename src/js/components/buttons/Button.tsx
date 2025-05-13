@@ -33,14 +33,14 @@ const Button = ({
           "border-white bg-white text-black hover:border-white/80":
             design === "primary",
 
-          "text-white hover:border-white disabled:text-white/50 disabled:hover:border-white/10":
+          "text-[#F1F1F1] hover:border-white disabled:text-[#F1F1F1]/50 disabled:hover:border-white/10":
             design === "secondary",
           "border-white/10": design === "secondary" && !isActive,
           "border-white": design === "secondary" && isActive,
 
-          "border-white/0 bg-white/10 text-white/60 hover:border-white":
+          "border-white/0 bg-white/10 text-[#F1F1F1]/60 hover:border-white":
             design === "tertiary" && !isActive,
-          "border-white bg-transparent text-white":
+          "border-white bg-transparent text-[#F1F1F1]":
             design === "tertiary" && isActive,
 
           // "px-8 py-5 text-xl md:text-2xl rounded-2xl": tier > 0,

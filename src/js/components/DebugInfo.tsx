@@ -41,9 +41,13 @@ const DebugInfo = ({
     };
 
     return (
-        <div className="w-full h-fit px-3 text-xs font-normal">
-            <div className="debug-row">
-                <span className="debug-label">FPS:</span>
+        <div className="w-full h-fit text-xs font-normal fade-up opacity-0 gap-y-1 flex flex-col"
+            style={{
+                animationDelay: "0.05s"
+            }}
+        >
+            <div className="flex justify-between w-full text-right">
+                <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">FPS:</span>
                 <span className="debug-value">
                     <b
                         className={
@@ -58,22 +62,22 @@ const DebugInfo = ({
                     </b>
                 </span>
             </div>
-            <div className="debug-row">
-                <span className="debug-label whitespace-nowrap">{`Preview Position:`}</span>
+            <div className="flex justify-between w-full text-right">
+                <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">{`Preview Position:`}</span>
                 <span className="debug-value w-full">
                     <b className="w-auto" style={{
                         width: "auto"
                     }}>{`${debugInfo?.preview?.x}, ${debugInfo?.preview?.y}, ${debugInfo?.preview?.z}`}</b>
                 </span>
             </div>
-            <div className="debug-row">
-                <span className="debug-label">Total Blocks:</span>
+            <div className="flex justify-between w-full text-right">
+                <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Total Blocks:</span>
                 <span className="debug-value">
                     <b>{totalBlocks || 0}</b>
                 </span>
             </div>
-            <div className="debug-row">
-                <span className="debug-label">Total Env. Objects:</span>
+            <div className="flex justify-between w-full text-right">
+                <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Total Env. Objects:</span>
                 <span className="debug-value">
                     <b>{totalEnvironmentObjects}</b>
                 </span>

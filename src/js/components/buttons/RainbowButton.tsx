@@ -26,7 +26,7 @@ const RainbowButton = ({
       type={type}
       disabled={disabled}
       className={clsx(
-        "items-cente duration-250 relative flex justify-center bg-rainbow-alt py-4 font-bold text-white transition-all",
+        "items-center duration-250 relative flex justify-center bg-rainbow-alt py-4 font-bold text-[#F1F1F1] transition-all",
         "disabled:cursor-not-allowed disabled:opacity-50",
         {
           "rounded-2xl px-8 py-5 text-xl md:text-2xl": tier === 1,
@@ -55,7 +55,7 @@ export default RainbowButton;
   /* <div className="flex gap-4 text-[20px] font-bold leading-none">
 <div
   onClick={openSubmitReviewFlow}
-  className={`relative h-[50px] min-w-[175px] rounded-[10px] bg-rainbow-alt px-[20px] py-[16px] text-white transition-all duration-[250] ${dataChanged
+  className={`relative h-[50px] min-w-[175px] rounded-[10px] bg-rainbow-alt px-[20px] py-[16px] text-[#F1F1F1] transition-all duration-[250] ${dataChanged
     ? "cursor-not-allowed opacity-50"
     : "cursor-pointer hover:scale-[1.01] active:scale-[1]"
     }`}
