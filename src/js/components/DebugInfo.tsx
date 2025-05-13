@@ -41,45 +41,56 @@ const DebugInfo = ({
     };
 
     return (
-        <div className="w-full h-fit text-xs font-normal fade-up opacity-0 gap-y-1 flex flex-col"
-            style={{
-                animationDelay: "0.05s"
-            }}
+        <div className="w-full h-fit text-xs font-normal gap-y-1 flex flex-col"
         >
-            <div className="flex justify-between w-full text-right">
+            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+                style={{
+                    animationDelay: "0.03s"
+                }}
+            >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">FPS:</span>
-                <span className="debug-value">
+                <span className="text-right">
                     <b
                         className={
                             fps < 30
                                 ? "fps-low"
                                 : fps < 50
-                                ? "fps-medium"
-                                : "fps-high"
+                                    ? "fps-medium"
+                                    : "fps-high"
                         }
                     >
                         {fps}
                     </b>
                 </span>
             </div>
-            <div className="flex justify-between w-full text-right">
-                <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">{`Preview Position:`}</span>
-                <span className="debug-value w-full">
-                    <b className="w-auto" style={{
-                        width: "auto"
-                    }}>{`${debugInfo?.preview?.x}, ${debugInfo?.preview?.y}, ${debugInfo?.preview?.z}`}</b>
+            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+                style={{
+                    animationDelay: "0.06s"
+                }}
+            >
+                <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Preview Position</span>
+                <span className="text-right">
+                    {`${debugInfo?.preview?.x}, ${debugInfo?.preview?.y}, ${debugInfo?.preview?.z}`}
+
                 </span>
             </div>
-            <div className="flex justify-between w-full text-right">
+            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+                style={{
+                    animationDelay: "0.09s"
+                }}
+            >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Total Blocks:</span>
-                <span className="debug-value">
-                    <b>{totalBlocks || 0}</b>
+                <span className="">
+                    {totalBlocks || 0}
                 </span>
             </div>
-            <div className="flex justify-between w-full text-right">
+            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+                style={{
+                    animationDelay: "0.12s"
+                }}
+            >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Total Env. Objects:</span>
-                <span className="debug-value">
-                    <b>{totalEnvironmentObjects}</b>
+                <span className="text-right">{totalEnvironmentObjects}
                 </span>
             </div>
         </div>

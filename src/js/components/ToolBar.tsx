@@ -631,14 +631,6 @@ const ToolBar = ({
                                 <FaExpand />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Clear entire map">
-                            <button
-                                onClick={handleClearMap}
-                                className="control-button"
-                            >
-                                <FaTrash />
-                            </button>
-                        </Tooltip>
                         <Tooltip text="Import Minecraft Map">
                             <button
                                 onClick={() =>
@@ -681,6 +673,14 @@ const ToolBar = ({
                 </div>
                 <div className="control-group contol-group-end">
                     <div className="control-button-wrapper">
+                        <Tooltip text="Clear entire map">
+                            <button
+                                onClick={handleClearMap}
+                                className="control-button"
+                            >
+                                <FaTrash />
+                            </button>
+                        </Tooltip>
                         <Tooltip text="Save terrain (Ctrl+S)">
                             <button
                                 onClick={async () => {

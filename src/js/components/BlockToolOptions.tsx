@@ -110,12 +110,11 @@ function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onTog
             {isOpen && (
                 <div className="mt-3 flex flex-col gap-5">
                     <div className="flex flex-col gap-1">
-                        <div className="flex flex-col gap-1 fade-up opacity-0"
-                            style={{
-                                animationDelay: "0.05s"
-                            }}
+                        <div className="flex flex-col gap-1"
                         >
-                            <label className="flex items-center justify-between text-xs text-[#F1F1F1] h-4">
+                            <label className="flex items-center justify-between text-xs text-[#F1F1F1] h-4 cursor-pointer fade-down opacity-0 duration-150" style={{
+                                animationDelay: "0.025s"
+                            }}>
                                 <span>Auto-Save (5 min)</span>
                                 <input
                                     type="checkbox"
@@ -124,7 +123,9 @@ function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onTog
                                     className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                                 />
                             </label>
-                            <label className="flex items-center justify-between text-xs text-[#F1F1F1]">
+                            <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                                animationDelay: "0.05s"
+                            }}>
                                 <span>Block Sidebar</span>
                                 <input
                                     type="checkbox"
@@ -133,7 +134,9 @@ function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onTog
                                     className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                                 />
                             </label>
-                            <label className="flex items-center justify-between text-xs text-[#F1F1F1]">
+                            <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                                animationDelay: "0.05s"
+                            }}>
                                 <span>Options Panel</span>
                                 <input
                                     type="checkbox"
@@ -142,7 +145,9 @@ function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onTog
                                     className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                                 />
                             </label>
-                            <label className="flex items-center justify-between text-xs text-[#F1F1F1]">
+                            <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                                animationDelay: "0.075s"
+                            }}>
                                 <span>Toolbar</span>
                                 <input
                                     type="checkbox"
@@ -151,30 +156,42 @@ function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onTog
                                     className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                                 />
                             </label>
-                            <div className="flex items-center justify-between text-xs text-[#F1F1F1]">
+                            <div className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                                animationDelay: "0.1s"
+                            }}>
                                 <span>Reset Camera</span>
                                 <button onClick={onResetCamera} className="flex items-center justify-center cursor-pointer hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-md transition-all">
                                     <FaRedo />
                                 </button>
                             </div>
-                            <div className="flex items-center justify-between text-xs text-[#F1F1F1]">
+                            <div className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                                animationDelay: "0.125s"
+                            }}>
                                 <span>Toggle Sound</span>
                                 <button onClick={toggleMute} className="flex items-center justify-center cursor-pointer hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-md transition-all">
                                     {isMuted ? <FaVolumeMute /> : <FaVolumeUp />}
                                 </button>
                             </div>
                             <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-x-2 w-full">
+                                <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{
+                                    animationDelay: "0.15s"
+                                }}>
                                     <label className="text-xs text-[#F1F1F1] whitespace-nowrap">View Distance</label>
                                     <input
                                         type="number"
                                         value={viewDistance}
                                         onChange={(e) => handleViewDistanceChange(Number(e.target.value))}
                                         onBlur={(e) => handleViewDistanceChange(Math.max(32, Math.min(256, Number(e.target.value))))}
+                                        onKeyDown={(e: any) => {
+                                            if (e.key === 'Enter') {
+                                                handleViewDistanceChange(Math.max(32, Math.min(256, Number(e.target.value))));
+                                                e.target.blur();
+                                            }
+                                        }}
                                         min={32}
                                         max={256}
                                         step={16}
-                                        className="w-16 px-1 py-1 bg-white/10 border border-white/10 focus:border-white/20 focus:bg-white/15 rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        className="w-16 px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                     />
                                     <input
                                         type="range"
