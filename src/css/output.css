@@ -982,6 +982,14 @@
       }
     }
   }
+  .hover\:border {
+    &:hover {
+      @media (hover: hover) {
+        border-style: var(--tw-border-style);
+        border-width: 1px;
+      }
+    }
+  }
   .hover\:border-2 {
     &:hover {
       @media (hover: hover) {
@@ -1175,6 +1183,11 @@
   .active\:scale-\[1\] {
     &:active {
       scale: 1;
+    }
+  }
+  .active\:border-white {
+    &:active {
+      border-color: var(--color-white);
     }
   }
   .active\:shadow-none {

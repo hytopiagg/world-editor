@@ -1,8 +1,9 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FaDownload, FaWrench } from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
+import { cameraManager } from "../Camera";
 import { environmentModels } from "../EnvironmentBuilder";
 import {
     batchProcessCustomBlocks,
@@ -15,13 +16,7 @@ import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
 import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
-import ModelPreview from "./ModelPreview";
-import { cameraManager } from "../Camera";
 
-const SCALE_MIN = 0.1;
-const SCALE_MAX = 5.0;
-const ROTATION_MIN = 0;
-const ROTATION_MAX = 360;
 let selectedBlockID = 0;
 export const refreshBlockTools = () => {
     const event = new CustomEvent("refreshBlockTools");
@@ -1039,9 +1034,6 @@ const BlockToolsSidebar = ({
                                                     envType.id
                                                 );
                                             }}
-                                            onDelete={
-                                                handleDeleteEnvironmentModel
-                                            }
                                         />
                                     ))}
                                 <div className="block-tools-section-label">
@@ -1065,9 +1057,6 @@ const BlockToolsSidebar = ({
                                                     envType.id
                                                 );
                                             }}
-                                            onDelete={
-                                                handleDeleteEnvironmentModel
-                                            }
                                         />
                                     ))}
                             </div>

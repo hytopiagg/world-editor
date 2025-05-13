@@ -192,10 +192,6 @@ button.block-button {
     padding: 4px;
 }
 
-.environment-button:not(.selected):hover {
-    border: 2px solid #272727;
-    background: rgba(255, 255, 255, 0.2);
-}
 
 .environment-button.selected {
     padding-left: 6px;

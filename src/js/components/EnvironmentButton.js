@@ -67,7 +67,7 @@ const startNextRender = () => {
         }
     }, 1); // 100ms delay between renders
 };
-const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
+const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
     const [imageUrl, setImageUrl] = React.useState(null);
     const [showCanvas, setShowCanvas] = React.useState(false);
     const [isQueued, setIsQueued] = React.useState(false);
@@ -184,7 +184,10 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
     return (
         <Tooltip text={envType.name}>
             <button
-                className={`environment-button ${isSelected ? "selected" : ""}`}
+                className={`environment-button border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white`}
+                style={{
+                    border: isSelected ? "1px solid #ffffff" : "",
+                }}
                 onClick={() => {
                     onSelect(envType);
                     playUIClick();
@@ -220,22 +223,6 @@ const EnvironmentButton = ({ envType, isSelected, onSelect, onDelete }) => {
                         {envType.name}
                     </div>
                 </div>
-                {envType.isCustom && (
-                    <div
-                        className="delete-button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            playUIClick();
-                            onDelete(envType.id);
-                        }}
-                        style={{
-                            marginLeft: "auto",
-                            marginRight: "10px",
-                        }}
-                    >
-                        <FaTrash />
-                    </div>
-                )}
             </button>
         </Tooltip>
     );
