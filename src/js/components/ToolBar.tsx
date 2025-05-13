@@ -401,7 +401,10 @@ const ToolBar = ({
     return (
         <>
             <div className="controls-container">
-                <div className="control-group contol-group-start">
+                {/*     background-color: rgba(13, 13, 13, 0.7);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px); */}
+                <div className="control-group contol-group-start bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
                     <div className="control-button-wrapper">
                         <div className="relative">
                             <Tooltip text="Import / Export Map" hideTooltip={showImportExportMenu}>
@@ -463,7 +466,7 @@ const ToolBar = ({
                     {/* <div className="control-label">Import</div> */}
                 </div>
 
-                <div className="control-group">
+                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
                     <div className="control-button-wrapper">
                         <Tooltip text="Add blocks">
                             <button
@@ -592,22 +595,35 @@ const ToolBar = ({
                     </div>
                     {/* <div className="control-label">Placement Tools</div> */}
                 </div>
-                <div className="control-group">
-                    <div className="control-button-wrapper">
-                        <Tooltip text="Generate solid cube">
+                {/* <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm"> */}
+                    {/* <div className="control-button-wrapper"> */}
+                    {/* <Tooltip text="Generate solid cube">
                             <button
                                 onClick={() => setShowDimensionsModal(true)}
                                 className="control-button"
                             >
                                 <FaCube />
                             </button>
-                        </Tooltip>
-                        <Tooltip text="Generate wall of Blocks">
+                        </Tooltip> */}
+                    {/* <Tooltip text="Generate wall of Blocks">
                             <button
                                 onClick={() => setShowBorderModal(true)}
                                 className="control-button"
                             >
                                 <FaBorderStyle />
+                            </button>
+                        </Tooltip> */}
+                    {/* </div> */}
+                    {/* <div className="control-label">Generative Tools</div> */}
+                {/* </div> */}
+                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
+                    <div className="control-button-wrapper">
+                        <Tooltip text="Change grid size">
+                            <button
+                                onClick={() => setShowGridSizeModal(true)}
+                                className="control-button"
+                            >
+                                <FaExpand />
                             </button>
                         </Tooltip>
                         <Tooltip text="Generate terrain">
@@ -616,19 +632,6 @@ const ToolBar = ({
                                 className="control-button"
                             >
                                 <FaMountain />
-                            </button>
-                        </Tooltip>
-                    </div>
-                    {/* <div className="control-label">Generative Tools</div> */}
-                </div>
-                <div className="control-group">
-                    <div className="control-button-wrapper">
-                        <Tooltip text="Change grid size">
-                            <button
-                                onClick={() => setShowGridSizeModal(true)}
-                                className="control-button"
-                            >
-                                <FaExpand />
                             </button>
                         </Tooltip>
                         <Tooltip text="Import Minecraft Map">
@@ -671,7 +674,7 @@ const ToolBar = ({
                     </div>
                     {/* <div className="control-label">Map Tools</div> */}
                 </div>
-                <div className="control-group contol-group-end">
+                <div className="control-group contol-group-end bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
                     <div className="control-button-wrapper">
                         <Tooltip text="Clear entire map">
                             <button

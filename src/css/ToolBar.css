@@ -23,7 +23,6 @@
     font-weight: bold;
     text-align: center;
     bottom: 110%;
-    text-shadow: 0 0 2px #000000;
     width: 100%;
     white-space: nowrap;
 }
@@ -41,9 +40,6 @@
     align-items: center;
     justify-content: flex-start;
     padding: 8px;
-    background-color: rgba(13, 13, 13, 0.7);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
     border-left: 1px solid rgba(241, 241, 241, 0.15);
     padding-left: 15px;
     padding-right: 15px;

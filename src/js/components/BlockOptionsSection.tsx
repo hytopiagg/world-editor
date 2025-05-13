@@ -62,8 +62,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
     if (!selectedBlock) return null;
 
     return (
-        <div className="px-3 mb-4 flex flex-col gap-3">
-            <h3 className="text-xs text-[#F1F1F1]/50 border-b border-white/10 pb-1">Block Options</h3>
+        <div className="flex flex-col gap-3">
             <div className="block-preview-container h-48 w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
                 onWheel={(e) => e.stopPropagation()}
                 style={{
@@ -71,7 +70,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                 }}
             >
                 {Object.keys(textureObjects).length > 0 ? (
-                    <BlockPreview3D textureObjects={textureObjects} target={[0, -0.6, 0]} />
+                    <BlockPreview3D textureObjects={textureObjects} target={[0, -0.3, 0]} showControls={false} />
                 ) : (
                     <div className="flex items-center justify-center h-full text-xs text-white/50">Loading Preview...</div>
                 )}

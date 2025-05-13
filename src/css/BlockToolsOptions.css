@@ -11,8 +11,7 @@
 
 .block-tools-options-sidebar {
     position: absolute;
-    width: 300px;
-    background-color: rgba(13, 13, 13, 0.95);
+    width: 250px;
     border-radius: 12px;
     display: flex;
     flex-direction: column;
@@ -20,8 +19,6 @@
     height: 98vh;
     overflow: hidden;
     pointer-events: all;
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
     top: 50%;
     right: 1vh;
     transform: translateY(-50%);

@@ -31,7 +31,7 @@ const PreviewCube = ({ textureObjects }) => {
 PreviewCube.propTypes = {
     textureObjects: PropTypes.object.isRequired,
 };
-const BlockPreview3D = ({ textureObjects, target = [0, 0, 0] }) => {
+const BlockPreview3D = ({ textureObjects, target = [0, 0, 0], showControls = true }) => {
     const [isRotating, setIsRotating] = useState(true);
 
     const previewKey = useMemo(
@@ -100,7 +100,7 @@ const BlockPreview3D = ({ textureObjects, target = [0, 0, 0] }) => {
                 />
             </Canvas>
 
-            <div className="block-preview-controls">
+            {showControls && <div className="block-preview-controls">
                 <button
                     className="rotation-control-button"
                     onClick={toggleRotation}
@@ -108,7 +108,7 @@ const BlockPreview3D = ({ textureObjects, target = [0, 0, 0] }) => {
                 >
                     {isRotating ? <FaPause size={16} /> : <FaPlay size={16} />}
                 </button>
-            </div>
+            </div>}
         </div>
     );
 };
