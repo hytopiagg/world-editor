@@ -8,7 +8,6 @@ import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
 
 interface BlockToolOptionsProps {
-    debugInfo: any;
     totalBlocks: any;
     totalEnvironmentObjects: any;
     terrainBuilderRef: any;
@@ -57,7 +56,6 @@ function CollapsibleSection({ title, children, animationDelay = "0s" }: Collapsi
 
 
 export function BlockToolOptions({
-    debugInfo,
     totalBlocks,
     totalEnvironmentObjects,
     terrainBuilderRef,
@@ -129,7 +127,6 @@ export function BlockToolOptions({
                 </CollapsibleSection>
                 <CollapsibleSection title="Debug">
                     <DebugInfo
-                        debugInfo={debugInfo}
                         totalBlocks={totalBlocks}
                         totalEnvironmentObjects={totalEnvironmentObjects}
                         terrainBuilderRef={terrainBuilderRef}

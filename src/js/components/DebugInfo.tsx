@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "../../css/DebugInfo.css";
 const DebugInfo = ({
-    debugInfo,
     totalBlocks,
     totalEnvironmentObjects,
     terrainBuilderRef,
@@ -10,6 +9,7 @@ const DebugInfo = ({
     const frameTimesRef = useRef([]);
     const lastTimeRef = useRef(performance.now());
     const frameRef = useRef(null);
+
     useEffect(() => {
         frameRef.current = requestAnimationFrame(measureFps);
         return () => {
@@ -70,8 +70,7 @@ const DebugInfo = ({
             >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Preview Position</span>
                 <span className="text-right">
-                    {`${debugInfo?.preview?.x}, ${debugInfo?.preview?.y}, ${debugInfo?.preview?.z}`}
-
+                    {`${terrainBuilderRef?.current?.previewPositionRef?.x}, ${terrainBuilderRef?.current?.previewPositionRef?.y}, ${terrainBuilderRef?.current?.previewPositionRef?.z}`}
                 </span>
             </div>
             <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"

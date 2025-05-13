@@ -9,8 +9,7 @@ import {
     batchProcessCustomBlocks,
     blockTypes,
     getCustomBlocks,
-    processCustomBlock,
-    removeCustomBlock,
+    processCustomBlock
 } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
@@ -88,18 +87,7 @@ const BlockToolsSidebar = ({
     onOpenTextureModal,
     onLoadSchematicFromHistory,
 }) => {
-    const [settings, setSettings] = useState({
-        randomScale: false,
-        randomRotation: false,
-        minScale: 0.5,
-        maxScale: 1.5,
-        minRotation: 0,
-        maxRotation: 360,
-        scale: 1.0,
-        rotation: 0,
-    });
     const [customBlocks, setCustomBlocks] = useState([]);
-    const [previewModelUrl, setPreviewModelUrl] = useState(initialPreviewUrl);
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -453,7 +441,6 @@ const BlockToolsSidebar = ({
             const defaultBlock = blockTypes[0];
             setCurrentBlockType(defaultBlock);
             selectedBlockID = defaultBlock.id;
-            setPreviewModelUrl(null);
         } else if (newTab === "models") {
             const defaultEnvModel = environmentModels.find((m) => !m.isCustom);
             console.log("defaultEnvModel", defaultEnvModel);
@@ -463,79 +450,16 @@ const BlockToolsSidebar = ({
                     isEnvironment: true,
                 });
                 selectedBlockID = defaultEnvModel.id;
-                setPreviewModelUrl(defaultEnvModel.modelUrl);
             } else {
                 setCurrentBlockType(null);
                 selectedBlockID = 0;
-                setPreviewModelUrl(null);
             }
         } else if (newTab === "components") {
-            setPreviewModelUrl(null);
             setCurrentBlockType(null);
             selectedBlockID = 0;
             loadSchematicsFromDB();
         }
         setActiveTab(newTab);
-    };
-
-    const handleDeleteCustomBlock = async (blockType) => {
-        const confirmMessage = `Deleting "${blockType.name}" will replace any instances of this block with an error texture. Are you sure you want to proceed?`;
-        if (window.confirm(confirmMessage)) {
-            removeCustomBlock(blockType.id);
-            setCustomBlocks(getCustomBlocks());
-            try {
-                await DatabaseManager.saveData(
-                    STORES.CUSTOM_BLOCKS,
-                    "blocks",
-                    getCustomBlocks()
-                );
-            } catch (err) {
-                console.error(
-                    "Error saving custom blocks after deletion:",
-                    err
-                );
-            }
-            try {
-                const currentTerrain =
-                    (await DatabaseManager.getData(
-                        STORES.TERRAIN,
-                        "current"
-                    )) || {};
-                const newTerrain = { ...currentTerrain };
-                const errorBlock = {
-                    id: 999,
-                    name: `missing_${blockType.name}`,
-                    textureUri: "./assets/blocks/error.png",
-                    hasMissingTexture: true,
-                    originalId: blockType.id,
-                };
-                const errorId = errorBlock.id;
-                console.log("blockType", blockType);
-                Object.entries(newTerrain).forEach(([position, block]) => {
-                    console.log("block", block);
-                    console.log(
-                        "blockType.id == block.id",
-                        blockType.id == block.id
-                    );
-                    if (block === blockType.id) {
-                        newTerrain[position] = errorId;
-                    }
-                });
-                console.log("newTerrain", newTerrain);
-                await DatabaseManager.saveData(
-                    STORES.TERRAIN,
-                    "current",
-                    newTerrain
-                );
-                terrainBuilderRef.current.buildUpdateTerrain();
-            } catch (error) {
-                console.error(
-                    "Error updating database after block deletion:",
-                    error
-                );
-            }
-            refreshBlockTools();
-        }
     };
 
     const handleEnvironmentSelect = (envType) => {
@@ -545,7 +469,6 @@ const BlockToolsSidebar = ({
             isEnvironment: true,
         });
         selectedBlockID = envType.id;
-        setPreviewModelUrl(envType.modelUrl);
     };
 
     const handleBlockSelect = (blockType) => {
@@ -877,14 +800,17 @@ const BlockToolsSidebar = ({
                                         handleDragStart={handleDragStart}
                                     />
                                 ))}
-                            <div className="block-tools-section-label custom-label-with-icon">
+                            <div className="block-tools-section-label custom-label-with-icon mt-2">
                                 Custom Blocks (ID: 100-199)
                                 <button
                                     className="download-all-icon-button"
                                     onClick={handleDownloadAllCustom}
                                     title="Download all custom textures"
                                 >
-                                    <FaDownload />
+                                    {customBlocks.filter(
+                                        (block) =>
+                                            block.id >= 100 && block.id < 200
+                                    ).length > 0 && <FaDownload />}
                                 </button>
                             </div>
                             {customBlocks
@@ -936,7 +862,7 @@ const BlockToolsSidebar = ({
                                             }}
                                         />
                                     ))}
-                                <div className="block-tools-section-label">
+                                <div className="block-tools-section-label mt-2">
                                     Custom Models (ID: 300+)
                                 </div>
                                 {environmentModels

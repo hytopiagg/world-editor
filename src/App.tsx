@@ -37,11 +37,6 @@ function App() {
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
     const [mode, setMode] = useState("add");
-    const [debugInfo, setDebugInfo] = useState({
-        mouse: {},
-        preview: {},
-        grid: {},
-    });
     const [totalBlocks, setTotalBlocks] = useState(0);
     const [axisLockEnabled, setAxisLockEnabled] = useState(false);
     const [cameraReset, setCameraReset] = useState(false);
@@ -450,7 +445,6 @@ function App() {
                 {/* Block Tool Options - Now conditionally rendered */}
                 {showOptionsPanel && (
                     <BlockToolOptions
-                        debugInfo={debugInfo}
                         totalBlocks={totalBlocks}
                         totalEnvironmentObjects={totalEnvironmentObjects}
                         terrainBuilderRef={terrainBuilderRef}
@@ -527,7 +521,6 @@ function App() {
                         ref={terrainBuilderRef}
                         currentBlockType={currentBlockType}
                         mode={mode}
-                        setDebugInfo={setDebugInfo}
                         sendTotalBlocks={setTotalBlocks}
                         axisLockEnabled={axisLockEnabled}
                         placementSize={placementSize}

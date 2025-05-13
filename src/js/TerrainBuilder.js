@@ -83,7 +83,6 @@ function TerrainBuilder(
         currentBlockType,
         undoRedoManager,
         mode,
-        setDebugInfo,
         sendTotalBlocks,
         axisLockEnabled,
         gridSize,
@@ -479,7 +478,6 @@ function TerrainBuilder(
     const isFirstBlockRef = useRef(true);
     const modeRef = useRef(mode);
     const placementSizeRef = useRef(placementSize);
-    const previewIsGroundPlaneRef = useRef(false);
     const placedBlockCountRef = useRef(0); // Track number of blocks placed during a mouse down/up cycle
     const placedEnvironmentCountRef = useRef(0); // Track number of Environment objects placed during a mouse down/up cycle
     const lastDeletionTimeRef = useRef(0); // Add this ref to track the last deletion time
@@ -492,11 +490,6 @@ function TerrainBuilder(
     const disableSpatialHashUpdatesRef = useRef(false);
     const deferSpatialHashUpdatesRef = useRef(false);
     const updateDebugInfo = () => {
-        setDebugInfo({
-            preview: previewPositionRef.current,
-            totalBlocks: totalBlocksRef.current,
-            isGroundPlane: previewIsGroundPlaneRef.current,
-        });
         if (sendTotalBlocks) {
             sendTotalBlocks(totalBlocksRef.current);
         }
@@ -1731,6 +1724,9 @@ function TerrainBuilder(
         },
         get toolManagerRef() {
             return { current: toolManagerRef.current };
+        },
+        get previewPositionRef() {
+            return previewPositionRef.current;
         },
         setDeferredChunkMeshing,
         deferSpatialHashUpdates: (defer) => {
