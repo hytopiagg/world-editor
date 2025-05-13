@@ -487,27 +487,6 @@ function App() {
                     />
                 )}
 
-                <div className="camera-controls-wrapper">
-                    <div className="camera-buttons">
-                        <Tooltip text="Reset camera position">
-                            <button
-                                onClick={() => setCameraReset((prev) => !prev)}
-                                className="camera-control-button"
-                            >
-                                <FaCamera />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text={isMuted ? "Unmute" : "Mute"}>
-                            <button
-                                onClick={toggleMute}
-                                className={`camera-control-button ${!isMuted ? "active" : ""}`}
-                            >
-                                <FaVolumeMute />
-                            </button>
-                        </Tooltip>
-                    </div>
-                </div>
-
                 <button
                     className="toolbar-button"
                     onClick={async () => await DatabaseManager.clearDatabase()}
