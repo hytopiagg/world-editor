@@ -481,6 +481,8 @@ function App() {
                         onUpdateBlockName={handleUpdateBlockName}
                         onDownloadBlock={handleDownloadBlock}
                         onDeleteBlock={handleDeleteBlock}
+                        gridSize={gridSize}
+                        setGridSize={setGridSize}
                     />
                 )}
 
@@ -581,7 +583,6 @@ function App() {
                         setAxisLockEnabled={setAxisLockEnabled}
                         placementSize={placementSize}
                         setPlacementSize={setPlacementSize}
-                        setGridSize={setGridSize}
                         undoRedoManager={undoRedoManagerRef}
                         currentBlockType={currentBlockType}
                         toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}

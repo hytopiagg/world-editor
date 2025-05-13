@@ -2,12 +2,9 @@ import { generatePerlinNoise } from "perlin-noise";
 import { useEffect, useState } from "react";
 import {
     FaBorderAll,
-    FaBorderStyle,
     FaCloud,
-    FaCube,
     FaCubes,
     FaDrawPolygon,
-    FaExpand,
     FaLock,
     FaLockOpen,
     FaMinus,
@@ -36,7 +33,6 @@ const ToolBar = ({
     setAxisLockEnabled,
     placementSize,
     setPlacementSize,
-    setGridSize,
     undoRedoManager,
     currentBlockType,
     environmentBuilderRef,
@@ -44,7 +40,6 @@ const ToolBar = ({
     isAIAssistantVisible,
     setIsSaving,
 }) => {
-    const [newGridSize, setNewGridSize] = useState(100);
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     const [showImportExportMenu, setShowImportExportMenu] = useState(false);
     const [dimensions, setDimensions] = useState({
@@ -52,7 +47,6 @@ const ToolBar = ({
         length: 1,
         height: 1,
     });
-    const [showGridSizeModal, setShowGridSizeModal] = useState(false);
     const [showBorderModal, setShowBorderModal] = useState(false);
     const [borderDimensions, setBorderDimensions] = useState({
         width: 1,
@@ -297,25 +291,6 @@ const ToolBar = ({
         } catch (error) {
             console.error("Error exporting map:", error);
             alert("Error exporting map. Please try again.");
-        }
-    };
-    const applyNewGridSize = async (newGridSize) => {
-        if (newGridSize > 10) {
-            setGridSize(newGridSize);
-
-            if (
-                terrainBuilderRef.current &&
-                terrainBuilderRef.current.updateGridSize
-            ) {
-                await terrainBuilderRef.current.updateGridSize(newGridSize);
-            } else {
-                console.warn(
-                    "TerrainBuilder updateGridSize method not available"
-                );
-            }
-            setShowGridSizeModal(false);
-        } else {
-            alert("Grid size must be greater than 10");
         }
     };
 
@@ -596,8 +571,8 @@ const ToolBar = ({
                     {/* <div className="control-label">Placement Tools</div> */}
                 </div>
                 {/* <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm"> */}
-                    {/* <div className="control-button-wrapper"> */}
-                    {/* <Tooltip text="Generate solid cube">
+                {/* <div className="control-button-wrapper"> */}
+                {/* <Tooltip text="Generate solid cube">
                             <button
                                 onClick={() => setShowDimensionsModal(true)}
                                 className="control-button"
@@ -605,7 +580,7 @@ const ToolBar = ({
                                 <FaCube />
                             </button>
                         </Tooltip> */}
-                    {/* <Tooltip text="Generate wall of Blocks">
+                {/* <Tooltip text="Generate wall of Blocks">
                             <button
                                 onClick={() => setShowBorderModal(true)}
                                 className="control-button"
@@ -613,19 +588,11 @@ const ToolBar = ({
                                 <FaBorderStyle />
                             </button>
                         </Tooltip> */}
-                    {/* </div> */}
-                    {/* <div className="control-label">Generative Tools</div> */}
+                {/* </div> */}
+                {/* <div className="control-label">Generative Tools</div> */}
                 {/* </div> */}
                 <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
                     <div className="control-button-wrapper">
-                        <Tooltip text="Change grid size">
-                            <button
-                                onClick={() => setShowGridSizeModal(true)}
-                                className="control-button"
-                            >
-                                <FaExpand />
-                            </button>
-                        </Tooltip>
                         <Tooltip text="Generate terrain">
                             <button
                                 onClick={() => setShowTerrainModal(true)}
@@ -784,49 +751,6 @@ const ToolBar = ({
                             <button
                                 className="menu-button"
                                 onClick={() => setShowDimensionsModal(false)}
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {showGridSizeModal && (
-                <div
-                    className="modal-overlay"
-                    onClick={(e) =>
-                        handleModalOverlayClick(e, setShowGridSizeModal)
-                    }
-                >
-                    <div className="modal-content">
-                        <h3 className="modal-title">Change Grid Size</h3>
-                        <p className="modal-description">
-                            Adjust the size of the building grid. This affects
-                            the visible grid and the area where you can place
-                            blocks.
-                        </p>
-                        <div className="modal-input">
-                            <label>New Grid Size (10-500): </label>
-                            <input
-                                type="number"
-                                value={newGridSize}
-                                onChange={(e) =>
-                                    setNewGridSize(parseInt(e.target.value))
-                                }
-                                min="10"
-                                max="500"
-                            />
-                        </div>
-                        <div className="modal-buttons">
-                            <button
-                                className="menu-button"
-                                onClick={() => applyNewGridSize(newGridSize)}
-                            >
-                                Apply
-                            </button>
-                            <button
-                                className="menu-button"
-                                onClick={() => setShowGridSizeModal(false)}
                             >
                                 Cancel
                             </button>
