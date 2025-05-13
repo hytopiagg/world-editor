@@ -1,13 +1,10 @@
 import React from "react";
-import { FaTrash, FaDownload } from "react-icons/fa";
-import Tooltip from "./Tooltip";
 import { playUIClick } from "../Sound";
+import Tooltip from "./Tooltip";
 const BlockButton = ({
     blockType,
     isSelected,
     onSelect,
-    onDelete,
-    onDownload,
     handleDragStart,
 }) => {
     const getTextureUrl = (blockType) => {

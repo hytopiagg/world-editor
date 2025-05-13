@@ -592,8 +592,6 @@ button.block-button {
     align-items: center;
     justify-content: center;
     padding: 8px;
-    border: 1px solid #555;
-    background-color: #3a3a3a;
     cursor: pointer;
     text-align: center;
     min-height: 80px; /* Adjust for prompt visibility */
@@ -603,14 +601,11 @@ button.block-button {
     box-sizing: border-box;
     word-break: break-word;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     transition: all 0.2s ease;
     color: #ddd; /* Text color for prompt */
 }
 
 .schematic-button:hover {
-    background-color: #4a4a4a;
-    border-color: #777;
     transform: translateY(-2px);
 }
 

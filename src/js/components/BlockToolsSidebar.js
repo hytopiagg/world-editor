@@ -417,48 +417,8 @@ const BlockToolsSidebar = ({
         };
     }, [schematicList]);
 
-    const updateSettings = (updates) => {
-        const newSettings = { ...settings, ...updates };
-        setSettings(newSettings);
-        onPlacementSettingsChange?.(newSettings);
-    };
-
     const handleDragStart = (blockId) => {
         console.log("Drag started with block:", blockId);
-    };
-
-    const handleDownloadBlock = async (blockType) => {
-        if (!blockType || !blockType.isCustom) return;
-        const zip = new JSZip();
-        const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
-        const textures = blockType.sideTextures || {};
-        const mainTexture = blockType.textureUri;
-        let hasError = false;
-        for (const key of faceKeys) {
-            const dataUrl = textures[key] || mainTexture;
-            let blob = dataURLtoBlob(dataUrl);
-            if (!blob) {
-                console.warn(
-                    `Missing texture ${key} for ${blockType.name}, using placeholder.`
-                );
-                blob = await createPlaceholderBlob();
-                if (!blob) {
-                    console.error(`Placeholder failed for ${key}, skipping.`);
-                    hasError = true;
-                    continue;
-                }
-            }
-            zip.file(`${key}.png`, blob);
-        }
-        if (hasError) console.warn("Some textures missing; placeholders used.");
-        try {
-            const zipBlob = await zip.generateAsync({ type: "blob" });
-            saveAs(zipBlob, `${blockType.name}.zip`);
-            console.log(`Downloaded ${blockType.name}.zip`);
-        } catch (err) {
-            console.error("Error saving zip: ", err);
-            alert("Failed to save zip. See console.");
-        }
     };
 
     const handleDownloadAllCustom = async () => {
@@ -575,62 +535,6 @@ const BlockToolsSidebar = ({
                 );
             }
             refreshBlockTools();
-        }
-    };
-
-    const handleDeleteEnvironmentModel = async (modelId) => {
-        if (
-            window.confirm("Are you sure you want to delete this custom model?")
-        ) {
-            try {
-                const existingModels =
-                    (await DatabaseManager.getData(
-                        STORES.CUSTOM_MODELS,
-                        "models"
-                    )) || [];
-                const modelToDelete = environmentModels.find(
-                    (model) => model.id === modelId
-                );
-                if (!modelToDelete) return;
-                const modelIndex = environmentModels.findIndex(
-                    (model) => model.id === modelId
-                );
-                if (modelIndex !== -1) {
-                    environmentModels.splice(modelIndex, 1);
-                }
-                const updatedModels = existingModels.filter(
-                    (model) => model.name !== modelToDelete.name
-                );
-                await DatabaseManager.saveData(
-                    STORES.CUSTOM_MODELS,
-                    "models",
-                    updatedModels
-                );
-                const currentEnvironment =
-                    (await DatabaseManager.getData(
-                        STORES.ENVIRONMENT,
-                        "current"
-                    )) || [];
-                const updatedEnvironment = currentEnvironment.filter(
-                    (obj) => obj.name !== modelToDelete.name
-                );
-                await DatabaseManager.saveData(
-                    STORES.ENVIRONMENT,
-                    "current",
-                    updatedEnvironment
-                );
-                if (environmentBuilder && environmentBuilder.current) {
-                    await environmentBuilder.current.refreshEnvironmentFromDB();
-                }
-                if (
-                    modelToDelete &&
-                    previewModelUrl === modelToDelete.modelUrl
-                ) {
-                    setPreviewModelUrl(null);
-                }
-            } catch (error) {
-                console.error("Error deleting environment model:", error);
-            }
         }
     };
 
@@ -970,8 +874,6 @@ const BlockToolsSidebar = ({
                                                 block.id
                                             );
                                         }}
-                                        onDelete={handleDeleteCustomBlock}
-                                        onDownload={handleDownloadBlock}
                                         handleDragStart={handleDragStart}
                                     />
                                 ))}
@@ -1003,8 +905,6 @@ const BlockToolsSidebar = ({
                                                 block.id
                                             );
                                         }}
-                                        onDelete={handleDeleteCustomBlock}
-                                        onDownload={handleDownloadBlock}
                                         handleDragStart={handleDragStart}
                                         needsTexture={blockType.needsTexture}
                                     />
@@ -1075,7 +975,7 @@ const BlockToolsSidebar = ({
                             {schematicList.map((entry) => (
                                 <div
                                     key={entry.id}
-                                    className="schematic-button"
+                                    className="schematic-button bg-white/10 border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white"
                                     onClick={() => handleSchematicSelect(entry)}
                                     title={`Load: ${entry.prompt}`}
                                 >
@@ -1131,6 +1031,7 @@ const BlockToolsSidebar = ({
                             <div className="drop-zone-icons">
                                 <img
                                     className="upload-icon"
+                                    alt="Upload icon"
                                     src="./assets/ui/icons/upload-icon.png"
                                 />
                             </div>
