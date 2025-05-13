@@ -130,7 +130,12 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                     )}
                 </div>
                 <div className="flex items-center justify-end gap-2 mt-2">
-                    <button onClick={handleDownload} className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600/80 hover:bg-blue-600 text-white rounded-md border border-blue-500/50 hover:border-blue-400 transition-all" title="Download Block Textures">
+                    <button
+                        onClick={handleDownload}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-all bg-blue-600/80 hover:bg-blue-600 text-white border-blue-500/50 hover:border-blue-400 disabled:bg-gray-600/50 disabled:text-white/50 disabled:border-gray-500/30 disabled:cursor-not-allowed`}
+                        title={selectedBlock.textureUri ? "Download Block Textures" : "No textures available for download"}
+                        disabled={!selectedBlock.textureUri}
+                    >
                         <FaDownload /> Download
                     </button>
                     {selectedBlock.isCustom && (

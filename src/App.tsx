@@ -299,7 +299,7 @@ function App() {
             return getHytopiaBlocks();
         } catch (error) {
             console.error("Error getting Hytopia blocks:", error);
-            return []; 
+            return [];
         }
     }, []);
 
@@ -333,7 +333,7 @@ function App() {
     };
 
     const handleDownloadBlock = async (blockType: any) => {
-        if (!blockType || !blockType.isCustom) return;
+        if (!blockType) return;
         console.log("App: Downloading block:", blockType.name);
         const zip = new JSZip();
         const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
@@ -343,7 +343,25 @@ function App() {
 
         for (const key of faceKeys) {
             const dataUrl = textures[key] || mainTexture;
-            let blob = dataURLtoBlob(dataUrl);
+            let blob: Blob | null = null;
+
+            // Handle both data URIs and file paths
+            if (dataUrl && dataUrl.startsWith('data:image')) {
+                blob = dataURLtoBlob(dataUrl);
+            } else if (dataUrl && (dataUrl.startsWith('./') || dataUrl.startsWith('/'))) {
+                // For file paths, fetch the image
+                try {
+                    const response = await fetch(dataUrl);
+                    if (response.ok) {
+                        blob = await response.blob();
+                    } else {
+                        console.warn(`Failed to fetch texture ${key} from path ${dataUrl}, status: ${response.status}`);
+                    }
+                } catch (fetchError) {
+                    console.error(`Error fetching texture from ${dataUrl}:`, fetchError);
+                }
+            }
+
             if (!blob) {
                 console.warn(`Missing texture ${key} for ${blockType.name}, using placeholder.`);
                 try {
