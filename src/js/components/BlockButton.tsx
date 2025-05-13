@@ -41,8 +41,8 @@ const BlockButton = ({
                     if (isMissingTexture && !blockType.isCustom) {
                         alert(
                             "Missing system texture! \n \nThis means the map has this block, but the texture hasn't been added yet. Please select a different block, or upload the correct texture of the same name.\n \nTexture Name: \"" +
-                                blockType.name +
-                                '"'
+                            blockType.name +
+                            '"'
                         );
                         return;
                     }
@@ -52,47 +52,17 @@ const BlockButton = ({
                 draggable={true}
                 onDragStart={() => handleDragStart(blockType.id)}
             >
-                {blockType.isCustom && (
-                    <div className="custom-block-actions">
-                        <Tooltip text="Download Textures (.zip)">
-                            <div
-                                className="download-button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    playUIClick();
-                                    if (onDownload) {
-                                        onDownload(blockType);
-                                    }
-                                }}
-                            >
-                                <FaDownload />
-                            </div>
-                        </Tooltip>
-                        <Tooltip text="Delete Block">
-                            <div
-                                className="delete-button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    playUIClick();
-                                    onDelete(blockType);
-                                }}
-                            >
-                                <FaTrash />
-                            </div>
-                        </Tooltip>
-                    </div>
-                )}
                 <div
                     className="block-preview"
                     style={{
                         backgroundImage: `url(${getTextureUrl(
                             blockType.isMultiTexture
                                 ? {
-                                      ...blockType,
-                                      textureUri:
-                                          blockType.sideTextures["+y"] ||
-                                          blockType.textureUri,
-                                  }
+                                    ...blockType,
+                                    textureUri:
+                                        blockType.sideTextures["+y"] ||
+                                        blockType.textureUri,
+                                }
                                 : blockType
                         )})`,
                         backgroundSize: "cover",

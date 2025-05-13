@@ -1,9 +1,10 @@
+import { useState } from "react";
+import { FaAngleUp, FaRedo, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import "../../css/BlockToolsOptions.css";
 import "../../css/BlockToolsSidebar.css";
-import DebugInfo from "./DebugInfo";
-import { FaAngleDown, FaAngleUp, FaCamera, FaCog, FaRedo, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
-import { useState } from "react";
 import { isMuted, toggleMute } from "../Sound";
+import DebugInfo from "./DebugInfo";
+import BlockOptionsSection from "./BlockOptionsSection";
 
 interface SettingsMenuProps {
     terrainBuilderRef: any;
@@ -22,6 +23,11 @@ interface BlockToolOptionsProps {
     onToggleSidebar: () => void;
     onToggleOptions: () => void;
     onToggleToolbar: () => void;
+    activeTab: string;
+    selectedBlock: any | null;
+    onUpdateBlockName: (blockId: number, newName: string) => Promise<void>;
+    onDownloadBlock: (block: any) => void;
+    onDeleteBlock: (block: any) => void;
 }
 
 interface DebugMenuProps {
@@ -226,6 +232,11 @@ export function BlockToolOptions({
     onToggleSidebar,
     onToggleOptions,
     onToggleToolbar,
+    activeTab,
+    selectedBlock,
+    onUpdateBlockName,
+    onDownloadBlock,
+    onDeleteBlock,
 }: BlockToolOptionsProps) {
     return (
         <div className="block-tool-options-container" style={{
@@ -236,7 +247,19 @@ export function BlockToolOptions({
         }}>
             <div className="block-tools-options-sidebar" style={{
                 padding: "12px 0px",
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
             }}>
+                {activeTab === 'blocks' && selectedBlock && (
+                    <BlockOptionsSection
+                        selectedBlock={selectedBlock}
+                        onUpdateBlockName={onUpdateBlockName}
+                        onDownloadBlock={onDownloadBlock}
+                        onDeleteBlock={onDeleteBlock}
+                    />
+                )}
+
                 <SettingsMenu
                     terrainBuilderRef={terrainBuilderRef}
                     onResetCamera={onResetCamera}

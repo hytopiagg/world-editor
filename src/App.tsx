@@ -1,16 +1,14 @@
 import { defaultTheme, Provider } from "@adobe/react-spectrum";
 import { Canvas } from "@react-three/fiber";
+import { saveAs } from "file-saver";
+import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaCamera, FaDatabase, FaVolumeMute } from "react-icons/fa";
+import { FaDatabase } from "react-icons/fa";
 import "./css/App.css";
 import "./css/output.css";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
-import { isMuted, toggleMute } from "./js/Sound";
-import TerrainBuilder, {
-    blockTypes,
-    getCustomBlocks,
-} from "./js/TerrainBuilder";
+import TerrainBuilder from "./js/TerrainBuilder";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
 import { BlockToolOptions } from "./js/components/BlockToolOptions";
 import BlockToolsSidebar, {
@@ -21,13 +19,20 @@ import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import QuickTips from "./js/components/QuickTips";
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import ToolBar from "./js/components/ToolBar";
-import Tooltip from "./js/components/Tooltip";
 import UnderConstruction from "./js/components/UnderConstruction";
-import { processCustomBlock } from "./js/managers/BlockTypesManager";
+import {
+    blockTypes,
+    getCustomBlocks,
+    processCustomBlock,
+    removeCustomBlock,
+    updateCustomBlockName,
+} from "./js/managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
+import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+
 function App() {
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
@@ -207,7 +212,6 @@ function App() {
         </div>
     );
 
-    // Callback for when the modal finishes editing/generating
     const handleTextureReady = async (faceTextures, textureName) => {
         console.log(
             "Texture ready:",
@@ -216,7 +220,6 @@ function App() {
             Object.keys(faceTextures).length
         );
         try {
-            // Map face names to coordinate system keys
             const faceMap = {
                 top: "+y",
                 bottom: "-y",
@@ -226,20 +229,17 @@ function App() {
                 back: "-z",
             };
 
-            // Prepare the block data for processCustomBlock
             const newBlockData = {
                 name:
                     textureName
                         .replace(/[^a-zA-Z0-9_\-\s]/g, "")
                         .replace(/\s+/g, "_") || "custom_texture",
-                // Use 'all' or fallback to 'top' if 'all' is missing but others exist
                 textureUri: faceTextures.all || faceTextures.top || null,
                 sideTextures: {},
                 isCustom: true,
                 isMultiTexture: false,
             };
 
-            // Populate sideTextures using the mapped keys, excluding 'all'
             let hasSpecificFaces = false;
             for (const face in faceTextures) {
                 if (face !== "all" && faceTextures[face] && faceMap[face]) {
@@ -250,38 +250,29 @@ function App() {
                 }
             }
 
-            // If only 'all' texture was provided, but we expect multi-texture, copy 'all' to '+y'
-            // This helps with previews if the modal only returned an 'all' texture.
             if (!hasSpecificFaces && faceTextures.all) {
                 newBlockData.sideTextures["+y"] = faceTextures.all;
-                // Technically not multi-texture, but lets BlockButton preview work
-                // isMultiTexture will be false based on hasSpecificFaces below.
             } else if (
                 hasSpecificFaces &&
                 !newBlockData.sideTextures["+y"] &&
                 newBlockData.textureUri
             ) {
-                // If we have specific faces but somehow miss +y, use the main textureUri as +y fallback for preview
                 newBlockData.sideTextures["+y"] = newBlockData.textureUri;
             }
 
-            // Set isMultiTexture based only on whether specific faces (top, bottom, etc.) were provided
             newBlockData.isMultiTexture = hasSpecificFaces;
 
-            // Fallback textureUri if 'all' and 'top' were missing
             if (!newBlockData.textureUri && hasSpecificFaces) {
-                newBlockData.textureUri = newBlockData.sideTextures["+y"]; // Use top as the main URI
+                newBlockData.textureUri = newBlockData.sideTextures["+y"];
             }
 
             console.log("Processing block data:", newBlockData);
 
-            // Process the new texture as a custom block
             await processCustomBlock(newBlockData);
             console.log("Custom block processed:", newBlockData.name);
 
-            // Save updated custom blocks to DB
             try {
-                const updatedCustomBlocks = getCustomBlocks(); // Get the latest list including the new one
+                const updatedCustomBlocks = getCustomBlocks();
                 await DatabaseManager.saveData(
                     STORES.CUSTOM_BLOCKS,
                     "blocks",
@@ -297,53 +288,142 @@ function App() {
                 );
             }
 
-            // Refresh the block tools sidebar to show the new block
             refreshBlockTools();
         } catch (error) {
             console.error("Error processing generated texture:", error);
-            // Show an error message to the user?
         }
     };
 
-    // Callback to get available blocks for AI Panel
     const handleGetAvailableBlocks = useCallback(() => {
         try {
             return getHytopiaBlocks();
         } catch (error) {
             console.error("Error getting Hytopia blocks:", error);
-            return []; // Return empty array on error
+            return []; 
         }
     }, []);
 
-    // Callback to load schematic data and activate the placement tool
     const handleLoadAISchematic = useCallback((schematic) => {
         console.log("App: Loading AI schematic and activating tool", schematic);
-        setCurrentSchematic(schematic); // Store schematic data
-        // Activate the tool via TerrainBuilder's ref
+        setCurrentSchematic(schematic);
         terrainBuilderRef.current?.activateTool("schematic", schematic);
     }, []);
+
+
+    const handleUpdateBlockName = async (blockId: number, newName: string) => {
+        console.log(`App: Updating block ${blockId} name to ${newName}`);
+        try {
+            const success = await updateCustomBlockName(blockId, newName);
+            if (!success) {
+                throw new Error("BlockTypesManager failed to update name.");
+            }
+            const updatedBlocks = getCustomBlocks();
+            await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedBlocks);
+
+            if (currentBlockType?.id === blockId) {
+                setCurrentBlockType(prev => ({ ...prev, name: newName }));
+            }
+            refreshBlockTools();
+            console.log(`App: Block ${blockId} renamed successfully.`);
+        } catch (error) {
+            console.error("App: Error updating block name:", error);
+            alert(`Failed to rename block: ${error.message || "Unknown error"}`);
+            throw error;
+        }
+    };
+
+    const handleDownloadBlock = async (blockType: any) => {
+        if (!blockType || !blockType.isCustom) return;
+        console.log("App: Downloading block:", blockType.name);
+        const zip = new JSZip();
+        const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
+        const textures = blockType.sideTextures || {};
+        const mainTexture = blockType.textureUri;
+        let hasError = false;
+
+        for (const key of faceKeys) {
+            const dataUrl = textures[key] || mainTexture;
+            let blob = dataURLtoBlob(dataUrl);
+            if (!blob) {
+                console.warn(`Missing texture ${key} for ${blockType.name}, using placeholder.`);
+                try {
+                    blob = await createPlaceholderBlob();
+                    if (!blob) {
+                        console.error(`Placeholder failed for ${key}, skipping.`);
+                        hasError = true; continue;
+                    }
+                } catch (placeholderError) {
+                    console.error(`Error creating placeholder for ${key}:`, placeholderError);
+                    hasError = true; continue;
+                }
+            }
+            const fileName = `${key.replace('+', 'positive_').replace('-', 'negative_')}.png`;
+            zip.file(fileName, blob);
+        }
+        if (hasError) alert("Warning: Some textures missing/invalid; placeholders used or skipped. Check console.");
+        try {
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            saveAs(zipBlob, `${blockType.name}.zip`);
+            console.log(`App: Downloaded ${blockType.name}.zip`);
+        } catch (err) {
+            console.error("App: Error saving zip:", err);
+            alert("Failed to save zip. See console.");
+        }
+    };
+
+    const handleDeleteBlock = async (blockType: any) => {
+        if (!blockType || !blockType.isCustom) return;
+        const confirmMessage = `Deleting "${blockType.name}" (ID: ${blockType.id}) cannot be undone. Instances of this block in the world will be lost. Are you sure?`;
+        if (window.confirm(confirmMessage)) {
+            console.log("App: Deleting block:", blockType.name);
+            try {
+                removeCustomBlock(blockType.id);
+                const updatedBlocks = getCustomBlocks();
+                await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedBlocks);
+                console.log("App: Updated custom blocks in DB after deletion.");
+                const errorId = 0; // Air block ID
+                const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, "current") || {};
+                let blocksReplaced = 0;
+                const newTerrain = Object.entries(currentTerrain).reduce((acc, [pos, id]) => {
+                    if (id === blockType.id) {
+                        acc[pos] = errorId; blocksReplaced++;
+                    } else {
+                        acc[pos] = id;
+                    }
+                    return acc;
+                }, {});
+                if (blocksReplaced > 0) {
+                    console.log(`App: Replacing ${blocksReplaced} instances of deleted block ${blockType.id} with ID ${errorId}.`);
+                    await DatabaseManager.saveData(STORES.TERRAIN, "current", newTerrain);
+                    terrainBuilderRef.current?.buildUpdateTerrain();
+                    console.log("App: Triggered terrain update.");
+                } else {
+                    console.log("App: No instances found.");
+                }
+                refreshBlockTools();
+                if (currentBlockType?.id === blockType.id) {
+                    console.log("App: Resetting selected block type.");
+                    setCurrentBlockType(blockTypes[0]);
+                    setActiveTab('blocks');
+                    localStorage.setItem("selectedBlock", blockTypes[0].id.toString());
+                }
+                console.log(`App: Block ${blockType.name} deleted.`);
+            } catch (error) {
+                console.error("App: Error deleting block:", error);
+                alert(`Failed to delete block: ${error.message}`);
+            }
+        }
+    };
+
 
     return (
         <Provider theme={defaultTheme}>
             <div className="App">
                 {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
 
-                {/* Loading Screen */}
                 {!pageIsLoaded && <LoadingScreen />}
 
-                {/* Global Loading Screen for heavy operations */}
                 <GlobalLoadingScreen />
-
-                {/* Hytopia Logo */}
-                {/* <div className="hytopia-logo-wrapper">
-                    <img
-                        src={"/assets/img/hytopia_logo_white.png"}
-                        alt="Hytopia Logo"
-                    />
-                    <p className="hytopia-version-text">
-                        World Editor Version {version}
-                    </p>
-                </div> */}
 
                 {pageIsLoaded && <QuickTips />}
 
@@ -378,6 +458,11 @@ function App() {
                         onToggleSidebar={() => setShowBlockSidebar(prev => !prev)}
                         onToggleOptions={() => setShowOptionsPanel(prev => !prev)}
                         onToggleToolbar={() => setShowToolbar(prev => !prev)}
+                        activeTab={activeTab}
+                        selectedBlock={currentBlockType}
+                        onUpdateBlockName={handleUpdateBlockName}
+                        onDownloadBlock={handleDownloadBlock}
+                        onDeleteBlock={handleDeleteBlock}
                     />
                 )}
 
