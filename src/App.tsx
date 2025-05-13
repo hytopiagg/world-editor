@@ -483,6 +483,8 @@ function App() {
                         onDeleteBlock={handleDeleteBlock}
                         gridSize={gridSize}
                         setGridSize={setGridSize}
+                        placementSettings={placementSettings}
+                        onPlacementSettingsChange={setPlacementSettings}
                     />
                 )}
 

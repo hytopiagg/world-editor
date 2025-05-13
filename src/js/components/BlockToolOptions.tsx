@@ -5,6 +5,7 @@ import "../../css/BlockToolsSidebar.css";
 import { isMuted, toggleMute } from "../Sound";
 import DebugInfo from "./DebugInfo";
 import BlockOptionsSection from "./BlockOptionsSection";
+import ModelOptionsSection from "./ModelOptionsSection";
 
 interface SettingsMenuProps {
     terrainBuilderRef: any;
@@ -32,6 +33,8 @@ interface BlockToolOptionsProps {
     onDeleteBlock: (block: any) => void;
     gridSize: number;
     setGridSize: (size: number) => void;
+    placementSettings?: any;
+    onPlacementSettingsChange?: (settings: any) => void;
 }
 
 interface CollapsibleSectionProps {
@@ -268,6 +271,17 @@ export function BlockToolOptions({
     onDeleteBlock,
     gridSize,
     setGridSize,
+    placementSettings = {
+        randomScale: false,
+        randomRotation: false,
+        minScale: 0.5,
+        maxScale: 1.5,
+        minRotation: 0,
+        maxRotation: 360,
+        scale: 1.0,
+        rotation: 0,
+    },
+    onPlacementSettingsChange = () => { },
 }: BlockToolOptionsProps) {
     return (
         <div className="block-tool-options-container" style={{
@@ -289,6 +303,19 @@ export function BlockToolOptions({
                             onUpdateBlockName={onUpdateBlockName}
                             onDownloadBlock={onDownloadBlock}
                             onDeleteBlock={onDeleteBlock}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTab === 'models' && selectedBlock && (
+                    <CollapsibleSection title="Model Options">
+                        <ModelOptionsSection
+                            selectedModel={selectedBlock}
+                            placementSettings={placementSettings}
+                            onPlacementSettingsChange={onPlacementSettingsChange}
+                            onDeleteModel={onDeleteBlock}
+                            onDownloadModel={onDownloadBlock}
+                            onUpdateModelName={onUpdateBlockName}
+                            environmentBuilder={terrainBuilderRef?.current?.environmentBuilderRef}
                         />
                     </CollapsibleSection>
                 )}
