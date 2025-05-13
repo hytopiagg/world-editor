@@ -911,7 +911,7 @@ const BlockToolsSidebar = ({
                 width: "100%",
             }}
         >
-            <div className="block-tools-sidebar bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
+            <div className="block-tools-sidebar bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
                 <div className="tab-button-outer-wrapper w-full flex">
                     <div
                         className="tab-button-inner-wrapper flex w-full"

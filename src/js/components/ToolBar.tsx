@@ -379,69 +379,7 @@ const ToolBar = ({
                 {/*     background-color: rgba(13, 13, 13, 0.7);
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px); */}
-                <div className="control-group contol-group-start bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
-                    <div className="control-button-wrapper">
-                        <div className="relative">
-                            <Tooltip text="Import / Export Map" hideTooltip={showImportExportMenu}>
-                                <button
-                                    className={`relative control-button import-export-button active:translate-y-[1px] group transition-all ${showImportExportMenu ? 'selected' : ''}`}
-                                    onClick={() => setShowImportExportMenu(!showImportExportMenu)}
-                                >
-                                    <FaCloud className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
-                                </button>
-                            </Tooltip>
-
-                            {showImportExportMenu && <div className={`absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2`}>
-                                <input
-                                    id="mapFileInput"
-                                    type="file"
-                                    accept=".json"
-                                    onChange={onMapFileSelected}
-                                    style={{ display: "none" }}
-                                />
-                                <button
-                                    className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
-                                    onClick={() => document.getElementById("mapFileInput").click()}
-                                    style={{ animationDelay: '0.1s' }}
-                                >
-                                    {"Import"}
-                                </button>
-                                <button
-                                    className={`w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
-                                    onClick={handleExportMap}
-                                    style={{ animationDelay: '0.2s' }}
-                                >
-                                    {"Export"}
-                                </button>
-                            </div>}
-                        </div>
-
-
-                        {!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
-                            <Tooltip text="Import complete asset pack (includes map and textures)">
-                                <button
-                                    onClick={() =>
-                                        document
-                                            .getElementById("assetPackInput")
-                                            .click()
-                                    }
-                                    className="control-button import-export-button"
-                                >
-                                    Asset Pack
-                                </button>
-                                <input
-                                    id="assetPackInput"
-                                    type="file"
-                                    accept=".zip"
-                                    style={{ display: "none" }}
-                                />
-                            </Tooltip>
-                        )}
-                    </div>
-                    {/* <div className="control-label">Import</div> */}
-                </div>
-
-                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
+                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg rounded-l-xl pl-2">
                     <div className="control-button-wrapper">
                         <Tooltip text="Add blocks">
                             <button
@@ -570,7 +508,7 @@ const ToolBar = ({
                     </div>
                     {/* <div className="control-label">Placement Tools</div> */}
                 </div>
-                {/* <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm"> */}
+                {/* <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"> */}
                 {/* <div className="control-button-wrapper"> */}
                 {/* <Tooltip text="Generate solid cube">
                             <button
@@ -591,7 +529,7 @@ const ToolBar = ({
                 {/* </div> */}
                 {/* <div className="control-label">Generative Tools</div> */}
                 {/* </div> */}
-                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
+                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
                     <div className="control-button-wrapper">
                         <Tooltip text="Generate terrain">
                             <button
@@ -641,7 +579,7 @@ const ToolBar = ({
                     </div>
                     {/* <div className="control-label">Map Tools</div> */}
                 </div>
-                <div className="control-group contol-group-end bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-sm">
+                <div className="control-group rounded-r-xl pr-2 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
                     <div className="control-button-wrapper">
                         <Tooltip text="Clear entire map">
                             <button
@@ -672,6 +610,62 @@ const ToolBar = ({
                                 <FaSave />
                             </button>
                         </Tooltip>
+                        <div className="relative">
+                            <Tooltip text="Import / Export Map" hideTooltip={showImportExportMenu}>
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showImportExportMenu ? 'selected' : ''}`}
+                                    onClick={() => setShowImportExportMenu(!showImportExportMenu)}
+                                >
+                                    <FaCloud className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+
+                            {showImportExportMenu && <div className={`absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2`}>
+                                <input
+                                    id="mapFileInput"
+                                    type="file"
+                                    accept=".json"
+                                    onChange={onMapFileSelected}
+                                    style={{ display: "none" }}
+                                />
+                                <button
+                                    className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
+                                    onClick={() => document.getElementById("mapFileInput").click()}
+                                    style={{ animationDelay: '0.1s' }}
+                                >
+                                    {"Import"}
+                                </button>
+                                <button
+                                    className={`w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
+                                    onClick={handleExportMap}
+                                    style={{ animationDelay: '0.2s' }}
+                                >
+                                    {"Export"}
+                                </button>
+                            </div>}
+                        </div>
+
+
+                        {!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
+                            <Tooltip text="Import complete asset pack (includes map and textures)">
+                                <button
+                                    onClick={() =>
+                                        document
+                                            .getElementById("assetPackInput")
+                                            .click()
+                                    }
+                                    className="control-button import-export-button"
+                                >
+                                    Asset Pack
+                                </button>
+                                <input
+                                    id="assetPackInput"
+                                    type="file"
+                                    accept=".zip"
+                                    style={{ display: "none" }}
+                                />
+                            </Tooltip>
+                        )}
                     </div>
                     {/* <div className="control-label">Save</div> */}
                 </div>

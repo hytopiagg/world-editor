@@ -22,8 +22,6 @@
     height: 98vh;
     overflow: hidden;
     pointer-events: all;
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
     top: 50%;
     transform: translateY(-50%);
 }

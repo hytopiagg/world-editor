@@ -45,15 +45,6 @@
     padding-right: 15px;
 }
 
-.contol-group-start {
-    border-radius: 12px 0 0 12px;
-    padding-left: 8px;
-}
-
-.contol-group-end {
-    border-radius: 0 12px 12px 0;
-    padding-right: 8px;
-}
 .control-button-wrapper {
     display: flex;
     justify-content: center;
