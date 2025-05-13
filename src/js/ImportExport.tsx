@@ -173,30 +173,6 @@ export const importMap = async (
                                 minZ = Math.min(minZ, z);
                                 maxZ = Math.max(maxZ, z);
                             });
-
-                            const width = maxX - minX + 10;
-                            const length = maxZ - minZ + 10;
-
-                            const gridSize =
-                                Math.ceil(Math.max(width, length) / 16) * 16;
-
-                            if (terrainBuilderRef.current.updateGridSize) {
-                                loadingManager.updateLoading(
-                                    `Updating grid size to ${gridSize}...`,
-                                    50
-                                );
-
-                                terrainBuilderRef.current.updateGridSize(
-                                    gridSize
-                                );
-                                console.log(
-                                    `Grid size update completed, should now be ${gridSize}`
-                                );
-                            } else {
-                                console.warn(
-                                    "updateGridSize method not found on terrainBuilderRef"
-                                );
-                            }
                         }
 
                         if (importData.entities) {

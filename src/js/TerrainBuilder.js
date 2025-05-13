@@ -1075,28 +1075,6 @@ function TerrainBuilder(
     const updateTerrainFromToolBar = (terrainData) => {
         loadingManager.showLoading("Starting Minecraft map import...", 0);
         terrainRef.current = terrainData;
-        if (terrainData && Object.keys(terrainData).length > 0) {
-            const totalBlocks = Object.keys(terrainData).length;
-            loadingManager.updateLoading(
-                `Processing ${totalBlocks.toLocaleString()} blocks...`,
-                5
-            );
-            let minX = Infinity,
-                minZ = Infinity;
-            let maxX = -Infinity,
-                maxZ = -Infinity;
-            Object.keys(terrainData).forEach((key) => {
-                const [x, y, z] = key.split(",").map(Number);
-                minX = Math.min(minX, x);
-                maxX = Math.max(maxX, x);
-                minZ = Math.min(minZ, z);
-                maxZ = Math.max(maxZ, z);
-            });
-            const width = maxX - minX + 10;
-            const length = maxZ - minZ + 10;
-            const gridSize = Math.ceil(Math.max(width, length) / 16) * 16;
-            updateGridSize(gridSize);
-        }
         loadingManager.updateLoading(
             "Saving imported terrain to database...",
             15
@@ -1173,32 +1151,8 @@ function TerrainBuilder(
             let gridSizeToUse;
             if (newGridSize) {
                 gridSizeToUse = newGridSize;
-                try {
-                    await DatabaseManager.saveData(
-                        STORES.SETTINGS,
-                        "gridSize",
-                        gridSizeToUse
-                    );
-                } catch (error) {
-                    console.error(
-                        "Error saving grid size to IndexedDB:",
-                        error
-                    );
-                }
             } else {
-                try {
-                    gridSizeToUse =
-                        (await DatabaseManager.getData(
-                            STORES.SETTINGS,
-                            "gridSize"
-                        )) || 200;
-                } catch (error) {
-                    console.error(
-                        "Error loading grid size from IndexedDB:",
-                        error
-                    );
-                    gridSizeToUse = 200; // Default to 200 if there's an error
-                }
+                gridSizeToUse = 5000; // Default to 5000 if no grid size is provided
             }
             gridSizeRef.current = gridSizeToUse;
             if (gridRef.current.geometry) {
@@ -1387,9 +1341,6 @@ function TerrainBuilder(
         axisLockEnabledRef.current = axisLockEnabled;
     }, [axisLockEnabled]);
     useEffect(() => {
-        updateGridSize(gridSize);
-    }, [gridSize]);
-    useEffect(() => {
         if (threeCamera) {
             threeCamera.frustumCulled = false;
         }
@@ -1486,7 +1437,11 @@ function TerrainBuilder(
                                     await BlockTypeRegistry.instance.preload();
                                 }
                                 await rebuildTextureAtlas();
-                                updateTerrainChunks(terrainRef.current, true, environmentBuilderRef); // Set true to only load visible chunks
+                                updateTerrainChunks(
+                                    terrainRef.current,
+                                    true,
+                                    environmentBuilderRef
+                                );
                                 processChunkRenderQueue();
                                 window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();

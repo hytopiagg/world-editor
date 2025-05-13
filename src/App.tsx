@@ -51,7 +51,7 @@ function App() {
     const [pageIsLoaded, setPageIsLoaded] = useState(false);
     const [scene, setScene] = useState(null);
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
-    const [gridSize, setGridSize] = useState(100);
+    const gridSize = 5000;
     const [currentPreviewPosition, setCurrentPreviewPosition] = useState(null);
     const environmentBuilderRef = useRef(null);
     const terrainBuilderRef = useRef(null);
@@ -76,6 +76,12 @@ function App() {
     const [showBlockSidebar, setShowBlockSidebar] = useState(true);
     const [showOptionsPanel, setShowOptionsPanel] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
+
+    useEffect(() => {
+        if (terrainBuilderRef.current) {
+            terrainBuilderRef.current.updateGridSize(gridSize);
+        }
+    }, [gridSize, terrainBuilderRef.current?.updateGridSize]);
 
     useEffect(() => {
         const loadSavedToolSelection = () => {
@@ -173,24 +179,6 @@ function App() {
             });
         }
     }, [undoRedoManagerRef.current]);
-
-    // Add useEffect to load grid size from IndexedDB
-    useEffect(() => {
-        const loadGridSize = async () => {
-            try {
-                const savedGridSize = await DatabaseManager.getData(
-                    STORES.SETTINGS,
-                    "gridSize"
-                );
-                if (savedGridSize) {
-                    setGridSize(+savedGridSize);
-                }
-            } catch (error) {
-                console.error("Error loading grid size from IndexedDB:", error);
-            }
-        };
-        loadGridSize();
-    }, []);
 
     useEffect(() => {
         DatabaseManager.clearStore(STORES.UNDO);
@@ -481,8 +469,6 @@ function App() {
                         onUpdateBlockName={handleUpdateBlockName}
                         onDownloadBlock={handleDownloadBlock}
                         onDeleteBlock={handleDeleteBlock}
-                        gridSize={gridSize}
-                        setGridSize={setGridSize}
                         placementSettings={placementSettings}
                         onPlacementSettingsChange={setPlacementSettings}
                     />

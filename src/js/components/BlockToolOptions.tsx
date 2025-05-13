@@ -13,8 +13,6 @@ interface SettingsMenuProps {
     onToggleSidebar: () => void;
     onToggleOptions: () => void;
     onToggleToolbar: () => void;
-    gridSize: number;
-    setGridSize: (size: number) => void;
 }
 
 interface BlockToolOptionsProps {
@@ -31,8 +29,6 @@ interface BlockToolOptionsProps {
     onUpdateBlockName: (blockId: number, newName: string) => Promise<void>;
     onDownloadBlock: (block: any) => void;
     onDeleteBlock: (block: any) => void;
-    gridSize: number;
-    setGridSize: (size: number) => void;
     placementSettings?: any;
     onPlacementSettingsChange?: (settings: any) => void;
 }
@@ -66,7 +62,7 @@ function CollapsibleSection({ title, children, animationDelay = "0s" }: Collapsi
     );
 }
 
-function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar, gridSize, setGridSize }: SettingsMenuProps) {
+function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar }: SettingsMenuProps) {
     const [viewDistance, setViewDistance] = useState(128);
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
     const [showSidebar, setShowSidebar] = useState(true);
@@ -100,15 +96,6 @@ function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onTog
     const handleToolbarToggle = () => {
         setShowToolbar(!showToolbar);
         onToggleToolbar();
-    };
-
-    const handleGridSizeChange = async (value: number) => {
-        if (value >= 10 && value <= 500) {
-            setGridSize(value);
-            if (terrainBuilderRef?.current?.updateGridSize) {
-                await terrainBuilderRef.current.updateGridSize(value);
-            }
-        }
     };
 
     return (
@@ -213,42 +200,6 @@ function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onTog
 
                         </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{
-                            animationDelay: "0.175s"
-                        }}>
-                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Grid Size</label>
-                            <input
-                                type="number"
-                                value={gridSize}
-                                onChange={(e) => handleGridSizeChange(Number(e.target.value))}
-                                onBlur={(e) => handleGridSizeChange(Math.max(10, Math.min(500, Number(e.target.value))))}
-                                onKeyDown={(e: any) => {
-                                    if (e.key === 'Enter') {
-                                        handleGridSizeChange(Math.max(10, Math.min(500, Number(e.target.value))));
-                                        e.target.blur();
-                                    }
-                                }}
-                                min={10}
-                                max={500}
-                                step={10}
-                                className="w-16 px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                            <input
-                                type="range"
-                                min="10"
-                                max="500"
-                                step="10"
-                                value={gridSize}
-                                onChange={(e) => handleGridSizeChange(Number(e.target.value))}
-                                className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
-                                style={{
-                                    transition: "all 0.3s ease-in-out",
-                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(gridSize - 10) / (500 - 10) * 100}%, rgba(255, 255, 255, 0.1) ${(gridSize - 10) / (500 - 10) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
-                                }}
-                            />
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -269,8 +220,6 @@ export function BlockToolOptions({
     onUpdateBlockName,
     onDownloadBlock,
     onDeleteBlock,
-    gridSize,
-    setGridSize,
     placementSettings = {
         randomScale: false,
         randomRotation: false,
@@ -326,8 +275,6 @@ export function BlockToolOptions({
                         onToggleSidebar={onToggleSidebar}
                         onToggleOptions={onToggleOptions}
                         onToggleToolbar={onToggleToolbar}
-                        gridSize={gridSize}
-                        setGridSize={setGridSize}
                     />
                 </CollapsibleSection>
                 <CollapsibleSection title="Debug">
