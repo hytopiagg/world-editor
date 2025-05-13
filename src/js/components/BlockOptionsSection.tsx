@@ -132,14 +132,14 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                 <div className="flex items-center justify-end gap-2 mt-2">
                     <button
                         onClick={handleDownload}
-                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-all bg-blue-600/80 hover:bg-blue-600 text-white border-blue-500/50 hover:border-blue-400 disabled:bg-gray-600/50 disabled:text-white/50 disabled:border-gray-500/30 disabled:cursor-not-allowed`}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md border transition-all bg-blue-600/80 hover:bg-blue-600 text-white border-blue-500/50 hover:border-blue-400 disabled:bg-gray-600/50 disabled:text-white/50 disabled:border-gray-500/30 disabled:cursor-not-allowed cursor-pointer`}
                         title={selectedBlock.textureUri ? "Download Block Textures" : "No textures available for download"}
                         disabled={!selectedBlock.textureUri}
                     >
                         <FaDownload /> Download
                     </button>
                     {selectedBlock.isCustom && (
-                        <button onClick={handleDelete} className="flex items-center gap-1 px-2 py-1 text-xs bg-red-600/80 hover:bg-red-600 text-white rounded-md border border-red-500/50 hover:border-red-400 transition-all" title="Delete Custom Block">
+                        <button onClick={handleDelete} className="flex items-center gap-1 px-2 py-1 text-xs bg-red-600/80 hover:bg-red-600 text-white rounded-md border border-red-500/50 hover:border-red-400 transition-all cursor-pointer" title="Delete Custom Block">
                             <FaTrash /> Delete
                         </button>
                     )}
