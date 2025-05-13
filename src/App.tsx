@@ -45,13 +45,11 @@ function App() {
     const [totalBlocks, setTotalBlocks] = useState(0);
     const [axisLockEnabled, setAxisLockEnabled] = useState(false);
     const [cameraReset, setCameraReset] = useState(false);
-    const [cameraAngle, setCameraAngle] = useState(0);
     const [placementSize, setPlacementSize] = useState("single");
     const [activeTab, setActiveTab] = useState<ActiveTabType>("blocks");
     const [pageIsLoaded, setPageIsLoaded] = useState(false);
     const [scene, setScene] = useState(null);
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
-    const gridSize = 5000;
     const [currentPreviewPosition, setCurrentPreviewPosition] = useState(null);
     const environmentBuilderRef = useRef(null);
     const terrainBuilderRef = useRef(null);
@@ -67,15 +65,12 @@ function App() {
     });
     const [isSaving, setIsSaving] = useState(false);
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
-
-    // AI Assistant State
-    const [currentSchematic, setCurrentSchematic] = useState(null);
     const [isAIAssistantVisible, setIsAIAssistantVisible] = useState(false);
-
-    // Add new state variables for UI visibility
     const [showBlockSidebar, setShowBlockSidebar] = useState(true);
     const [showOptionsPanel, setShowOptionsPanel] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
+    const cameraAngle = 0;
+    const gridSize = 5000;
 
     useEffect(() => {
         if (terrainBuilderRef.current) {
@@ -293,7 +288,6 @@ function App() {
 
     const handleLoadAISchematic = useCallback((schematic) => {
         console.log("App: Loading AI schematic and activating tool", schematic);
-        setCurrentSchematic(schematic);
         terrainBuilderRef.current?.activateTool("schematic", schematic);
     }, []);
 
