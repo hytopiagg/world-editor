@@ -681,7 +681,8 @@ function TerrainBuilder(
                 updatePreviewPosition,
                 handleBlockPlacement,
                 playPlaceSound,
-                threeRaycaster
+                threeRaycaster,
+                cameraManager
             );
         },
         [threeRaycaster.ray]

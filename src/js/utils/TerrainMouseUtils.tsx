@@ -107,8 +107,13 @@ function handleTerrainMouseDown(
     updatePreviewPosition,
     handleBlockPlacement,
     playPlaceSound,
-    threeRaycaster
+    threeRaycaster,
+    cameraManager
 ) {
+    if (cameraManager.isPointerLockMode && !cameraManager.isPointerLocked) {
+        cameraManager.isPointerLocked = true;
+        return;
+    }
     const isToolActive =
         toolManagerRef.current && toolManagerRef.current.getActiveTool();
     console.log("handleTerrainMouseDown");

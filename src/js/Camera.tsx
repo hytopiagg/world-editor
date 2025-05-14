@@ -15,6 +15,7 @@ class CameraManager {
     _eventsInitialized: boolean;
     _isInputDisabled: boolean;
     isPointerLockMode: boolean;
+    isPointerLocked: boolean;
     lastFrameTime: number;
     normalizedFps: number;
     constructor() {
@@ -32,12 +33,14 @@ class CameraManager {
         this._isInputDisabled = false;
         this.lastFrameTime = performance.now();
         this.normalizedFps = 120; // Default to 60 FPS
+        this.isPointerLockMode = false;
+        this.isPointerLocked = false;
     }
 
     setNormalizedFps(fps: number) {
         this.normalizedFps = Math.max(1, fps);
     }
-    
+
     initialize(camera, controls) {
         if (this._eventsInitialized) return;
         this._eventsInitialized = true;
@@ -52,6 +55,7 @@ class CameraManager {
         this.animationFrameId = null;
         this.onCameraAngleChange = null;
         this.isPointerLockMode = true;
+        this.isPointerLocked = false;
         this.lastFrameTime = performance.now();
         this.controls.enableZoom = false;
         this.controls.panSpeed = 10;
@@ -311,6 +315,11 @@ class CameraManager {
             event.key &&
             movementKeys.includes(event.key.toLowerCase())
         ) {
+            return;
+        }
+
+        if (event.key === "escape" && this.isPointerLockMode && this.isPointerLocked) {
+            this.isPointerLocked = false;
             return;
         }
 
