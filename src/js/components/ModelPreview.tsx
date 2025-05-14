@@ -126,12 +126,21 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(newWidth, newHeight);
     };
-    window.addEventListener('resize', handleResize);
+
+    let resizeObserver;
+    if (currentMount) {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(currentMount);
+    }
 
     return () => {
       console.log("--- Cleaning up THREE Scene --- (ModelPreview)");
       cancelAnimationFrame(frameIdRef.current);
-      window.removeEventListener('resize', handleResize);
+      if (resizeObserver && currentMount) {
+        resizeObserver.unobserve(currentMount);
+      }
       if (controlsRef.current) {
         controlsRef.current.dispose();
         controlsRef.current = null;
