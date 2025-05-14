@@ -594,9 +594,6 @@ button.block-button {
     cursor: pointer;
     text-align: center;
     min-height: 80px; /* Adjust for prompt visibility */
-    width: calc(
-        33.333% - 4px
-    ); /* For 3 items per row, accounting for 6px gap (2 gaps for 3 items) */
     box-sizing: border-box;
     word-break: break-word;
     border-radius: 8px;

@@ -910,6 +910,9 @@ const BlockToolsSidebar = ({
                                 <div
                                     key={entry.id}
                                     className="schematic-button bg-white/10 border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white"
+                                    style={{
+                                        width: isCompactMode ? "calc(50% - 6px)" : "calc(33.333% - 4px)",
+                                    }}
                                     onClick={() => handleSchematicSelect(entry)}
                                     title={`Load: ${entry.prompt}`}
                                 >
