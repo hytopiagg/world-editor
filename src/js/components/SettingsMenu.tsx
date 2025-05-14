@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FaRedo, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import { isMuted, toggleMute } from "../Sound";
+import { cameraManager } from "../Camera";
+import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 
 interface SettingsMenuProps {
     terrainBuilderRef: any;
@@ -18,6 +20,22 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [showSidebar, setShowSidebar] = useState(true);
     const [showOptions, setShowOptions] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
+    const [cameraSensitivity, setCameraSensitivity] = useState(5);
+
+    // Load saved sensitivity on mount
+    useEffect(() => {
+        (async () => {
+            try {
+                const saved = await DatabaseManager.getData(STORES.SETTINGS, "cameraSensitivity");
+                if (typeof saved === "number") {
+                    setCameraSensitivity(saved);
+                    cameraManager.setPointerSensitivity(saved);
+                }
+            } catch (error) {
+                console.error("Error loading camera sensitivity:", error);
+            }
+        })();
+    }, []);
 
     const handleViewDistanceChange = (value: number) => {
         setViewDistance(value);
@@ -46,6 +64,13 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const handleToolbarToggle = () => {
         setShowToolbar(!showToolbar);
         onToggleToolbar();
+    };
+
+    const handleSensitivityChange = async (value: number) => {
+        const clamped = Math.max(1, Math.min(10, value));
+        setCameraSensitivity(clamped);
+        cameraManager.setPointerSensitivity(clamped);
+        await DatabaseManager.saveData(STORES.SETTINGS, "cameraSensitivity", clamped);
     };
 
     return (
@@ -161,6 +186,22 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
 
                         </div>
                     </div>
+                    {/* Camera sensitivity visible only when pointer-lock capable (Glide mode) */}
+                    {!cameraManager.isPointerLockMode && (
+                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.17s" }}>
+                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Sensitivity</label>
+                            <input
+                                type="range"
+                                min={1}
+                                max={10}
+                                step={1}
+                                value={cameraSensitivity}
+                                onChange={(e) => handleSensitivityChange(parseInt(e.target.value))}
+                                className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
+                            />
+                            <span className="text-xs text-[#F1F1F1] w-4 text-center">{cameraSensitivity}</span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

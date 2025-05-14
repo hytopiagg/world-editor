@@ -665,8 +665,44 @@ function TerrainBuilder(
     const handleMouseDown = useCallback(
         (e) => {
             console.log("handleMouseDown");
+
+            // Pointer-lock handling: first click should engage lock rather than place
+            if (
+                !cameraManager.isPointerLockMode &&
+                !cameraManager.isPointerLocked
+            ) {
+                const canvasEl = gl && gl.domElement;
+                if (canvasEl && canvasEl.requestPointerLock) {
+                    canvasEl.requestPointerLock();
+                }
+                // mouse press solely for locking cursor – do not place/remove
+                return;
+            }
+
+            // When pointer is already locked, decide mode based on mouse button
+            if (
+                !cameraManager.isPointerLockMode &&
+                cameraManager.isPointerLocked
+            ) {
+                if (e.button === 0) {
+                    modeRef.current = "add";
+                } else if (e.button === 2) {
+                    modeRef.current = "remove";
+                }
+            }
+
+            let eventForHandler = e;
+            if (
+                !cameraManager.isPointerLockMode &&
+                cameraManager.isPointerLocked &&
+                e.button === 2
+            ) {
+                // Clone event with button set to 0 to reuse placement logic for removal mode
+                eventForHandler = { ...e, button: 0 };
+            }
+
             handleTerrainMouseDown(
-                e,
+                eventForHandler,
                 toolManagerRef,
                 isPlacingRef,
                 placedBlockCountRef,
@@ -685,7 +721,7 @@ function TerrainBuilder(
                 cameraManager
             );
         },
-        [threeRaycaster.ray]
+        [threeRaycaster.ray, gl, cameraManager]
     );
     const handleBlockPlacement = () => {
         console.log("********handleBlockPlacement********");
@@ -853,11 +889,15 @@ function TerrainBuilder(
         }
     };
     const getRaycastIntersection = useCallback(() => {
+        const ptr =
+            !cameraManager.isPointerLockMode && cameraManager.isPointerLocked
+                ? new THREE.Vector2(0, 0)
+                : pointer.clone();
         return getTerrainRaycastIntersection(
             scene,
             threeCamera,
             threeRaycaster,
-            pointer,
+            ptr,
             useSpatialHashRef,
             spatialGridManagerRef,
             gridSizeRef,
@@ -866,7 +906,7 @@ function TerrainBuilder(
             isPlacingRef,
             modeRef
         );
-    }, [pointer, scene, threeCamera, threeRaycaster]);
+    }, [pointer, scene, threeCamera, threeRaycaster, cameraManager]);
     const updatePreviewPosition = () => {
         if (updatePreviewPosition.isProcessing) {
             return;
@@ -878,7 +918,10 @@ function TerrainBuilder(
         const blockIntersection = getRaycastIntersection();
         const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
         const currentGroundPoint = new THREE.Vector3();
-        const normalizedMouse = pointer.clone();
+        const normalizedMouse =
+            !cameraManager.isPointerLockMode && cameraManager.isPointerLocked
+                ? new THREE.Vector2(0, 0)
+                : pointer.clone();
         threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
         const hitGround = threeRaycaster.ray.intersectPlane(
             groundPlane,
@@ -2130,13 +2173,23 @@ function TerrainBuilder(
         const handleCanvasMouseUp = (event) => {
             handleMouseUp(event);
         };
+        const handleContextMenu = (event) => {
+            if (
+                !cameraManager.isPointerLockMode &&
+                cameraManager.isPointerLocked
+            ) {
+                event.preventDefault();
+            }
+        };
         canvas.addEventListener("mousedown", handleCanvasMouseDown);
         canvas.addEventListener("mouseup", handleCanvasMouseUp);
+        canvas.addEventListener("contextmenu", handleContextMenu);
         return () => {
             canvas.removeEventListener("mousedown", handleCanvasMouseDown);
             canvas.removeEventListener("mouseup", handleCanvasMouseUp);
+            canvas.removeEventListener("contextmenu", handleContextMenu);
         };
-    }, [gl, handleMouseDown, handleMouseUp]); // Add dependencies
+    }, [gl, handleMouseDown, handleMouseUp, cameraManager]); // Add dependencies
     useEffect(() => {
         optimizeRenderer(gl);
         cameraManager.initialize(threeCamera, orbitControlsRef.current);

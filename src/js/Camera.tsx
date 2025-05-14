@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import QuickTipsManager from "./components/QuickTipsManager";
+import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 
 class CameraManager {
     camera: THREE.Camera | null;
     controls: any | null;
     moveSpeed: number;
     rotateSpeed: number;
+    pointerSensitivity: number;
     keys: Set<string>;
     isSliderDragging: boolean;
     lastPosition: THREE.Vector3 | null;
@@ -18,11 +20,13 @@ class CameraManager {
     isPointerLocked: boolean;
     lastFrameTime: number;
     normalizedFps: number;
+    handlePointerMove: (event: MouseEvent) => void;
     constructor() {
         this.camera = null;
         this.controls = null;
         this.moveSpeed = 0.2;
         this.rotateSpeed = 0.02;
+        this.pointerSensitivity = 5;
         this.keys = new Set();
         this.isSliderDragging = false;
         this.lastPosition = null;
@@ -35,6 +39,7 @@ class CameraManager {
         this.normalizedFps = 120; // Default to 60 FPS
         this.isPointerLockMode = false;
         this.isPointerLocked = false;
+        this.handlePointerMove = () => { };
     }
 
     setNormalizedFps(fps: number) {
@@ -59,6 +64,53 @@ class CameraManager {
         this.lastFrameTime = performance.now();
         this.controls.enableZoom = false;
         this.controls.panSpeed = 10;
+
+        // Ensure rotation order suitable for FPS style
+        if (this.camera) {
+            this.camera.rotation.order = "YXZ"; // yaw first, then pitch
+        }
+
+        // >>> Pointer lock change handler
+        const handlePointerLockChange = () => {
+            const hasLock = document.pointerLockElement !== null;
+            this.isPointerLocked = hasLock;
+            if (this.controls) {
+                // Disable OrbitControls rotation when pointer is locked to avoid conflicts
+                this.controls.enableRotate = !hasLock;
+            }
+        };
+        document.addEventListener("pointerlockchange", handlePointerLockChange);
+
+        // >>> Pointer-move rotation when pointer lock is active
+        this.handlePointerMove = (event: MouseEvent) => {
+            if (this.isPointerLockMode || !this.isPointerLocked || !this.camera || !this.controls) return;
+            const movementX = event.movementX || 0;
+            const movementY = event.movementY || 0;
+            const sensitivityFactor = this.pointerSensitivity / 5; // default factor 1 at sensitivity 5
+            const yawDelta = -movementX * this.rotateSpeed * sensitivityFactor;
+            const pitchDelta = -movementY * this.rotateSpeed * sensitivityFactor;
+
+            // Update Euler angles directly to keep unlimited yaw
+            this.camera.rotation.y += yawDelta; // yaw
+            this.camera.rotation.x += pitchDelta; // pitch
+
+            const maxPitch = Math.PI / 2 - 0.01;
+            const minPitch = -Math.PI / 2 + 0.01;
+            this.camera.rotation.x = THREE.MathUtils.clamp(this.camera.rotation.x, minPitch, maxPitch);
+            // Update controls target to match new camera orientation
+            const newTarget = this.camera.position.clone().add(this.camera.getWorldDirection(new THREE.Vector3()));
+            this.controls.target.copy(newTarget);
+            this.controls.update();
+            this.saveState();
+            if (this.onCameraAngleChange) {
+                const direction = new THREE.Vector3();
+                this.camera.getWorldDirection(direction);
+                const verticalAngle = THREE.MathUtils.radToDeg(Math.asin(direction.y));
+                this.onCameraAngleChange(verticalAngle);
+            }
+        };
+        window.addEventListener("mousemove", this.handlePointerMove);
+        // <<< end pointer lock additions
 
         const handleWheel = (event) => {
             const isUIElement = event.target.closest(
@@ -115,6 +167,8 @@ class CameraManager {
             window.removeEventListener("wheel", handleWheel);
             window.removeEventListener("keydown", this.handleKeyDown);
             window.removeEventListener("keyup", this.handleKeyUp);
+            document.removeEventListener("pointerlockchange", handlePointerLockChange);
+            window.removeEventListener("mousemove", this.handlePointerMove);
             if (this.animationFrameId) {
                 cancelAnimationFrame(this.animationFrameId);
             }
@@ -320,14 +374,25 @@ class CameraManager {
 
         if (event.key === "escape" && this.isPointerLockMode && this.isPointerLocked) {
             this.isPointerLocked = false;
+            if (document.exitPointerLock) {
+                document.exitPointerLock();
+            }
             return;
         }
 
         if (event.key === "0") {
             this.isPointerLockMode = !this.isPointerLockMode;
+            const enteringRotate = this.isPointerLockMode;
+            // If switching to Rotate mode, make sure pointer lock is cleared
+            if (enteringRotate && this.isPointerLocked && document.exitPointerLock) {
+                document.exitPointerLock();
+            }
+            this.isPointerLocked = false;
             console.log("Camera mode toggled. Rotate mode:", this.isPointerLockMode);
             const modeText = this.isPointerLockMode ? "Rotate" : "Glide";
             QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
+            // Persist setting
+            DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", this.isPointerLockMode).catch(() => { });
             return;
         }
 
@@ -357,6 +422,10 @@ class CameraManager {
         if (disabled) {
             this.keys.clear();
         }
+    }
+    setPointerSensitivity(level: number) {
+        // level expected 1-10
+        this.pointerSensitivity = THREE.MathUtils.clamp(level, 1, 10);
     }
 }
 export const cameraManager = new CameraManager();

@@ -31,6 +31,7 @@ import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { cameraManager } from "./js/Camera";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -63,6 +64,7 @@ function App() {
     const [showOptionsPanel, setShowOptionsPanel] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
     const [isCompactMode, setIsCompactMode] = useState(true);
+    const [showCrosshair, setShowCrosshair] = useState(cameraManager.isPointerLocked);
     const cameraAngle = 0;
     const gridSize = 5000;
 
@@ -79,8 +81,18 @@ function App() {
                 if (savedCompactMode === false) {
                     setIsCompactMode(false);
                 }
+
+                const savedPointerLockMode = await DatabaseManager.getData(STORES.SETTINGS, "pointerLockMode");
+                if (typeof savedPointerLockMode === "boolean") {
+                    cameraManager.isPointerLockMode = savedPointerLockMode;
+                }
+
+                const savedSensitivity = await DatabaseManager.getData(STORES.SETTINGS, "cameraSensitivity");
+                if (typeof savedSensitivity === "number") {
+                    cameraManager.setPointerSensitivity(savedSensitivity);
+                }
             } catch (error) {
-                console.error("Error loading compact mode setting:", error);
+                console.error("Error loading app settings:", error);
             }
 
             const savedBlockId = localStorage.getItem("selectedBlock");
@@ -176,6 +188,14 @@ function App() {
     useEffect(() => {
         DatabaseManager.clearStore(STORES.UNDO);
         DatabaseManager.clearStore(STORES.REDO);
+    }, []);
+
+    useEffect(() => {
+        // Poll pointer lock state to update crosshair visibility
+        const crosshairInterval = setInterval(() => {
+            setShowCrosshair(cameraManager.isPointerLocked);
+        }, 100);
+        return () => clearInterval(crosshairInterval);
     }, []);
 
     const handleToggleCompactMode = async () => {
@@ -569,6 +589,45 @@ function App() {
                         isAIAssistantVisible={isAIAssistantVisible}
                         setIsSaving={setIsSaving}
                     />
+                )}
+
+                {/* Crosshair visible while pointer is locked */}
+                {showCrosshair && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            width: "20px",
+                            height: "20px",
+                            pointerEvents: "none",
+                            zIndex: 10000,
+                        }}
+                    >
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: "50%",
+                                top: "0",
+                                width: "2px",
+                                height: "100%",
+                                background: "#ffffff",
+                                transform: "translateX(-50%)",
+                            }}
+                        />
+                        <div
+                            style={{
+                                position: "absolute",
+                                top: "50%",
+                                left: "0",
+                                width: "100%",
+                                height: "2px",
+                                background: "#ffffff",
+                                transform: "translateY(-50%)",
+                            }}
+                        />
+                    </div>
                 )}
 
                 <button
