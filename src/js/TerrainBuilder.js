@@ -808,6 +808,15 @@ function TerrainBuilder(
                             terrainRef.current[blockKey] =
                                 currentBlockTypeRef.current.id;
                         }
+                        // remove it from the removed array
+                        if (placementChangesRef.current.terrain.removed[blockKey]) {
+                            delete placementChangesRef.current.terrain.removed[blockKey];
+                        }
+                        if (pendingChangesRef.current.terrain.removed[blockKey]) {
+                            delete pendingChangesRef.current.terrain.removed[blockKey];
+                        }
+
+                        
                         recentlyPlacedBlocksRef.current.add(blockKey);
                         placementChangesRef.current.terrain.added[blockKey] =
                             currentBlockTypeRef.current.id;
@@ -853,6 +862,15 @@ function TerrainBuilder(
                 let blockWasRemoved = false; // Flag to track if any block was actually removed in this call
                 positions.forEach((pos) => {
                     const blockKey = `${pos.x},${pos.y},${pos.z}`;
+
+                    // remove it from the added array
+                    if (placementChangesRef.current.terrain.added[blockKey]) {
+                        delete placementChangesRef.current.terrain.added[blockKey];
+                    }
+                    if (pendingChangesRef.current.terrain.added[blockKey]) {
+                        delete pendingChangesRef.current.terrain.added[blockKey];
+                    }
+
                     if (terrainRef.current[blockKey]) {
                         removedBlocks[blockKey] = terrainRef.current[blockKey];
                         delete terrainRef.current[blockKey];

@@ -133,7 +133,8 @@ function handleTerrainMouseDown(
             return;
         }
     }
-    if (e.button === 0) {
+    // TODO: Handle pointer lock mode
+    if (e.button === 0 || (cameraManager.isPointerLockMode && cameraManager.isPointerLocked)) {
         if (!isToolActive) {
             console.log("isPlacingRef.current = true");
             isPlacingRef.current = true;

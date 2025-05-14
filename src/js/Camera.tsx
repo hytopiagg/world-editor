@@ -389,7 +389,7 @@ class CameraManager {
             }
             this.isPointerLocked = false;
             console.log("Camera mode toggled. Rotate mode:", this.isPointerLockMode);
-            const modeText = this.isPointerLockMode ? "Rotate" : "Glide";
+            const modeText = this.isPointerLockMode ? "Rotate" : "Pointer Lock";
             QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
             // Persist setting
             DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", this.isPointerLockMode).catch(() => { });

@@ -592,7 +592,7 @@ function App() {
                 )}
 
                 {/* Crosshair visible while pointer is locked */}
-                {showCrosshair && (
+                {showCrosshair && !cameraManager.isPointerLockMode && (
                     <div
                         style={{
                             position: "fixed",
