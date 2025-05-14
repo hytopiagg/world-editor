@@ -14,7 +14,7 @@ class CameraManager {
     onCameraAngleChange: ((angle: number) => void) | null;
     _eventsInitialized: boolean;
     _isInputDisabled: boolean;
-    isRotateMode: boolean;
+    isPointerLockMode: boolean;
     lastFrameTime: number;
     normalizedFps: number;
     constructor() {
@@ -51,7 +51,7 @@ class CameraManager {
         this.lastTarget = null;
         this.animationFrameId = null;
         this.onCameraAngleChange = null;
-        this.isRotateMode = true;
+        this.isPointerLockMode = true;
         this.lastFrameTime = performance.now();
         this.controls.enableZoom = false;
         this.controls.panSpeed = 10;
@@ -179,7 +179,7 @@ class CameraManager {
         }
 
         if (this.keys.has("a") || this.keys.has("arrowleft")) {
-            if (this.isRotateMode) {
+            if (this.isPointerLockMode) {
                 this.camera.rotateY(frameAdjustedRotateSpeed);
             } else {
                 const direction = new THREE.Vector3();
@@ -199,7 +199,7 @@ class CameraManager {
             moved = true;
         }
         if (this.keys.has("d") || this.keys.has("arrowright")) {
-            if (this.isRotateMode) {
+            if (this.isPointerLockMode) {
                 this.camera.rotateY(-frameAdjustedRotateSpeed);
             } else {
                 const direction = new THREE.Vector3();
@@ -315,9 +315,9 @@ class CameraManager {
         }
 
         if (event.key === "0") {
-            this.isRotateMode = !this.isRotateMode;
-            console.log("Camera mode toggled. Rotate mode:", this.isRotateMode);
-            const modeText = this.isRotateMode ? "Rotate" : "Glide";
+            this.isPointerLockMode = !this.isPointerLockMode;
+            console.log("Camera mode toggled. Rotate mode:", this.isPointerLockMode);
+            const modeText = this.isPointerLockMode ? "Rotate" : "Glide";
             QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
             return;
         }
