@@ -2243,6 +2243,9 @@ function TerrainBuilder(
                     handleMouseUp({ button: 0 });
                 }
             }
+            if (isPlacingRef.current) {
+                updatePreviewPosition();
+            }
             frameCount++;
             if (!threeCamera) {
                 console.warn("[Animation] Three camera is null or undefined");
