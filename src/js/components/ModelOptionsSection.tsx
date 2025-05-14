@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { FaSave, FaCog, FaDownload, FaTrash } from "react-icons/fa";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { environmentModels } from "../EnvironmentBuilder";
+import clsx from "clsx";
 
 const SCALE_MIN = 0.1;
 const SCALE_MAX = 5.0;
@@ -27,12 +28,14 @@ interface ModelOptionsProps {
     onDeleteModel?: (model: any) => void;
     onUpdateModelName?: (modelId: number, newName: string) => Promise<void>;
     environmentBuilder?: any;
+    isCompactMode: boolean;
 }
 
 export default function ModelOptionsSection({
     selectedModel,
     placementSettings,
     onPlacementSettingsChange,
+    isCompactMode,
     onDownloadModel,
     onDeleteModel,
     onUpdateModelName,
@@ -191,11 +194,12 @@ export default function ModelOptionsSection({
 
     return (
         <div className="flex flex-col gap-3">
-            <div className="model-preview-container h-48 w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
-                onWheel={(e) => e.stopPropagation()}
+            <div className={"model-preview-container w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"}
                 style={{
+                    height: isCompactMode ? "10rem" : "12rem",
                     animationDelay: "0.05s"
                 }}
+                onWheel={(e) => e.stopPropagation()}
             >
                 {selectedModel.modelUrl ? (
                     <ModelPreview modelUrl={selectedModel.modelUrl} skybox={null} />

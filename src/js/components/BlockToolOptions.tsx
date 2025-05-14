@@ -101,6 +101,7 @@ export function BlockToolOptions({
                             onUpdateBlockName={onUpdateBlockName}
                             onDownloadBlock={onDownloadBlock}
                             onDeleteBlock={onDeleteBlock}
+                            isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>
                 )}
@@ -114,6 +115,7 @@ export function BlockToolOptions({
                             onDownloadModel={onDownloadBlock}
                             onUpdateModelName={onUpdateBlockName}
                             environmentBuilder={terrainBuilderRef?.current?.environmentBuilderRef}
+                            isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>
                 )}

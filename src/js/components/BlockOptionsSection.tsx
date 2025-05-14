@@ -5,7 +5,15 @@ import * as THREE from 'three';
 
 const FACE_ORDER = ["right", "left", "top", "bottom", "front", "back"];
 
-export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, onDownloadBlock, onDeleteBlock }) {
+interface BlockOptionsSectionProps {
+    selectedBlock: any;
+    onUpdateBlockName: (id: number, name: string) => Promise<void>;
+    onDownloadBlock: (block: any) => void;
+    onDeleteBlock: (block: any) => void;
+    isCompactMode: boolean;
+}
+
+export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, onDownloadBlock, onDeleteBlock, isCompactMode }: BlockOptionsSectionProps) {
     const [editableName, setEditableName] = useState(selectedBlock?.name || '');
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -63,9 +71,10 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
 
     return (
         <div className="flex flex-col gap-3">
-            <div className="block-preview-container h-48 w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
+            <div className="block-preview-container w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
                 onWheel={(e) => e.stopPropagation()}
                 style={{
+                    height: isCompactMode ? "10rem" : "12rem",
                     animationDelay: "0.05s"
                 }}
             >
