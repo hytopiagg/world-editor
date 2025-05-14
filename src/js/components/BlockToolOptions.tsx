@@ -21,6 +21,8 @@ interface BlockToolOptionsProps {
     onDeleteBlock: (block: any) => void;
     placementSettings?: any;
     onPlacementSettingsChange?: (settings: any) => void;
+    isCompactMode: boolean;
+    onToggleCompactMode: () => void;
 }
 
 interface CollapsibleSectionProps {
@@ -52,8 +54,6 @@ function CollapsibleSection({ title, children, animationDelay = "0s" }: Collapsi
     );
 }
 
-
-
 export function BlockToolOptions({
     totalEnvironmentObjects,
     terrainBuilderRef,
@@ -77,6 +77,8 @@ export function BlockToolOptions({
         rotation: 0,
     },
     onPlacementSettingsChange = () => { },
+    isCompactMode,
+    onToggleCompactMode,
 }: BlockToolOptionsProps) {
     return (
         <div className="block-tool-options-container" style={{
@@ -121,6 +123,8 @@ export function BlockToolOptions({
                         onToggleSidebar={onToggleSidebar}
                         onToggleOptions={onToggleOptions}
                         onToggleToolbar={onToggleToolbar}
+                        isCompactMode={isCompactMode}
+                        onToggleCompactMode={onToggleCompactMode}
                     />
                 </CollapsibleSection>
                 <CollapsibleSection title="Debug">

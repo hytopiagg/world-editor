@@ -12,7 +12,6 @@ import TerrainBuilder from "./js/TerrainBuilder";
 import AIAssistantPanel from "./js/components/AIAssistantPanel";
 import { BlockToolOptions } from "./js/components/BlockToolOptions";
 import BlockToolsSidebar, {
-    ActiveTabType,
     refreshBlockTools,
 } from "./js/components/BlockToolsSidebar";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
@@ -40,7 +39,7 @@ function App() {
     const [axisLockEnabled, setAxisLockEnabled] = useState(false);
     const [cameraReset, setCameraReset] = useState(false);
     const [placementSize, setPlacementSize] = useState("single");
-    const [activeTab, setActiveTab] = useState<ActiveTabType>("blocks");
+    const [activeTab, setActiveTab] = useState("blocks");
     const [pageIsLoaded, setPageIsLoaded] = useState(false);
     const [scene, setScene] = useState(null);
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
@@ -63,6 +62,7 @@ function App() {
     const [showBlockSidebar, setShowBlockSidebar] = useState(true);
     const [showOptionsPanel, setShowOptionsPanel] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
+    const [isCompactMode, setIsCompactMode] = useState(true);
     const cameraAngle = 0;
     const gridSize = 5000;
 
@@ -73,11 +73,19 @@ function App() {
     }, [gridSize, terrainBuilderRef.current?.updateGridSize]);
 
     useEffect(() => {
-        const loadSavedToolSelection = () => {
+        const loadAppSettings = async () => {
+            try {
+                const savedCompactMode = await DatabaseManager.getData(STORES.SETTINGS, "compactMode");
+                if (savedCompactMode === false) {
+                    setIsCompactMode(false);
+                }
+            } catch (error) {
+                console.error("Error loading compact mode setting:", error);
+            }
+
             const savedBlockId = localStorage.getItem("selectedBlock");
             if (savedBlockId) {
                 const blockId = parseInt(savedBlockId);
-
                 if (blockId < 200) {
                     const block = [...blockTypes, ...getCustomBlocks()].find(
                         (b) => b.id === blockId
@@ -108,18 +116,15 @@ function App() {
         }
 
         if (pageIsLoaded) {
-            loadSavedToolSelection();
+            loadAppSettings();
         }
     }, [pageIsLoaded]);
 
-    // Add Ctrl+S hotkey for saving
     useEffect(() => {
         const handleKeyDown = async (e) => {
-            // Check for Ctrl+S (or Cmd+S on Mac)
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-                e.preventDefault(); // Prevent browser's save dialog
+                e.preventDefault();
 
-                // Set saving state directly for immediate feedback
                 setIsSaving(true);
 
                 try {
@@ -140,7 +145,6 @@ function App() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, []);
 
-    // Log undoRedoManager initialization and updates
     useEffect(() => {
         console.log("App: undoRedoManagerRef initialized");
 
@@ -173,6 +177,17 @@ function App() {
         DatabaseManager.clearStore(STORES.UNDO);
         DatabaseManager.clearStore(STORES.REDO);
     }, []);
+
+    const handleToggleCompactMode = async () => {
+        const newCompactValue = !isCompactMode;
+        setIsCompactMode(newCompactValue);
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "compactMode", newCompactValue);
+            console.log("Compact mode setting saved:", newCompactValue);
+        } catch (error) {
+            console.error("Error saving compact mode setting:", error);
+        }
+    };
 
     const LoadingScreen = () => (
         <div className="loading-screen">
@@ -285,7 +300,6 @@ function App() {
         terrainBuilderRef.current?.activateTool("schematic", schematic);
     }, []);
 
-
     const handleUpdateBlockName = async (blockId: number, newName: string) => {
         console.log(`App: Updating block ${blockId} name to ${newName}`);
         try {
@@ -321,11 +335,9 @@ function App() {
             const dataUrl = textures[key] || mainTexture;
             let blob: Blob | null = null;
 
-            // Handle both data URIs and file paths
             if (dataUrl && dataUrl.startsWith('data:image')) {
                 blob = dataURLtoBlob(dataUrl);
             } else if (dataUrl && (dataUrl.startsWith('./') || dataUrl.startsWith('/'))) {
-                // For file paths, fetch the image
                 try {
                     const response = await fetch(dataUrl);
                     if (response.ok) {
@@ -375,7 +387,7 @@ function App() {
                 const updatedBlocks = getCustomBlocks();
                 await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedBlocks);
                 console.log("App: Updated custom blocks in DB after deletion.");
-                const errorId = 0; // Air block ID
+                const errorId = 0;
                 const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, "current") || {};
                 let blocksReplaced = 0;
                 const newTerrain = Object.entries(currentTerrain).reduce((acc, [pos, id]) => {
@@ -409,7 +421,6 @@ function App() {
         }
     };
 
-
     return (
         <Provider theme={defaultTheme}>
             <div className="App">
@@ -427,9 +438,9 @@ function App() {
                     environmentBuilderRef={environmentBuilderRef}
                 />
 
-                {/* Block Tools Sidebar - Now conditionally rendered */}
                 {showBlockSidebar && (
                     <BlockToolsSidebar
+                        isCompactMode={isCompactMode}
                         onOpenTextureModal={() => setIsTextureModalOpen(true)}
                         terrainBuilderRef={terrainBuilderRef}
                         activeTab={activeTab}
@@ -441,7 +452,6 @@ function App() {
                     />
                 )}
 
-                {/* Block Tool Options - Now conditionally rendered */}
                 {showOptionsPanel && (
                     <BlockToolOptions
                         totalEnvironmentObjects={totalEnvironmentObjects}
@@ -457,17 +467,17 @@ function App() {
                         onDeleteBlock={handleDeleteBlock}
                         placementSettings={placementSettings}
                         onPlacementSettingsChange={setPlacementSettings}
+                        isCompactMode={isCompactMode}
+                        onToggleCompactMode={handleToggleCompactMode}
                     />
                 )}
 
-                {/* Texture Generation Modal */}
                 <TextureGenerationModal
                     isOpen={isTextureModalOpen}
                     onClose={() => setIsTextureModalOpen(false)}
                     onTextureReady={handleTextureReady}
                 />
 
-                {/* AI Assistant Panel */}
                 <AIAssistantPanel
                     isVisible={isAIAssistantVisible}
                     getAvailableBlocks={handleGetAvailableBlocks}
@@ -476,7 +486,6 @@ function App() {
 
                 <div className="vignette-gradient"></div>
 
-                {/* Saving indicator */}
                 {isSaving && (
                     <div
                         style={{
@@ -544,7 +553,6 @@ function App() {
                     />
                 </Canvas>
 
-                {/* Toolbar - Now conditionally rendered */}
                 {showToolbar && (
                     <ToolBar
                         terrainBuilderRef={terrainBuilderRef}

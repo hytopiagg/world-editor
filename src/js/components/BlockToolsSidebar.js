@@ -9,12 +9,15 @@ import {
     batchProcessCustomBlocks,
     blockTypes,
     getCustomBlocks,
-    processCustomBlock
+    processCustomBlock,
 } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
 import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
+import { BlockIcon } from "./icons/BlockIcon";
+import { PalmTreeIcon } from "./icons/PalmTreeIcon";
+import { BlocksIcon } from "./icons/BlocksIcon";
 
 let selectedBlockID = 0;
 export const refreshBlockTools = () => {
@@ -62,21 +65,6 @@ const createPlaceholderBlob = () => {
 const firstDefaultModel = environmentModels.find((m) => !m.isCustom);
 const initialPreviewUrl = firstDefaultModel?.modelUrl ?? null;
 
-/**
- * @typedef {"blocks" | "models" | "components"} ActiveTabType
- */
-
-/**
- * @param {object} props
- * @param {ActiveTabType} props.activeTab
- * @param {React.RefObject<any>} props.terrainBuilderRef
- * @param {(tab: ActiveTabType) => void} props.setActiveTab
- * @param {(block: any | null) => void} props.setCurrentBlockType
- * @param {React.RefObject<any>} props.environmentBuilder
- * @param {(settings: any) => void} [props.onPlacementSettingsChange]
- * @param {() => void} props.onOpenTextureModal
- * @param {(schematic: import("./AIAssistantPanel").RawSchematicType) => void} props.onLoadSchematicFromHistory
- */
 const BlockToolsSidebar = ({
     activeTab,
     terrainBuilderRef,
@@ -86,6 +74,7 @@ const BlockToolsSidebar = ({
     onPlacementSettingsChange,
     onOpenTextureModal,
     onLoadSchematicFromHistory,
+    isCompactMode,
 }) => {
     const [customBlocks, setCustomBlocks] = useState([]);
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
@@ -435,7 +424,6 @@ const BlockToolsSidebar = ({
         }
     };
 
-    /** @param {ActiveTabType} newTab */
     const handleTabChange = (newTab) => {
         if (newTab === "blocks") {
             const defaultBlock = blockTypes[0];
@@ -733,7 +721,11 @@ const BlockToolsSidebar = ({
                 width: "100%",
             }}
         >
-            <div className="block-tools-sidebar bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
+            <div className="block-tools-sidebar bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"
+                style={{
+                    width: isCompactMode ? "205px" : "295px",
+                }}
+            >
                 <div className="tab-button-outer-wrapper w-full flex">
                     <div
                         className="tab-button-inner-wrapper flex w-full"
@@ -747,8 +739,24 @@ const BlockToolsSidebar = ({
                                     className={`tab-button w-full ${
                                         activeTab === tab ? "active" : ""
                                     }`}
+                                    title={
+                                        isCompactMode
+                                            ? tab.charAt(0).toUpperCase() +
+                                              tab.slice(1)
+                                            : undefined
+                                    }
                                 >
-                                    {tab}
+                                    {isCompactMode ? (
+                                        tab === "blocks" ? (
+                                            <BlockIcon className="mx-auto h-4.5 w-4.5" />
+                                        ) : tab === "models" ? (
+                                            <PalmTreeIcon className="mx-auto h-4.5 w-4.5" />
+                                        ) : (
+                                            <BlocksIcon className="mx-auto h-4.5 w-4.5" />
+                                        )
+                                    ) : (
+                                        tab
+                                    )}
                                 </button>
                             )
                         )}

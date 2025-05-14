@@ -8,9 +8,11 @@ interface SettingsMenuProps {
     onToggleSidebar: () => void;
     onToggleOptions: () => void;
     onToggleToolbar: () => void;
+    isCompactMode: boolean;
+    onToggleCompactMode: () => void;
 }
 
-export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar }: SettingsMenuProps) {
+export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar, isCompactMode, onToggleCompactMode }: SettingsMenuProps) {
     const [viewDistance, setViewDistance] = useState(128);
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
     const [showSidebar, setShowSidebar] = useState(true);
@@ -92,6 +94,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             type="checkbox"
                             checked={showToolbar}
                             onChange={handleToolbarToggle}
+                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                        animationDelay: "0.087s"
+                    }}>
+                        <span>Compact Sidebar</span>
+                        <input
+                            type="checkbox"
+                            checked={isCompactMode}
+                            onChange={onToggleCompactMode}
                             className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                         />
                     </label>
