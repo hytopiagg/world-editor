@@ -87,11 +87,12 @@ export function BlockToolOptions({
             height: "100%",
             width: "100%",
         }}>
-            <div className="block-tools-options-sidebar bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg" style={{
+            <div className="block-tools-options-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg" style={{
                 padding: "12px 0px",
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '1rem',
+                width: isCompactMode ? "205px" : "295px",
             }}>
                 {activeTab === 'blocks' && selectedBlock && (
                     <CollapsibleSection title="Block Options">

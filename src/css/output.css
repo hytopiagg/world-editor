@@ -967,6 +967,14 @@
     --tw-duration: 250ms;
     transition-duration: 250ms;
   }
+  .duration-300 {
+    --tw-duration: 300ms;
+    transition-duration: 300ms;
+  }
+  .duration-500 {
+    --tw-duration: 500ms;
+    transition-duration: 500ms;
+  }
   .duration-\[250\] {
     --tw-duration: 250;
     transition-duration: 250;
