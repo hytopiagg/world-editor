@@ -668,7 +668,7 @@ function TerrainBuilder(
 
             // Pointer-lock handling: first click should engage lock rather than place
             if (
-                !cameraManager.isPointerLockMode &&
+                !cameraManager.isPointerUnlockedMode &&
                 !cameraManager.isPointerLocked
             ) {
                 const canvasEl = gl && gl.domElement;
@@ -681,7 +681,7 @@ function TerrainBuilder(
 
             // When pointer is already locked, decide mode based on mouse button
             if (
-                !cameraManager.isPointerLockMode &&
+                !cameraManager.isPointerUnlockedMode &&
                 cameraManager.isPointerLocked
             ) {
                 if (e.button === 0) {
@@ -691,18 +691,19 @@ function TerrainBuilder(
                 }
             }
 
-            let eventForHandler = e;
-            if (
-                !cameraManager.isPointerLockMode &&
-                cameraManager.isPointerLocked &&
-                e.button === 2
-            ) {
-                // Clone event with button set to 0 to reuse placement logic for removal mode
-                eventForHandler = { ...e, button: 0 };
-            }
+            // let eventForHandler = e;
+            // if (
+            //     !cameraManager.isPointerUnlockedMode &&
+            //     cameraManager.isPointerLocked &&
+            //     e.button === 2
+            // ) {
+            //     // Clone event with button set to 0 to reuse placement logic for removal mode
+            //     eventForHandler = { ...e, button: 0 };
+            // }
 
             handleTerrainMouseDown(
-                eventForHandler,
+                // eventForHandler,
+                e,
                 toolManagerRef,
                 isPlacingRef,
                 placedBlockCountRef,
@@ -809,14 +810,23 @@ function TerrainBuilder(
                                 currentBlockTypeRef.current.id;
                         }
                         // remove it from the removed array
-                        if (placementChangesRef.current.terrain.removed[blockKey]) {
-                            delete placementChangesRef.current.terrain.removed[blockKey];
+                        if (
+                            placementChangesRef.current.terrain.removed[
+                                blockKey
+                            ]
+                        ) {
+                            delete placementChangesRef.current.terrain.removed[
+                                blockKey
+                            ];
                         }
-                        if (pendingChangesRef.current.terrain.removed[blockKey]) {
-                            delete pendingChangesRef.current.terrain.removed[blockKey];
+                        if (
+                            pendingChangesRef.current.terrain.removed[blockKey]
+                        ) {
+                            delete pendingChangesRef.current.terrain.removed[
+                                blockKey
+                            ];
                         }
 
-                        
                         recentlyPlacedBlocksRef.current.add(blockKey);
                         placementChangesRef.current.terrain.added[blockKey] =
                             currentBlockTypeRef.current.id;
@@ -865,10 +875,14 @@ function TerrainBuilder(
 
                     // remove it from the added array
                     if (placementChangesRef.current.terrain.added[blockKey]) {
-                        delete placementChangesRef.current.terrain.added[blockKey];
+                        delete placementChangesRef.current.terrain.added[
+                            blockKey
+                        ];
                     }
                     if (pendingChangesRef.current.terrain.added[blockKey]) {
-                        delete pendingChangesRef.current.terrain.added[blockKey];
+                        delete pendingChangesRef.current.terrain.added[
+                            blockKey
+                        ];
                     }
 
                     if (terrainRef.current[blockKey]) {
@@ -908,7 +922,8 @@ function TerrainBuilder(
     };
     const getRaycastIntersection = useCallback(() => {
         const ptr =
-            !cameraManager.isPointerLockMode && cameraManager.isPointerLocked
+            !cameraManager.isPointerUnlockedMode &&
+            cameraManager.isPointerLocked
                 ? new THREE.Vector2(0, 0)
                 : pointer.clone();
         return getTerrainRaycastIntersection(
@@ -937,7 +952,8 @@ function TerrainBuilder(
         const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
         const currentGroundPoint = new THREE.Vector3();
         const normalizedMouse =
-            !cameraManager.isPointerLockMode && cameraManager.isPointerLocked
+            !cameraManager.isPointerUnlockedMode &&
+            cameraManager.isPointerLocked
                 ? new THREE.Vector2(0, 0)
                 : pointer.clone();
         threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
@@ -2193,7 +2209,7 @@ function TerrainBuilder(
         };
         const handleContextMenu = (event) => {
             if (
-                !cameraManager.isPointerLockMode &&
+                !cameraManager.isPointerUnlockedMode &&
                 cameraManager.isPointerLocked
             ) {
                 event.preventDefault();

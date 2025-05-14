@@ -84,7 +84,7 @@ function App() {
 
                 const savedPointerLockMode = await DatabaseManager.getData(STORES.SETTINGS, "pointerLockMode");
                 if (typeof savedPointerLockMode === "boolean") {
-                    cameraManager.isPointerLockMode = savedPointerLockMode;
+                    cameraManager.isPointerUnlockedMode = savedPointerLockMode;
                 }
 
                 const savedSensitivity = await DatabaseManager.getData(STORES.SETTINGS, "cameraSensitivity");
@@ -592,7 +592,7 @@ function App() {
                 )}
 
                 {/* Crosshair visible while pointer is locked */}
-                {showCrosshair && !cameraManager.isPointerLockMode && (
+                {showCrosshair && !cameraManager.isPointerUnlockedMode && (
                     <div
                         style={{
                             position: "fixed",

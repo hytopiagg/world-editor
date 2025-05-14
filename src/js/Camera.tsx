@@ -16,7 +16,7 @@ class CameraManager {
     onCameraAngleChange: ((angle: number) => void) | null;
     _eventsInitialized: boolean;
     _isInputDisabled: boolean;
-    isPointerLockMode: boolean;
+    isPointerUnlockedMode: boolean;
     isPointerLocked: boolean;
     lastFrameTime: number;
     normalizedFps: number;
@@ -37,7 +37,7 @@ class CameraManager {
         this._isInputDisabled = false;
         this.lastFrameTime = performance.now();
         this.normalizedFps = 120; // Default to 60 FPS
-        this.isPointerLockMode = false;
+        this.isPointerUnlockedMode = false;
         this.isPointerLocked = false;
         this.handlePointerMove = () => { };
     }
@@ -59,7 +59,7 @@ class CameraManager {
         this.lastTarget = null;
         this.animationFrameId = null;
         this.onCameraAngleChange = null;
-        this.isPointerLockMode = true;
+        this.isPointerUnlockedMode = true;
         this.isPointerLocked = false;
         this.lastFrameTime = performance.now();
         this.controls.enableZoom = false;
@@ -83,7 +83,7 @@ class CameraManager {
 
         // >>> Pointer-move rotation when pointer lock is active
         this.handlePointerMove = (event: MouseEvent) => {
-            if (this.isPointerLockMode || !this.isPointerLocked || !this.camera || !this.controls) return;
+            if (this.isPointerUnlockedMode || !this.isPointerLocked || !this.camera || !this.controls) return;
             const movementX = event.movementX || 0;
             const movementY = event.movementY || 0;
             const sensitivityFactor = this.pointerSensitivity / 5; // default factor 1 at sensitivity 5
@@ -237,7 +237,7 @@ class CameraManager {
         }
 
         if (this.keys.has("a") || this.keys.has("arrowleft")) {
-            if (this.isPointerLockMode) {
+            if (this.isPointerUnlockedMode) {
                 this.camera.rotateY(frameAdjustedRotateSpeed);
             } else {
                 const direction = new THREE.Vector3();
@@ -257,7 +257,7 @@ class CameraManager {
             moved = true;
         }
         if (this.keys.has("d") || this.keys.has("arrowright")) {
-            if (this.isPointerLockMode) {
+            if (this.isPointerUnlockedMode) {
                 this.camera.rotateY(-frameAdjustedRotateSpeed);
             } else {
                 const direction = new THREE.Vector3();
@@ -372,7 +372,7 @@ class CameraManager {
             return;
         }
 
-        if (event.key === "escape" && this.isPointerLockMode && this.isPointerLocked) {
+        if (event.key === "escape" && this.isPointerUnlockedMode && this.isPointerLocked) {
             this.isPointerLocked = false;
             if (document.exitPointerLock) {
                 document.exitPointerLock();
@@ -381,18 +381,18 @@ class CameraManager {
         }
 
         if (event.key === "0") {
-            this.isPointerLockMode = !this.isPointerLockMode;
-            const enteringRotate = this.isPointerLockMode;
+            this.isPointerUnlockedMode = !this.isPointerUnlockedMode;
+            const enteringRotate = this.isPointerUnlockedMode;
             // If switching to Rotate mode, make sure pointer lock is cleared
             if (enteringRotate && this.isPointerLocked && document.exitPointerLock) {
                 document.exitPointerLock();
             }
             this.isPointerLocked = false;
-            console.log("Camera mode toggled. Rotate mode:", this.isPointerLockMode);
-            const modeText = this.isPointerLockMode ? "Rotate" : "Pointer Lock";
+            console.log("Camera mode toggled. Rotate mode:", this.isPointerUnlockedMode);
+            const modeText = this.isPointerUnlockedMode ? "Rotate" : "Pointer Lock";
             QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
             // Persist setting
-            DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", this.isPointerLockMode).catch(() => { });
+            DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", this.isPointerUnlockedMode).catch(() => { });
             return;
         }
 

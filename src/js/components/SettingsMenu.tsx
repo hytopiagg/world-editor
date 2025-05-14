@@ -187,7 +187,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                         </div>
                     </div>
                     {/* Camera sensitivity visible only when pointer-lock capable (Glide mode) */}
-                    {!cameraManager.isPointerLockMode && (
+                    {!cameraManager.isPointerUnlockedMode && (
                         <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.17s" }}>
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Sensitivity</label>
                             <input
