@@ -233,12 +233,12 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
 
               determinedCameraDistance = Math.max(distX, distY);
 
-              const minPracticalDistance = 0.5;
+              const minPracticalDistance = 0.75;
               if (determinedCameraDistance < minPracticalDistance) {
                 const maxDim = Math.max(size.x, size.y, size.z);
                 if (maxDim > 0) {
-                  // Ensure distance is at least minPracticalDistance or twice the max dimension
-                  determinedCameraDistance = Math.max(maxDim * 2, minPracticalDistance);
+                  // Ensure distance is at least minPracticalDistance or a larger multiple of max dimension
+                  determinedCameraDistance = Math.max(maxDim * 3, minPracticalDistance); // Multiplier increased from 2 to 3
                 } else {
                   // Fallback for a model that somehow registered as non-point but has no maxDim
                   determinedCameraDistance = 5;
