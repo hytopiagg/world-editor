@@ -360,7 +360,7 @@ export default function ModelOptionsSection({
 
                     <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.1s" }}>
                         <div className="flex items-center gap-x-2 w-full">
-                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Object Scale</label>
+                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Scale</label>
                             <input
                                 type="number"
                                 value={settings.scale}
@@ -375,7 +375,7 @@ export default function ModelOptionsSection({
                                         updateSettings({ scale: 1.0 });
                                     }
                                 }}
-                                className="w-16 px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ml-auto"
+                                className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"
@@ -412,9 +412,8 @@ export default function ModelOptionsSection({
                                             updateSettings({ rotation: 0 });
                                         }
                                     }}
-                                    className="w-16 px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
-                                <span className="text-xs text-[#F1F1F1] ml-1">°</span>
                             </div>
                             <input
                                 type="range"
