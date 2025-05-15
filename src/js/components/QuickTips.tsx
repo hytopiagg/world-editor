@@ -44,7 +44,7 @@ const QuickTips = () => {
     return (
         isVisible && (
             <div className={containerClassName}>
-                <div className="quick-tips">
+                <div className="quick-tips py-2 filter backdrop-blur-lg">
                     <p className="tip-title">Quick Tips:</p>
                     <p className="tip-text">
                         {tipText ? (
