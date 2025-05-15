@@ -667,6 +667,20 @@ function TerrainBuilder(
                 if (canvasEl && canvasEl.requestPointerLock) {
                     try {
                         const lockResult = canvasEl.requestPointerLock();
+                        const handleRelock = () => {
+                            if (document.pointerLockElement === canvasEl) {
+                                document.removeEventListener(
+                                    "pointerlockchange",
+                                    handleRelock
+                                );
+                            }
+                        };
+                        document.addEventListener(
+                            "pointerlockchange",
+                            handleRelock,
+                            { once: true }
+                        );
+
                         if (
                             lockResult &&
                             typeof lockResult.catch === "function"
@@ -675,6 +689,10 @@ function TerrainBuilder(
                                 console.warn(
                                     "[TerrainBuilder] Pointer lock request was rejected:",
                                     err
+                                );
+                                document.removeEventListener(
+                                    "pointerlockchange",
+                                    handleRelock
                                 );
                             });
                         }
