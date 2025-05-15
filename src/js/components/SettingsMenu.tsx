@@ -3,6 +3,7 @@ import { FaRedo, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import { isMuted, toggleMute } from "../Sound";
 import { cameraManager } from "../Camera";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import QuickTipsManager from "./QuickTipsManager";
 
 interface SettingsMenuProps {
     terrainBuilderRef: any;
@@ -21,6 +22,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [showOptions, setShowOptions] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
     const [cameraSensitivity, setCameraSensitivity] = useState(5);
+    const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(cameraManager.isPointerUnlockedMode);
 
     // Load saved sensitivity on mount
     useEffect(() => {
@@ -31,10 +33,34 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     setCameraSensitivity(saved);
                     cameraManager.setPointerSensitivity(saved);
                 }
+                // Ensure pointer mode matches persisted value (in case App hasn't already)
+                try {
+                    const savedPointerMode = await DatabaseManager.getData(STORES.SETTINGS, "pointerLockMode");
+                    if (typeof savedPointerMode === "boolean") {
+                        cameraManager.isPointerUnlockedMode = savedPointerMode;
+                        setIsPointerUnlockedMode(savedPointerMode);
+                    }
+                } catch (error) {
+                    console.error("Error loading pointer lock mode:", error);
+                }
             } catch (error) {
                 console.error("Error loading camera sensitivity:", error);
             }
         })();
+    }, []);
+
+    // Sync state if user toggles camera mode via keyboard ('0')
+    useEffect(() => {
+        const keyListener = (e: KeyboardEvent) => {
+            if (e.key === "0") {
+                // Defer update to allow CameraManager to process toggle first
+                requestAnimationFrame(() => {
+                    setIsPointerUnlockedMode(cameraManager.isPointerUnlockedMode);
+                });
+            }
+        };
+        window.addEventListener("keydown", keyListener);
+        return () => window.removeEventListener("keydown", keyListener);
     }, []);
 
     const handleViewDistanceChange = (value: number) => {
@@ -64,6 +90,26 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const handleToolbarToggle = () => {
         setShowToolbar(!showToolbar);
         onToggleToolbar();
+    };
+
+    const handlePointerModeToggle = async () => {
+        const newValue = !isPointerUnlockedMode;
+        setIsPointerUnlockedMode(newValue);
+        cameraManager.isPointerUnlockedMode = newValue;
+
+        // If switching to Rotate mode (unlocked), exit any existing pointer lock
+        if (newValue && cameraManager.isPointerLocked && document.exitPointerLock) {
+            document.exitPointerLock();
+        }
+
+        const modeText = newValue ? "Rotate" : "Pointer Lock";
+        QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
+
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", newValue);
+        } catch (error) {
+            console.error("Error saving pointer lock mode:", error);
+        }
     };
 
     const handleSensitivityChange = async (value: number) => {
@@ -133,6 +179,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                         />
                     </label>
+                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                        animationDelay: "0.095s"
+                    }}>
+                        <span>Pointer Lock Mode</span>
+                        <input
+                            type="checkbox"
+                            checked={!isPointerUnlockedMode}
+                            onChange={handlePointerModeToggle}
+                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                        />
+                    </label>
                     <div className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
                         animationDelay: "0.1s"
                     }}>
@@ -187,9 +244,19 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                         </div>
                     </div>
                     {/* Camera sensitivity visible only when pointer-lock capable (Glide mode) */}
-                    {!cameraManager.isPointerUnlockedMode && (
+                    {!isPointerUnlockedMode && (
                         <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.17s" }}>
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Sensitivity</label>
+                            <input
+                                type="number"
+                                value={cameraSensitivity}
+                                onChange={(e) => handleSensitivityChange(parseInt(e.target.value))}
+                                onBlur={(e) => handleSensitivityChange(Math.max(1, Math.min(10, parseInt(e.target.value))))}
+                                className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                min={1}
+                                max={10}
+                                step={1}
+                            />
                             <input
                                 type="range"
                                 min={1}
