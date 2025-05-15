@@ -393,6 +393,8 @@ class CameraManager {
             QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
             // Persist setting
             DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", this.isPointerUnlockedMode).catch(() => { });
+            // Notify listeners (e.g., ToolBar) that pointer lock mode changed
+            window.dispatchEvent(new Event("pointerLockModeChanged"));
             return;
         }
 
