@@ -84,6 +84,9 @@ class SelectionTool extends BaseTool {
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
         this.selectionActive = false;
+        if (this.toolManagerRef?.current?.activateTool) {
+            this.toolManagerRef.current.activateTool(null);
+        }
     }
 
     handleMouseDown(event, position, button) {
@@ -103,6 +106,9 @@ class SelectionTool extends BaseTool {
                 this.selectionActive = false;
                 this.removeSelectionPreview();
                 this.deactivate();
+                if (this.toolManagerRef?.current?.activateTool) {
+                    this.toolManagerRef.current.activateTool(null);
+                }
             } else if (this.selectionStartPosition) {
                 // Complete the selection
                 this.completeSelection(currentPosition);
@@ -234,111 +240,112 @@ class SelectionTool extends BaseTool {
 
         this.removeSelectionPreview();
 
-        // Create a group to hold all preview meshes
+        // Create a group to hold preview meshes (or instanced meshes)
         const previewGroup = new THREE.Group();
 
-        // If we're in moving mode, use the actual selected blocks and environments
-        if (this.selectionActive) {
-            const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
-            const previewMaterial = new THREE.MeshBasicMaterial({
-                color: 0x4eff4e, // Green for moving
+        const createInstancedPreview = (
+            positions: THREE.Vector3[],
+            color: number,
+            scaleFactor: number = 1
+        ) => {
+            if (positions.length === 0) return;
+            const geom = new THREE.BoxGeometry(1, 1, 1);
+            const mat = new THREE.MeshBasicMaterial({
+                color,
                 transparent: true,
                 opacity: 0.5,
-                wireframe: false,
+                depthWrite: false,
             });
+            const instanced = new THREE.InstancedMesh(
+                geom,
+                mat,
+                positions.length
+            );
+            const dummy = new THREE.Object3D();
+            positions.forEach((pos, idx) => {
+                dummy.position.copy(pos);
+                dummy.scale.setScalar(scaleFactor);
+                dummy.updateMatrix();
+                instanced.setMatrixAt(idx, dummy.matrix);
+            });
+            instanced.instanceMatrix.needsUpdate = true;
+            previewGroup.add(instanced);
+        };
 
-            // Create preview for each selected block with offset
+        if (this.selectionActive) {
+            const blockPositions: THREE.Vector3[] = [];
+            const envPositions: THREE.Vector3[] = [];
+
             if (this.selectedBlocks) {
-                for (const [posKey, blockId] of this.selectedBlocks) {
+                for (const [posKey] of this.selectedBlocks) {
                     const originalPos = this.originalPositions.get(posKey);
-                    if (originalPos) {
-                        const mesh = new THREE.Mesh(
-                            previewGeometry,
-                            previewMaterial
-                        );
-                        const rotatedPos = this.rotatePosition(
-                            originalPos,
-                            this.selectionCenter
-                        );
-                        mesh.position.set(
+                    if (!originalPos) continue;
+                    const rotatedPos = this.rotatePosition(
+                        originalPos,
+                        this.selectionCenter
+                    );
+                    blockPositions.push(
+                        new THREE.Vector3(
                             rotatedPos.x + this.moveOffset.x,
                             rotatedPos.y +
                                 this.moveOffset.y +
                                 this.verticalOffset,
                             rotatedPos.z + this.moveOffset.z
-                        );
-                        previewGroup.add(mesh);
-                    }
+                        )
+                    );
                 }
             }
 
-            // Create preview for each selected environment object
             if (this.selectedEnvironments) {
-                const envPreviewMaterial = previewMaterial.clone();
-                envPreviewMaterial.color.setHex(0x4eff9e); // Slightly different green for environments
-
-                for (const [envKey, envObj] of this.selectedEnvironments) {
+                for (const [envKey] of this.selectedEnvironments) {
                     const originalPos =
                         this.originalEnvironmentPositions.get(envKey);
-                    if (originalPos) {
-                        const mesh = new THREE.Mesh(
-                            previewGeometry,
-                            envPreviewMaterial
-                        );
-                        const rotatedPos = this.rotatePosition(
-                            new THREE.Vector3(
-                                originalPos.x,
-                                originalPos.y,
-                                originalPos.z
-                            ),
-                            this.selectionCenter
-                        );
-                        mesh.position.set(
+                    if (!originalPos) continue;
+                    const rotatedPos = this.rotatePosition(
+                        new THREE.Vector3(
+                            originalPos.x,
+                            originalPos.y,
+                            originalPos.z
+                        ),
+                        this.selectionCenter
+                    );
+                    envPositions.push(
+                        new THREE.Vector3(
                             rotatedPos.x + this.moveOffset.x,
                             rotatedPos.y +
                                 this.moveOffset.y +
                                 this.verticalOffset,
                             rotatedPos.z + this.moveOffset.z
-                        );
-                        mesh.scale.set(1.2, 1.2, 1.2); // Slightly larger to distinguish from blocks
-                        previewGroup.add(mesh);
-                    }
+                        )
+                    );
                 }
             }
+
+            createInstancedPreview(blockPositions, 0x4eff4e, 1);
+            createInstancedPreview(envPositions, 0x4eff9e, 1.2);
         } else {
-            // Selection mode preview
             const minX = Math.min(Math.round(startPos.x), Math.round(endPos.x));
             const maxX = Math.max(Math.round(startPos.x), Math.round(endPos.x));
             const minZ = Math.min(Math.round(startPos.z), Math.round(endPos.z));
             const maxZ = Math.max(Math.round(startPos.z), Math.round(endPos.z));
             const baseY = Math.round(startPos.y);
 
-            const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
-            const previewMaterial = new THREE.MeshBasicMaterial({
-                color:
-                    this.selectionMode === "copy"
-                        ? 0xffff00 // yellow for copy
-                        : this.selectionMode === "delete"
-                        ? 0xff4e4e // red for delete
-                        : 0x4e8eff, // blue for move
-                transparent: true,
-                opacity: 0.5,
-                wireframe: false,
-            });
-
-            // Create preview for selection area
+            const areaPositions: THREE.Vector3[] = [];
             for (let x = minX; x <= maxX; x++) {
                 for (let z = minZ; z <= maxZ; z++) {
                     for (let y = 0; y < this.selectionHeight; y++) {
-                        const mesh = new THREE.Mesh(
-                            previewGeometry,
-                            previewMaterial
-                        );
-                        mesh.position.set(x, baseY + y, z);
-                        previewGroup.add(mesh);
+                        areaPositions.push(new THREE.Vector3(x, baseY + y, z));
                     }
                 }
             }
+
+            const color =
+                this.selectionMode === "copy"
+                    ? 0xffff00
+                    : this.selectionMode === "delete"
+                    ? 0xff4e4e
+                    : 0x4e8eff;
+            createInstancedPreview(areaPositions, color, 1);
         }
 
         this.selectionPreview = previewGroup;
@@ -528,6 +535,9 @@ class SelectionTool extends BaseTool {
             this.selectionStartPosition = null;
             this.removeSelectionPreview();
             this.deactivate();
+            if (this.toolManagerRef?.current?.activateTool) {
+                this.toolManagerRef.current.activateTool(null);
+            }
         }
     }
 

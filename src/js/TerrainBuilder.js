@@ -1820,9 +1820,21 @@ function TerrainBuilder(
             forceRefreshAllChunks();
             return true;
         },
+        setSelectionDistance: (distance) => {
+            const { setSelectionDistance } = require("./constants/terrain");
+            setSelectionDistance(distance);
+            selectionDistanceRef.current = distance;
+            return true;
+        },
+        getSelectionDistance: () => {
+            return selectionDistanceRef.current;
+        },
         getViewDistance: () => {
             const { getViewDistance } = require("./constants/terrain");
             return getViewDistance();
+        },
+        getSelectionDistance: () => {
+            return selectionDistanceRef.current;
         },
         setAutoSaveInterval: (intervalMs) => {
             if (autoSaveIntervalRef.current) {

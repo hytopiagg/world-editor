@@ -114,7 +114,7 @@ export function BlockToolOptions({
                             onPlacementSettingsChange={onPlacementSettingsChange}
                             onDeleteModel={onDeleteBlock}
                             onDownloadModel={onDownloadBlock}
-                            onUpdateModelName={onUpdateBlockName}
+                            /* onUpdateModelName intentionally omitted for models to avoid irrelevant block rename errors */
                             environmentBuilder={terrainBuilderRef?.current?.environmentBuilderRef}
                             isCompactMode={isCompactMode}
                         />

@@ -10,7 +10,7 @@ import BaseTool from "./BaseTool";
 class ToolManager {
     tools: Record<string, BaseTool>;
     activeTool: BaseTool | null;
-    toolChangeListeners: ((toolName: string) => void)[];
+    toolChangeListeners: ((toolName: string | null) => void)[];
     terrainBuilder: any;
 
     constructor(terrainBuilderProps: any) {
@@ -62,6 +62,12 @@ class ToolManager {
 
         if (this.activeTool) {
             this.activeTool.deactivate();
+            // Notify listeners of deactivation
+            this.toolChangeListeners.forEach((cb) => {
+                try {
+                    cb(null);
+                } catch (_) { }
+            });
         }
 
         if (!toolName) {
@@ -69,6 +75,7 @@ class ToolManager {
             console.log("All tools deactivated");
 
             QuickTipsManager.setToDefaultTip();
+            // Listeners already notified above
             return true;
         }
 
@@ -89,6 +96,14 @@ class ToolManager {
             if (this.activeTool.tooltip) {
                 QuickTipsManager.setToolTip(this.activeTool.tooltip);
             }
+
+            // Notify listeners
+            this.toolChangeListeners.forEach((cb) => {
+                try {
+                    cb(toolName);
+                } catch (_) { }
+            });
+
             return true;
         } else {
             console.warn(`Tool not found: ${toolName}`);
@@ -167,6 +182,18 @@ class ToolManager {
         });
         this.tools = {};
         this.activeTool = null;
+    }
+    /** Add a listener that will be called whenever the active tool changes */
+    addToolChangeListener(listener: (toolName: string | null) => void) {
+        if (typeof listener === "function") {
+            this.toolChangeListeners.push(listener);
+        }
+    }
+
+    removeToolChangeListener(listener: (toolName: string | null) => void) {
+        this.toolChangeListeners = this.toolChangeListeners.filter(
+            (l) => l !== listener
+        );
     }
 }
 export default ToolManager;

@@ -1,7 +1,7 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaDownload, FaWrench } from "react-icons/fa";
+import { FaDownload, FaWrench, FaUpload } from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
 import { cameraManager } from "../Camera";
 import { environmentModels } from "../EnvironmentBuilder";
@@ -77,6 +77,7 @@ const BlockToolsSidebar = ({
     isCompactMode,
 }) => {
     const [customBlocks, setCustomBlocks] = useState([]);
+    const [searchQuery, setSearchQuery] = useState("");
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -427,6 +428,7 @@ const BlockToolsSidebar = ({
 
     const handleTabChange = (newTab) => {
         terrainBuilderRef?.current?.activateTool(null);
+        setSearchQuery("");
         if (newTab === "blocks") {
             const defaultBlock = blockTypes[0];
             setCurrentBlockType(defaultBlock);
@@ -719,6 +721,36 @@ const BlockToolsSidebar = ({
         }
     };
 
+    // ---------- Search Filtering ----------
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    const isMatch = (str) => {
+        if (!normalizedQuery) return true;
+        return str && str.toString().toLowerCase().includes(normalizedQuery);
+    };
+
+    const visibleDefaultBlocks = blockTypes
+        .filter((block) => block.id < 100)
+        .filter((block) => isMatch(block.name) || isMatch(block.id));
+
+    const visibleCustomBlocks = customBlocks
+        .filter((block) => block.id >= 100 && block.id < 200)
+        .filter((block) => isMatch(block.name) || isMatch(block.id));
+
+    const visibleDefaultModels = environmentModels
+        .filter((envType) => !envType.isCustom)
+        .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
+
+    const visibleCustomModels = environmentModels
+        .filter((envType) => envType.isCustom)
+        .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
+
+    const visibleSchematics = schematicList.filter((entry) => {
+        return (
+            isMatch(entry.name) || isMatch(entry.prompt) || isMatch(entry.id)
+        );
+    });
+
     return (
         <div
             className="block-tools-container"
@@ -792,31 +824,38 @@ const BlockToolsSidebar = ({
                         marginBottom: "15px",
                     }}
                 />
+                <div className="px-3">
+                    <input
+                        type="text"
+                        placeholder="Search..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-md bg-black/30 border border-white/20 text-white focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
+                    />
+                </div>
                 <div className="block-buttons-grid">
                     {activeTab === "blocks" ? (
                         <>
                             <div className="block-tools-section-label">
                                 Default Blocks (ID: 1-99)
                             </div>
-                            {blockTypes
-                                .filter((block) => block.id < 100)
-                                .map((blockType) => (
-                                    <BlockButton
-                                        key={blockType.id}
-                                        blockType={blockType}
-                                        isSelected={
-                                            selectedBlockID === blockType.id
-                                        }
-                                        onSelect={(block) => {
-                                            handleBlockSelect(block);
-                                            localStorage.setItem(
-                                                "selectedBlock",
-                                                block.id
-                                            );
-                                        }}
-                                        handleDragStart={handleDragStart}
-                                    />
-                                ))}
+                            {visibleDefaultBlocks.map((blockType) => (
+                                <BlockButton
+                                    key={blockType.id}
+                                    blockType={blockType}
+                                    isSelected={
+                                        selectedBlockID === blockType.id
+                                    }
+                                    onSelect={(block) => {
+                                        handleBlockSelect(block);
+                                        localStorage.setItem(
+                                            "selectedBlock",
+                                            block.id
+                                        );
+                                    }}
+                                    handleDragStart={handleDragStart}
+                                />
+                            ))}
                             <div className="block-tools-section-label custom-label-with-icon mt-2">
                                 Custom Blocks (ID: 100-199)
                                 <button
@@ -824,34 +863,29 @@ const BlockToolsSidebar = ({
                                     onClick={handleDownloadAllCustom}
                                     title="Download all custom textures"
                                 >
-                                    {customBlocks.filter(
-                                        (block) =>
-                                            block.id >= 100 && block.id < 200
-                                    ).length > 0 && <FaDownload />}
+                                    {visibleCustomBlocks.length > 0 && (
+                                        <FaDownload />
+                                    )}
                                 </button>
                             </div>
-                            {customBlocks
-                                .filter(
-                                    (block) => block.id >= 100 && block.id < 200
-                                )
-                                .map((blockType) => (
-                                    <BlockButton
-                                        key={blockType.id}
-                                        blockType={blockType}
-                                        isSelected={
-                                            selectedBlockID === blockType.id
-                                        }
-                                        onSelect={(block) => {
-                                            handleBlockSelect(block);
-                                            localStorage.setItem(
-                                                "selectedBlock",
-                                                block.id
-                                            );
-                                        }}
-                                        handleDragStart={handleDragStart}
-                                        needsTexture={blockType.needsTexture}
-                                    />
-                                ))}
+                            {visibleCustomBlocks.map((blockType) => (
+                                <BlockButton
+                                    key={blockType.id}
+                                    blockType={blockType}
+                                    isSelected={
+                                        selectedBlockID === blockType.id
+                                    }
+                                    onSelect={(block) => {
+                                        handleBlockSelect(block);
+                                        localStorage.setItem(
+                                            "selectedBlock",
+                                            block.id
+                                        );
+                                    }}
+                                    handleDragStart={handleDragStart}
+                                    needsTexture={blockType.needsTexture}
+                                />
+                            ))}
                         </>
                     ) : activeTab === "models" ? (
                         <>
@@ -859,49 +893,41 @@ const BlockToolsSidebar = ({
                                 <div className="block-tools-section-label">
                                     Default Models (ID: 200-299)
                                 </div>
-                                {environmentModels
-                                    .filter((envType) => !envType.isCustom)
-                                    .map((envType) => (
-                                        <EnvironmentButton
-                                            key={envType.id}
-                                            envType={envType}
-                                            isSelected={
-                                                selectedBlockID === envType.id
-                                            }
-                                            onSelect={(envType) => {
-                                                handleEnvironmentSelect(
-                                                    envType
-                                                );
-                                                localStorage.setItem(
-                                                    "selectedBlock",
-                                                    envType.id
-                                                );
-                                            }}
-                                        />
-                                    ))}
+                                {visibleDefaultModels.map((envType) => (
+                                    <EnvironmentButton
+                                        key={envType.id}
+                                        envType={envType}
+                                        isSelected={
+                                            selectedBlockID === envType.id
+                                        }
+                                        onSelect={(envType) => {
+                                            handleEnvironmentSelect(envType);
+                                            localStorage.setItem(
+                                                "selectedBlock",
+                                                envType.id
+                                            );
+                                        }}
+                                    />
+                                ))}
                                 <div className="block-tools-section-label mt-2">
                                     Custom Models (ID: 300+)
                                 </div>
-                                {environmentModels
-                                    .filter((envType) => envType.isCustom)
-                                    .map((envType) => (
-                                        <EnvironmentButton
-                                            key={envType.id}
-                                            envType={envType}
-                                            isSelected={
-                                                selectedBlockID === envType.id
-                                            }
-                                            onSelect={(envType) => {
-                                                handleEnvironmentSelect(
-                                                    envType
-                                                );
-                                                localStorage.setItem(
-                                                    "selectedBlock",
-                                                    envType.id
-                                                );
-                                            }}
-                                        />
-                                    ))}
+                                {visibleCustomModels.map((envType) => (
+                                    <EnvironmentButton
+                                        key={envType.id}
+                                        envType={envType}
+                                        isSelected={
+                                            selectedBlockID === envType.id
+                                        }
+                                        onSelect={(envType) => {
+                                            handleEnvironmentSelect(envType);
+                                            localStorage.setItem(
+                                                "selectedBlock",
+                                                envType.id
+                                            );
+                                        }}
+                                    />
+                                ))}
                             </div>
                         </>
                     ) : activeTab === "components" ? (
@@ -909,13 +935,13 @@ const BlockToolsSidebar = ({
                             <div className="block-tools-section-label">
                                 Saved Schematics
                             </div>
-                            {schematicList.length === 0 && (
+                            {visibleSchematics.length === 0 && (
                                 <div className="no-schematics-text">
                                     No schematics saved yet. Generate some using
                                     the AI Assistant!
                                 </div>
                             )}
-                            {schematicList.map((entry) => (
+                            {visibleSchematics.map((entry) => (
                                 <div
                                     key={entry.id}
                                     className="schematic-button bg-white/10 border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white"
@@ -967,37 +993,35 @@ const BlockToolsSidebar = ({
                         </>
                     ) : null}
                 </div>
-                <div className="flex w-full px-3">
-                    <div
-                        className="texture-drop-zone w-full"
-                        onDragOver={(e) => {
-                            e.preventDefault();
-                            e.currentTarget.classList.add("drag-over");
-                        }}
-                        onDragLeave={(e) => {
-                            e.preventDefault();
-                            e.currentTarget.classList.remove("drag-over");
-                        }}
-                        onDrop={handleCustomAssetDropUpload}
-                    >
-                        <div className="drop-zone-content">
-                            <div className="drop-zone-icons">
-                                <img
-                                    className="upload-icon"
-                                    alt="Upload icon"
-                                    src="./assets/ui/icons/upload-icon.png"
-                                />
-                            </div>
-                            <div className="drop-zone-text">
-                                {activeTab === "blocks"
-                                    ? "Drag textures here to add new blocks or fix missing textures"
-                                    : activeTab === "models"
-                                    ? "Drag .gltf files here to add custom models"
-                                    : "Use AI Assistant to generate schematics"}
+                {(activeTab === "blocks" || activeTab === "models") && (
+                    <div className="flex w-full px-3">
+                        <div
+                            className="texture-drop-zone w-full h-[100px]"
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.add("drag-over");
+                            }}
+                            onDragLeave={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove("drag-over");
+                            }}
+                            onDrop={handleCustomAssetDropUpload}
+                        >
+                            <div className="drop-zone-content">
+                                <div className="drop-zone-icons">
+                                    <FaUpload />
+                                </div>
+                                <div className="drop-zone-text">
+                                    {activeTab === "blocks"
+                                        ? "Drag textures here to add new blocks or fix missing textures"
+                                        : activeTab === "models"
+                                        ? "Drag .gltf files here to add custom models"
+                                        : ""}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
                 <div className="flex px-3 w-full my-3">
                     <button
                         className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"

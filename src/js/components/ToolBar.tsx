@@ -375,22 +375,23 @@ const ToolBar = ({
         handleModeChange(newMode);
     };
 
+    // Listen for tool change events from ToolManager instead of polling
     useEffect(() => {
-        /* Keep local `activeTool` state in sync with ToolManager – a tool can be
-           de-activated outside of this component (e.g. by tab switching or ESC).
-           We poll the ToolManager every 200 ms and clear the selected state when
-           nothing is active. */
-        const interval = setInterval(() => {
-            const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
-            if (!manager || typeof manager.getActiveTool !== "function") return;
-            const toolInstance = manager.getActiveTool();
-            if (!toolInstance && activeTool !== null) {
-                // Tool was de-activated elsewhere – update UI.
-                setActiveTool(null);
+        const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
+        if (!manager || typeof manager.addToolChangeListener !== "function") return;
+
+        const listener = (toolName) => {
+            setActiveTool(toolName || null);
+        };
+
+        manager.addToolChangeListener(listener);
+
+        return () => {
+            if (typeof manager.removeToolChangeListener === "function") {
+                manager.removeToolChangeListener(listener);
             }
-        }, 200);
-        return () => clearInterval(interval);
-    }, [terrainBuilderRef, activeTool]);
+        };
+    }, [terrainBuilderRef]);
 
     return (
         <>

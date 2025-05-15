@@ -68,7 +68,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
         try {
             const existing: any = await DatabaseManager.getData(STORES.SCHEMATICS, selectedComponent.id);
             if (existing && typeof existing === "object") {
-                const updated: any = { ...(existing as any), name: trimmed };
+                const updated: any = { ...(existing as any), name: trimmed, timestamp: Date.now() };
                 await DatabaseManager.saveData(STORES.SCHEMATICS, selectedComponent.id, updated);
                 // Optimistically update local prop so UI reflects change immediately
                 (selectedComponent as any).name = trimmed;
@@ -131,22 +131,22 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-2 opacity-60 pointer-events-none">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 pointer-events-none">
+                    <div className="flex items-center gap-2 opacity-60">
                         <label className="text-xs text-[#F1F1F1]/80 w-10">ID:</label>
                         <input type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 opacity-60">
                         <label className="text-xs text-[#F1F1F1]/80 w-10">Name:</label>
                         <input style={{ width: 'calc(100% - 8px)' }} type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 opacity-60">
                         <label className="text-xs text-[#F1F1F1]/80">Prompt:</label>
                         <input style={{ width: 'calc(100% - 8px)' }} type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
                     </div>
                     <div className="flex items-center justify-between mt-2">
                         <label className="text-xs text-[#F1F1F1]">Repeat Placement</label>
-                        <input disabled={false} type="checkbox" className="w-4 h-4" checked={repeatPlacement} onChange={(e) => toggleRepeatPlacement(e.target.checked)} />
+                        <input disabled={false} type="checkbox" className="w-4 h-4 pointer-events-auto" checked={repeatPlacement} onChange={(e) => toggleRepeatPlacement(e.target.checked)} />
                     </div>
                 </div>
             </div>
@@ -227,7 +227,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
 
                 <div className="flex items-center justify-between mt-2">
                     <label className="text-xs text-[#F1F1F1]">Repeat Placement</label>
-                    <input type="checkbox" className="w-4 h-4" checked={repeatPlacement} onChange={(e) => toggleRepeatPlacement(e.target.checked)} />
+                    <input disabled={false} type="checkbox" className="w-4 h-4 pointer-events-auto" checked={repeatPlacement} onChange={(e) => toggleRepeatPlacement(e.target.checked)} />
                 </div>
 
                 <div className="flex items-center justify-end gap-2 mt-2">

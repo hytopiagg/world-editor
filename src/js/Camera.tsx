@@ -86,7 +86,7 @@ class CameraManager {
             if (this.isPointerUnlockedMode || !this.isPointerLocked || !this.camera || !this.controls) return;
             const movementX = event.movementX || 0;
             const movementY = event.movementY || 0;
-            const sensitivityFactor = this.pointerSensitivity / 5; // default factor 1 at sensitivity 5
+            const sensitivityFactor = this.pointerSensitivity / 10; // default factor 1 at sensitivity 5
             const yawDelta = -movementX * this.rotateSpeed * sensitivityFactor;
             const pitchDelta = -movementY * this.rotateSpeed * sensitivityFactor;
 
