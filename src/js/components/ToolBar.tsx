@@ -75,6 +75,7 @@ const ToolBar = ({
         y: 0,
         z: 0,
     };
+
     const handleGenerateBlocks = () => {
         if (currentBlockType.id > 199) {
             alert(

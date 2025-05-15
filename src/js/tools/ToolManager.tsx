@@ -103,6 +103,9 @@ class ToolManager {
      * @returns {BaseTool|null} The active tool or null if none is active
      */
     getActiveTool() {
+        if (this.activeTool && !this.activeTool.active) {
+            return null;
+        }
         return this.activeTool;
     }
     /**

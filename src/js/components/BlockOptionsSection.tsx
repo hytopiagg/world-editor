@@ -106,6 +106,9 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                             disabled={isSaving}
                             autoFocus
                             className="flex-grow px-2 py-1 text-xs bg-white/10 border border-white/30 rounded-md text-[#F1F1F1] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            style={{
+                                width: 'calc(100% - 8px)',
+                            }}
                         />
                     ) : (
                         <input
@@ -114,6 +117,9 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                             disabled
                             onClick={() => selectedBlock.isCustom && setIsEditing(true)} // Enable editing on click for custom blocks
                             className={`flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md ${selectedBlock.isCustom ? 'text-[#F1F1F1] cursor-text hover:bg-black/30' : 'text-[#F1F1F1]/70'}`}
+                            style={{
+                                width: 'calc(100% - 8px)',
+                            }}
                         />
                     )}
                     {selectedBlock.isCustom && (

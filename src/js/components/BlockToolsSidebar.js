@@ -425,6 +425,7 @@ const BlockToolsSidebar = ({
     };
 
     const handleTabChange = (newTab) => {
+        terrainBuilderRef?.current?.activateTool(null);
         if (newTab === "blocks") {
             const defaultBlock = blockTypes[0];
             setCurrentBlockType(defaultBlock);
@@ -452,6 +453,7 @@ const BlockToolsSidebar = ({
 
     const handleEnvironmentSelect = (envType) => {
         console.log("Environment selected:", envType);
+        terrainBuilderRef?.current?.activateTool(null);
         setCurrentBlockType({
             ...envType,
             isEnvironment: true,
@@ -461,6 +463,7 @@ const BlockToolsSidebar = ({
 
     const handleBlockSelect = (blockType) => {
         console.log("Block selected:", blockType);
+        terrainBuilderRef?.current?.activateTool(null);
         setCurrentBlockType({
             ...blockType,
             isEnvironment: false,
@@ -471,6 +474,10 @@ const BlockToolsSidebar = ({
     /** @param {import("./AIAssistantPanel").SchematicHistoryEntry} schematicEntry */
     const handleSchematicSelect = (schematicEntry) => {
         console.log("Schematic selected:", schematicEntry.prompt);
+        setCurrentBlockType({
+            ...schematicEntry,
+            isComponent: true,
+        });
         onLoadSchematicFromHistory(schematicEntry.schematic);
     };
 
@@ -721,7 +728,8 @@ const BlockToolsSidebar = ({
                 width: "100%",
             }}
         >
-            <div className="block-tools-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"
+            <div
+                className="block-tools-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"
                 style={{
                     width: isCompactMode ? "205px" : "295px",
                 }}
@@ -911,7 +919,9 @@ const BlockToolsSidebar = ({
                                     key={entry.id}
                                     className="schematic-button bg-white/10 border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white"
                                     style={{
-                                        width: isCompactMode ? "calc(50% - 6px)" : "calc(33.333% - 4px)",
+                                        width: isCompactMode
+                                            ? "calc(50% - 6px)"
+                                            : "calc(33.333% - 4px)",
                                     }}
                                     onClick={() => handleSchematicSelect(entry)}
                                     title={`Load: ${entry.prompt}`}

@@ -6,6 +6,7 @@ import BlockOptionsSection from "./BlockOptionsSection";
 import DebugInfo from "./DebugInfo";
 import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
+import ComponentOptionsSection from "./ComponentOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -115,6 +116,14 @@ export function BlockToolOptions({
                             onDownloadModel={onDownloadBlock}
                             onUpdateModelName={onUpdateBlockName}
                             environmentBuilder={terrainBuilderRef?.current?.environmentBuilderRef}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTab === 'components' && selectedBlock && (
+                    <CollapsibleSection title="Component Options">
+                        <ComponentOptionsSection
+                            selectedComponent={selectedBlock}
                             isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>

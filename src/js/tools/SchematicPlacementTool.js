@@ -94,6 +94,7 @@ class SchematicPlacementTool extends BaseTool {
         if (this.terrainBuilderProps.clearAISchematic) {
             this.terrainBuilderProps.clearAISchematic();
         }
+
         // Clear any pending mouse move updates
         if (this.mouseMoveTimeout) {
             clearTimeout(this.mouseMoveTimeout);
@@ -322,13 +323,21 @@ class SchematicPlacementTool extends BaseTool {
             pendingChanges.terrain.removed = removedBlocks;
         }
 
-        if (this.terrainBuilderProps.activateTool) {
-            this.terrainBuilderProps.activateTool(null);
+        const repeatPlacement =
+            localStorage.getItem("schematicRepeatPlacement") === "true";
+
+        if (!repeatPlacement) {
+            if (this.terrainBuilderProps.activateTool) {
+                this.terrainBuilderProps.activateTool(null);
+            } else {
+                console.warn(
+                    "activateTool not found in props, deactivating schematic tool."
+                );
+                this.deactivate();
+            }
         } else {
-            console.warn(
-                "activateTool not found in props, deactivating schematic tool."
-            );
-            this.deactivate();
+            // Keep preview visible and allow further placements.
+            this._updatePreviewAnchorPosition();
         }
     }
 
