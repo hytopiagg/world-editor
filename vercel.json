@@ -1,9 +1,0 @@
-{
-    "buildCommand": "bun run build",
-    "outputDirectory": "dist",
-    "build": {
-      "env": {
-        "BUN_INSTALL": "true"
-      }
-    }
-  }
