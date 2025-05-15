@@ -98,7 +98,11 @@ export default function ModelOptionsSection({
                         await environmentBuilder.current.refreshEnvironmentFromDB();
                     }
                     if (onUpdateModelName) {
-                        await onUpdateModelName(selectedModel.id, trimmedName);
+                        try {
+                            await onUpdateModelName(selectedModel.id, trimmedName);
+                        } catch (err) {
+                            console.warn("onUpdateModelName callback failed (ignored for models):", err);
+                        }
                     }
                 }
 

@@ -120,6 +120,7 @@ const BlockToolsSidebar = ({
                         loadedSchematics.push({
                             id: dbKey,
                             prompt: dbValue.prompt,
+                            name: dbValue.name || "",
                             schematic: dbValue.schematic,
                             timestamp: dbValue.timestamp,
                         });
@@ -951,7 +952,12 @@ const BlockToolsSidebar = ({
                                         )}
                                     </div>
                                     <div className="schematic-button-prompt">
-                                        {entry.prompt.length > 50
+                                        {entry.name && entry.name.trim()
+                                            ? entry.name.length > 50
+                                                ? entry.name.substring(0, 47) +
+                                                  "..."
+                                                : entry.name
+                                            : entry.prompt.length > 50
                                             ? entry.prompt.substring(0, 47) +
                                               "..."
                                             : entry.prompt}

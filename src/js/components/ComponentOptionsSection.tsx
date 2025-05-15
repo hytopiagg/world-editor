@@ -70,6 +70,9 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
             if (existing && typeof existing === "object") {
                 const updated: any = { ...(existing as any), name: trimmed };
                 await DatabaseManager.saveData(STORES.SCHEMATICS, selectedComponent.id, updated);
+                // Optimistically update local prop so UI reflects change immediately
+                (selectedComponent as any).name = trimmed;
+                setEditableName(trimmed);
                 window.dispatchEvent(new Event("schematicsDbUpdated"));
                 if (onRenameComponent) onRenameComponent(selectedComponent, trimmed);
             }
@@ -115,7 +118,40 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
         }
     };
 
-    if (!selectedComponent) return null;
+    if (!selectedComponent) {
+        // Render disabled placeholder UI when no component is selected
+        return (
+            <div className="flex flex-col gap-3">
+                <div
+                    className="component-preview-container w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
+                    style={{ height: isCompactMode ? "10rem" : "12rem", animationDelay: "0.05s" }}
+                >
+                    <div className="flex items-center justify-center h-full text-xs text-white/40">
+                        No component selected
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-2 opacity-60 pointer-events-none">
+                    <div className="flex items-center gap-2">
+                        <label className="text-xs text-[#F1F1F1]/80 w-10">ID:</label>
+                        <input type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="text-xs text-[#F1F1F1]/80 w-10">Name:</label>
+                        <input style={{ width: 'calc(100% - 8px)' }} type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="text-xs text-[#F1F1F1]/80">Prompt:</label>
+                        <input style={{ width: 'calc(100% - 8px)' }} type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                        <label className="text-xs text-[#F1F1F1]">Repeat Placement</label>
+                        <input disabled={false} type="checkbox" className="w-4 h-4" checked={repeatPlacement} onChange={(e) => toggleRepeatPlacement(e.target.checked)} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col gap-3">
@@ -158,7 +194,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                     ) : (
                         <input
                             type="text"
-                            value={selectedComponent.name || "(unnamed)"}
+                            value={editableName || "(unnamed)"}
                             disabled
                             onClick={() => setIsEditing(true)}
                             className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1] cursor-text hover:bg-black/30"
@@ -180,7 +216,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
 
                 <div className="flex items-center gap-2">
                     <label className="text-xs text-[#F1F1F1]/80">Prompt:</label>
-                    <input type="text" value={selectedComponent.prompt} disabled className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
+                    <input type="text" value={selectedComponent.prompt || ""} disabled className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
                         style={{
                             width: 'calc(100% - 8px)',
                         }} />

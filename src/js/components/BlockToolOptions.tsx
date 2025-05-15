@@ -120,7 +120,7 @@ export function BlockToolOptions({
                         />
                     </CollapsibleSection>
                 )}
-                {activeTab === 'components' && selectedBlock && (
+                {activeTab === 'components' && (
                     <CollapsibleSection title="Component Options">
                         <ComponentOptionsSection
                             selectedComponent={selectedBlock}
