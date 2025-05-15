@@ -519,14 +519,6 @@ function TerrainBuilder(
     const resetPendingChanges = terrainUndoRedoManager.resetPendingChanges.bind(
         terrainUndoRedoManager
     );
-    /**
-     * Build or update the terrain mesh from the terrain data
-     * @param {Object} options - Options for terrain update
-     * @param {boolean} options.deferMeshBuilding - Whether to defer mesh building for distant chunks
-     * @param {number} options.priorityDistance - Distance within which chunks get immediate meshes
-     * @param {number} options.deferredBuildDelay - Delay in ms before building deferred chunks
-     * @param {Object} options.blocks - Blocks to use (if not provided, uses terrainRef.current)
-     */
     const buildUpdateTerrain = async (options = {}) => {
         console.time("buildUpdateTerrain");
         const useProvidedBlocks =
@@ -673,13 +665,29 @@ function TerrainBuilder(
             ) {
                 const canvasEl = gl && gl.domElement;
                 if (canvasEl && canvasEl.requestPointerLock) {
-                    canvasEl.requestPointerLock();
+                    try {
+                        const lockResult = canvasEl.requestPointerLock();
+                        if (
+                            lockResult &&
+                            typeof lockResult.catch === "function"
+                        ) {
+                            lockResult.catch((err) => {
+                                console.warn(
+                                    "[TerrainBuilder] Pointer lock request was rejected:",
+                                    err
+                                );
+                            });
+                        }
+                    } catch (err) {
+                        console.warn(
+                            "[TerrainBuilder] Pointer lock request threw an error:",
+                            err
+                        );
+                    }
                 }
-                // mouse press solely for locking cursor – do not place/remove
                 return;
             }
 
-            // When pointer is already locked, decide mode based on mouse button
             if (
                 !cameraManager.isPointerUnlockedMode &&
                 cameraManager.isPointerLocked
@@ -691,18 +699,7 @@ function TerrainBuilder(
                 }
             }
 
-            // let eventForHandler = e;
-            // if (
-            //     !cameraManager.isPointerUnlockedMode &&
-            //     cameraManager.isPointerLocked &&
-            //     e.button === 2
-            // ) {
-            //     // Clone event with button set to 0 to reuse placement logic for removal mode
-            //     eventForHandler = { ...e, button: 0 };
-            // }
-
             handleTerrainMouseDown(
-                // eventForHandler,
                 e,
                 toolManagerRef,
                 isPlacingRef,
