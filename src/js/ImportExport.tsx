@@ -216,20 +216,20 @@ export const importMap = async (
                                             entity.modelScale) /
                                         2;
                                     const adjustedY = y - 0.5 - verticalOffset;
-                                    
-                                    const boundingBoxWidth = 
+
+                                    const boundingBoxWidth =
                                         matchingModel?.boundingBoxWidth || 1;
                                     const boundingBoxDepth =
                                         matchingModel?.boundingBoxDepth || 1;
-                                        
-                                    const horizontalOffsetX = 
+
+                                    const horizontalOffsetX =
                                         (boundingBoxWidth * entity.modelScale) / 2;
                                     const horizontalOffsetZ =
                                         (boundingBoxDepth * entity.modelScale) / 2;
-                                        
+
                                     const adjustedX = x - horizontalOffsetX;
                                     const adjustedZ = z - horizontalOffsetZ;
-                                    
+
                                     return {
                                         position: { x: adjustedX, y: adjustedY, z: adjustedZ },
                                         rotation: {
@@ -370,6 +370,21 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         const allBlockTypes = getBlockTypes();
         console.log("Exporting block types:", allBlockTypes);
 
+        // === Helper utilities for texture handling ===
+        const sanitizeName = (name: string) => name.replace(/\s+/g, "_").toLowerCase();
+        const getFileExtensionFromUri = (uri: string) => {
+            if (uri.startsWith("data:")) {
+                const match = uri.match(/^data:image\/([a-zA-Z0-9+]+);/);
+                if (match && match[1]) {
+                    return match[1] === "jpeg" ? "jpg" : match[1];
+                }
+                return "png"; // default when mime not recognised
+            }
+            const parts = uri.split(".");
+            return parts.length > 1 ? parts.pop()!.split("?")[0].toLowerCase() : "png";
+        };
+        // === End helper utilities ===
+
         // --- Determine Used Block IDs ---
         const usedBlockIds = new Set<number>();
         Object.values(simplifiedTerrain).forEach(blockId => {
@@ -385,27 +400,31 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
         // --- Collect Asset URIs ---
         loadingManager.updateLoading("Collecting asset URIs...", 60);
-        // Store texture info: { uri: string, blockName: string | null, isMulti: boolean }
-        const textureInfos = new Set<{ uri: string; blockName: string | null; isMulti: boolean }>();
+        // Store texture info: { uri: string, blockName: string | null, isMulti: boolean, fileName: string }
+        const textureInfos = new Set<{ uri: string; blockName: string | null; isMulti: boolean; fileName: string }>();
         const modelUris = new Set<string>();
 
-        // Iterate over ONLY the used block types to collect textures
+        // Iterate over ONLY the used block types to collect textures (including data URIs)
         usedBlockTypes.forEach((block) => {
             const isMulti = block.isMultiTexture || false;
+            const sanitizedBlockName = sanitizeName(block.name);
             const blockNameForPath = isMulti ? block.name : null;
 
-            // Handle main texture URI if it exists and isn't data
-            if (block.textureUri && typeof block.textureUri === 'string' && !block.textureUri.startsWith('data:')) {
-                // For multi-texture blocks, the main textureUri might represent a convention or primary texture.
-                // We add it like any other texture associated with this block.
-                textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti });
+            // Handle main texture URI (single-texture blocks)
+            if (block.textureUri && typeof block.textureUri === "string") {
+                const ext = getFileExtensionFromUri(block.textureUri);
+                const fileName = `${sanitizedBlockName}.${ext}`;
+                textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti, fileName });
             }
 
-            // Add side textures if they exist and are not data URIs
+            // Handle side textures
             if (block.sideTextures) {
-                Object.values(block.sideTextures).forEach(uri => {
-                    if (uri && typeof uri === 'string' && !uri.startsWith('data:')) {
-                        textureInfos.add({ uri: uri, blockName: blockNameForPath, isMulti });
+                Object.entries(block.sideTextures).forEach(([side, uri]) => {
+                    if (uri && typeof uri === "string") {
+                        const ext = getFileExtensionFromUri(uri);
+                        const sanitizedSide = side.toLowerCase();
+                        const fileName = `${sanitizedBlockName}_${sanitizedSide}.${ext}`;
+                        textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
                     }
                 });
             }
@@ -431,39 +450,33 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             // Export block type definitions only for the blocks actually used
             blockTypes: usedBlockTypes.map((block) => {
                 // Determine JSON paths based on zip structure
-                let textureUriForJson: string | undefined;
                 const isMulti = block.isMultiTexture || false;
+                const sanitizedBlockName = sanitizeName(block.name);
 
-                if (block.textureUri && block.textureUri.startsWith('data:')) {
-                    textureUriForJson = block.textureUri; // Keep data URI as is
-                } else if (isMulti) {
-                    // Multi-texture blocks point to their folder in the zip
-                    textureUriForJson = `blocks/${block.name}`; // Represents the folder
+                // --- Main texture path (single-texture blocks) ---
+                let textureUriForJson: string | undefined;
+                if (isMulti) {
+                    // Multi-texture blocks reference their folder
+                    textureUriForJson = `blocks/${block.name}`;
                 } else if (block.textureUri) {
-                    // Single-texture blocks point to the file in the root textures folder
-                    const fileName = block.textureUri.split('/').pop();
-                    textureUriForJson = `blocks/${fileName}`;
-                } else {
-                    textureUriForJson = undefined; // No texture URI provided
+                    const ext = getFileExtensionFromUri(block.textureUri);
+                    const fileNameSingle = `${sanitizedBlockName}.${ext}`;
+                    textureUriForJson = `blocks/${fileNameSingle}`;
                 }
 
-                // Process side textures for JSON paths
+                // --- Side textures (for both single- and multi-texture blocks) ---
                 const sideTexturesForJson = block.sideTextures ? Object.entries(block.sideTextures).reduce((acc, [side, uri]) => {
                     if (uri && typeof uri === 'string') {
-                        if (uri.startsWith('data:')) {
-                            acc[side] = uri; // Keep data URI as is
-                        } else {
-                            const fileName = uri.split('/').pop();
-                            if (fileName) {
-                                acc[side] = isMulti
-                                    ? `blocks/${block.name}/${fileName}` // Path within block's subfolder
-                                    : `blocks/${fileName}`; // Path in root textures folder
-                            }
-                        }
+                        const ext = getFileExtensionFromUri(uri);
+                        const sanitizedSide = side.toLowerCase();
+                        const fileNameSide = `${sanitizedBlockName}_${sanitizedSide}.${ext}`;
+
+                        acc[side] = isMulti
+                            ? `blocks/${block.name}/${fileNameSide}`
+                            : `blocks/${fileNameSide}`;
                     }
                     return acc;
                 }, {}) : undefined;
-
 
                 return {
                     id: block.id,
@@ -515,10 +528,10 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
                     const boundingBoxWidth = entityType.boundingBoxWidth || 1;
                     const boundingBoxDepth = entityType.boundingBoxDepth || 1;
-                    
+
                     const horizontalOffsetX = (boundingBoxWidth * obj.scale.x) / 2;
                     const horizontalOffsetZ = (boundingBoxDepth * obj.scale.z) / 2;
-                    
+
                     const adjustedX = obj.position.x + horizontalOffsetX;
                     const adjustedZ = obj.position.z + horizontalOffsetZ;
 
@@ -557,15 +570,16 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         const fetchedAssetUrls = new Set<string>(); // Keep track of URLs already being fetched/added
 
         textureInfos.forEach(texInfo => {
-            if (texInfo.uri && !texInfo.uri.startsWith('data:') && !fetchedAssetUrls.has(texInfo.uri)) {
+            if (texInfo.uri && !fetchedAssetUrls.has(texInfo.uri)) {
                 fetchedAssetUrls.add(texInfo.uri);
-                const fileName = texInfo.uri.split('/').pop();
+
+                const fileName = texInfo.fileName;
 
                 if (fileName && blocksRootFolder) {
-                    // Determine the target folder within the zip
+                    // Determine the target folder within the zip (sub-folder for multi-texture blocks)
                     const targetFolder = texInfo.isMulti && texInfo.blockName
-                        ? blocksRootFolder.folder(texInfo.blockName) // Get or create subfolder
-                        : blocksRootFolder; // Use root textures folder
+                        ? blocksRootFolder.folder(texInfo.blockName)
+                        : blocksRootFolder;
 
                     if (!targetFolder) {
                         console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
@@ -579,9 +593,9 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                                 return response.blob();
                             })
                             .then(blob => {
-                                targetFolder.file(fileName, blob); // Add to the correct folder (root or subfolder)
+                                targetFolder.file(fileName, blob); // Add to the appropriate folder
                                 const pathInZip = texInfo.isMulti && texInfo.blockName ? `${texInfo.blockName}/${fileName}` : fileName;
-                                console.log(`Added texture: ${pathInZip} to zip folder textures/`);
+                                console.log(`Added texture: ${pathInZip} to zip`);
                             })
                             .catch(error => console.error(`Failed to fetch/add texture ${texInfo.uri}:`, error))
                     );
