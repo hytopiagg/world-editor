@@ -306,47 +306,72 @@ const BlockToolsSidebar = ({
                 schematicPreviewsRef.current[entry.id] === undefined ||
                 schematicPreviewsRef.current[entry.id] === null
             ) {
-                // Schematic data exists, and preview is missing or previously failed. Try/Retry generating.
-                let newPreviewDataUrl = null;
-                let errorOccurred = false;
+                // Check if preview already exists in IndexedDB and use it if available
+                let previewFromDB = null;
                 try {
-                    console.log(
-                        `[BlockToolsSidebar] Generating preview for schematic (index ${
-                            currentPreviewIndex.current
-                        }): ${entry.prompt.substring(0, 30)}...`
+                    previewFromDB = await DatabaseManager.getData(
+                        STORES.PREVIEWS,
+                        entry.id
                     );
-                    newPreviewDataUrl = await generateSchematicPreview(
-                        entry.schematic,
-                        {
-                            width: 48,
-                            height: 48,
-                            background: "transparent",
-                        }
-                    );
-                } catch (error) {
-                    console.error(
-                        `[BlockToolsSidebar] Error generating preview for schematic ${entry.id}:`,
-                        error
-                    );
-                    errorOccurred = true;
+                } catch (dbErr) {
+                    // ignore, will generate preview below
                 }
 
-                setSchematicPreviews((prevPreviews) => ({
-                    ...prevPreviews,
-                    [entry.id]: errorOccurred
-                        ? null
-                        : newPreviewDataUrl || null,
-                }));
-            } else {
-                // Preview already exists and is valid (not undefined or null), or no schematic data (handled above)
-                console.log(
-                    `[BlockToolsSidebar] Skipping preview for schematic (index ${
-                        currentPreviewIndex.current
-                    }): ${entry.prompt.substring(
-                        0,
-                        30
-                    )} - already processed or no retry needed.`
-                );
+                if (previewFromDB && typeof previewFromDB === "string") {
+                    setSchematicPreviews((prev) => ({
+                        ...prev,
+                        [entry.id]: previewFromDB,
+                    }));
+                    schematicPreviewsRef.current[entry.id] = previewFromDB;
+                    // Skip generation as we already have it
+                } else {
+                    let newPreviewDataUrl = null;
+                    let errorOccurred = false;
+                    try {
+                        console.log(
+                            `[BlockToolsSidebar] Generating preview for schematic (index ${
+                                currentPreviewIndex.current
+                            }): ${entry.prompt.substring(0, 30)}...`
+                        );
+                        newPreviewDataUrl = await generateSchematicPreview(
+                            entry.schematic,
+                            {
+                                width: 48,
+                                height: 48,
+                                background: "transparent",
+                            }
+                        );
+                    } catch (error) {
+                        console.error(
+                            `[BlockToolsSidebar] Error generating preview for schematic ${entry.id}:`,
+                            error
+                        );
+                        errorOccurred = true;
+                    }
+
+                    // If preview was generated (and not errored), cache it in DB for future sessions
+                    if (!errorOccurred && newPreviewDataUrl) {
+                        try {
+                            await DatabaseManager.saveData(
+                                STORES.PREVIEWS,
+                                entry.id,
+                                newPreviewDataUrl
+                            );
+                        } catch (saveErr) {
+                            console.warn(
+                                "Failed to cache schematic preview:",
+                                saveErr
+                            );
+                        }
+                    }
+
+                    setSchematicPreviews((prevPreviews) => ({
+                        ...prevPreviews,
+                        [entry.id]: errorOccurred
+                            ? null
+                            : newPreviewDataUrl || null,
+                    }));
+                }
             }
 
             currentPreviewIndex.current++;
@@ -396,6 +421,33 @@ const BlockToolsSidebar = ({
         };
     }, [schematicList]);
 
+    // Load previews from DB when schematic list changes
+    useEffect(() => {
+        const fetchPreviews = async () => {
+            if (schematicList.length === 0) return;
+            const updates = {};
+            for (const entry of schematicList) {
+                if (schematicPreviewsRef.current[entry.id] !== undefined)
+                    continue;
+                try {
+                    const preview = await DatabaseManager.getData(
+                        STORES.PREVIEWS,
+                        entry.id
+                    );
+                    if (preview) {
+                        updates[entry.id] = preview;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+            if (Object.keys(updates).length > 0) {
+                setSchematicPreviews((prev) => ({ ...prev, ...updates }));
+            }
+        };
+        fetchPreviews();
+    }, [schematicList]);
+
     const handleDragStart = (blockId) => {
         console.log("Drag started with block:", blockId);
     };
@@ -429,6 +481,8 @@ const BlockToolsSidebar = ({
     const handleTabChange = (newTab) => {
         terrainBuilderRef?.current?.activateTool(null);
         setSearchQuery("");
+        // Notify other components (e.g., ToolBar) of tab change so they can reset state
+        window.dispatchEvent(new Event("blockToolsTabChanged"));
         if (newTab === "blocks") {
             const defaultBlock = blockTypes[0];
             setCurrentBlockType(defaultBlock);

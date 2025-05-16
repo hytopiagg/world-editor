@@ -377,6 +377,13 @@ export async function generateSchematicPreview(
     const dataUrl = renderer.domElement.toDataURL("image/png");
 
     renderer.dispose();
+    if (renderer.forceContextLoss) {
+        renderer.forceContextLoss();
+    }
+    if (renderer.domElement && renderer.domElement.remove) {
+        renderer.domElement.remove();
+    }
+
     sharedBoxGeometry.dispose();
     materialsToDispose.forEach((mat) => {
         if (Array.isArray(mat)) {

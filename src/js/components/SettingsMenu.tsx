@@ -23,7 +23,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [showOptions, setShowOptions] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
     const [cameraSensitivity, setCameraSensitivity] = useState(5);
-    const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(cameraManager.isPointerUnlockedMode);
+    const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(!cameraManager.isPointerUnlockedMode);
 
     // Load saved sensitivity on mount
     useEffect(() => {

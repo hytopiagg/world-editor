@@ -254,7 +254,7 @@ class SelectionTool extends BaseTool {
                 color,
                 transparent: true,
                 opacity: 0.5,
-                depthWrite: false,
+                depthWrite: true,
             });
             const instanced = new THREE.InstancedMesh(
                 geom,
@@ -269,6 +269,8 @@ class SelectionTool extends BaseTool {
                 instanced.setMatrixAt(idx, dummy.matrix);
             });
             instanced.instanceMatrix.needsUpdate = true;
+            // Draw on top of regular blocks
+            instanced.renderOrder = 999;
             previewGroup.add(instanced);
         };
 

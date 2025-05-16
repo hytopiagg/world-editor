@@ -383,7 +383,6 @@ class CameraManager {
         if (event.key === "0") {
             this.isPointerUnlockedMode = !this.isPointerUnlockedMode;
             const enteringRotate = this.isPointerUnlockedMode;
-            // If switching to Rotate mode, make sure pointer lock is cleared
             if (enteringRotate && this.isPointerLocked && document.exitPointerLock) {
                 document.exitPointerLock();
             }
@@ -391,9 +390,7 @@ class CameraManager {
             console.log("Camera mode toggled. Rotate mode:", this.isPointerUnlockedMode);
             const modeText = this.isPointerUnlockedMode ? "Rotate" : "Pointer Lock";
             QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
-            // Persist setting
             DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", this.isPointerUnlockedMode).catch(() => { });
-            // Notify listeners (e.g., ToolBar) that pointer lock mode changed
             window.dispatchEvent(new Event("pointerLockModeChanged"));
             return;
         }

@@ -106,6 +106,11 @@ export default function ModelOptionsSection({
                     }
                 }
 
+                // Update visible name immediately in this component
+                if (selectedModel) {
+                    selectedModel.name = trimmedName;
+                }
+                setEditableName(trimmedName);
                 setIsEditing(false);
             } catch (error) {
                 console.error("Failed to update model name:", error);
@@ -240,7 +245,7 @@ export default function ModelOptionsSection({
                     ) : (
                         <input
                             type="text"
-                            value={selectedModel.name}
+                            value={editableName}
                             disabled
                             onClick={() => selectedModel.isCustom && setIsEditing(true)}
                             className={`flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md ${selectedModel.isCustom ? 'text-[#F1F1F1] cursor-text hover:bg-black/30' : 'text-[#F1F1F1]/70'}`}

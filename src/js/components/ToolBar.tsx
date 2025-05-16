@@ -393,6 +393,24 @@ const ToolBar = ({
         };
     }, [terrainBuilderRef]);
 
+    // Listen for tab change events dispatched from BlockToolsSidebar and pointer lock state changes
+    useEffect(() => {
+        const handleTabChangeReset = () => {
+            setActiveTool(null);
+        };
+        const handlePointerLockChange = () => {
+            setActiveTool(null);
+        };
+        window.addEventListener("blockToolsTabChanged", handleTabChangeReset);
+        window.addEventListener("pointerLockModeChanged", handleTabChangeReset);
+        document.addEventListener("pointerlockchange", handlePointerLockChange);
+        return () => {
+            window.removeEventListener("blockToolsTabChanged", handleTabChangeReset);
+            window.removeEventListener("pointerLockModeChanged", handleTabChangeReset);
+            document.removeEventListener("pointerlockchange", handlePointerLockChange);
+        };
+    }, []);
+
     return (
         <>
             <div className="controls-container">
