@@ -1048,9 +1048,9 @@ const BlockToolsSidebar = ({
                     ) : null}
                 </div>
                 {(activeTab === "blocks" || activeTab === "models") && (
-                    <div className="flex w-full px-3">
+                    <div className="flex w-full px-3 mb-3">
                         <div
-                            className="texture-drop-zone w-full h-[100px]"
+                            className="texture-drop-zone w-full py-2 h-[120px]"
                             onDragOver={(e) => {
                                 e.preventDefault();
                                 e.currentTarget.classList.add("drag-over");
@@ -1067,23 +1067,23 @@ const BlockToolsSidebar = ({
                                 </div>
                                 <div className="drop-zone-text">
                                     {activeTab === "blocks"
-                                        ? "Drag textures here to add new blocks or fix missing textures"
+                                        ? "Upload new blocks or fix missing textures"
                                         : activeTab === "models"
-                                        ? "Drag .gltf files here to add custom models"
+                                        ? "Upload .gltf files here to add custom models"
                                         : ""}
                                 </div>
                             </div>
                         </div>
                     </div>
                 )}
-                <div className="flex px-3 w-full my-3">
+                {activeTab === "blocks" && <div className="flex px-3 w-full mb-3">
                     <button
                         className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"
                         onClick={onOpenTextureModal}
                     >
                         Create Texture
                     </button>
-                </div>
+                </div>}
             </div>
         </div>
     );

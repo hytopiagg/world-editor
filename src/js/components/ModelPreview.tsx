@@ -166,6 +166,18 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
         currentMount.removeChild(rendererRef.current.domElement);
       }
       if (rendererRef.current) {
+        // Explicitly lose the WebGL context to avoid the browser keeping too many alive
+        try {
+          const gl = rendererRef.current.getContext();
+          const loseContextExt = gl?.getExtension('WEBGL_lose_context');
+          if (loseContextExt && typeof loseContextExt.loseContext === 'function') {
+            loseContextExt.loseContext();
+          }
+        } catch (err) {
+          // In very rare cases getContext can throw if renderer already disposed
+          console.warn('ModelPreview cleanup: Unable to explicitly lose WebGL context:', err);
+        }
+
         rendererRef.current.dispose();
         rendererRef.current = null;
       }

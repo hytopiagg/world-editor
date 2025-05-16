@@ -372,6 +372,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
         // === Helper utilities for texture handling ===
         const sanitizeName = (name: string) => name.replace(/\s+/g, "_").toLowerCase();
+        const FACE_KEYS = ["+x", "-x", "+y", "-y", "+z", "-z"] as const;
+
         const getFileExtensionFromUri = (uri: string) => {
             if (uri.startsWith("data:")) {
                 const match = uri.match(/^data:image\/([a-zA-Z0-9+]+);/);
@@ -410,24 +412,23 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             const sanitizedBlockName = sanitizeName(block.name);
             const blockNameForPath = isMulti ? block.name : null;
 
-            // Handle main texture URI (single-texture blocks)
-            if (block.textureUri && typeof block.textureUri === "string") {
+            // Handle main texture URI only for NON-multi-texture blocks
+            if (!isMulti && block.textureUri && typeof block.textureUri === "string") {
                 const ext = getFileExtensionFromUri(block.textureUri);
                 const fileName = `${sanitizedBlockName}.${ext}`;
                 textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti, fileName });
             }
 
-            // Handle side textures
-            if (block.sideTextures) {
-                Object.entries(block.sideTextures).forEach(([side, uri]) => {
-                    if (uri && typeof uri === "string") {
-                        const ext = getFileExtensionFromUri(uri);
-                        const sanitizedSide = side.toLowerCase();
-                        const fileName = `${sanitizedBlockName}_${sanitizedSide}.${ext}`;
-                        textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
-                    }
-                });
-            }
+            // Handle side textures (ensure we consider every face key defined)
+            FACE_KEYS.forEach(faceKey => {
+                const uri = block.sideTextures?.[faceKey] || block.sideTextures?.["+y"] || block.textureUri;
+                if (!uri) {
+                    return; // Skip this face if no texture found
+                }
+                const ext = getFileExtensionFromUri(uri);
+                const fileName = `${sanitizedBlockName}_${faceKey}.${ext}`;
+                textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
+            });
         });
 
 
@@ -465,18 +466,18 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 }
 
                 // --- Side textures (for both single- and multi-texture blocks) ---
-                const sideTexturesForJson = block.sideTextures ? Object.entries(block.sideTextures).reduce((acc, [side, uri]) => {
-                    if (uri && typeof uri === 'string') {
+                const sideTexturesForJson = Object.fromEntries(
+                    FACE_KEYS.map(faceKey => {
+                        const uri = block.sideTextures?.[faceKey] || block.sideTextures?.["+y"] || block.textureUri;
+                        if (!uri) {
+                            return [faceKey, ""];
+                        }
                         const ext = getFileExtensionFromUri(uri);
-                        const sanitizedSide = side.toLowerCase();
-                        const fileNameSide = `${sanitizedBlockName}_${sanitizedSide}.${ext}`;
-
-                        acc[side] = isMulti
-                            ? `blocks/${block.name}/${fileNameSide}`
-                            : `blocks/${fileNameSide}`;
-                    }
-                    return acc;
-                }, {}) : undefined;
+                        const fileNameSide = `${sanitizedBlockName}_${faceKey}.${ext}`;
+                        const pathInZip = isMulti ? `blocks/${block.name}/${fileNameSide}` : `blocks/${fileNameSide}`;
+                        return [faceKey, pathInZip];
+                    })
+                );
 
                 return {
                     id: block.id,

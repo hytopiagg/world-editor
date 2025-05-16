@@ -9,7 +9,6 @@ import "./css/output.css";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
 import TerrainBuilder from "./js/TerrainBuilder";
-import AIAssistantPanel from "./js/components/AIAssistantPanel";
 import { BlockToolOptions } from "./js/components/BlockToolOptions";
 import BlockToolsSidebar, {
     refreshBlockTools,
@@ -59,7 +58,7 @@ function App() {
     });
     const [isSaving, setIsSaving] = useState(false);
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
-    const [isAIAssistantVisible, setIsAIAssistantVisible] = useState(false);
+    const [isAIComponentsActive, setIsAIComponentsActive] = useState(false);
     const [showBlockSidebar, setShowBlockSidebar] = useState(true);
     const [showOptionsPanel, setShowOptionsPanel] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
@@ -489,6 +488,9 @@ function App() {
                         onPlacementSettingsChange={setPlacementSettings}
                         isCompactMode={isCompactMode}
                         onToggleCompactMode={handleToggleCompactMode}
+                        showAIComponents={isAIComponentsActive}
+                        getAvailableBlocks={handleGetAvailableBlocks}
+                        loadAISchematic={handleLoadAISchematic}
                     />
                 )}
 
@@ -496,12 +498,6 @@ function App() {
                     isOpen={isTextureModalOpen}
                     onClose={() => setIsTextureModalOpen(false)}
                     onTextureReady={handleTextureReady}
-                />
-
-                <AIAssistantPanel
-                    isVisible={isAIAssistantVisible}
-                    getAvailableBlocks={handleGetAvailableBlocks}
-                    loadAISchematic={handleLoadAISchematic}
                 />
 
                 <div className="vignette-gradient"></div>
@@ -585,8 +581,11 @@ function App() {
                         setPlacementSize={setPlacementSize}
                         undoRedoManager={undoRedoManagerRef}
                         currentBlockType={currentBlockType}
-                        toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
-                        isAIAssistantVisible={isAIAssistantVisible}
+                        toggleAIAssistant={() => setIsAIComponentsActive((v) => !v)}
+                        isAIAssistantVisible={isAIComponentsActive}
+                        onOpenTextureModal={() => setIsTextureModalOpen(true)}
+                        toggleAIComponents={() => setIsAIComponentsActive((v) => !v)}
+                        isAIComponentsActive={isAIComponentsActive}
                         setIsSaving={setIsSaving}
                     />
                 )}
@@ -630,7 +629,7 @@ function App() {
                     </div>
                 )}
 
-                <button
+                {/* <button
                     className="toolbar-button"
                     onClick={async () => await DatabaseManager.clearDatabase()}
                     title="Clear Database"
@@ -641,7 +640,7 @@ function App() {
                     }}
                 >
                     <FaDatabase />
-                </button>
+                </button> */}
             </div>
         </Provider>
     );

@@ -40,6 +40,9 @@ const ToolBar = ({
     toggleAIAssistant,
     isAIAssistantVisible,
     setIsSaving,
+    onOpenTextureModal,
+    toggleAIComponents,
+    isAIComponentsActive,
 }) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     const [showImportExportMenu, setShowImportExportMenu] = useState(false);
@@ -55,6 +58,7 @@ const ToolBar = ({
         height: 1,
     });
     const [showTerrainModal, setShowTerrainModal] = useState(false);
+    const [showAISubmenu, setShowAISubmenu] = useState(false);
     const [terrainSettings, setTerrainSettings] = useState({
         width: 32,
         length: 32,
@@ -626,21 +630,41 @@ const ToolBar = ({
                                 <FaSeedling />
                             </button>
                         </Tooltip>
-                        <Tooltip
-                            text={
-                                isAIAssistantVisible
-                                    ? "Hide AI Assistant"
-                                    : "Show AI Assistant"
-                            }
-                        >
-                            <button
-                                onClick={toggleAIAssistant}
-                                className={`control-button ${isAIAssistantVisible ? "selected" : ""
-                                    }`}
-                            >
-                                <FaRobot />
-                            </button>
-                        </Tooltip>
+                        <div className="relative">
+                            <Tooltip text="AI Tools" hideTooltip={showAISubmenu}>
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showAISubmenu || isAIComponentsActive ? 'selected' : ''}`}
+                                    onClick={() => setShowAISubmenu(!showAISubmenu)}
+                                >
+                                    <FaRobot className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+
+                            {showAISubmenu && (
+                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                    <button
+                                        className="w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
+                                        style={{ animationDelay: '0.05s' }}
+                                        onClick={() => {
+                                            onOpenTextureModal && onOpenTextureModal();
+                                            setShowAISubmenu(false);
+                                        }}
+                                    >
+                                        {"Textures"}
+                                    </button>
+                                    <button
+                                        className="w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
+                                        style={{ animationDelay: '0.1s' }}
+                                        onClick={() => {
+                                            toggleAIComponents && toggleAIComponents();
+                                            setShowAISubmenu(false);
+                                        }}
+                                    >
+                                        {"Components"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     {/* <div className="control-label">Map Tools</div> */}
                 </div>

@@ -149,6 +149,8 @@ export async function generateSchematicPreview(
         useTextures = true,
     }: GeneratePreviewOptions = {}
 ): Promise<string> {
+    console.log("generateSchematicPreview called with inputWidth:", inputWidth, "inputHeight:", inputHeight);
+    
     // Ensure width and height are positive for stable rendering
     const renderWidth = Math.max(1, inputWidth);
     const renderHeight = Math.max(1, inputHeight);

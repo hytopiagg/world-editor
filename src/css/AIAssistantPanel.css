@@ -6,7 +6,12 @@
     right: 20px; /* Will adjust this later */
     width: 300px; /* Will adjust this later */
     padding: 15px;
-    background: rgba(26, 26, 26, 0.95); /* Darker background to match App theme */
+    background: rgba(
+        26,
+        26,
+        26,
+        0.95
+    ); /* Darker background to match App theme */
     border: 1px solid #333;
     border-radius: 8px;
     color: white;
@@ -23,29 +28,38 @@
     min-height: 80px;
     background: #222;
     color: white;
+    outline: none;
     border: 1px solid #444;
     border-radius: 8px;
     padding: 10px;
     box-sizing: border-box; /* Include padding in width */
     resize: vertical; /* Allow vertical resize */
-    font-family: 'Inter', sans-serif;
+    font-family: "Inter", sans-serif;
     font-size: 14px;
+}
+
+.ai-assistant-textarea:focus {
+    border: 1px solid #f1f1f1;
 }
 
 .ai-assistant-button {
     padding: 8px 15px;
-    background-color: transparent;
-    color: white;
-    border: none;
+    background-color: #f1f1f1;
+    color: #000;
+    font-weight: 600;
     border-radius: 8px;
     cursor: pointer;
     height: 40px;
     font-size: 16px;
-    transition: background 0.2s ease-in-out;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.ai-assistant-button:hover:disabled {
+    scale: 1;
 }
 
 .ai-assistant-button:hover {
-    background: rgba(255, 255, 255, 0.2);
+    scale: 1.01;
 }
 
 .ai-assistant-button:active {
@@ -53,9 +67,8 @@
 }
 
 .ai-assistant-button:disabled {
-    background-color: rgba(255, 255, 255, 0.2);
     cursor: not-allowed;
-    opacity: 0.7;
+    opacity: 0.5;
 }
 
 .ai-assistant-error {
@@ -113,6 +126,17 @@
     margin: 5px 0;
 }
 
+.ai-assistant-panel iframe {
+    border-radius: 10px !important;
+    width: 100% !important;
+}
+
+.ai-assistant-panel iframe html {
+    border-radius: 10px !important;
+    width: auto !important;
+}
+
+
 /* Custom dark theme styles that work with hcaptcha iframe */
 .h-captcha iframe {
     background: #222 !important;
@@ -151,4 +175,36 @@
     .h-captcha {
         min-height: 144px;
     }
-} 
+}
+
+.ai-assistant-panel.embedded {
+    position: static;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    width: 100%;
+    color: #f1f1f1;
+}
+
+.ai-assistant-panel.embedded h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.ai-assistant-panel.embedded .ai-assistant-textarea {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-assistant-panel.embedded .ai-assistant-button {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    font-size: 0.75rem;
+    height: auto;
+    padding: 6px 10px;
+}
+
+.ai-assistant-panel.embedded .ai-assistant-history-list {
+    max-height: 90px;
+}

@@ -7,6 +7,7 @@ import DebugInfo from "./DebugInfo";
 import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
 import ComponentOptionsSection from "./ComponentOptionsSection";
+import AIAssistantPanel from "./AIAssistantPanel";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -24,6 +25,9 @@ interface BlockToolOptionsProps {
     onPlacementSettingsChange?: (settings: any) => void;
     isCompactMode: boolean;
     onToggleCompactMode: () => void;
+    showAIComponents: boolean;
+    getAvailableBlocks: () => Promise<any> | any;
+    loadAISchematic: (schematic: any) => void;
 }
 
 interface CollapsibleSectionProps {
@@ -43,7 +47,7 @@ function CollapsibleSection({ title, children, animationDelay = "0s" }: Collapsi
             >
                 <span className="text-[#F1F1F1]/50 whitespace-nowrap">{title}</span>
                 <div className="border-b border-white/10 w-full ml-auto"></div>
-                <FaAngleUp className={`ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <FaAngleUp className={`ml-auto transition-transform min-w-fit ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isOpen && (
@@ -80,6 +84,9 @@ export function BlockToolOptions({
     onPlacementSettingsChange = () => { },
     isCompactMode,
     onToggleCompactMode,
+    showAIComponents,
+    getAvailableBlocks,
+    loadAISchematic,
 }: BlockToolOptionsProps) {
     return (
         <div className="block-tool-options-container" style={{
@@ -128,6 +135,18 @@ export function BlockToolOptions({
                         />
                     </CollapsibleSection>
                 )}
+
+                {showAIComponents && (
+                    <CollapsibleSection title="AI Assistant">
+                        <AIAssistantPanel
+                            isVisible={true}
+                            isEmbedded={true}
+                            getAvailableBlocks={getAvailableBlocks}
+                            loadAISchematic={loadAISchematic}
+                        />
+                    </CollapsibleSection>
+                )}
+
                 <CollapsibleSection title="Settings">
                     <SettingsMenu
                         terrainBuilderRef={terrainBuilderRef}
