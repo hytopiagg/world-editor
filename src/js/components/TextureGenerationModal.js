@@ -282,31 +282,47 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
     const initialCanvasTexture = textureObjects[selectedFace];
     return (
-        <div className="modal-overlay">
-            <div className="modal-content texture-editor-modal">
+        <div
+            onClick={handleClose}
+            className="modal-overlay"
+            style={{
+                zIndex: 1000,
+                backgroundColor: "rgba(0, 0, 0, 0.7)",
+                backdropFilter: "blur(10px)",
+            }}
+        >
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex flex-col gap-2 bg-[#0D0D0D]/30 max-h-[90vh] rounded-2xl p-3 backdrop-blur-lg opacity-0 fade-up overflow-scroll"
+                style={{
+                    animationDuration: "0.5s",
+                }}
+            >
                 {/* Top Bar: Title */}
-                <div className="modal-header">
-                    <h2>Create & Edit Texture</h2>
-                </div>
 
                 {/* Main Content Area with Sidebar and Canvas */}
-                <div className="editor-main-container">
+                <div className="p-3">
+                    <div className="modal-header">
+                        <h2 className="text-white text-2xl font-bold">
+                            Create & Edit Texture
+                        </h2>
+                    </div>
                     <div className="top-controls-container">
                         {/* Static Sidebar for Tools and Preview */}
                         <div className="editor-sidebar">
-                            <CustomColorPicker
-                                value={selectedColor}
-                                onChange={setSelectedColor}
-                            />
                             <div className="preview-face-container">
                                 <BlockPreview3D
                                     textureObjects={textureObjects}
                                 />
                             </div>
+                            <FaceSelector
+                                selectedFace={selectedFace}
+                                onSelectFace={handleSelectFace}
+                            />
                         </div>
 
                         {/* Scalable Canvas Area */}
-                        <div className="editor-canvas-container">
+                        <div className="flex items-center gap-2 justify-center">
                             <PixelEditorCanvas
                                 ref={pixelCanvasRef}
                                 key={selectedFace}
@@ -317,7 +333,11 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 onPixelUpdate={handlePixelUpdate}
                                 onColorPicked={colorPickerController}
                             />
-                            <div className="editor-toolbar-container">
+                            <div className="flex flex-col gap-2 max-w-fit">
+                                <CustomColorPicker
+                                    value={selectedColor}
+                                    onChange={setSelectedColor}
+                                />
                                 <EditorToolbar
                                     selectedTool={selectedTool}
                                     onSelectTool={setSelectedTool}
@@ -325,10 +345,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                     onRedo={handleRedo}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
-                                />
-                                <FaceSelector
-                                    selectedFace={selectedFace}
-                                    onSelectFace={handleSelectFace}
                                 />
                             </div>
                         </div>
