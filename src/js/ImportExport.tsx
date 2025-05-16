@@ -423,7 +423,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     return; // Skip this face if no texture found
                 }
                 const ext = getFileExtensionFromUri(uri);
-                const fileName = `${sanitizedBlockName}_${faceKey}.${ext}`;
+                const fileName = `${faceKey}.${ext}`;
                 textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
             });
         });
@@ -470,7 +470,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                             return [faceKey, ""];
                         }
                         const ext = getFileExtensionFromUri(uri);
-                        const fileNameSide = `${sanitizedBlockName}_${faceKey}.${ext}`;
+                        const fileNameSide = `${faceKey}.${ext}`;
                         const pathInZip = isMulti ? `blocks/${block.name}/${fileNameSide}` : `blocks/${fileNameSide}`;
                         return [faceKey, pathInZip];
                     })
