@@ -17,7 +17,8 @@ import {
     FaSeedling,
     FaSquare,
     FaTrash,
-    FaUndo
+    FaUndo,
+    FaThLarge,
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
@@ -67,6 +68,7 @@ const ToolBar = ({
     const [canRedo, setCanRedo] = useState(false);
 
     const [activeTool, setActiveTool] = useState(null);
+    const [showPlacementMenu, setShowPlacementMenu] = useState(false);
 
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
@@ -397,9 +399,11 @@ const ToolBar = ({
     useEffect(() => {
         const handleTabChangeReset = () => {
             setActiveTool(null);
+            setShowPlacementMenu(false);
         };
         const handlePointerLockChange = () => {
             setActiveTool(null);
+            setShowPlacementMenu(false);
         };
         window.addEventListener("blockToolsTabChanged", handleTabChangeReset);
         window.addEventListener("pointerLockModeChanged", handleTabChangeReset);
@@ -483,18 +487,41 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        {/* <Tooltip text="Single block placement">
-                            <button
-                                onClick={() => setPlacementSize("single")}
-                                className={`control-button ${placementSize === "single" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaCircle
-                                    style={{ width: "5px", height: "5px" }}
-                                />
-                            </button>
+                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu}>
+                            <div className="relative">
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showPlacementMenu ? 'selected' : ''}`}
+                                    onClick={() => setShowPlacementMenu(!showPlacementMenu)}
+                                >
+                                    <FaThLarge />
+                                </button>
+
+                                {showPlacementMenu && (
+                                    <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                        {[
+                                            { label: '1×1', value: 'single' },
+                                            { label: '3×3', value: '3x3' },
+                                            { label: '5×5', value: '5x5' },
+                                            { label: '◇3', value: '3x3diamond' },
+                                            { label: '◇5', value: '5x5diamond' },
+                                        ].map((opt, idx) => (
+                                            <button
+                                                key={idx}
+                                                className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${placementSize === opt.value ? 'bg-white/90 text-black' : ''}`}
+                                                style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
+                                                onClick={() => {
+                                                    setPlacementSize(opt.value);
+                                                    setShowPlacementMenu(false);
+                                                }}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </Tooltip>
-                        <div className="control-divider-vertical"></div> */}
+                        <div className="control-divider-vertical"></div>
                         <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
                             <button
                                 onClick={() => {

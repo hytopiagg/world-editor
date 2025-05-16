@@ -1139,12 +1139,52 @@ function TerrainBuilder(
     );
     const getPlacementPositions = (centerPos, placementSize) => {
         const positions = [];
-        positions.push({ ...centerPos });
+
+        const addPos = (dx, dz) => {
+            positions.push({
+                x: centerPos.x + dx,
+                y: centerPos.y,
+                z: centerPos.z + dz,
+            });
+        };
+
+        const square = (radius) => {
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dz = -radius; dz <= radius; dz++) {
+                    addPos(dx, dz);
+                }
+            }
+        };
+
+        const diamond = (radius) => {
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dz = -radius; dz <= radius; dz++) {
+                    if (Math.abs(dx) + Math.abs(dz) <= radius) {
+                        addPos(dx, dz);
+                    }
+                }
+            }
+        };
+
         switch (placementSize) {
-            default:
+            case "3x3":
+                square(1);
+                break;
+            case "5x5":
+                square(2);
+                break;
+            case "3x3diamond":
+                diamond(1);
+                break;
+            case "5x5diamond":
+                diamond(2);
+                break;
             case "single":
+            default:
+                addPos(0, 0);
                 break;
         }
+
         return positions;
     };
     const getCurrentTerrainData = () => {
