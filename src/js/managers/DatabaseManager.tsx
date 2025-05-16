@@ -10,6 +10,7 @@ export const STORES = {
     UNDO: "undo-states",
     REDO: "redo-states",
     SCHEMATICS: "ai-schematics",
+    ENVIRONMENT_MODEL_SETTINGS: "environment-model-settings",
 };
 export class DatabaseManager {
     static DB_NAME = "hytopia-world-editor-db-v" + DB_VERSION;

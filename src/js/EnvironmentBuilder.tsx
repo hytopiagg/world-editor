@@ -36,6 +36,7 @@ export const environmentModels = (() => {
                 modelUrl: `assets/models/environment/${fileName}`,
                 isEnvironment: true,
                 animations: ["idle"],
+                addCollider: true,
             };
             models.set(name, model);
             result.push(model);
@@ -140,7 +141,7 @@ const EnvironmentBuilder = (
             });
         });
     };
-    
+
 
     // Check if any instance has this position, if so, return the true
     const hasInstanceAtPosition = (position) => {
@@ -291,9 +292,34 @@ const EnvironmentBuilder = (
                         isEnvironment: true,
                         isCustom: true,
                         animations: ["idle"],
+                        addCollider: true,
                     };
                     environmentModels.push(newEnvironmentModel);
                 }
+            }
+
+            let savedColliderSettings: any = null;
+            try {
+                savedColliderSettings = await DatabaseManager.getData(
+                    STORES.ENVIRONMENT_MODEL_SETTINGS,
+                    "colliderSettings"
+                );
+            } catch (e) {
+                // Fallback for older databases where the dedicated store does not exist yet
+                try {
+                    savedColliderSettings = await DatabaseManager.getData(
+                        STORES.SETTINGS,
+                        "colliderSettings"
+                    );
+                } catch {/* ignore */ }
+            }
+            if (savedColliderSettings && typeof savedColliderSettings === "object") {
+                environmentModels.forEach((model) => {
+                    const idKey = String(model.id);
+                    if (Object.prototype.hasOwnProperty.call(savedColliderSettings, idKey)) {
+                        model.addCollider = !!savedColliderSettings[idKey];
+                    }
+                });
             }
 
             await Promise.all(

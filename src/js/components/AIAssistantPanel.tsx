@@ -171,6 +171,7 @@ const AIAssistantPanel = ({
     const [hCaptchaToken, setHCaptchaToken] = useState<string | null>(null);
     const [captchaError, setCaptchaError] = useState<string | null>(null);
     const [showCaptcha, setShowCaptcha] = useState(false);
+    const [captchaFading, setCaptchaFading] = useState(false);
     const [generationRequested, setGenerationRequested] = useState(false);
     const hCaptchaRef = useRef<HCaptcha>(null);
 
@@ -363,33 +364,41 @@ const AIAssistantPanel = ({
                 onClick={handleGenerateClick}
                 disabled={isLoading || !prompt.trim()}
             >
-                {isLoading ? "Generating..." : "Generate Structure"}
+                {isLoading ? <div className="flex items-center gap-1.5 justify-center">Generating <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black/80 rounded-full animate-spin" /> </div> : "Generate Structure"}
             </button>
             {error && <div className="ai-assistant-error">{error}</div>}
             {showCaptcha && (
-                <HCaptcha
-                    ref={hCaptchaRef}
-                    sitekey={
-                        process.env.REACT_APP_HCAPTCHA_SITE_KEY ||
-                        "10000000-ffff-ffff-ffff-000000000001"
-                    } // Fallback for local dev if .env is missing
-                    size="normal"
-                    theme="light"
-                    custom={true}
-                    onVerify={(token) => {
-                        setHCaptchaToken(token);
-                        setCaptchaError(null);
-                        // Generation will auto-start in useEffect once a token is present.
-                    }}
-                    onExpire={() => {
-                        setHCaptchaToken(null);
-                        setCaptchaError("CAPTCHA expired. Please verify again.");
-                    }}
-                    onError={(err) => {
-                        setHCaptchaToken(null);
-                        setCaptchaError(`CAPTCHA error: ${err}`);
-                    }}
-                />
+                <div className={`ai-assistant-captcha-container ${captchaFading ? 'fade-out' : ''}`}>
+                    <HCaptcha
+                        ref={hCaptchaRef}
+                        sitekey={
+                            process.env.REACT_APP_HCAPTCHA_SITE_KEY ||
+                            "10000000-ffff-ffff-ffff-000000000001"
+                        } // Fallback for local dev if .env is missing
+                        size="normal"
+                        theme="light"
+                        custom={true}
+                        onVerify={(token) => {
+                            setHCaptchaToken(token);
+                            setCaptchaError(null);
+                            // Trigger fade out then hide
+                            setCaptchaFading(true);
+                            setTimeout(() => {
+                                setShowCaptcha(false);
+                                setCaptchaFading(false);
+                            }, 600);
+                            // Generation will auto-start in useEffect once a token is present.
+                        }}
+                        onExpire={() => {
+                            setHCaptchaToken(null);
+                            setCaptchaError("CAPTCHA expired. Please verify again.");
+                        }}
+                        onError={(err) => {
+                            setHCaptchaToken(null);
+                            setCaptchaError(`CAPTCHA error: ${err}`);
+                        }}
+                    />
+                </div>
             )}
             {captchaError && (
                 <div className="ai-assistant-error">{captchaError}</div>

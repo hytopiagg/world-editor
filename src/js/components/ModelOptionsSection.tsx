@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
-import ModelPreview from "./ModelPreview";
-import * as THREE from 'three';
-import { FaSave, FaCog, FaDownload, FaTrash } from "react-icons/fa";
-import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import { useEffect, useState } from "react";
+import { FaCog, FaDownload, FaSave, FaTrash } from "react-icons/fa";
 import { environmentModels } from "../EnvironmentBuilder";
-import clsx from "clsx";
+import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import ModelPreview from "./ModelPreview";
 
 const SCALE_MIN = 0.1;
 const SCALE_MAX = 5.0;
@@ -45,6 +43,7 @@ export default function ModelOptionsSection({
     const [editableName, setEditableName] = useState(selectedModel?.name || '');
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [addColliderEnabled, setAddColliderEnabled] = useState(true);
 
     useEffect(() => {
         setSettings(placementSettings);
@@ -53,7 +52,75 @@ export default function ModelOptionsSection({
     useEffect(() => {
         setEditableName(selectedModel?.name || '');
         setIsEditing(false); // Reset editing state when model changes
+        // Load collider preference
+        const loadColliderPref = async () => {
+            if (!selectedModel) return;
+            try {
+                let prefs: Record<string, boolean> = {};
+                try {
+                    prefs = (await DatabaseManager.getData(
+                        STORES.ENVIRONMENT_MODEL_SETTINGS,
+                        "colliderSettings"
+                    )) as Record<string, boolean> || {};
+                } catch (e) {
+                    // Fallback: use the SETTINGS store when the dedicated one is missing
+                    try {
+                        prefs = (await DatabaseManager.getData(
+                            STORES.SETTINGS,
+                            "colliderSettings"
+                        )) as Record<string, boolean> || {};
+                    } catch {
+                        prefs = {};
+                    }
+                }
+                const idKey = String(selectedModel.id);
+                const prefValue = Object.prototype.hasOwnProperty.call(prefs, idKey) ? prefs[idKey] : true;
+                setAddColliderEnabled(!!prefValue);
+                // Ensure environmentModels reflects current value
+                const idx = environmentModels.findIndex((m) => m.id === selectedModel.id);
+                if (idx !== -1) {
+                    environmentModels[idx].addCollider = !!prefValue;
+                }
+            } catch (err) {
+                console.warn("Failed to load collider preference:", err);
+                setAddColliderEnabled(true);
+            }
+        };
+        loadColliderPref();
     }, [selectedModel]);
+
+    const handleColliderToggle = async (checked: boolean) => {
+        setAddColliderEnabled(checked);
+        try {
+            const storeKey = "colliderSettings";
+            let existingPrefs: Record<string, boolean> = {};
+            let saveStore = STORES.ENVIRONMENT_MODEL_SETTINGS;
+            try {
+                existingPrefs = (await DatabaseManager.getData(
+                    STORES.ENVIRONMENT_MODEL_SETTINGS,
+                    storeKey
+                )) as Record<string, boolean> || {};
+            } catch (e) {
+                saveStore = STORES.SETTINGS;
+                existingPrefs = (await DatabaseManager.getData(
+                    STORES.SETTINGS,
+                    storeKey
+                )) as Record<string, boolean> || {};
+            }
+            existingPrefs[String(selectedModel.id)] = checked;
+            await DatabaseManager.saveData(saveStore, storeKey, existingPrefs);
+            const idx = environmentModels.findIndex((m) => m.id === selectedModel.id);
+            if (idx !== -1) {
+                environmentModels[idx].addCollider = checked;
+            }
+            // Also reflect in incoming selectedModel object (clone) for immediate UI consistency
+            if (selectedModel) {
+                selectedModel.addCollider = checked;
+            }
+        } catch (err) {
+            console.error("Failed to save collider preference:", err);
+        }
+    };
 
     const updateSettings = (updates: any) => {
         const newSettings = { ...settings, ...updates };
@@ -449,6 +516,19 @@ export default function ModelOptionsSection({
                                 }}
                             />
                         </div>
+                    </div>
+
+                    {/* Add Collider Checkbox */}
+                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.15s" }}>
+                        <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer">
+                            <span>Add Collider</span>
+                            <input
+                                type="checkbox"
+                                checked={addColliderEnabled}
+                                onChange={(e) => handleColliderToggle(e.target.checked)}
+                                className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                            />
+                        </label>
                     </div>
                 </div>
 

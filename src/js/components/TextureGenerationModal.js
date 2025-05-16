@@ -30,6 +30,8 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     const [error, setError] = useState(null);
     const [hCaptchaToken, setHCaptchaToken] = useState(null);
     const [captchaError, setCaptchaError] = useState(null);
+    const [captchaVisible, setCaptchaVisible] = useState(true);
+    const [captchaFading, setCaptchaFading] = useState(false);
     const hCaptchaRef = useRef(null); // Ref for resetting captcha
 
     const [selectedTool, setSelectedTool] = useState(TOOLS.PENCIL);
@@ -62,7 +64,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 hCaptchaRef.current.resetCaptcha();
             }
         } else {
-
             Object.values(textureObjects).forEach((texture) =>
                 texture?.dispose()
             );
@@ -71,7 +72,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
         return () => {
             if (!isOpen) {
-
                 Object.values(textureObjects).forEach((texture) =>
                     texture?.dispose()
                 );
@@ -151,7 +151,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
             setIsLoading(false);
         } finally {
-
             setHCaptchaToken(null);
             if (hCaptchaRef.current) {
                 hCaptchaRef.current.resetCaptcha();
@@ -160,13 +159,11 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         }
     };
     const handleClose = () => {
-
         onClose(); // Just call onClose, useEffect handles the rest
     };
 
     const handlePixelUpdate = useCallback(
         (face, imageData) => {
-
             if (face === "all") {
                 Object.entries(textureObjects).forEach(([key, texture]) => {
                     if (texture && texture.image instanceof HTMLCanvasElement) {
@@ -177,7 +174,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     }
                 });
             } else {
-
                 const texture = textureObjects[face];
                 if (texture && texture.image instanceof HTMLCanvasElement) {
                     const ctx = texture.image.getContext("2d");
@@ -195,7 +191,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         [textureObjects] // Keep dependency on textureObjects
     );
 
-
     const handleHistoryChange = useCallback((canUndoNow, canRedoNow) => {
         console.log("TextureGenerationModal: History changed:", {
             canUndoNow,
@@ -207,13 +202,11 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
     useEffect(() => {
         if (pixelCanvasRef.current) {
-
             const originalNotify = pixelCanvasRef.current.notifyHistoryChanged;
             pixelCanvasRef.current.notifyHistoryChanged = (
                 canUndoNow,
                 canRedoNow
             ) => {
-
                 if (originalNotify) {
                     originalNotify(canUndoNow, canRedoNow);
                 }
@@ -228,7 +221,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     };
     const handleUseTexture = () => {
         if (onTextureReady && Object.keys(textureObjects).length > 0) {
-
             const exportData = {};
             let success = true;
             try {
@@ -237,7 +229,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     if (texture && texture.image instanceof HTMLCanvasElement) {
                         exportData[face] = texture.image.toDataURL();
                     } else {
-
                         console.warn(
                             `Skipping export for missing/invalid texture on face: ${face}`
                         );
@@ -273,7 +264,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         }
     };
 
-
     const colorPickerController = useCallback(
         {
             pickColor: (hexColor) => {
@@ -298,7 +288,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 <div className="modal-header">
                     <h2>Create & Edit Texture</h2>
                 </div>
-                
+
                 {/* Main Content Area with Sidebar and Canvas */}
                 <div className="editor-main-container">
                     <div className="top-controls-container">
@@ -309,10 +299,12 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 onChange={setSelectedColor}
                             />
                             <div className="preview-face-container">
-                                    <BlockPreview3D textureObjects={textureObjects} />
+                                <BlockPreview3D
+                                    textureObjects={textureObjects}
+                                />
                             </div>
                         </div>
-                        
+
                         {/* Scalable Canvas Area */}
                         <div className="editor-canvas-container">
                             <PixelEditorCanvas
@@ -341,38 +333,63 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                             </div>
                         </div>
                     </div>
-                        {/* Bottom Controls Area */}
+                    {/* Bottom Controls Area */}
                     <div className="bottom-controls-container">
                         {/* Error Display */}
                         {error && <div className="error-message">{error}</div>}
                         {isLoading && (
-                            <div className="loading-indicator">Generating image...</div>
+                            <div className="loading-indicator">
+                                Generating image...
+                            </div>
                         )}
                         <h3>Generate AI Texture</h3>
                         {/* Generation Section - Moved to Bottom */}
                         <div className="generation-section">
                             {/* hCaptcha Component */}
-                                <div className="hcaptcha-container">
+                            {captchaVisible && (
+                                <div
+                                    className={`hcaptcha-container ${
+                                        captchaFading ? "fade-out" : ""
+                                    }`}
+                                >
+                                    {" "}
+                                    {/* fade-out when requested */}
                                     <HCaptcha
                                         ref={hCaptchaRef}
                                         theme="dark"
-                                        sitekey={process.env.REACT_APP_HCAPTCHA_SITE_KEY}
+                                        sitekey={
+                                            process.env
+                                                .REACT_APP_HCAPTCHA_SITE_KEY
+                                        }
                                         onVerify={(token) => {
                                             setHCaptchaToken(token);
                                             setCaptchaError(null);
+                                            // Trigger fade animation then hide
+                                            setCaptchaFading(true);
+                                            setTimeout(() => {
+                                                setCaptchaVisible(false);
+                                                setCaptchaFading(false);
+                                            }, 600);
                                         }}
                                         onExpire={() => {
                                             setHCaptchaToken(null);
                                             setCaptchaError(
                                                 "CAPTCHA expired. Please verify again."
                                             );
+                                            setCaptchaVisible(true);
+                                            setCaptchaFading(false);
                                         }}
                                         onError={(err) => {
                                             setHCaptchaToken(null);
-                                            setCaptchaError(`CAPTCHA error: ${err}`);
+                                            setCaptchaError(
+                                                `CAPTCHA error: ${err}`
+                                            );
+                                            setCaptchaVisible(true);
+                                            setCaptchaFading(false);
                                         }}
                                     />
                                 </div>
+                            )}
                             <div className="generation-controls">
                                 <textarea
                                     className="prompt-input"
@@ -383,17 +400,21 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                     disabled={isLoading}
                                 />
                             </div>
-                            
+
                             <div className="generation-buttons">
                                 <button
                                     className="generate-button"
                                     onClick={handleGenerate}
-                                    disabled={isLoading || !prompt.trim() || !hCaptchaToken}
+                                    disabled={
+                                        isLoading ||
+                                        !prompt.trim() ||
+                                        !hCaptchaToken
+                                    }
                                 >
                                     {isLoading ? "Generating..." : "Generate"}
                                 </button>
                             </div>
-                            
+
                             {captchaError && (
                                 <div className="error-message captcha-error">
                                     {captchaError}
@@ -402,8 +423,8 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         </div>
                     </div>
                 </div>
-                 {/* Action Buttons */}
-                 <div className="modal-actions">
+                {/* Action Buttons */}
+                <div className="modal-actions">
                     <button
                         className="modal-close-button"
                         onClick={handleClose}

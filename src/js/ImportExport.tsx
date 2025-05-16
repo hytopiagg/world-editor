@@ -335,29 +335,25 @@ export const importMap = async (
 };
 export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) => {
     try {
-        if (
-            !terrainBuilderRef.current.getCurrentTerrainData() ||
-            Object.keys(terrainBuilderRef.current.getCurrentTerrainData())
-                .length === 0
-        ) {
-            alert("No map found to export!");
+        const currentTerrainData = terrainBuilderRef.current.getCurrentTerrainData() || {};
+        const hasBlocks = Object.keys(currentTerrainData).length > 0;
+
+        const environmentObjects = environmentBuilderRef.current.getAllEnvironmentObjects();
+
+        if (!hasBlocks && (!environmentObjects || environmentObjects.length === 0)) {
+            alert("Nothing to export! Add blocks or models first.");
             return;
         }
 
         loadingManager.showLoading("Preparing to export map...", 0);
 
         loadingManager.updateLoading("Retrieving environment data...", 10);
-        const environmentObjects = environmentBuilderRef.current.getAllEnvironmentObjects();
-        // (await DatabaseManager.getData(STORES.ENVIRONMENT, "current")) ||
-        // [];
         console.log("Retrieved environmentObjects for export:", environmentObjects);
 
         console.log("Exporting environment data:", environmentObjects);
 
         loadingManager.updateLoading("Processing terrain data...", 30);
-        const simplifiedTerrain = Object.entries(
-            terrainBuilderRef.current.getCurrentTerrainData()
-        ).reduce((acc, [key, value]) => {
+        const simplifiedTerrain = Object.entries(currentTerrainData).reduce((acc, [key, value]) => {
             if (key.split(",").length === 3) {
                 acc[key] = value;
             }
@@ -399,6 +395,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         // --- Filter Block Types to only those used ---
         const usedBlockTypes = allBlockTypes.filter(block => usedBlockIds.has(block.id));
         console.log("Filtered Block Types (used in terrain):", usedBlockTypes);
+        // If no blocks used but custom blocks may still exist; nothing wrong. Proceed.
 
         // --- Collect Asset URIs ---
         loadingManager.updateLoading("Collecting asset URIs...", 60);
@@ -539,7 +536,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     const key = `${adjustedX},${adjustedY},${adjustedZ}`;
                     acc[key] = {
                         modelUri: modelUriForJson, // Use adjusted relative path
-                        modelPreferredShape: "trimesh",
+                        modelPreferredShape: (entityType.addCollider === false) ? "none" : "trimesh",
                         modelLoopedAnimations: entityType.animations || [
                             "idle",
                         ],
