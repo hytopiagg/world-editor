@@ -219,7 +219,7 @@ export const importMap = async (
                                     scaledOffset.applyQuaternion(qInv);
 
                                     // Convert centre position (x,y,z) to origin (adjustedX etc.)
-                                    const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset).sub(new THREE.Vector3(0, 0.5, 0));
+                                    const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset).sub(new THREE.Vector3(0.5, 0.5, 0.5));
 
                                     const adjustedX = originPos.x;
                                     const adjustedY = originPos.y;
