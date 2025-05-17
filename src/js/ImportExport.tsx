@@ -616,7 +616,14 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         modelUris.forEach(uri => {
             if (uri && !uri.startsWith('data:') && !fetchedAssetUrls.has(uri)) { // Avoid data URIs and duplicates
                 fetchedAssetUrls.add(uri);
-                const fileName = uri.split('/').pop(); // Extract filename
+                let fileName: string | undefined;
+                const matchingModel = environmentModels.find(m => m.modelUrl === uri);
+                if (matchingModel && matchingModel.isCustom) {
+                    fileName = `${matchingModel.name}.gltf`;
+                } else {
+                    fileName = uri.split('/').pop();
+                }
+
                 if (fileName && modelsFolder) {
                     fetchPromises.push(
                         fetch(uri)
