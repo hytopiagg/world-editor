@@ -355,6 +355,7 @@ const EnvironmentBuilder = (
 
         const bbox = new THREE.Box3().setFromObject(gltf.scene);
         const size = bbox.getSize(new THREE.Vector3());
+        const center = bbox.getCenter(new THREE.Vector3());
         const boundingHeight = size.y;
         const boundingWidth = size.x;
         const boundingDepth = size.z;
@@ -368,6 +369,7 @@ const EnvironmentBuilder = (
                 boundingBoxHeight: boundingHeight,
                 boundingBoxWidth: boundingWidth,
                 boundingBoxDepth: boundingDepth,
+                boundingBoxCenter: center,
             };
         }
 

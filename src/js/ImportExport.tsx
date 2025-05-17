@@ -199,26 +199,31 @@ export const importMap = async (
                                             (model) => model.name === modelName
                                         );
 
-                                    const boundingBoxHeight =
-                                        matchingModel?.boundingBoxHeight || 1;
-                                    const verticalOffset =
-                                        (boundingBoxHeight *
-                                            entity.modelScale) /
-                                        2;
-                                    const adjustedY = y - 0.5 - verticalOffset;
+                                    // --- Reverse of export: from centre to origin ---
+                                    let localCentreOffset: THREE.Vector3;
+                                    if (matchingModel?.boundingBoxCenter instanceof THREE.Vector3) {
+                                        localCentreOffset = matchingModel.boundingBoxCenter.clone();
+                                    } else {
+                                        localCentreOffset = new THREE.Vector3(
+                                            (matchingModel?.boundingBoxWidth || 1) / 2,
+                                            (matchingModel?.boundingBoxHeight || 1) / 2,
+                                            (matchingModel?.boundingBoxDepth || 1) / 2
+                                        );
+                                    }
 
-                                    const boundingBoxWidth =
-                                        matchingModel?.boundingBoxWidth || 1;
-                                    const boundingBoxDepth =
-                                        matchingModel?.boundingBoxDepth || 1;
+                                    // Apply scale
+                                    const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(entity.modelScale, entity.modelScale, entity.modelScale));
 
-                                    const horizontalOffsetX =
-                                        (boundingBoxWidth * entity.modelScale) / 2;
-                                    const horizontalOffsetZ =
-                                        (boundingBoxDepth * entity.modelScale) / 2;
+                                    // Apply rotation around Y
+                                    const qInv = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), euler.y);
+                                    scaledOffset.applyQuaternion(qInv);
 
-                                    const adjustedX = x - horizontalOffsetX;
-                                    const adjustedZ = z - horizontalOffsetZ;
+                                    // Convert centre position (x,y,z) to origin (adjustedX etc.)
+                                    const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset).sub(new THREE.Vector3(0, 0.5, 0));
+
+                                    const adjustedX = originPos.x;
+                                    const adjustedY = originPos.y;
+                                    const adjustedZ = originPos.z;
 
                                     return {
                                         position: { x: adjustedX, y: adjustedY, z: adjustedZ },
@@ -461,15 +466,15 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 if (entityType) {
                     // ... (keep existing entity processing logic)
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
-                    const rotY = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
+                    const rotYVal = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
 
 
-                    const hasRotation = Math.abs(rotY) > 0.001;
+                    const hasRotation = Math.abs(rotYVal) > 0.001;
 
 
                     const quaternion = new THREE.Quaternion();
                     if (hasRotation) {
-                        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
+                        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotYVal);
                     } else {
 
                         quaternion.identity();
@@ -486,28 +491,29 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
                     }
 
-                    const boundingBoxHeight = entityType.boundingBoxHeight || 1;
-                    const verticalOffset =
-                        (boundingBoxHeight * obj.scale.y) / 2;
-                    const adjustedY = obj.position.y + 0.5 + verticalOffset;
+                    let localCentreOffset: THREE.Vector3;
+                    if (entityType.boundingBoxCenter instanceof THREE.Vector3) {
+                        localCentreOffset = entityType.boundingBoxCenter.clone();
+                    } else {
+                        localCentreOffset = new THREE.Vector3(
+                            (entityType.boundingBoxWidth || 1) / 2,
+                            (entityType.boundingBoxHeight || 1) / 2,
+                            (entityType.boundingBoxDepth || 1) / 2
+                        );
+                    }
 
-                    const boundingBoxWidth = entityType.boundingBoxWidth || 1;
-                    const boundingBoxDepth = entityType.boundingBoxDepth || 1;
+                    const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(obj.scale.x, obj.scale.y, obj.scale.z));
 
-                    const horizontalOffsetX = (boundingBoxWidth * obj.scale.x) / 2;
-                    const horizontalOffsetZ = (boundingBoxDepth * obj.scale.z) / 2;
+                    const qOffset = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotYVal);
+                    scaledOffset.applyQuaternion(qOffset);
 
-                    const adjustedX = obj.position.x + horizontalOffsetX;
-                    const adjustedZ = obj.position.z + horizontalOffsetZ;
+                    const adjustedPos = new THREE.Vector3(
+                        obj.position.x,
+                        obj.position.y,
+                        obj.position.z
+                    ).add(new THREE.Vector3(0.5, 0.5, 0.5)).add(scaledOffset);
 
-                    console.log("entityType", entityType);
-                    console.log("boundingBoxWidth", boundingBoxWidth);
-                    console.log("boundingBoxDepth", boundingBoxDepth);
-                    console.log("original position", obj.position);
-                    console.log("horizontal offset", horizontalOffsetX, horizontalOffsetZ);
-                    console.log("adjusted position", adjustedX, adjustedY, adjustedZ);
-
-                    const key = `${adjustedX},${adjustedY},${adjustedZ}`;
+                    const key = `${adjustedPos.x},${adjustedPos.y},${adjustedPos.z}`;
                     acc[key] = {
                         modelUri: modelUriForJson, // Use adjusted relative path
                         modelPreferredShape: (entityType.addCollider === false) ? "none" : "trimesh",
