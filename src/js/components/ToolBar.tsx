@@ -402,17 +402,11 @@ const ToolBar = ({
             setActiveTool(null);
             setShowPlacementMenu(false);
         };
-        const handlePointerLockChange = () => {
-            setActiveTool(null);
-            setShowPlacementMenu(false);
-        };
         window.addEventListener("blockToolsTabChanged", handleTabChangeReset);
         window.addEventListener("pointerLockModeChanged", handleTabChangeReset);
-        document.addEventListener("pointerlockchange", handlePointerLockChange);
         return () => {
             window.removeEventListener("blockToolsTabChanged", handleTabChangeReset);
             window.removeEventListener("pointerLockModeChanged", handleTabChangeReset);
-            document.removeEventListener("pointerlockchange", handlePointerLockChange);
         };
     }, []);
 

@@ -14,7 +14,6 @@ import BlockToolsSidebar, {
     refreshBlockTools,
 } from "./js/components/BlockToolsSidebar";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
-import QuickTips from "./js/components/QuickTips";
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import ToolBar from "./js/components/ToolBar";
 import UnderConstruction from "./js/components/UnderConstruction";
@@ -449,7 +448,7 @@ function App() {
 
                 <GlobalLoadingScreen />
 
-                {pageIsLoaded && <QuickTips />}
+                {/* QuickTips removed per UX update */}
 
                 <UndoRedoManager
                     ref={undoRedoManagerRef}

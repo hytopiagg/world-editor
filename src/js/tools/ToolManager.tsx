@@ -12,6 +12,7 @@ class ToolManager {
     activeTool: BaseTool | null;
     toolChangeListeners: ((toolName: string | null) => void)[];
     terrainBuilder: any;
+    _handleGlobalDeactivate: (_e?: Event) => void;
 
     constructor(terrainBuilderProps: any) {
 
@@ -29,6 +30,19 @@ class ToolManager {
                 (key) => terrainBuilderProps[key] !== undefined
             )
         );
+
+        // Deactivate current tool when certain global editor events occur
+        this._handleGlobalDeactivate = (_e?: Event) => {
+            // Only deactivate if something is active to avoid unnecessary work
+            if (this.activeTool) {
+                this.activateTool(null, undefined);
+            }
+        };
+
+        if (typeof window !== "undefined") {
+            window.addEventListener("pointerLockModeChanged", this._handleGlobalDeactivate);
+            window.addEventListener("blockToolsTabChanged", this._handleGlobalDeactivate);
+        }
     }
     /**
      * Register a new tool with the manager
@@ -68,6 +82,12 @@ class ToolManager {
                     cb(null);
                 } catch (_) { }
             });
+
+            // Broadcast a global event so UI components can react even if they don't have
+            // a direct reference to the ToolManager instance.
+            try {
+                window.dispatchEvent(new CustomEvent("activeToolChanged", { detail: null }));
+            } catch (_) { }
         }
 
         if (!toolName) {
@@ -103,6 +123,10 @@ class ToolManager {
                     cb(toolName);
                 } catch (_) { }
             });
+
+            try {
+                window.dispatchEvent(new CustomEvent("activeToolChanged", { detail: toolName }));
+            } catch (_) { }
 
             return true;
         } else {
@@ -182,6 +206,11 @@ class ToolManager {
         });
         this.tools = {};
         this.activeTool = null;
+
+        if (typeof window !== "undefined" && this._handleGlobalDeactivate) {
+            window.removeEventListener("pointerLockModeChanged", this._handleGlobalDeactivate);
+            window.removeEventListener("blockToolsTabChanged", this._handleGlobalDeactivate);
+        }
     }
     /** Add a listener that will be called whenever the active tool changes */
     addToolChangeListener(listener: (toolName: string | null) => void) {

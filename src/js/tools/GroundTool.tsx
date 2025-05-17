@@ -10,7 +10,7 @@ class GroundTool extends BaseTool {
      * Creates a new GroundTool instance
      */
     groundHeight = 1;
-    groundSides = 4; // Number of sides (4 = square, 5 = pentagon, etc.)
+    isCircleShape = false; // false = square, true = circle
     isCtrlPressed = false;
     groundStartPosition = null;
     groundPreview = null;
@@ -33,8 +33,7 @@ class GroundTool extends BaseTool {
         this.tooltip =
             "Ground Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.";
         this.groundHeight = 1;
-        this.groundSides = 4; // Number of sides (4 = square, 5 = pentagon, etc.)
-        this.isCtrlPressed = false;
+        this.isCircleShape = false;
         this.groundStartPosition = null;
         this.groundPreview = null;
 
@@ -225,16 +224,14 @@ class GroundTool extends BaseTool {
      */
     handleKeyDown(event) {
         if (event.key === "Control") {
-            this.isCtrlPressed = true;
+            this.isCtrlPressed = !this.isCtrlPressed; // toggle mode
             this.updateGroundPreviewMaterial();
         } else if (event.key === "1") {
             this.setGroundHeight(this.groundHeight - 1);
         } else if (event.key === "2") {
             this.setGroundHeight(this.groundHeight + 1);
         } else if (event.key === "5") {
-            this.setGroundSides(this.groundSides - 1);
-        } else if (event.key === "6") {
-            this.setGroundSides(this.groundSides + 1);
+            this.toggleShape();
         } else if (event.key === "Escape") {
             this.removeGroundPreview();
             this.groundStartPosition = null;
@@ -244,10 +241,7 @@ class GroundTool extends BaseTool {
      * Handle key up events for the tool
      */
     handleKeyUp(event) {
-        if (event.key === "Control") {
-            this.isCtrlPressed = false;
-            this.updateGroundPreviewMaterial();
-        }
+        // no-op for Control now (toggle handled on keydown)
     }
     /**
      * Updates the ground height
@@ -267,21 +261,17 @@ class GroundTool extends BaseTool {
         }
     }
 
-    setGroundSides(sides) {
-        const newSides = Math.max(4, Math.min(8, sides));
-        if (newSides !== this.groundSides) {
-            this.groundSides = newSides;
-
-            if (
-                this.groundStartPosition &&
-                this.previewPositionRef &&
+    toggleShape() {
+        this.isCircleShape = !this.isCircleShape;
+        if (
+            this.groundStartPosition &&
+            this.previewPositionRef &&
+            this.previewPositionRef.current
+        ) {
+            this.updateGroundPreview(
+                this.groundStartPosition,
                 this.previewPositionRef.current
-            ) {
-                this.updateGroundPreview(
-                    this.groundStartPosition,
-                    this.previewPositionRef.current
-                );
-            }
+            );
         }
     }
 
@@ -292,37 +282,22 @@ class GroundTool extends BaseTool {
         maxX: number,
         minZ: number,
         maxZ: number,
-        sides = 4
+        isCircle = false
     ) {
-        if (sides === 4) {
+        if (!isCircle) {
+            // square
             return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
         } else {
+            // circle approximation
             const width = maxX - minX + 1;
             const length = maxZ - minZ + 1;
-
             const centerX = minX + width / 2;
             const centerZ = minZ + length / 2;
-
-            const distFromCenterX = x - centerX;
-            const distFromCenterZ = z - centerZ;
-
-            const distSquared =
-                distFromCenterX * distFromCenterX +
-                distFromCenterZ * distFromCenterZ;
-
-            const radius = Math.min(width / 2, length / 2);
-
-            const outerRadiusSquared = radius * radius;
-
-            if (distSquared > outerRadiusSquared) {
-                return false;
-            }
-
-            if (sides >= 8) {
-                return true;
-            }
-
-            return true;
+            const dx = x - centerX;
+            const dz = z - centerZ;
+            const distSquared = dx * dx + dz * dz;
+            const radius = Math.min(width, length) / 2;
+            return distSquared <= radius * radius;
         }
     }
     /**
@@ -366,7 +341,7 @@ class GroundTool extends BaseTool {
                         maxX,
                         minZ,
                         maxZ,
-                        this.groundSides
+                        this.isCircleShape
                     )
                 ) {
                     for (let y = 0; y < this.groundHeight; y++) {
@@ -456,7 +431,7 @@ class GroundTool extends BaseTool {
             "with height",
             this.groundHeight,
             "and sides",
-            this.groundSides
+            this.isCircleShape
         );
         if (!startPos || !endPos) {
             console.error("Invalid start or end position for erasing");
@@ -490,7 +465,7 @@ class GroundTool extends BaseTool {
                         maxX,
                         minZ,
                         maxZ,
-                        this.groundSides
+                        this.isCircleShape
                     )
                 ) {
                     for (let y = 0; y < this.groundHeight; y++) {
@@ -595,7 +570,7 @@ class GroundTool extends BaseTool {
                         maxX,
                         minZ,
                         maxZ,
-                        this.groundSides
+                        this.isCircleShape
                     )
                 ) {
                     totalBlocks += this.groundHeight;
@@ -633,7 +608,7 @@ class GroundTool extends BaseTool {
                             maxX,
                             minZ,
                             maxZ,
-                            this.groundSides
+                            this.isCircleShape
                         )
                     ) {
                         for (let y = 0; y < this.groundHeight; y++) {

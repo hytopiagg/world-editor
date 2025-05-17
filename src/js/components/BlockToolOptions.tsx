@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { FaAngleUp } from "react-icons/fa";
 import "../../css/BlockToolsOptions.css";
 import "../../css/BlockToolsSidebar.css";
@@ -8,6 +8,7 @@ import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
 import ComponentOptionsSection from "./ComponentOptionsSection";
 import AIAssistantPanel from "./AIAssistantPanel";
+import GroundToolOptionsSection from "./GroundToolOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -89,6 +90,37 @@ export function BlockToolOptions({
     getAvailableBlocks,
     loadAISchematic,
 }: BlockToolOptionsProps) {
+    const [activeTool, setActiveTool] = useState<string | null>(null);
+
+    // Listen via ToolManager directly when available
+    useEffect(() => {
+        const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
+        if (!manager || typeof manager.addToolChangeListener !== "function") return;
+
+        const listener = (toolName) => setActiveTool(toolName || null);
+        manager.addToolChangeListener(listener);
+        // Initialize current tool state immediately
+        try {
+            const current = manager.getActiveTool?.();
+            if (current?.name) setActiveTool(current.name.toLowerCase());
+        } catch (_) { }
+
+        return () => {
+            if (typeof manager.removeToolChangeListener === "function") {
+                manager.removeToolChangeListener(listener);
+            }
+        };
+    }, [terrainBuilderRef?.current?.toolManagerRef?.current]);
+
+    // Fallback: global event dispatched by ToolManager
+    useEffect(() => {
+        const handler = (e: any) => {
+            setActiveTool((e as CustomEvent).detail || null);
+        };
+        window.addEventListener("activeToolChanged", handler);
+        return () => window.removeEventListener("activeToolChanged", handler);
+    }, []);
+
     return (
         <div className="block-tool-options-container" style={{
             display: "flex",
@@ -147,7 +179,14 @@ export function BlockToolOptions({
                         />
                     </CollapsibleSection>
                 )}
-
+                {activeTool === "ground" && (
+                    <CollapsibleSection title="Ground Tool" animationDelay="0.09s">
+                        <GroundToolOptionsSection
+                            groundTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["ground"]}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
                 <CollapsibleSection title="Settings">
                     <SettingsMenu
                         terrainBuilderRef={terrainBuilderRef}
