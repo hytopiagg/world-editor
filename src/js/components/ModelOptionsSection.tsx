@@ -20,6 +20,7 @@ interface ModelOptionsProps {
         maxRotation: number;
         scale: number;
         rotation: number;
+        snapToGrid: boolean;
     };
     onPlacementSettingsChange: (settings: any) => void;
     onDownloadModel?: (model: any) => void;
@@ -39,14 +40,20 @@ export default function ModelOptionsSection({
     onUpdateModelName,
     environmentBuilder
 }: ModelOptionsProps) {
-    const [settings, setSettings] = useState(placementSettings);
+    const [settings, setSettings] = useState({
+        ...placementSettings,
+        snapToGrid: placementSettings.snapToGrid !== false,
+    });
     const [editableName, setEditableName] = useState(selectedModel?.name || '');
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [addColliderEnabled, setAddColliderEnabled] = useState(true);
 
     useEffect(() => {
-        setSettings(placementSettings);
+        setSettings({
+            ...placementSettings,
+            snapToGrid: placementSettings.snapToGrid !== false,
+        });
     }, [placementSettings]);
 
     useEffect(() => {
@@ -526,6 +533,19 @@ export default function ModelOptionsSection({
                                 type="checkbox"
                                 checked={addColliderEnabled}
                                 onChange={(e) => handleColliderToggle(e.target.checked)}
+                                className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                            />
+                        </label>
+                    </div>
+
+                    {/* Snap to Grid Checkbox */}
+                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.175s" }}>
+                        <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer">
+                            <span>Snap to Grid</span>
+                            <input
+                                type="checkbox"
+                                checked={settings.snapToGrid}
+                                onChange={(e) => updateSettings({ snapToGrid: e.target.checked })}
                                 className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                             />
                         </label>

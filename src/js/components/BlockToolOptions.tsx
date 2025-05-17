@@ -80,6 +80,7 @@ export function BlockToolOptions({
         maxRotation: 360,
         scale: 1.0,
         rotation: 0,
+        snapToGrid: true,
     },
     onPlacementSettingsChange = () => { },
     isCompactMode,

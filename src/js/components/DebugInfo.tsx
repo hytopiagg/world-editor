@@ -69,7 +69,7 @@ const DebugInfo = ({
             >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Preview Position</span>
                 <span className="text-right">
-                    {`${terrainBuilderRef?.current?.previewPositionRef?.x}, ${terrainBuilderRef?.current?.previewPositionRef?.y}, ${terrainBuilderRef?.current?.previewPositionRef?.z}`}
+                    {`${Math.round(terrainBuilderRef?.current?.previewPositionRef?.x * 10) / 10}, ${Math.round(terrainBuilderRef?.current?.previewPositionRef?.y * 100) / 100}, ${Math.round(terrainBuilderRef?.current?.previewPositionRef?.z * 100) / 100}`}
                 </span>
             </div>
             <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"

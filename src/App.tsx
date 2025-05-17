@@ -55,6 +55,7 @@ function App() {
         maxRotation: 360,
         scale: 1.0,
         rotation: 0,
+        snapToGrid: true,
     });
     const [isSaving, setIsSaving] = useState(false);
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
@@ -555,6 +556,7 @@ function App() {
                         previewPositionToAppJS={setCurrentPreviewPosition}
                         undoRedoManager={undoRedoManagerRef}
                         customBlocks={getCustomBlocks()}
+                        snapToGrid={placementSettings.snapToGrid}
                     />
                     <EnvironmentBuilder
                         ref={environmentBuilderRef}

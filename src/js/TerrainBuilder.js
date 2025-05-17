@@ -92,6 +92,7 @@ function TerrainBuilder(
         customBlocks,
         environmentBuilderRef,
         isInputDisabled,
+        snapToGrid,
     },
     ref
 ) {
@@ -121,6 +122,12 @@ function TerrainBuilder(
     const AUTO_SAVE_INTERVAL = 300000; // Auto-save every 5 minutes (300,000 ms)
     const isAutoSaveEnabledRef = useRef(true); // Default to enabled, but can be toggled
     const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
+    const placementSizeRef = useRef(placementSize);
+    const snapToGridRef = useRef(snapToGrid !== false);
+
+    useEffect(() => {
+        snapToGridRef.current = snapToGrid !== false;
+    }, [snapToGrid]);
 
     useEffect(() => {
         const setupAutoSave = () => {
@@ -476,7 +483,6 @@ function TerrainBuilder(
     const currentBlockTypeRef = useRef(currentBlockType);
     const isFirstBlockRef = useRef(true);
     const modeRef = useRef(mode);
-    const placementSizeRef = useRef(placementSize);
     const placedBlockCountRef = useRef(0); // Track number of blocks placed during a mouse down/up cycle
     const placedEnvironmentCountRef = useRef(0); // Track number of Environment objects placed during a mouse down/up cycle
     const lastDeletionTimeRef = useRef(0); // Add this ref to track the last deletion time
@@ -1014,16 +1020,35 @@ function TerrainBuilder(
                     hitBlock.y + blockIntersection.normal.y;
                 potentialNewPosition.z =
                     hitBlock.z + blockIntersection.normal.z;
-                potentialNewPosition.x = Math.round(potentialNewPosition.x);
-                potentialNewPosition.y = Math.round(potentialNewPosition.y);
-                potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                if (
+                    snapToGridRef.current ||
+                    !currentBlockTypeRef.current?.isEnvironment
+                ) {
+                    potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                    potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                    potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                }
             } else {
                 potentialNewPosition.add(
                     blockIntersection.normal.clone().multiplyScalar(0.5)
                 );
-                potentialNewPosition.x = Math.round(potentialNewPosition.x);
-                potentialNewPosition.y = Math.round(potentialNewPosition.y);
-                potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                if (
+                    snapToGridRef.current ||
+                    !currentBlockTypeRef.current?.isEnvironment
+                ) {
+                    potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                    potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                    potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                }
+            }
+
+            // Override snapping for environment models when grid snapping is disabled
+            if (
+                !snapToGridRef.current &&
+                currentBlockTypeRef.current?.isEnvironment &&
+                hitGround
+            ) {
+                potentialNewPosition.copy(currentGroundPoint);
             }
 
             if (blockIntersection.isGroundPlane) {
