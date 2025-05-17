@@ -1042,13 +1042,26 @@ function TerrainBuilder(
                 }
             }
 
-            // Override snapping for environment models when grid snapping is disabled
+            // Override snapping for environment models when grid snapping is disabled and no block hit (ground plane)
             if (
                 !snapToGridRef.current &&
                 currentBlockTypeRef.current?.isEnvironment &&
+                blockIntersection.isGroundPlane &&
                 hitGround
             ) {
                 potentialNewPosition.copy(currentGroundPoint);
+            }
+
+            // When unsnapped for environment, keep precise X/Z from intersection but snap Y to nearest block level
+            if (
+                !snapToGridRef.current &&
+                currentBlockTypeRef.current?.isEnvironment &&
+                blockIntersection &&
+                !blockIntersection.isGroundPlane
+            ) {
+                potentialNewPosition.x = blockIntersection.point.x;
+                potentialNewPosition.z = blockIntersection.point.z;
+                potentialNewPosition.y = Math.round(potentialNewPosition.y);
             }
 
             if (blockIntersection.isGroundPlane) {
