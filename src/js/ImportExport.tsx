@@ -392,7 +392,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         });
         console.log("Used Block IDs in terrain:", usedBlockIds);
 
-        // --- Filter Block Types to only those used ---
+        // --- Filter Block Types ---
+        // Include only block types that actually appear in the terrain.
         const usedBlockTypes = allBlockTypes.filter(block => usedBlockIds.has(block.id));
         console.log("Filtered Block Types (used in terrain):", usedBlockTypes);
         // If no blocks used but custom blocks may still exist; nothing wrong. Proceed.
@@ -416,16 +417,18 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti, fileName });
             }
 
-            // Handle side textures (ensure we consider every face key defined)
-            FACE_KEYS.forEach(faceKey => {
-                const uri = block.sideTextures?.[faceKey] || block.sideTextures?.["+y"] || block.textureUri;
-                if (!uri) {
-                    return; // Skip this face if no texture found
-                }
-                const ext = getFileExtensionFromUri(uri);
-                const fileName = `${faceKey}.${ext}`;
-                textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
-            });
+            // For multi-texture blocks, collect each face texture. Single-texture blocks need only the main texture.
+            if (isMulti) {
+                FACE_KEYS.forEach(faceKey => {
+                    const uri = block.sideTextures?.[faceKey] || block.sideTextures?.["+y"] || block.textureUri;
+                    if (!uri) {
+                        return; // Skip this face if no texture found
+                    }
+                    const ext = getFileExtensionFromUri(uri);
+                    const fileName = `${faceKey}.${ext}`;
+                    textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
+                });
+            }
         });
 
 
@@ -479,10 +482,9 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 return {
                     id: block.id,
                     name: block.name,
-                    textureUri: textureUriForJson, // Use adjusted path for zip structure
+                    textureUri: textureUriForJson, // For multi texture blocks this will be folder path; single texture blocks file path
                     isCustom: block.isCustom || (block.id >= 100 && block.id < 200),
-                    isMultiTexture: isMulti, // Ensure this is exported
-                    sideTextures: sideTexturesForJson, // Use adjusted paths for zip structure
+                    isMultiTexture: isMulti,
                 };
             }),
             blocks: simplifiedTerrain,
@@ -567,38 +569,77 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
         const fetchedAssetUrls = new Set<string>(); // Keep track of URLs already being fetched/added
 
+        // --- Helper to create a blank PNG blob (24x24 transparent) ---
+        const blankPngBlobPromise = (() => {
+            let cache = null;
+            return async () => {
+                if (cache) return cache;
+                const canvas = document.createElement('canvas');
+                canvas.width = 24;
+                canvas.height = 24;
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                cache = blob;
+                return blob;
+            };
+        })();
+
+        // Cache fetched blobs so duplicate URIs don't trigger network again but all face files are still written.
+        const uriBlobCache = new Map<string, Blob>();
+
         textureInfos.forEach(texInfo => {
-            if (texInfo.uri && !fetchedAssetUrls.has(texInfo.uri)) {
-                fetchedAssetUrls.add(texInfo.uri);
+            const fileName = texInfo.fileName;
+            if (!fileName || !blocksRootFolder) return;
 
-                const fileName = texInfo.fileName;
+            const targetFolder = texInfo.isMulti && texInfo.blockName
+                ? blocksRootFolder.folder(texInfo.blockName)
+                : blocksRootFolder;
 
-                if (fileName && blocksRootFolder) {
-                    // Determine the target folder within the zip (sub-folder for multi-texture blocks)
-                    const targetFolder = texInfo.isMulti && texInfo.blockName
-                        ? blocksRootFolder.folder(texInfo.blockName)
-                        : blocksRootFolder;
-
-                    if (!targetFolder) {
-                        console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
-                        return; // Skip this texture if folder creation fails
-                    }
-
-                    fetchPromises.push(
-                        fetch(texInfo.uri)
-                            .then(response => {
-                                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${texInfo.uri}`);
-                                return response.blob();
-                            })
-                            .then(blob => {
-                                targetFolder.file(fileName, blob); // Add to the appropriate folder
-                                const pathInZip = texInfo.isMulti && texInfo.blockName ? `${texInfo.blockName}/${fileName}` : fileName;
-                                console.log(`Added texture: ${pathInZip} to zip`);
-                            })
-                            .catch(error => console.error(`Failed to fetch/add texture ${texInfo.uri}:`, error))
-                    );
-                }
+            if (!targetFolder) {
+                console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
+                return;
             }
+
+            const addFileToZip = (blob: Blob) => {
+                targetFolder.file(fileName, blob);
+                const pathInZip = texInfo.isMulti && texInfo.blockName ? `${texInfo.blockName}/${fileName}` : fileName;
+                console.log(`Added texture: ${pathInZip} to zip`);
+            };
+
+            if (!texInfo.uri) {
+                // No texture URI provided – create blank PNG
+                fetchPromises.push(
+                    blankPngBlobPromise().then(addFileToZip)
+                );
+                return;
+            }
+
+            // If we've already fetched this URI, reuse the blob
+            if (uriBlobCache.has(texInfo.uri)) {
+                addFileToZip(uriBlobCache.get(texInfo.uri));
+                return;
+            }
+
+            // Fetch (or convert data URI) then cache and add
+            const fetchPromise = (async () => {
+                let blob: Blob;
+                try {
+                    if (texInfo.uri.startsWith('data:image')) {
+                        const res = await fetch(texInfo.uri);
+                        blob = await res.blob();
+                    } else {
+                        const response = await fetch(texInfo.uri);
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${texInfo.uri}`);
+                        blob = await response.blob();
+                    }
+                } catch (error) {
+                    console.warn(`Failed to fetch texture ${texInfo.uri}, using blank PNG.`, error);
+                    blob = await blankPngBlobPromise();
+                }
+                uriBlobCache.set(texInfo.uri, blob);
+                addFileToZip(blob);
+            })();
+
+            fetchPromises.push(fetchPromise);
         });
 
 
