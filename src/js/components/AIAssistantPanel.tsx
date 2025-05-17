@@ -351,9 +351,8 @@ const AIAssistantPanel = ({
 
     return (
         <div className={`ai-assistant-panel ${isEmbedded ? 'embedded' : ''}`}>
-            <h4>AI Building Assistant</h4>
             <textarea
-                className="ai-assistant-textarea"
+                className="text-xs bg-transparent rounded-md h-20 p-2 ring-0 outline-none border border-white/10 resize-none focus:border-white hover:border-white/20 transition-all duration-200 transition-all"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Describe what you want to build (e.g., 'a small stone hut', 'a 5 block high brick tower')"
