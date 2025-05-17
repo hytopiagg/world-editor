@@ -24,7 +24,6 @@ export const importMap = async (
                     );
 
                     const importData = JSON.parse(event.target.result as string);
-                    console.log("Importing map data:", importData);
                     let terrainData = {};
                     let environmentData = [];
 
@@ -120,16 +119,11 @@ export const importMap = async (
 
                                 if (currentBlockNameToId.hasOwnProperty(blockName)) {
                                     blockIdMapping[importedId] = currentBlockNameToId[blockName];
-                                    console.log(`Mapped imported block "${importedBlockType.name}" (ID: ${importedId}) to editor ID: ${blockIdMapping[importedId]}`);
                                 } else {
-
                                     blockIdMapping[importedId] = importedId;
-                                    console.log(`No name match for imported block "${importedBlockType.name}" (ID: ${importedId}), using original ID`);
                                 }
                             });
                         } else {
-
-                            console.log("No block types in import file, using direct ID mapping");
                             currentBlockTypes.forEach(blockType => {
                                 blockIdMapping[blockType.id] = blockType.id;
                             });
@@ -158,10 +152,6 @@ export const importMap = async (
                                 "Calculating map dimensions...",
                                 40
                             );
-                            console.log(
-                                "Calculating map dimensions to update grid size..."
-                            );
-
                             let minX = Infinity,
                                 minZ = Infinity;
                             let maxX = -Infinity,
@@ -255,9 +245,6 @@ export const importMap = async (
                                     };
                                 })
                                 .filter((obj) => obj !== null);
-                            console.log(
-                                `Imported ${environmentData.length} environment objects`
-                            );
                         }
                     } else {
                         loadingManager.hideLoading();
@@ -292,7 +279,6 @@ export const importMap = async (
                             "Rebuilding terrain from imported data...",
                             85
                         );
-                        console.log("Refreshing terrain from DB after import");
                         await terrainBuilderRef.current.refreshTerrainFromDB();
 
 
@@ -348,9 +334,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         loadingManager.showLoading("Preparing to export map...", 0);
 
         loadingManager.updateLoading("Retrieving environment data...", 10);
-        console.log("Retrieved environmentObjects for export:", environmentObjects);
-
-        console.log("Exporting environment data:", environmentObjects);
 
         loadingManager.updateLoading("Processing terrain data...", 30);
         const simplifiedTerrain = Object.entries(currentTerrainData).reduce((acc, [key, value]) => {
@@ -364,7 +347,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             50
         );
         const allBlockTypes = getBlockTypes();
-        console.log("Exporting block types:", allBlockTypes);
 
         // === Helper utilities for texture handling ===
         const sanitizeName = (name: string) => name.replace(/\s+/g, "_").toLowerCase();
@@ -390,12 +372,10 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 usedBlockIds.add(blockId);
             }
         });
-        console.log("Used Block IDs in terrain:", usedBlockIds);
 
         // --- Filter Block Types ---
         // Include only block types that actually appear in the terrain.
         const usedBlockTypes = allBlockTypes.filter(block => usedBlockIds.has(block.id));
-        console.log("Filtered Block Types (used in terrain):", usedBlockTypes);
         // If no blocks used but custom blocks may still exist; nothing wrong. Proceed.
 
         // --- Collect Asset URIs ---
@@ -441,8 +421,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             }
         });
 
-        console.log("Collected Texture Infos:", Array.from(textureInfos));
-        console.log("Collected Model URIs:", Array.from(modelUris));
         // --- End Collect Asset URIs ---
 
 
@@ -465,19 +443,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     textureUriForJson = `blocks/${fileNameSingle}`;
                 }
 
-                // --- Side textures (for both single- and multi-texture blocks) ---
-                const sideTexturesForJson = Object.fromEntries(
-                    FACE_KEYS.map(faceKey => {
-                        const uri = block.sideTextures?.[faceKey] || block.sideTextures?.["+y"] || block.textureUri;
-                        if (!uri) {
-                            return [faceKey, ""];
-                        }
-                        const ext = getFileExtensionFromUri(uri);
-                        const fileNameSide = `${faceKey}.${ext}`;
-                        const pathInZip = isMulti ? `blocks/${block.name}/${fileNameSide}` : `blocks/${fileNameSide}`;
-                        return [faceKey, pathInZip];
-                    })
-                );
+
 
                 return {
                     id: block.id,
@@ -520,7 +486,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
                     }
 
-
                     const boundingBoxHeight = entityType.boundingBoxHeight || 1;
                     const verticalOffset =
                         (boundingBoxHeight * obj.scale.y) / 2;
@@ -534,6 +499,13 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
                     const adjustedX = obj.position.x + horizontalOffsetX;
                     const adjustedZ = obj.position.z + horizontalOffsetZ;
+
+                    console.log("entityType", entityType);
+                    console.log("boundingBoxWidth", boundingBoxWidth);
+                    console.log("boundingBoxDepth", boundingBoxDepth);
+                    console.log("original position", obj.position);
+                    console.log("horizontal offset", horizontalOffsetX, horizontalOffsetZ);
+                    console.log("adjusted position", adjustedX, adjustedY, adjustedZ);
 
                     const key = `${adjustedX},${adjustedY},${adjustedZ}`;
                     acc[key] = {
@@ -601,8 +573,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
             const addFileToZip = (blob: Blob) => {
                 targetFolder.file(fileName, blob);
-                const pathInZip = texInfo.isMulti && texInfo.blockName ? `${texInfo.blockName}/${fileName}` : fileName;
-                console.log(`Added texture: ${pathInZip} to zip`);
             };
 
             if (!texInfo.uri) {
@@ -656,7 +626,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                             })
                             .then(blob => {
                                 modelsFolder.file(fileName, blob);
-                                console.log(`Added model: ${fileName} to zip`);
                             })
                             .catch(error => console.error(`Failed to fetch/add model ${uri}:`, error))
                     );
@@ -666,7 +635,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
 
         await Promise.all(fetchPromises);
-        console.log("Asset fetching complete.");
         // --- End Fetch Assets and Create ZIP ---
 
         loadingManager.updateLoading("Creating export files...", 90);
@@ -675,7 +643,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
         // Add terrain.json to the zip file root
         zip.file("terrain.json", jsonBlob);
-        console.log("Added terrain.json to zip");
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
 

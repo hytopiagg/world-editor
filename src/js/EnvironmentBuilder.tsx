@@ -356,6 +356,8 @@ const EnvironmentBuilder = (
         const bbox = new THREE.Box3().setFromObject(gltf.scene);
         const size = bbox.getSize(new THREE.Vector3());
         const boundingHeight = size.y;
+        const boundingWidth = size.x;
+        const boundingDepth = size.z;
 
         const modelIndex = environmentModels.findIndex(
             (model) => model.id === modelType.id
@@ -364,6 +366,8 @@ const EnvironmentBuilder = (
             environmentModels[modelIndex] = {
                 ...environmentModels[modelIndex],
                 boundingBoxHeight: boundingHeight,
+                boundingBoxWidth: boundingWidth,
+                boundingBoxDepth: boundingDepth,
             };
         }
 
@@ -575,7 +579,6 @@ const EnvironmentBuilder = (
                         model.name === obj.name ||
                         model.modelUrl === obj.modelUrl
                 );
-                console.log("modelType", modelType);
                 if (modelType) {
                     const eulerRotation = new THREE.Euler(
                         obj.rotation?.x || 0,
@@ -606,7 +609,6 @@ const EnvironmentBuilder = (
                 }
             });
 
-            console.log("targetObjects", targetObjects);
 
             // Remove objects that are no longer in the target state
             for (const [compositeKey, obj] of currentObjects) {
@@ -618,7 +620,6 @@ const EnvironmentBuilder = (
             // Add new objects from the target state
             for (const [compositeKey, obj] of targetObjects) {
                 if (!currentObjects.has(compositeKey)) {
-                    console.log("obj has instance", obj);
                     const modelType = environmentModels.find(
                         (model) =>
                             model.modelUrl === obj.modelUrl ||
