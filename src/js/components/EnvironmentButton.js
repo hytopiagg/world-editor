@@ -71,6 +71,8 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
     const [imageUrl, setImageUrl] = React.useState(null);
     const [showCanvas, setShowCanvas] = React.useState(false);
     const [isQueued, setIsQueued] = React.useState(false);
+    const [isLoading, setIsLoading] = React.useState(true);
+
     const getCacheKey = useCallback(() => {
         if (envType.modelUrl.startsWith("blob:")) {
             return envType.name;
@@ -78,8 +80,13 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
 
         return envType.modelUrl.replace(/^\//, "");
     }, [envType.modelUrl, envType.name]);
+
     useEffect(() => {
         if (!envType) return;
+
+        let mounted = true; // Add mounted flag
+        setIsLoading(true);
+
         const loadCachedImage = async () => {
             const cacheKey = getCacheKey();
             try {
@@ -87,8 +94,13 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                     STORES.PREVIEWS,
                     cacheKey
                 );
-                if (cachedImage && cachedImage.startsWith("data:image/")) {
+                if (
+                    cachedImage &&
+                    cachedImage.startsWith("data:image/") &&
+                    mounted
+                ) {
                     setImageUrl(cachedImage);
+                    setIsLoading(false);
                     return true;
                 }
                 console.log("No cached image found for:", cacheKey);
@@ -101,15 +113,18 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
             }
             return false;
         };
+
         const startRender = () => {
-            setShowCanvas(true);
-            setIsQueued(false);
+            if (mounted) {
+                setShowCanvas(true);
+                setIsQueued(false);
+            }
         };
 
         if (!imageUrl && !showCanvas && !isQueued) {
-            let mounted = true; // Add mounted flag
             loadCachedImage().then((hasCache) => {
                 if (!mounted) return; // Check if still mounted
+
                 if (!hasCache) {
                     setIsQueued(true);
                     if (activeRenders < MAX_SIMULTANEOUS_RENDERS) {
@@ -120,21 +135,23 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                     }
                 }
             });
-
-            return () => {
-                mounted = false; // Set mounted to false on cleanup
-                if (isQueued) {
-                    renderQueue = renderQueue.filter(
-                        (render) => render !== startRender
-                    );
-                }
-            };
         }
+
+        return () => {
+            mounted = false; // Set mounted to false on cleanup
+            if (isQueued) {
+                renderQueue = renderQueue.filter(
+                    (render) => render !== startRender
+                );
+            }
+        };
     }, [imageUrl, showCanvas, isQueued, envType, getCacheKey]);
+
     if (!envType) {
         console.log("EnvironmentButton: envType is null");
         return null;
     }
+
     const handleRenderComplete = () => {
         const canvas = document.querySelector(
             `#preview-${envType.name} canvas`
@@ -143,6 +160,7 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
             try {
                 const url = canvas.toDataURL("image/png");
                 setImageUrl(url);
+                setIsLoading(false);
                 const cacheKey = getCacheKey();
                 console.log("Saving preview to cache with key:", cacheKey);
                 DatabaseManager.saveData(STORES.PREVIEWS, cacheKey, url)
@@ -181,6 +199,12 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
             startNextRender();
         }
     };
+
+    // Handle image loading completion
+    const handleImageLoad = () => {
+        setIsLoading(false);
+    };
+
     return (
         <Tooltip text={envType.name}>
             <button
@@ -206,16 +230,29 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                                 onRenderComplete={handleRenderComplete}
                             />
                         </Canvas>
+                    ) : imageUrl ? (
+                        <>
+                            <img
+                                src={imageUrl}
+                                alt={envType.name}
+                                style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "contain",
+                                    display: isLoading ? "none" : "block",
+                                }}
+                                onLoad={handleImageLoad}
+                            />
+                            {isLoading && (
+                                <div className="model-loading-spinner">
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white/80 rounded-full animate-spin"></div>
+                                </div>
+                            )}
+                        </>
                     ) : (
-                        <img
-                            src={imageUrl}
-                            alt={envType.name}
-                            style={{
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "contain",
-                            }}
-                        />
+                        <div className="model-loading-spinner">
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white/80 rounded-full animate-spin"></div>
+                        </div>
                     )}
                 </div>
                 <div className="environment-label-wrapper">

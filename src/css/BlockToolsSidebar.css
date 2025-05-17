@@ -660,3 +660,13 @@ button.block-button {
         transform: rotate(360deg);
     }
 }
+
+.model-loading-spinner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+}
