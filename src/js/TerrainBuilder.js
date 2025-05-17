@@ -50,7 +50,6 @@ import {
     ToolManager,
     WallTool,
 } from "./tools";
-import SeedGeneratorTool from "./tools/SeedGeneratorTool"; // Add SeedGeneratorTool import
 import {
     configureChunkLoading,
     forceChunkUpdate,
@@ -1652,8 +1651,6 @@ function TerrainBuilder(
         toolManagerRef.current.registerTool("ground", groundTool);
         const pipeTool = new PipeTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("pipe", pipeTool);
-        const seedGeneratorTool = new SeedGeneratorTool(terrainBuilderProps);
-        toolManagerRef.current.registerTool("seed", seedGeneratorTool);
         const schematicPlacementTool = new SchematicPlacementTool(
             terrainBuilderProps
         );
@@ -1910,9 +1907,6 @@ function TerrainBuilder(
         getViewDistance: () => {
             const { getViewDistance } = require("./constants/terrain");
             return getViewDistance();
-        },
-        getSelectionDistance: () => {
-            return selectionDistanceRef.current;
         },
         setAutoSaveInterval: (intervalMs) => {
             if (autoSaveIntervalRef.current) {

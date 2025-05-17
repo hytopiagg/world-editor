@@ -3,9 +3,9 @@ import { Canvas } from "@react-three/fiber";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaDatabase } from "react-icons/fa";
 import "./css/App.css";
 import "./css/output.css";
+import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
 import TerrainBuilder from "./js/TerrainBuilder";
@@ -30,7 +30,6 @@ import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
-import { cameraManager } from "./js/Camera";
 
 function App() {
     const undoRedoManagerRef = useRef(null);

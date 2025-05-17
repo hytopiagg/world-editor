@@ -14,11 +14,10 @@ import {
     FaRedo,
     FaRobot,
     FaSave,
-    FaSeedling,
     FaSquare,
-    FaTrash,
-    FaUndo,
     FaThLarge,
+    FaTrash,
+    FaUndo
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
@@ -616,18 +615,6 @@ const ToolBar = ({
                                 className="control-button"
                             >
                                 <FaCubes />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Generate world from seed">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("seed");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "seed" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaSeedling />
                             </button>
                         </Tooltip>
                         <div className="relative">
