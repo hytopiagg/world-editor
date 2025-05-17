@@ -517,16 +517,16 @@ const ToolBar = ({
                             </div>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
+                        <Tooltip text="Selection Tool - Click to start selection, click again to confirm. Click and drag to move selection. Press Escape to cancel.">
                             <button
                                 onClick={() => {
-                                    handleToolToggle("wall");
+                                    handleToolToggle("selection");
                                     setPlacementSize("single");
                                 }}
-                                className={`control-button ${activeTool === "wall" ? "selected" : ""
+                                className={`control-button ${activeTool === "selection" ? "selected" : ""
                                     }`}
                             >
-                                <FaDrawPolygon />
+                                <FaMousePointer />
                             </button>
                         </Tooltip>
                         <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
@@ -541,16 +541,16 @@ const ToolBar = ({
                                 <FaSquare />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Selection Tool - Click to start selection, click again to confirm. Click and drag to move selection. Press Escape to cancel.">
+                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
                             <button
                                 onClick={() => {
-                                    handleToolToggle("selection");
+                                    handleToolToggle("wall");
                                     setPlacementSize("single");
                                 }}
-                                className={`control-button ${activeTool === "selection" ? "selected" : ""
+                                className={`control-button ${activeTool === "wall" ? "selected" : ""
                                     }`}
                             >
-                                <FaMousePointer />
+                                <FaDrawPolygon />
                             </button>
                         </Tooltip>
                         <Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
