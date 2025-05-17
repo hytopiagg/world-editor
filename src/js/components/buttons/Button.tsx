@@ -28,7 +28,7 @@ const Button = ({
       type={type}
       disabled={disabled}
       className={clsx(
-        "relative flex select-none items-center justify-center whitespace-nowrap border-2 border-transparent py-4 font-bold shadow-md transition-all hover:scale-[1.02] active:translate-y-1 active:shadow-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:active:translate-y-0",
+        "relative flex select-none cursor-pointer items-center justify-center whitespace-nowrap border-2 border-transparent py-4 font-bold shadow-md transition-all hover:scale-[1.02] active:translate-y-1 active:shadow-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:active:translate-y-0",
         {
           "border-white bg-white text-black hover:border-white/80":
             design === "primary",

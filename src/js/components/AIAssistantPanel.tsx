@@ -170,9 +170,6 @@ const AIAssistantPanel = ({
     const [error, setError] = useState<string | null>(null);
     const [hCaptchaToken, setHCaptchaToken] = useState<string | null>(null);
     const [captchaError, setCaptchaError] = useState<string | null>(null);
-    const [showCaptcha, setShowCaptcha] = useState(false);
-    const [captchaFading, setCaptchaFading] = useState(false);
-    const [generationRequested, setGenerationRequested] = useState(false);
     const hCaptchaRef = useRef<HCaptcha>(null);
 
     useEffect(() => {
@@ -317,8 +314,6 @@ const AIAssistantPanel = ({
             setError(err.message || "An unexpected error occurred.");
         } finally {
             setIsLoading(false);
-            setShowCaptcha(false);
-            setGenerationRequested(false);
             setHCaptchaToken(null);
             if (hCaptchaRef.current) {
                 hCaptchaRef.current.resetCaptcha();
@@ -334,16 +329,25 @@ const AIAssistantPanel = ({
             return;
         }
 
-        setShowCaptcha(true);
-        setGenerationRequested(true);
         setCaptchaError(null);
+        // Execute the captcha verification programmatically
+        if (hCaptchaRef.current) {
+            try {
+                hCaptchaRef.current.execute();
+            } catch (error) {
+                console.error("Failed to execute hCaptcha:", error);
+                setCaptchaError("Failed to initiate CAPTCHA. Please try again.");
+            }
+        } else {
+            setCaptchaError("CAPTCHA component not ready. Please try again.");
+        }
     };
 
     useEffect(() => {
-        if (generationRequested && hCaptchaToken) {
+        if (hCaptchaToken) {
             generateStructure();
         }
-    }, [generationRequested, hCaptchaToken, generateStructure]);
+    }, [hCaptchaToken, generateStructure]);
 
     if (!isVisible) {
         return null;
@@ -366,39 +370,32 @@ const AIAssistantPanel = ({
                 {isLoading ? <div className="flex items-center gap-1.5 justify-center">Generating <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black/80 rounded-full animate-spin" /> </div> : "Generate Structure"}
             </button>
             {error && <div className="ai-assistant-error">{error}</div>}
-            {showCaptcha && (
-                <div className={`ai-assistant-captcha-container ${captchaFading ? 'fade-out' : ''}`}>
-                    <HCaptcha
-                        ref={hCaptchaRef}
-                        sitekey={
-                            process.env.REACT_APP_HCAPTCHA_SITE_KEY ||
-                            "10000000-ffff-ffff-ffff-000000000001"
-                        } // Fallback for local dev if .env is missing
-                        size="normal"
-                        theme="light"
-                        custom={true}
-                        onVerify={(token) => {
-                            setHCaptchaToken(token);
-                            setCaptchaError(null);
-                            // Trigger fade out then hide
-                            setCaptchaFading(true);
-                            setTimeout(() => {
-                                setShowCaptcha(false);
-                                setCaptchaFading(false);
-                            }, 600);
-                            // Generation will auto-start in useEffect once a token is present.
-                        }}
-                        onExpire={() => {
-                            setHCaptchaToken(null);
-                            setCaptchaError("CAPTCHA expired. Please verify again.");
-                        }}
-                        onError={(err) => {
-                            setHCaptchaToken(null);
-                            setCaptchaError(`CAPTCHA error: ${err}`);
-                        }}
-                    />
-                </div>
-            )}
+
+            {/* Invisible hCaptcha - always in DOM but hidden */}
+            <div style={{ position: "fixed", visibility: "hidden", bottom: 0, right: 0 }}>
+                <HCaptcha
+                    ref={hCaptchaRef}
+                    sitekey={
+                        process.env.REACT_APP_HCAPTCHA_SITE_KEY ||
+                        "10000000-ffff-ffff-ffff-000000000001"
+                    } // Fallback for local dev if .env is missing
+                    size="invisible"
+                    theme="light"
+                    onVerify={(token) => {
+                        setHCaptchaToken(token);
+                        setCaptchaError(null);
+                    }}
+                    onExpire={() => {
+                        setHCaptchaToken(null);
+                        setCaptchaError("CAPTCHA expired. Please try again.");
+                    }}
+                    onError={(err) => {
+                        setHCaptchaToken(null);
+                        setCaptchaError(`CAPTCHA error: ${err}`);
+                    }}
+                />
+            </div>
+
             {captchaError && (
                 <div className="ai-assistant-error">{captchaError}</div>
             )}

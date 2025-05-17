@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
+import Button from "../../js/components/buttons/Button";
 import PropTypes from "prop-types";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import EditorToolbar, { TOOLS } from "./EditorToolbar";
@@ -30,8 +31,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     const [error, setError] = useState(null);
     const [hCaptchaToken, setHCaptchaToken] = useState(null);
     const [captchaError, setCaptchaError] = useState(null);
-    const [captchaVisible, setCaptchaVisible] = useState(true);
-    const [captchaFading, setCaptchaFading] = useState(false);
     const hCaptchaRef = useRef(null); // Ref for resetting captcha
 
     const [selectedTool, setSelectedTool] = useState(TOOLS.PENCIL);
@@ -59,6 +58,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             setError(null);
             setCaptchaError(null);
             setPrompt(""); // Clear prompt on open
+            setHCaptchaToken(null);
 
             if (hCaptchaRef.current) {
                 hCaptchaRef.current.resetCaptcha();
@@ -78,7 +78,8 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             }
         };
     }, [isOpen]); // Depend only on isOpen
-    const handleGenerate = async () => {
+
+    const generateTexture = async () => {
         if (!prompt.trim()) {
             setError("Please enter a prompt.");
             return;
@@ -90,11 +91,13 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         setError(null);
         setSelectedFace("all");
         setCaptchaError(null); // Clear captcha error on new generation attempt
+
         if (!hCaptchaToken) {
             setCaptchaError("Please complete the CAPTCHA verification.");
             setIsLoading(false);
             return;
         }
+
         try {
             const response = await fetch(
                 `${process.env.REACT_APP_API_URL}/generate_texture`,
@@ -158,6 +161,37 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             setIsLoading(false); // Ensure loading is false on errors too
         }
     };
+
+    const handleGenerateClick = () => {
+        if (!prompt.trim() || isLoading) return;
+
+        if (hCaptchaToken) {
+            generateTexture();
+            return;
+        }
+
+        setCaptchaError(null);
+        // Execute the captcha verification programmatically
+        if (hCaptchaRef.current) {
+            try {
+                hCaptchaRef.current.execute();
+            } catch (error) {
+                console.error("Failed to execute hCaptcha:", error);
+                setCaptchaError(
+                    "Failed to initiate CAPTCHA. Please try again."
+                );
+            }
+        } else {
+            setCaptchaError("CAPTCHA component not ready. Please try again.");
+        }
+    };
+
+    useEffect(() => {
+        if (hCaptchaToken) {
+            generateTexture();
+        }
+    }, [hCaptchaToken]);
+
     const handleClose = () => {
         onClose(); // Just call onClose, useEffect handles the rest
     };
@@ -309,7 +343,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     </div>
                     <div className="top-controls-container">
                         {/* Static Sidebar for Tools and Preview */}
-                        <div className="editor-sidebar">
+                        <div className="flex flex-col gap-2 max-w-fit p-2.5 border border-white/10 rounded-lg">
                             <div className="preview-face-container">
                                 <BlockPreview3D
                                     textureObjects={textureObjects}
@@ -333,102 +367,98 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 onPixelUpdate={handlePixelUpdate}
                                 onColorPicked={colorPickerController}
                             />
-                            <div className="flex flex-col gap-2 max-w-fit">
-                                <CustomColorPicker
-                                    value={selectedColor}
-                                    onChange={setSelectedColor}
-                                />
-                                <EditorToolbar
-                                    selectedTool={selectedTool}
-                                    onSelectTool={setSelectedTool}
-                                    onUndo={handleUndo}
-                                    onRedo={handleRedo}
-                                    canUndo={canUndo}
-                                    canRedo={canRedo}
-                                />
-                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2 max-w-fit p-2.5 border border-white/10 rounded-lg">
+                            <CustomColorPicker
+                                value={selectedColor}
+                                onChange={setSelectedColor}
+                            />
+                            <EditorToolbar
+                                selectedTool={selectedTool}
+                                onSelectTool={setSelectedTool}
+                                onUndo={handleUndo}
+                                onRedo={handleRedo}
+                                canUndo={canUndo}
+                                canRedo={canRedo}
+                            />
                         </div>
                     </div>
                     {/* Bottom Controls Area */}
-                    <div className="bottom-controls-container">
+                    <div className="border border-white/10 bg-white/10 rounded-lg p-2.5 mt-3 flex flex-col gap-2 items-center w-full text-start">
                         {/* Error Display */}
                         {error && <div className="error-message">{error}</div>}
-                        {isLoading && (
-                            <div className="loading-indicator">
-                                Generating image...
-                            </div>
-                        )}
-                        <h3>Generate AI Texture</h3>
+                        <h3 className="text-white text-xs mr-auto">
+                            Generate AI Texture
+                        </h3>
                         {/* Generation Section - Moved to Bottom */}
-                        <div className="generation-section">
-                            {/* hCaptcha Component */}
-                            {captchaVisible && (
-                                <div
-                                    className={`hcaptcha-container ${
-                                        captchaFading ? "fade-out" : ""
-                                    }`}
-                                >
-                                    {" "}
-                                    {/* fade-out when requested */}
-                                    <HCaptcha
-                                        ref={hCaptchaRef}
-                                        theme="dark"
-                                        sitekey={
-                                            process.env
-                                                .REACT_APP_HCAPTCHA_SITE_KEY
-                                        }
-                                        onVerify={(token) => {
-                                            setHCaptchaToken(token);
-                                            setCaptchaError(null);
-                                            // Trigger fade animation then hide
-                                            setCaptchaFading(true);
-                                            setTimeout(() => {
-                                                setCaptchaVisible(false);
-                                                setCaptchaFading(false);
-                                            }, 600);
-                                        }}
-                                        onExpire={() => {
-                                            setHCaptchaToken(null);
-                                            setCaptchaError(
-                                                "CAPTCHA expired. Please verify again."
-                                            );
-                                            setCaptchaVisible(true);
-                                            setCaptchaFading(false);
-                                        }}
-                                        onError={(err) => {
-                                            setHCaptchaToken(null);
-                                            setCaptchaError(
-                                                `CAPTCHA error: ${err}`
-                                            );
-                                            setCaptchaVisible(true);
-                                            setCaptchaFading(false);
-                                        }}
-                                    />
-                                </div>
-                            )}
+                        <div className="flex gap-2 w-full relative">
                             <div className="generation-controls">
                                 <textarea
-                                    className="prompt-input"
+                                    className="border border-white/10 rounded-lg p-2 w-full resize-none"
                                     value={prompt}
                                     onChange={(e) => setPrompt(e.target.value)}
                                     placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
-                                    rows="2"
+                                    rows="1"
                                     disabled={isLoading}
                                 />
                             </div>
 
                             <div className="generation-buttons">
-                                <button
-                                    className="generate-button"
-                                    onClick={handleGenerate}
-                                    disabled={
-                                        isLoading ||
-                                        !prompt.trim() ||
-                                        !hCaptchaToken
-                                    }
+                                <Button
+                                    design="primary"
+                                    tier={3}
+                                    onClick={handleGenerateClick}
+                                    style={{
+                                        fontSize: "12px",
+                                        padding: "6px 12px",
+                                        borderRadius: "8px",
+                                    }}
+                                    disabled={isLoading || !prompt.trim()}
                                 >
-                                    {isLoading ? "Generating..." : "Generate"}
-                                </button>
+                                    {isLoading ? (
+                                        <div className="flex items-center gap-1.5 justify-center">
+                                            Generating
+                                            <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black/80 rounded-full animate-spin" />
+                                        </div>
+                                    ) : (
+                                        "Generate"
+                                    )}
+                                </Button>
+                            </div>
+
+                            {/* Invisible hCaptcha - always in DOM but hidden */}
+                            <div
+                                style={{
+                                    position: "fixed",
+                                    visibility: "hidden",
+                                    bottom: 0,
+                                    right: 0,
+                                }}
+                            >
+                                <HCaptcha
+                                    ref={hCaptchaRef}
+                                    theme="dark"
+                                    size="invisible"
+                                    sitekey={
+                                        process.env.REACT_APP_HCAPTCHA_SITE_KEY
+                                    }
+                                    onVerify={(token) => {
+                                        setHCaptchaToken(token);
+                                        setCaptchaError(null);
+                                    }}
+                                    onExpire={() => {
+                                        setHCaptchaToken(null);
+                                        setCaptchaError(
+                                            "CAPTCHA expired. Please try again."
+                                        );
+                                    }}
+                                    onError={(err) => {
+                                        setHCaptchaToken(null);
+                                        setCaptchaError(
+                                            `CAPTCHA error: ${err}`
+                                        );
+                                    }}
+                                />
                             </div>
 
                             {captchaError && (
@@ -441,12 +471,18 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 </div>
                 {/* Action Buttons */}
                 <div className="modal-actions">
-                    <button
-                        className="modal-close-button"
+                    <Button
+                        design="tertiary"
+                        tier={3}
                         onClick={handleClose}
+                        style={{
+                            fontSize: "12px",
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                        }}
                     >
                         Cancel
-                    </button>
+                    </Button>
                     {/* Texture name input */}
                     <input
                         type="text"
@@ -455,8 +491,14 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         value={textureName}
                         onChange={(e) => setTextureName(e.target.value)}
                     />
-                    <button
-                        className="use-texture-button"
+                    <Button
+                        design="primary"
+                        tier={3}
+                        style={{
+                            fontSize: "12px",
+                            padding: "6px 12px",
+                            borderRadius: "8px",
+                        }}
                         onClick={handleUseTexture}
                         disabled={
                             Object.keys(textureObjects).length === 0 ||
@@ -464,7 +506,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         }
                     >
                         Add Texture
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

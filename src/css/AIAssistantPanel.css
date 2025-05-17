@@ -102,48 +102,6 @@
     background: #333;
 }
 
-/* Captcha Container Styling */
-.ai-assistant-captcha-container {
-    margin-top: 10px;
-    /* min-width: 304px; /* REMOVED - Let container shrink */
-    display: flex;
-    justify-content: center; /* Center captcha if container is wider */
-    width: 100%; /* Ensure container takes available width */
-    overflow: hidden; /* Hide potential overflow */
-}
-
-/* Style the hCaptcha iframe directly if needed (e.g., for scaling) */
-.ai-assistant-captcha-container > div {
-    /* This targets the div hCaptcha injects */
-    /* max-width: 100%; /* REMOVED - We set width/scale directly */
-    /* overflow: hidden; /* Moved to container */
-}
-
-/* Improve HCaptcha container styles for dark theme */
-.h-captcha {
-    display: flex;
-    justify-content: center;
-    margin: 5px 0;
-}
-
-.ai-assistant-panel iframe {
-    border-radius: 10px !important;
-    width: 100% !important;
-}
-
-.ai-assistant-panel iframe html {
-    border-radius: 10px !important;
-    width: auto !important;
-}
-
-
-/* Custom dark theme styles that work with hcaptcha iframe */
-.h-captcha iframe {
-    background: #222 !important;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
 /* Basic Responsiveness */
 @media (max-width: 600px) {
     .ai-assistant-panel {
@@ -152,28 +110,6 @@
         right: 5vw; /* Center it a bit more */
         top: auto; /* Remove fixed top */
         bottom: 20px; /* Stick to bottom */
-    }
-
-    /* Scale captcha container on smaller screens if it overflows */
-    .ai-assistant-captcha-container {
-        /* width: 100%; /* Already set above */
-        /* overflow: hidden; /* REMOVING - Might clip compact view */
-        /* Explicitly set height to match scaled content */
-        /* height: calc(78px * 0.9); /* REMOVED - No longer needed for compact */
-        min-height: 144px; /* Add min-height for compact captcha */
-    }
-
-    /* Target the actual captcha iframe container */
-    .ai-assistant-captcha-container > div {
-        /* REMOVED Styles related to scaling normal size */
-        /* width: 304px; */
-        /* height: 78px; */
-        /* transform: scale(0.9); */
-        /* transform-origin: 0 0; */
-    }
-
-    .h-captcha {
-        min-height: 144px;
     }
 }
 
