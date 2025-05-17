@@ -170,10 +170,11 @@ export const importMap = async (
                                 "Processing environment objects...",
                                 60
                             );
+                            const instanceIdCounters: Record<string, number> = {};
                             environmentData = Object.entries(
                                 importData.entities
                             )
-                                .map(([key, entity]: [string, any], index) => {
+                                .map(([key, entity]: [string, any]) => {
                                     const [x, y, z] = key
                                         .split(",")
                                         .map(Number);
@@ -246,7 +247,15 @@ export const importMap = async (
                                                 "idle",
                                             ],
 
-                                        instanceId: index, // Use the array index as a unique ID
+                                        // Assign a sequential ID for **this** model type only
+                                        instanceId: (() => {
+                                            const modelKey = matchingModel
+                                                ? matchingModel.modelUrl
+                                                : `assets/${entity.modelUri}`;
+                                            const nextId = instanceIdCounters[modelKey] ?? 0;
+                                            instanceIdCounters[modelKey] = nextId + 1;
+                                            return nextId;
+                                        })(),
                                     };
                                 })
                                 .filter((obj) => obj !== null);
