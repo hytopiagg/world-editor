@@ -36,8 +36,6 @@ const ToolBar = ({
     undoRedoManager,
     currentBlockType,
     environmentBuilderRef,
-    toggleAIAssistant,
-    isAIAssistantVisible,
     setIsSaving,
     onOpenTextureModal,
     toggleAIComponents,
@@ -448,7 +446,7 @@ const ToolBar = ({
                                 <FaMinus />
                             </button>
                         </Tooltip>
-                        <Tooltip
+                        {/* <Tooltip
                             text={
                                 axisLockEnabled
                                     ? "Disable axis lock"
@@ -464,7 +462,7 @@ const ToolBar = ({
                             >
                                 {axisLockEnabled ? <FaLock /> : <FaLockOpen />}
                             </button>
-                        </Tooltip>
+                        </Tooltip> */}
                         <Tooltip text="Undo (Ctrl+Z)">
                             <button
                                 onClick={() =>

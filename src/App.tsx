@@ -582,8 +582,6 @@ function App() {
                         setPlacementSize={setPlacementSize}
                         undoRedoManager={undoRedoManagerRef}
                         currentBlockType={currentBlockType}
-                        toggleAIAssistant={() => setIsAIComponentsActive((v) => !v)}
-                        isAIAssistantVisible={isAIComponentsActive}
                         onOpenTextureModal={() => setIsTextureModalOpen(true)}
                         toggleAIComponents={() => setIsAIComponentsActive((v) => !v)}
                         isAIComponentsActive={isAIComponentsActive}
