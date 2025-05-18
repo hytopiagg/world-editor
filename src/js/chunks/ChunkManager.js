@@ -353,8 +353,9 @@ class ChunkManager {
             const now = performance.now();
             const elapsed = now - this._lastMeshBuildTime;
 
+            // Lower per-chunk delay so chunks appear faster; keep adaptive based on queue length
             const timeBetweenBuilds =
-                this._renderChunkQueue.length > 10 ? 5 : 20;
+                this._renderChunkQueue.length > 10 ? 2 : 10;
             if (elapsed < timeBetweenBuilds) {
                 window.requestAnimationFrame(() => this._renderChunk(chunk));
                 return;

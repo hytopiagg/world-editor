@@ -1,5 +1,3 @@
-
-
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
 import { CHUNK_SIZE, CHUNK_INDEX_RANGE } from "./ChunkConstants";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
@@ -116,9 +114,7 @@ class Chunk {
      * @param {boolean} isVisible - Whether the chunk is visible
      */
     set visible(isVisible) {
-
         this._visible = isVisible;
-
         this._updateMeshVisibility();
     }
     /**
@@ -126,21 +122,16 @@ class Chunk {
      * @private
      */
     _updateMeshVisibility() {
-
-
         if (this._solidMesh) {
             if (this._solidMesh.visible !== this._visible) {
-
             }
             this._solidMesh.visible = this._visible;
         }
         if (this._liquidMesh) {
             if (this._liquidMesh.visible !== this._visible) {
-
             }
             this._liquidMesh.visible = this._visible;
         }
-
         if (this._scene) {
             this._scene.updateMatrixWorld(true);
         }
@@ -192,7 +183,6 @@ class Chunk {
         const hasRemovedBlocks =
             options && options.removed && options.removed.length > 0;
 
-
         if (
             !forceCompleteRebuild &&
             !hasAddedBlocks &&
@@ -231,6 +221,26 @@ class Chunk {
         const { x: originX, y: originY, z: originZ } = this.originCoordinate;
 
         this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
+
+        let hasBlocks = false;
+        for (let i = 0; i < this._blocks.length; i++) {
+            if (this._blocks[i] !== 0) {
+                hasBlocks = true;
+                break;
+            }
+        }
+        if (!hasBlocks) {
+            if (this._solidMesh) {
+                chunkManager.chunkMeshManager.removeSolidMesh(this);
+                this._solidMesh = undefined;
+            }
+            if (this._liquidMesh) {
+                chunkManager.chunkMeshManager.removeLiquidMesh(this);
+                this._liquidMesh = undefined;
+            }
+            this._meshHashCode = 0;
+            return;
+        }
 
         for (let y = 0; y < CHUNK_SIZE; y++) {
             const globalY = originY + y;
@@ -290,20 +300,15 @@ class Chunk {
                             meshPositions.push(vertexX, vertexY, vertexZ);
                             meshNormals.push(...dir);
 
-
                             const actualTextureUri =
                                 blockType.getTexturePath(blockFace);
 
                             let texCoords;
                             const isCustomBlock = blockType.id >= 100;
                             if (isCustomBlock) {
-
-
                             }
 
                             if (!texCoords) {
-
-
                                 if (isCustomBlock) {
                                     texCoords =
                                         BlockTextureAtlas.instance.getMultiSidedTextureUV(
@@ -312,8 +317,6 @@ class Chunk {
                                             uv
                                         );
                                 } else {
-
-
                                     texCoords =
                                         BlockTextureAtlas.instance.getMultiSidedTextureUV(
                                             blockType.name, // Pass ID as string first
@@ -322,7 +325,6 @@ class Chunk {
                                         );
                                 }
                                 if (!texCoords && actualTextureUri) {
-
                                     texCoords =
                                         BlockTextureAtlas.instance.getTextureUVCoordinateSync(
                                             actualTextureUri,
@@ -330,14 +332,12 @@ class Chunk {
                                         );
                                 }
                                 if (!texCoords) {
-
                                     texCoords =
                                         BlockTextureAtlas.instance.getTextureUVCoordinateSync(
                                             "./assets/blocks/error.png",
                                             uv
                                         );
                                     if (!texCoords) {
-
                                         texCoords = [0, 0, 1, 1];
                                     }
                                 }
@@ -378,9 +378,6 @@ class Chunk {
             }
         }
 
-
-
-
         this._liquidMesh =
             liquidMeshPositions.length > 0
                 ? chunkManager.chunkMeshManager.getLiquidMesh(this, {
@@ -391,7 +388,6 @@ class Chunk {
                       uvs: liquidMeshUvs,
                   })
                 : undefined;
-
 
         this._solidMesh =
             solidMeshPositions.length > 0
@@ -406,11 +402,9 @@ class Chunk {
 
         this._updateMeshVisibility();
 
-
         this._meshHashCode = this._calculateBlocksHashCode();
 
         delete this._extendedBlockTypes;
-
 
         if (chunkManager._scene) {
             if (this._solidMesh) {
@@ -449,11 +443,8 @@ class Chunk {
             return this.buildMeshes(chunkManager);
         }
         try {
-
-
             const localCoordinates = [];
             for (const coord of blockCoordinates) {
-
                 if (
                     coord.x >= 0 &&
                     coord.x < CHUNK_SIZE &&
@@ -463,10 +454,7 @@ class Chunk {
                     coord.z < CHUNK_SIZE
                 ) {
                     localCoordinates.push(coord);
-                }
-
-                else {
-
+                } else {
                     const originCoord =
                         Chunk.globalCoordinateToOriginCoordinate(coord);
                     if (
@@ -474,7 +462,6 @@ class Chunk {
                         originCoord.y === this.originCoordinate.y &&
                         originCoord.z === this.originCoordinate.z
                     ) {
-
                         localCoordinates.push(
                             Chunk.globalCoordinateToLocalCoordinate(coord)
                         );
@@ -495,7 +482,6 @@ class Chunk {
             const effectiveRange = new Set();
             const processedBlocks = new Set();
             for (const coord of localCoordinates) {
-
                 if (!Chunk.isValidLocalCoordinate(coord)) {
                     continue;
                 }
@@ -554,7 +540,6 @@ class Chunk {
                 processedBlocks.add(blockKey);
                 const blockType = this.getLocalBlockType({ x, y, z });
                 if (!blockType) {
-
                     continue;
                 }
                 for (const blockFace of blockType.faces) {
@@ -609,7 +594,6 @@ class Chunk {
                             );
                         }
                         if (!texCoords) {
-
                             if (blockType.isLiquid) {
                                 const liquidTexturePath =
                                     blockType.getTextureUris().top ||
@@ -619,11 +603,7 @@ class Chunk {
                                         liquidTexturePath,
                                         uv
                                     );
-                            }
-
-                            else if (blockType.isMultiSided) {
-
-
+                            } else if (blockType.isMultiSided) {
                                 texCoords =
                                     BlockTextureAtlas.instance.getMultiSidedTextureUV(
                                         blockType.id.toString(), // Pass ID as string first
@@ -654,7 +634,6 @@ class Chunk {
                                         );
                                 }
                             } else {
-
                                 texCoords =
                                     BlockTextureAtlas.instance.getTextureUVCoordinateSync(
                                         actualTextureUri,
@@ -722,7 +701,6 @@ class Chunk {
             };
 
             if (solidMeshPositions.length > 0) {
-
                 if (this._solidMesh) {
                     chunkManager.chunkMeshManager.removeSolidMesh(this);
                 }
@@ -740,7 +718,6 @@ class Chunk {
                 this._solidMesh = meshes.solidMesh;
             }
             if (liquidMeshPositions.length > 0) {
-
                 if (this._liquidMesh) {
                     chunkManager.chunkMeshManager.removeLiquidMesh(this);
                 }
@@ -818,7 +795,6 @@ class Chunk {
     clearVertexColorCache(localCoordinate, radius = 2) {
         if (!this._vertexColorCache) return;
 
-
         this._vertexColorCache.clear();
     }
     /**
@@ -828,7 +804,6 @@ class Chunk {
      * @param {ChunkManager} chunkManager - The chunk manager
      */
     setBlock(localCoordinate, blockTypeId, chunkManager) {
-
         const shouldLogPerf = Math.random() < 0.01; // Only log 1% of operations
         if (shouldLogPerf) {
             console.time(`setBlock-${this.chunkId}`);
@@ -870,9 +845,7 @@ class Chunk {
             return;
         }
 
-
         if (isBlockRemoval) {
-
             if (Math.random() < 0.1) {
                 console.log(
                     `Block removal at (${localCoordinate.x},${localCoordinate.y},${localCoordinate.z}) - doing full chunk rebuild`
@@ -966,7 +939,6 @@ class Chunk {
                         adjacentChunkId !== this.chunkId &&
                         chunkManager._chunks.has(adjacentChunkId)
                     ) {
-
                         if (Math.random() < 0.1) {
                             console.log(
                                 `Also rebuilding adjacent chunk ${adjacentChunkId} due to edge block removal`
@@ -1020,17 +992,13 @@ class Chunk {
         let hash = 0;
         const { length } = this._blocks;
 
-
         for (let i = 0; i < length; i++) {
-
             if (this._blocks[i] !== 0) {
                 hash = (hash << 5) - hash + (i * 31 + this._blocks[i]);
                 hash = hash & hash; // Convert to 32bit integer
             }
         }
 
-
-        hash = hash * 31 + Math.floor(performance.now() / 10000); // Changes every 10 seconds
         return hash;
     }
     /**
@@ -1048,7 +1016,6 @@ class Chunk {
         blockFaceAO,
         chunkManager
     ) {
-
         const baseColor = blockType.color;
         return [...baseColor]; // Return a copy of the base color
     }
