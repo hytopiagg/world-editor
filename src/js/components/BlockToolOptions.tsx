@@ -10,6 +10,7 @@ import GroundToolOptionsSection from "./GroundToolOptionsSection";
 import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
 import WallToolOptionsSection from "./WallToolOptionsSection";
+import SelectionToolOptionsSection from "./SelectionToolOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -196,6 +197,14 @@ export function BlockToolOptions({
                     <CollapsibleSection title="Wall Tool" animationDelay="0.09s">
                         <WallToolOptionsSection
                             wallTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["wall"]}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTool === "selection" && (
+                    <CollapsibleSection title="Selection Tool" animationDelay="0.09s">
+                        <SelectionToolOptionsSection
+                            selectionTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]}
                             isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>

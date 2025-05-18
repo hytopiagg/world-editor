@@ -23,6 +23,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [showOptions, setShowOptions] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
     const [cameraSensitivity, setCameraSensitivity] = useState(5);
+    const [moveSpeed, setMoveSpeed] = useState(0.2);
     const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(!cameraManager.isPointerUnlockedMode);
 
     // Load saved sensitivity on mount
@@ -43,6 +44,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     }
                 } catch (error) {
                     console.error("Error loading pointer lock mode:", error);
+                }
+
+                // >>> Load saved movement speed
+                try {
+                    const savedMoveSpeed = await DatabaseManager.getData(STORES.SETTINGS, "cameraMoveSpeed");
+                    if (typeof savedMoveSpeed === "number") {
+                        setMoveSpeed(savedMoveSpeed);
+                        cameraManager.setMoveSpeed(savedMoveSpeed);
+                    }
+                } catch (error) {
+                    console.error("Error loading camera move speed:", error);
                 }
             } catch (error) {
                 console.error("Error loading camera sensitivity:", error);
@@ -125,6 +137,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         setCameraSensitivity(clamped);
         cameraManager.setPointerSensitivity(clamped);
         await DatabaseManager.saveData(STORES.SETTINGS, "cameraSensitivity", clamped);
+    };
+
+    const handleMoveSpeedChange = async (value: number) => {
+        const clamped = Math.max(0.05, Math.min(2.5, value));
+        setMoveSpeed(clamped);
+        cameraManager.setMoveSpeed(clamped);
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "cameraMoveSpeed", clamped);
+        } catch (error) {
+            console.error("Error saving camera move speed:", error);
+        }
     };
 
     return (
@@ -314,6 +337,41 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             <span className="text-xs text-[#F1F1F1] w-4 text-center">{cameraSensitivity}</span>
                         </div>
                     )}
+                    {/* Camera movement speed */}
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.16s" }}>
+                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Move Speed</label>
+                            <input
+                                type="number"
+                                value={moveSpeed.toFixed(2)}
+                                onChange={(e) => handleMoveSpeedChange(Number(e.target.value))}
+                                onBlur={(e) => handleMoveSpeedChange(Math.max(0.05, Math.min(5, Number(e.target.value))))}
+                                onKeyDown={(e: any) => {
+                                    if (e.key === 'Enter') {
+                                        handleMoveSpeedChange(Math.max(0.05, Math.min(5, Number(e.target.value))));
+                                        e.target.blur();
+                                    }
+                                }}
+                                min={0.05}
+                                max={2.5}
+                                step={0.05}
+                                className="w-[50px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin_button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <input
+                                type="range"
+                                min={0.05}
+                                max={2.5}
+                                step={0.05}
+                                value={moveSpeed}
+                                onChange={(e) => handleMoveSpeedChange(Number(e.target.value))}
+                                className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
+                                style={{
+                                    transition: "all 0.3s ease-in-out",
+                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(moveSpeed - 0.05) / (5 - 0.05) * 100}%, rgba(255, 255, 255, 0.1) ${(moveSpeed - 0.05) / (5 - 0.05) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
+                                }}
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

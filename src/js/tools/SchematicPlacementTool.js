@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
-import BlockMaterial from "../blocks/BlockMaterial"; // Import BlockMaterial for preview
 import { blockTypes } from "../managers/BlockTypesManager"; // For getting block type info
 
 class SchematicPlacementTool extends BaseTool {
@@ -35,9 +34,7 @@ class SchematicPlacementTool extends BaseTool {
         this.previewGroup = new THREE.Group();
         this.anchorOffset = new THREE.Vector3(0, 0, 0); // Offset from cursor to schematic anchor (e.g., corner)
         this.currentRotation = 0; // 0: 0°, 1: 90°, 2: 180°, 3: 270°
-
-        this.tooltip =
-            "Schematic Placement Tool: Click to place. Tap R to rotate. Press Escape to cancel.";
+        this.verticalOffset = 0; // Y offset applied via 1 / 2 keys
 
         if (this.scene) {
             this.scene.add(this.previewGroup);
@@ -73,6 +70,8 @@ class SchematicPlacementTool extends BaseTool {
 
         this.schematicData = schematicData;
         this.currentRotation = 0; // Reset rotation on new schematic activation
+        this.verticalOffset = 0;
+        this.anchorOffset.y = 0;
         this._rebuildPreviewInstancedMesh(); // Build/rebuild the InstancedMesh
         this._updatePreviewAnchorPosition(); // Position the group
         this.previewGroup.visible = true;
@@ -89,6 +88,8 @@ class SchematicPlacementTool extends BaseTool {
         this.previewGroup.visible = false;
         this._clearPreviewInstancedMesh(); // Clear the instanced mesh
         this.currentRotation = 0; // Reset rotation
+        this.verticalOffset = 0;
+        this.anchorOffset.y = 0;
         console.log("SchematicPlacementTool specific deactivation");
 
         if (this.terrainBuilderProps.clearAISchematic) {
@@ -233,6 +234,16 @@ class SchematicPlacementTool extends BaseTool {
             console.log(`Schematic rotation: ${this.currentRotation * 90}°`);
             this._rebuildPreviewInstancedMesh(); // Rebuild with new relative positions
             this._updatePreviewAnchorPosition(); // Ensure group is correctly positioned
+        } else if (event.key === "1") {
+            // Shift down
+            this.verticalOffset -= 1;
+            this.anchorOffset.y = this.verticalOffset;
+            this._updatePreviewAnchorPosition();
+        } else if (event.key === "2") {
+            // Shift up
+            this.verticalOffset += 1;
+            this.anchorOffset.y = this.verticalOffset;
+            this._updatePreviewAnchorPosition();
         }
     }
 

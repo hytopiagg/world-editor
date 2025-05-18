@@ -426,5 +426,8 @@ class CameraManager {
         // level expected 1-10
         this.pointerSensitivity = THREE.MathUtils.clamp(level, 1, 10);
     }
+    setMoveSpeed(speed: number) {
+        this.moveSpeed = THREE.MathUtils.clamp(speed, 0.05, 2.5);
+    }
 }
 export const cameraManager = new CameraManager();
