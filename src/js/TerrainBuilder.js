@@ -286,53 +286,53 @@ function TerrainBuilder(
 
         try {
             const db = await DatabaseManager.getDBConnection();
-            const tx = db.transaction(STORES.TERRAIN, "readwrite");
-            const store = tx.objectStore(STORES.TERRAIN);
 
+            // Number of operations (delete/put) to execute per IndexedDB transaction.
+            // Keeping this value reasonable avoids hitting engine limits and keeps the UI responsive.
+            const CHUNK_SIZE = 100000;
+
+            // Utility helper to run a batch of operations inside its own transaction
+            const processChunk = (items, handler) => {
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORES.TERRAIN, "readwrite");
+                    const store = tx.objectStore(STORES.TERRAIN);
+                    items.forEach((item) => handler(store, item));
+                    tx.oncomplete = resolve;
+                    tx.onerror = reject;
+                });
+            };
+
+            // --- Handle removals in manageable chunks ---
             if (
                 changesToSave.removed &&
                 Object.keys(changesToSave.removed).length > 0
             ) {
-                await Promise.all(
-                    Object.keys(changesToSave.removed).map((key) => {
-                        const deleteRequest = store.delete(key);
-                        return new Promise((resolve, reject) => {
-                            deleteRequest.onsuccess = resolve;
-                            deleteRequest.onerror = reject;
-                        });
-                    })
-                );
-                console.log(
-                    `Deleted ${
-                        Object.keys(changesToSave.removed).length
-                    } blocks from DB`
-                );
+                const removeKeys = Object.keys(changesToSave.removed);
+                for (let i = 0; i < removeKeys.length; i += CHUNK_SIZE) {
+                    const slice = removeKeys.slice(i, i + CHUNK_SIZE);
+                    await processChunk(slice, (store, key) =>
+                        store.delete(key)
+                    );
+                }
+                console.log(`Deleted ${removeKeys.length} blocks from DB`);
             }
 
+            // --- Handle additions / updates in manageable chunks ---
             if (
                 changesToSave.added &&
                 Object.keys(changesToSave.added).length > 0
             ) {
-                await Promise.all(
-                    Object.entries(changesToSave.added).map(([key, value]) => {
-                        const putRequest = store.put(value, key);
-                        return new Promise((resolve, reject) => {
-                            putRequest.onsuccess = resolve;
-                            putRequest.onerror = reject;
-                        });
-                    })
-                );
-                console.log(
-                    `Added/updated ${
-                        Object.keys(changesToSave.added).length
-                    } blocks in DB`
-                );
+                const addEntries = Object.entries(changesToSave.added);
+                for (let i = 0; i < addEntries.length; i += CHUNK_SIZE) {
+                    const slice = addEntries.slice(i, i + CHUNK_SIZE);
+                    await processChunk(slice, (store, [key, value]) =>
+                        store.put(value, key)
+                    );
+                }
+                console.log(`Added/updated ${addEntries.length} blocks in DB`);
             }
 
-            await new Promise((resolve, reject) => {
-                tx.oncomplete = resolve;
-                tx.onerror = reject;
-            });
+            // All chunk transactions awaited above have completed at this point.
             lastSaveTimeRef.current = Date.now(); // Update last save time
             return true;
         } catch (error) {
@@ -2192,6 +2192,33 @@ function TerrainBuilder(
         )
             return;
         trackTerrainChanges(addedBlocks, removedBlocks);
+
+        if (options?.syncPendingChanges) {
+            // Synchronise TerrainBuilder-level pendingChangesRef so that manual/auto-save picks up changes
+            if (!pendingChangesRef.current) {
+                pendingChangesRef.current = {
+                    terrain: { added: {}, removed: {} },
+                    environment: { added: [], removed: [] },
+                };
+            }
+
+            // Process added blocks: add to "added" list and remove from "removed" if present
+            Object.entries(addedBlocks).forEach(([key, val]) => {
+                if (pendingChangesRef.current.terrain.removed[key]) {
+                    delete pendingChangesRef.current.terrain.removed[key];
+                }
+                pendingChangesRef.current.terrain.added[key] = val;
+            });
+
+            // Process removed blocks: if it was newly added in this session, drop it from "added"; otherwise record in "removed"
+            Object.entries(removedBlocks).forEach(([key, val]) => {
+                if (pendingChangesRef.current.terrain.added[key]) {
+                    delete pendingChangesRef.current.terrain.added[key];
+                } else {
+                    pendingChangesRef.current.terrain.removed[key] = val;
+                }
+            });
+        }
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             if (!isNaN(parseInt(blockId))) {
                 let dataUri = null;
@@ -2242,6 +2269,7 @@ function TerrainBuilder(
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             terrainRef.current[posKey] = blockId;
         });
+
         Object.entries(removedBlocks).forEach(([posKey]) => {
             delete terrainRef.current[posKey];
         });

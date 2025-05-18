@@ -14,7 +14,8 @@ import {
     FaSquare,
     FaThLarge,
     FaTrash,
-    FaUndo
+    FaUndo,
+    FaWrench
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
@@ -53,6 +54,7 @@ const ToolBar = ({
     });
     const [showTerrainModal, setShowTerrainModal] = useState(false);
     const [showAISubmenu, setShowAISubmenu] = useState(false);
+    const [showUtilsSubmenu, setShowUtilsSubmenu] = useState(false);
     const [terrainSettings, setTerrainSettings] = useState({
         width: 32,
         length: 32,
@@ -295,6 +297,64 @@ const ToolBar = ({
         }
     };
 
+    const handleRemoveHiddenBlocks = () => {
+        if (!terrainBuilderRef?.current?.getCurrentTerrainData) {
+            console.error("TerrainBuilder reference not available for removing hidden blocks");
+            return;
+        }
+
+        const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+        if (!terrainData) return;
+
+        const originalCount = Object.keys(terrainData).length;
+        const removedBlocks = {};
+
+        for (const key in terrainData) {
+            const [xStr, yStr, zStr] = key.split(",");
+            const x = parseInt(xStr);
+            const y = parseInt(yStr);
+            const z = parseInt(zStr);
+
+            const neighborKeys = [
+                `${x + 1},${y},${z}`,
+                `${x - 1},${y},${z}`,
+                `${x},${y + 1},${z}`,
+                `${x},${y - 1},${z}`,
+                `${x},${y},${z + 1}`,
+                `${x},${y},${z - 1}`,
+            ];
+
+            let isHidden = true;
+            for (const nKey of neighborKeys) {
+                if (!(nKey in terrainData)) {
+                    isHidden = false;
+                    break;
+                }
+            }
+
+            if (isHidden) {
+                removedBlocks[key] = terrainData[key];
+            }
+        }
+
+        const removedCount = Object.keys(removedBlocks).length;
+
+        if (removedCount === 0) {
+            alert("No hidden blocks found to remove.");
+            return;
+        }
+
+        try {
+            terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks, { syncPendingChanges: true });
+            alert(
+                `Hidden Blocks Removed!\nOriginal Blocks: ${originalCount}\nBlocks Removed: ${removedCount}\nRemaining Blocks: ${originalCount - removedCount}`
+            );
+        } catch (error) {
+            console.error("Error removing hidden blocks:", error);
+            alert("An error occurred while removing hidden blocks. Check console for details.");
+        }
+    };
+
     useEffect(() => {
         const checkUndoRedoAvailability = async () => {
             const undoStates =
@@ -426,7 +486,7 @@ const ToolBar = ({
                                 <FaPlus />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Remove blocks">
+                        <Tooltip text="Remove Hidden Blocks">
                             <button
                                 onClick={() =>
                                     handleModeChangeWithToolReset("remove")
@@ -611,6 +671,32 @@ const ToolBar = ({
                                         }}
                                     >
                                         {"Components"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        {/* Utils / Tools submenu */}
+                        <div className="relative">
+                            <Tooltip text="Tools" hideTooltip={showUtilsSubmenu}>
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showUtilsSubmenu ? 'selected' : ''}`}
+                                    onClick={() => setShowUtilsSubmenu(!showUtilsSubmenu)}
+                                >
+                                    <FaWrench className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+
+                            {showUtilsSubmenu && (
+                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                    <button
+                                        className="w-fit flex items-center whitespace-nowrap justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
+                                        style={{ animationDelay: '0.05s' }}
+                                        onClick={() => {
+                                            handleRemoveHiddenBlocks();
+                                            setShowUtilsSubmenu(false);
+                                        }}
+                                    >
+                                        {"Remove Hidden Blocks"}
                                     </button>
                                 </div>
                             )}
