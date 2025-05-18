@@ -1,12 +1,9 @@
 import { generatePerlinNoise } from "perlin-noise";
 import { useEffect, useState } from "react";
 import {
-    FaBorderAll,
     FaCloud,
     FaCubes,
     FaDrawPolygon,
-    FaLock,
-    FaLockOpen,
     FaMinus,
     FaMountain,
     FaMousePointer,
@@ -505,6 +502,13 @@ const ToolBar = ({
                                                 className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${placementSize === opt.value ? 'bg-white/90 text-black' : ''}`}
                                                 style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
                                                 onClick={() => {
+                                                    if (activeTool) {
+                                                        try {
+                                                            terrainBuilderRef.current?.activateTool(null);
+                                                        } catch (_) { }
+                                                        setActiveTool(null);
+                                                    }
+
                                                     setPlacementSize(opt.value);
                                                     setShowPlacementMenu(false);
                                                 }}
@@ -553,42 +557,9 @@ const ToolBar = ({
                                 <FaDrawPolygon />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("pipe");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "pipe" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaBorderAll />
-                            </button>
-                        </Tooltip>
                     </div>
-                    {/* <div className="control-label">Placement Tools</div> */}
                 </div>
-                {/* <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"> */}
-                {/* <div className="control-button-wrapper"> */}
-                {/* <Tooltip text="Generate solid cube">
-                            <button
-                                onClick={() => setShowDimensionsModal(true)}
-                                className="control-button"
-                            >
-                                <FaCube />
-                            </button>
-                        </Tooltip> */}
-                {/* <Tooltip text="Generate wall of Blocks">
-                            <button
-                                onClick={() => setShowBorderModal(true)}
-                                className="control-button"
-                            >
-                                <FaBorderStyle />
-                            </button>
-                        </Tooltip> */}
-                {/* </div> */}
-                {/* <div className="control-label">Generative Tools</div> */}
-                {/* </div> */}
+
                 <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
                     <div className="control-button-wrapper">
                         <Tooltip text="Generate terrain">
@@ -735,7 +706,6 @@ const ToolBar = ({
                             </Tooltip>
                         )}
                     </div>
-                    {/* <div className="control-label">Save</div> */}
                 </div>
             </div>
             {showDimensionsModal && (

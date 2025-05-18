@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { FaAngleUp } from "react-icons/fa";
 import "../../css/BlockToolsOptions.css";
 import "../../css/BlockToolsSidebar.css";
+import AIAssistantPanel from "./AIAssistantPanel";
 import BlockOptionsSection from "./BlockOptionsSection";
+import ComponentOptionsSection from "./ComponentOptionsSection";
 import DebugInfo from "./DebugInfo";
+import GroundToolOptionsSection from "./GroundToolOptionsSection";
 import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
-import ComponentOptionsSection from "./ComponentOptionsSection";
-import AIAssistantPanel from "./AIAssistantPanel";
-import GroundToolOptionsSection from "./GroundToolOptionsSection";
+import WallToolOptionsSection from "./WallToolOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -183,6 +184,14 @@ export function BlockToolOptions({
                     <CollapsibleSection title="Ground Tool" animationDelay="0.09s">
                         <GroundToolOptionsSection
                             groundTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["ground"]}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTool === "wall" && (
+                    <CollapsibleSection title="Wall Tool" animationDelay="0.09s">
+                        <WallToolOptionsSection
+                            wallTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["wall"]}
                             isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>

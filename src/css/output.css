@@ -289,6 +289,10 @@
   .table {
     display: table;
   }
+  .size-1 {
+    width: calc(var(--spacing) * 1);
+    height: calc(var(--spacing) * 1);
+  }
   .size-1000 {
     width: calc(var(--spacing) * 1000);
     height: calc(var(--spacing) * 1000);

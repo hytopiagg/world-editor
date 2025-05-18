@@ -44,7 +44,6 @@ import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
 import { playPlaceSound } from "./Sound";
 import {
     GroundTool,
-    PipeTool,
     SchematicPlacementTool,
     SelectionTool,
     ToolManager,
@@ -1649,8 +1648,6 @@ function TerrainBuilder(
         toolManagerRef.current.registerTool("wall", wallTool);
         const groundTool = new GroundTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("ground", groundTool);
-        const pipeTool = new PipeTool(terrainBuilderProps);
-        toolManagerRef.current.registerTool("pipe", pipeTool);
         const schematicPlacementTool = new SchematicPlacementTool(
             terrainBuilderProps
         );

@@ -11,6 +11,7 @@ class GroundTool extends BaseTool {
      */
     groundHeight = 1;
     isCircleShape = false; // false = square, true = circle
+    groundEdgeDepth = 0; // 0 = solid, >=1 = hollow with specified wall thickness
     isCtrlPressed = false;
     groundStartPosition = null;
     groundPreview = null;
@@ -31,9 +32,10 @@ class GroundTool extends BaseTool {
 
         this.name = "GroundTool";
         this.tooltip =
-            "Ground Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.";
+            "Ground Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 5 to toggle rounded edges. Use 3 | 4 to adjust hollowness. Hold Ctrl to erase. Press Escape to cancel.";
         this.groundHeight = 1;
         this.isCircleShape = false;
+        this.groundEdgeDepth = 0;
         this.groundStartPosition = null;
         this.groundPreview = null;
 
@@ -230,6 +232,10 @@ class GroundTool extends BaseTool {
             this.setGroundHeight(this.groundHeight - 1);
         } else if (event.key === "2") {
             this.setGroundHeight(this.groundHeight + 1);
+        } else if (event.key === "3") {
+            this.setGroundEdgeDepth(this.groundEdgeDepth - 1);
+        } else if (event.key === "4") {
+            this.setGroundEdgeDepth(this.groundEdgeDepth + 1);
         } else if (event.key === "5") {
             this.toggleShape();
         } else if (event.key === "Escape") {
@@ -275,20 +281,24 @@ class GroundTool extends BaseTool {
         }
     }
 
-    isInGroundShape(
+    /**
+     * Determine if a point is on the ground wall based on hollowness.
+     */
+    isInGroundWall(
         x: number,
         z: number,
         minX: number,
         maxX: number,
         minZ: number,
         maxZ: number,
+        edgeDepth: number,
         isCircle = false
     ) {
-        if (!isCircle) {
-            // square
-            return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
-        } else {
-            // circle approximation
+        if (edgeDepth <= 0) {
+            // Solid fill behaves like original isInGroundShape
+            if (!isCircle) {
+                return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
+            }
             const width = maxX - minX + 1;
             const length = maxZ - minZ + 1;
             const centerX = minX + width / 2;
@@ -298,6 +308,37 @@ class GroundTool extends BaseTool {
             const distSquared = dx * dx + dz * dz;
             const radius = Math.min(width, length) / 2;
             return distSquared <= radius * radius;
+        }
+
+        // Hollow walls determination
+        const width = maxX - minX + 1;
+        const length = maxZ - minZ + 1;
+
+        if (!isCircle) {
+            const distFromLeft = x - minX;
+            const distFromRight = maxX - x;
+            const distFromTop = z - minZ;
+            const distFromBottom = maxZ - z;
+
+            return (
+                distFromLeft < edgeDepth ||
+                distFromRight < edgeDepth ||
+                distFromTop < edgeDepth ||
+                distFromBottom < edgeDepth
+            );
+        } else {
+            const centerX = minX + width / 2;
+            const centerZ = minZ + length / 2;
+            const dx = x - centerX;
+            const dz = z - centerZ;
+            const distSquared = dx * dx + dz * dz;
+            const radius = Math.min(width, length) / 2;
+
+            const outerRadiusSquared = radius * radius;
+            const innerRadius = Math.max(0, radius - edgeDepth);
+            const innerRadiusSquared = innerRadius * innerRadius;
+
+            return distSquared <= outerRadiusSquared && distSquared >= innerRadiusSquared;
         }
     }
     /**
@@ -334,13 +375,14 @@ class GroundTool extends BaseTool {
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
                 if (
-                    this.isInGroundShape(
+                    this.isInGroundWall(
                         x,
                         z,
                         minX,
                         maxX,
                         minZ,
                         maxZ,
+                        this.groundEdgeDepth,
                         this.isCircleShape
                     )
                 ) {
@@ -458,13 +500,14 @@ class GroundTool extends BaseTool {
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
                 if (
-                    this.isInGroundShape(
+                    this.isInGroundWall(
                         x,
                         z,
                         minX,
                         maxX,
                         minZ,
                         maxZ,
+                        this.groundEdgeDepth,
                         this.isCircleShape
                     )
                 ) {
@@ -563,13 +606,14 @@ class GroundTool extends BaseTool {
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
                 if (
-                    this.isInGroundShape(
+                    this.isInGroundWall(
                         x,
                         z,
                         minX,
                         maxX,
                         minZ,
                         maxZ,
+                        this.groundEdgeDepth,
                         this.isCircleShape
                     )
                 ) {
@@ -601,13 +645,14 @@ class GroundTool extends BaseTool {
             for (let x = minX; x <= maxX; x++) {
                 for (let z = minZ; z <= maxZ; z++) {
                     if (
-                        this.isInGroundShape(
+                        this.isInGroundWall(
                             x,
                             z,
                             minX,
                             maxX,
                             minZ,
                             maxZ,
+                            this.groundEdgeDepth,
                             this.isCircleShape
                         )
                     ) {
@@ -668,6 +713,21 @@ class GroundTool extends BaseTool {
         this.terrainBuilderRef = null;
 
         super.dispose();
+    }
+
+    setGroundEdgeDepth(depth) {
+        this.groundEdgeDepth = Math.max(0, depth);
+
+        if (
+            this.groundStartPosition &&
+            this.previewPositionRef &&
+            this.previewPositionRef.current
+        ) {
+            this.updateGroundPreview(
+                this.groundStartPosition,
+                this.previewPositionRef.current
+            );
+        }
     }
 }
 
