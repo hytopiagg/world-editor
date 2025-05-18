@@ -220,8 +220,7 @@ class Chunk {
         const liquidMeshColors = [];
         const { x: originX, y: originY, z: originZ } = this.originCoordinate;
 
-        this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
-
+        // Check quickly if the chunk actually contains any non-air blocks.
         let hasBlocks = false;
         for (let i = 0; i < this._blocks.length; i++) {
             if (this._blocks[i] !== 0) {
@@ -242,7 +241,29 @@ class Chunk {
             return;
         }
 
+        // Only now that we know we have blocks worth rendering, build the neighbour lookup table.
+        this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
+
         for (let y = 0; y < CHUNK_SIZE; y++) {
+            // Quick test: if the entire X-Z slice at this Y level is air, skip costly per-face work
+            let sliceHasBlocks = false;
+            for (
+                let zTest = 0;
+                zTest < CHUNK_SIZE && !sliceHasBlocks;
+                zTest++
+            ) {
+                // compute contiguous offset once per row
+                const rowBase = CHUNK_SIZE * (y + CHUNK_SIZE * zTest);
+                for (let xTest = 0; xTest < CHUNK_SIZE; xTest++) {
+                    if (this._blocks[rowBase + xTest] !== 0) {
+                        sliceHasBlocks = true;
+                        break;
+                    }
+                }
+            }
+            if (!sliceHasBlocks) {
+                continue; // nothing on this Y level
+            }
             const globalY = originY + y;
             for (let z = 0; z < CHUNK_SIZE; z++) {
                 const globalZ = originZ + z;
