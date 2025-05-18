@@ -235,6 +235,13 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                         <FaTrash /> Delete
                     </button>
                 </div>
+
+                <div className="flex flex-col gap-1 text-[10px] text-[#F1F1F1]/80 mt-3 bg-black/10 -mx-3 px-3 py-3 text-left fade-down opacity-0 duration-150" style={{ animationDelay: "0.1s" }}>
+                    <p className="text-xs text-[#F1F1F1]/80 font-bold">Keyboard Shortcuts</p>
+                    <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">R</kbd> – Rotate schematic (90°)</div>
+                    <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">1</kbd>/<kbd className="bg-white/20 px-1 rounded">2</kbd> – Shift down / up</div>
+                    <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">Esc</kbd> – Cancel placement</div>
+                </div>
             </div>
         </div>
     );
