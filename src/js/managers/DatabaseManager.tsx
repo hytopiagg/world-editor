@@ -156,6 +156,16 @@ export class DatabaseManager {
         const db = await this.getDBConnection();
         return new Promise((resolve, reject) => {
             try {
+                // Gracefully handle requests for object stores that do not yet exist in the current DB version.
+                // This can happen when users are running an older database version that was created before
+                // the store was introduced (e.g. `environment-model-settings`).
+                if (!db.objectStoreNames.contains(storeName)) {
+                    console.warn(
+                        `[DB] Requested store '${storeName}' does not exist on this client. Returning undefined.`
+                    );
+                    resolve(undefined);
+                    return; // Exit early so we don't attempt to start a transaction on a non-existent store.
+                }
                 const tx = db.transaction(storeName, "readonly");
                 const store = tx.objectStore(storeName);
 

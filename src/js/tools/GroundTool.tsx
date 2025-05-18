@@ -360,6 +360,11 @@ class GroundTool extends BaseTool {
             return false;
         }
 
+        if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+            console.error("GroundTool: currentBlockTypeRef is null – no block selected");
+            return false;
+        }
+
         const blockTypeId = this.currentBlockTypeRef.current.id;
 
         const minX = Math.min(Math.round(startPos.x), Math.round(endPos.x));

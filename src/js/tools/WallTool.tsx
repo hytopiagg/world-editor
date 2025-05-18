@@ -294,7 +294,7 @@ class WallTool extends BaseTool {
             this.setWallHeight(this.wallHeight - 1);
         } else if (event.key === "2") {
             this.setWallHeight(this.wallHeight + 1);
-        } else if (event.key === "Escape" ) {
+        } else if (event.key === "Escape") {
             this.removeWallPreview();
             this.wallStartPosition = null;
         }
@@ -337,6 +337,10 @@ class WallTool extends BaseTool {
             return false;
         }
 
+        if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+            console.error("WallTool: currentBlockTypeRef is null – no block selected");
+            return false;
+        }
         const blockTypeId = this.currentBlockTypeRef.current.id;
 
         const points = this.getLinePoints(
@@ -371,8 +375,7 @@ class WallTool extends BaseTool {
             return false;
         }
         console.log(
-            `WallTool: Adding ${
-                Object.keys(addedBlocks).length
+            `WallTool: Adding ${Object.keys(addedBlocks).length
             } blocks in batch`
         );
 
@@ -452,6 +455,11 @@ class WallTool extends BaseTool {
             return false;
         }
 
+        if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+            console.error("WallTool: currentBlockTypeRef is null – no block selected");
+            return false;
+        }
+
         const points = this.getLinePoints(
             Math.round(startPos.x),
             Math.round(startPos.z),
@@ -482,8 +490,7 @@ class WallTool extends BaseTool {
             return false;
         }
         console.log(
-            `WallTool: Removing ${
-                Object.keys(removedBlocks).length
+            `WallTool: Removing ${Object.keys(removedBlocks).length
             } blocks in batch`
         );
 
