@@ -396,6 +396,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 <textarea
                                     className="border border-white/10 rounded-lg p-2 w-full resize-none"
                                     value={prompt}
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => setPrompt(e.target.value)}
                                     placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
                                     rows="1"

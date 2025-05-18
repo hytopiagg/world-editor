@@ -198,6 +198,7 @@ export default function ModelOptionsSection({
     };
 
     const handleKeyDown = (event: React.KeyboardEvent) => {
+        event.stopPropagation();
         if (event.key === 'Enter') {
             handleSaveName();
         } else if (event.key === 'Escape') {

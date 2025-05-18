@@ -355,7 +355,9 @@ const AIAssistantPanel = ({
 
     return (
         <div className={`ai-assistant-panel ${isEmbedded ? 'embedded' : ''}`}>
+            {/* Prevent inputs triggering keyboard shortcuts in the main app */}
             <textarea
+                onKeyDown={(e) => e.stopPropagation()}
                 className="text-xs bg-transparent rounded-md h-20 p-2 ring-0 outline-none border border-white/10 resize-none focus:border-white hover:border-white/20 transition-all duration-200"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}

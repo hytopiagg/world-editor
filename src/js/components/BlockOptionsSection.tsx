@@ -51,6 +51,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
     };
 
     const handleKeyDown = (event) => {
+        event.stopPropagation();
         if (event.key === 'Enter') {
             handleSaveName();
         } else if (event.key === 'Escape') {
