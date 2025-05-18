@@ -89,7 +89,7 @@ class SchematicPlacementTool extends BaseTool {
         this._clearPreviewInstancedMesh(); // Clear the instanced mesh
         this.currentRotation = 0; // Reset rotation
         this.verticalOffset = 0;
-        this.anchorOffset.y = 0;
+        this.anchorOffset.set(0, 0, 0);
         console.log("SchematicPlacementTool specific deactivation");
 
         if (this.terrainBuilderProps.clearAISchematic) {
@@ -150,10 +150,13 @@ class SchematicPlacementTool extends BaseTool {
             this.previewInstancedMaterial,
             count
         );
-        // Optional: for transparency, might help with rendering order
-        // this.previewInstancedMesh.renderOrder = 1;
 
-        const colorInstance = new THREE.Color(); // Reusable color object
+        const colorInstance = new THREE.Color();
+
+        let minX = Infinity,
+            maxX = -Infinity,
+            minZ = Infinity,
+            maxZ = -Infinity;
 
         for (let i = 0; i < count; i++) {
             const [relPosStr, blockId] = blocks[i];
@@ -164,17 +167,22 @@ class SchematicPlacementTool extends BaseTool {
                 relZ
             );
 
-            // Set instance transform (position)
+            // Track bounds for centering
+            minX = Math.min(minX, rotatedRel.x);
+            maxX = Math.max(maxX, rotatedRel.x);
+            minZ = Math.min(minZ, rotatedRel.z);
+            maxZ = Math.max(maxZ, rotatedRel.z);
+
+            // Instance transform
             this.dummy.position.set(rotatedRel.x, rotatedRel.y, rotatedRel.z);
-            // No rotation or scale needed for individual preview blocks beyond schematic rotation
             this.dummy.rotation.set(0, 0, 0);
             this.dummy.scale.set(1, 1, 1);
             this.dummy.updateMatrix();
             this.previewInstancedMesh.setMatrixAt(i, this.dummy.matrix);
 
-            // Set instance color
+            // Instance color
             const blockType = blockTypes.find((b) => b.id === blockId);
-            const colorHex = blockType ? 0x00ff00 : 0xff00ff; // Green for known, magenta for unknown
+            const colorHex = blockType ? 0x00ff00 : 0xff00ff;
             this.previewInstancedMesh.setColorAt(
                 i,
                 colorInstance.setHex(colorHex)
@@ -182,11 +190,18 @@ class SchematicPlacementTool extends BaseTool {
         }
 
         this.previewInstancedMesh.instanceMatrix.needsUpdate = true;
-        if (this.previewInstancedMesh.instanceColor) {
+        if (this.previewInstancedMesh.instanceColor)
             this.previewInstancedMesh.instanceColor.needsUpdate = true;
-        }
 
         this.previewGroup.add(this.previewInstancedMesh);
+
+        // Center the schematic horizontally (bottom-center)
+        const centerX = (minX + maxX) / 2;
+        const centerZ = (minZ + maxZ) / 2;
+        this.anchorOffset.x = -centerX;
+        this.anchorOffset.z = -centerZ;
+        // ensure Y offset maintained
+        this.anchorOffset.y = this.verticalOffset;
     }
 
     _clearPreviewInstancedMesh() {
