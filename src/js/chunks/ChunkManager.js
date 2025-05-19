@@ -91,21 +91,29 @@ class ChunkManager {
     getGlobalBlockType(globalCoordinate) {
         const cacheKey = `${globalCoordinate.x},${globalCoordinate.y},${globalCoordinate.z}`;
 
+        // Return cached non-air block type if we already have it
         if (this._blockTypeCache.has(cacheKey)) {
             const cachedType = this._blockTypeCache.get(cacheKey);
-
-            const currentId = this.getGlobalBlockId(globalCoordinate);
-
-            if (cachedType && currentId === 0) {
-                this._blockTypeCache.delete(cacheKey);
-            } else {
+            if (cachedType) {
                 return cachedType;
             }
+            // If the cached value was air (undefined/null), drop it so we can re-evaluate later
+            this._blockTypeCache.delete(cacheKey);
         }
+
         const blockId = this.getGlobalBlockId(globalCoordinate);
+
+        // Air (id 0) – do **not** cache to avoid unbounded Map growth
+        if (blockId === 0) {
+            return undefined;
+        }
+
         const blockType = BlockTypeRegistry.instance.getBlockType(blockId);
 
-        this._blockTypeCache.set(cacheKey, blockType);
+        // Only cache actual block types (non-air)
+        if (blockType) {
+            this._blockTypeCache.set(cacheKey, blockType);
+        }
         return blockType;
     }
 
