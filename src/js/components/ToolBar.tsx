@@ -483,7 +483,7 @@ const ToolBar = ({
                                 className={`control-button ${mode === "add" ? "selected" : ""
                                     }`}
                             >
-                                <FaPlus />
+                                <FaPlus className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <Tooltip text="Remove Hidden Blocks">
@@ -494,7 +494,7 @@ const ToolBar = ({
                                 className={`control-button ${mode === "remove" ? "selected" : ""
                                     }`}
                             >
-                                <FaMinus />
+                                <FaMinus className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         {/* <Tooltip
@@ -523,7 +523,7 @@ const ToolBar = ({
                                     }`}
                                 disabled={!canUndo}
                             >
-                                <FaUndo />
+                                <FaUndo className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <Tooltip text="Redo (Ctrl+Y)">
@@ -535,7 +535,7 @@ const ToolBar = ({
                                     }`}
                                 disabled={!canRedo}
                             >
-                                <FaRedo />
+                                <FaRedo className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
@@ -545,7 +545,7 @@ const ToolBar = ({
                                     className={`relative control-button active:translate-y-[1px] group transition-all ${showPlacementMenu ? 'selected' : ''}`}
                                     onClick={() => setShowPlacementMenu(!showPlacementMenu)}
                                 >
-                                    <FaThLarge />
+                                    <FaThLarge className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
 
                                 {showPlacementMenu && (
@@ -590,7 +590,7 @@ const ToolBar = ({
                                 className={`control-button ${activeTool === "selection" ? "selected" : ""
                                     }`}
                             >
-                                <FaMousePointer />
+                                <FaMousePointer className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
@@ -602,7 +602,7 @@ const ToolBar = ({
                                 className={`control-button ${activeTool === "ground" ? "selected" : ""
                                     }`}
                             >
-                                <FaSquare />
+                                <FaSquare className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
@@ -614,7 +614,7 @@ const ToolBar = ({
                                 className={`control-button ${activeTool === "wall" ? "selected" : ""
                                     }`}
                             >
-                                <FaDrawPolygon />
+                                <FaDrawPolygon className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                     </div>
@@ -627,7 +627,7 @@ const ToolBar = ({
                                 onClick={() => setShowTerrainModal(true)}
                                 className="control-button"
                             >
-                                <FaMountain />
+                                <FaMountain className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <Tooltip text="Import Minecraft Map">
@@ -711,7 +711,7 @@ const ToolBar = ({
                                 onClick={handleClearMap}
                                 className="control-button"
                             >
-                                <FaTrash />
+                                <FaTrash className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <Tooltip text="Save terrain (Ctrl+S)">
@@ -732,7 +732,7 @@ const ToolBar = ({
                                 }}
                                 className="control-button"
                             >
-                                <FaSave />
+                                <FaSave className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <div className="relative">
