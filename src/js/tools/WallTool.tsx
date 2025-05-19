@@ -124,6 +124,15 @@ class WallTool extends BaseTool {
         super.onDeactivate();
         this.removeWallPreview();
         this.wallStartPosition = null;
+        if (this.isPlacingRef) {
+            this.isPlacingRef.current = false;
+        }
+        if (this.placementChangesRef) {
+            this.placementChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
+        }
     }
     /**
      * Handles mouse down events for wall placement

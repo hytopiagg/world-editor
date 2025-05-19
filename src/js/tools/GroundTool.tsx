@@ -84,6 +84,17 @@ class GroundTool extends BaseTool {
         super.onDeactivate();
         this.removeGroundPreview();
         this.groundStartPosition = null;
+        // Ensure global placing state is reset in case the tool is deactivated mid-action
+        if (this.isPlacingRef) {
+            this.isPlacingRef.current = false;
+        }
+        // Clear any in-progress placement records to avoid leaking into other tools / default mode
+        if (this.placementChangesRef) {
+            this.placementChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
+        }
     }
     /**
      * Handles mouse down events for ground placement
