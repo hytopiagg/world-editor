@@ -25,17 +25,14 @@ const PreviewCube = ({ textureObjects }) => {
                 depthWrite: true, // Prevent depth buffer issues with transparency
             });
         });
-
     }, [textureObjects]);
     return <Box ref={meshRef} args={[1, 1, 1]} material={materials} />;
 };
 PreviewCube.propTypes = {
-
     textureObjects: PropTypes.object.isRequired,
 };
-const BlockPreview3D = ({ textureObjects }) => {
+const BlockPreview3D = ({ textureObjects, target = [0, 0, 0], showControls = true }) => {
     const [isRotating, setIsRotating] = useState(true);
-    
 
     const previewKey = useMemo(
         () =>
@@ -98,18 +95,20 @@ const BlockPreview3D = ({ textureObjects }) => {
                     maxPolarAngle={Math.PI / 1.6}
                     autoRotate={isRotating}
                     autoRotateSpeed={1.5}
+                    position={[0, 0, 0]}
+                    target={target}
                 />
             </Canvas>
-            
-            <div className="block-preview-controls">
-                <button 
-                    className="rotation-control-button" 
+
+            {showControls && <div className="block-preview-controls">
+                <button
+                    className="rotation-control-button"
                     onClick={toggleRotation}
                     title={isRotating ? "Pause rotation" : "Start rotation"}
                 >
-                    {isRotating ? <FaPause size={16}/> : <FaPlay size={16}/>}
+                    {isRotating ? <FaPause size={16} /> : <FaPlay size={16} />}
                 </button>
-            </div>
+            </div>}
         </div>
     );
 };

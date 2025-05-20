@@ -24,7 +24,7 @@ class WallTool extends BaseTool {
     previewPositionRef: React.RefObject<any>;
     wallPreview: THREE.InstancedMesh | null;
     pendingChangesRef: React.RefObject<any>;
-
+    environmentBuilderRef: React.RefObject<any>;
     constructor(terrainBuilderProps) {
         console.log("WallTool initialized");
         super(terrainBuilderProps);
@@ -51,6 +51,7 @@ class WallTool extends BaseTool {
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
             this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
+            this.environmentBuilderRef = terrainBuilderProps.environmentBuilderRef;
         } else {
             console.error(
                 "WallTool: terrainBuilderProps is undefined in constructor"
@@ -123,6 +124,15 @@ class WallTool extends BaseTool {
         super.onDeactivate();
         this.removeWallPreview();
         this.wallStartPosition = null;
+        if (this.isPlacingRef) {
+            this.isPlacingRef.current = false;
+        }
+        if (this.placementChangesRef) {
+            this.placementChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
+        }
     }
     /**
      * Handles mouse down events for wall placement
@@ -293,7 +303,7 @@ class WallTool extends BaseTool {
             this.setWallHeight(this.wallHeight - 1);
         } else if (event.key === "2") {
             this.setWallHeight(this.wallHeight + 1);
-        } else if (event.key === "Escape" ) {
+        } else if (event.key === "Escape") {
             this.removeWallPreview();
             this.wallStartPosition = null;
         }
@@ -336,6 +346,10 @@ class WallTool extends BaseTool {
             return false;
         }
 
+        if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+            console.error("WallTool: currentBlockTypeRef is null – no block selected");
+            return false;
+        }
         const blockTypeId = this.currentBlockTypeRef.current.id;
 
         const points = this.getLinePoints(
@@ -355,7 +369,7 @@ class WallTool extends BaseTool {
             for (let y = 0; y < height; y++) {
                 const posKey = `${x},${baseY + y},${z}`;
 
-                if (this.terrainRef.current[posKey]) continue;
+                if (this.terrainRef.current[posKey] || this.environmentBuilderRef.current.hasInstanceAtPosition(posKey)) continue;
 
                 addedBlocks[posKey] = blockTypeId;
                 this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
@@ -370,8 +384,7 @@ class WallTool extends BaseTool {
             return false;
         }
         console.log(
-            `WallTool: Adding ${
-                Object.keys(addedBlocks).length
+            `WallTool: Adding ${Object.keys(addedBlocks).length
             } blocks in batch`
         );
 
@@ -451,6 +464,11 @@ class WallTool extends BaseTool {
             return false;
         }
 
+        if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+            console.error("WallTool: currentBlockTypeRef is null – no block selected");
+            return false;
+        }
+
         const points = this.getLinePoints(
             Math.round(startPos.x),
             Math.round(startPos.z),
@@ -481,8 +499,7 @@ class WallTool extends BaseTool {
             return false;
         }
         console.log(
-            `WallTool: Removing ${
-                Object.keys(removedBlocks).length
+            `WallTool: Removing ${Object.keys(removedBlocks).length
             } blocks in batch`
         );
 

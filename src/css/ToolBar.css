@@ -6,7 +6,6 @@
 /* Controls Container */
 .controls-container {
     width: 100%;
-    min-width: 1300px;
     position: absolute;
     bottom: 0;
     left: 0;
@@ -23,7 +22,6 @@
     font-weight: bold;
     text-align: center;
     bottom: 110%;
-    text-shadow: 0 0 2px #000000;
     width: 100%;
     white-space: nowrap;
 }
@@ -41,23 +39,11 @@
     align-items: center;
     justify-content: flex-start;
     padding: 8px;
-    background-color: rgba(13, 13, 13, 0.7);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
     border-left: 1px solid rgba(241, 241, 241, 0.15);
     padding-left: 15px;
     padding-right: 15px;
 }
 
-.contol-group-start {
-    border-radius: 12px 0 0 12px;
-    padding-left: 8px;
-}
-
-.contol-group-end {
-    border-radius: 0 12px 12px 0;
-    padding-right: 8px;
-}
 .control-button-wrapper {
     display: flex;
     justify-content: center;
@@ -75,21 +61,25 @@
 
 /* Button Styles */
 .control-button {
-    margin: 0 2px;
+    margin: 0 1px;
     padding: 6px;
     border-radius: 8px;
-    border: 1px solid rgba(241, 241, 241, 0.15);
+    border: 1px solid rgba(241, 241, 241, 0);
+    background-color: rgba(241, 241, 241, 0);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 33px;
-    height: 33px;
+    width: 30px;
+    height: 30px;
 }
 
-button {
-    border-radius: 5px;
-    padding: 8px 15px;
+.control-button:hover {
+    border: 1px solid rgba(241, 241, 241, 1);
+}
+
+.control-button.selected {
+    background-color: rgba(241, 241, 241, 0.15);
 }
 
 .import-export-button {

@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 /* ==========================================================================
    Base Layout Styles
    ========================================================================== */
@@ -33,51 +35,16 @@ body {
 
 /* Body-specific styles */
 body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  font-weight: 400;
-  font-size: 14px;
-  text-shadow: 0 1px 3px #00000079;
-  color: white;
+    margin: 0;
+    font-family: "Inter", sans-serif;
+    font-weight: 400;
+    font-size: 14px;
+    text-shadow: 0 1px 3px #00000079;
+    color: white;
 }
 
 a {
     cursor: pointer;
-}
-
-/* Global Button Styles */
-button{
-  border: none;
-  background-color: transparent;
-  border-radius: 8px;
-  font-size: 16px;
-  padding: 8px 15px;
-  cursor: pointer;
-  color: white;
-  height: 40px;
-}
-
-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-button.active:hover, button.selected:hover {
-    background: #1f93ff;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    border: none;
-}
-
-button.selected, button.active {
-    background: #0084ff;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    border: none;
-    font-weight: bold;
-}
-
-button:disabled {
-    background-color: rgba(255, 255, 255, 0.2);
-    cursor: not-allowed;
-    opacity:0.7;
 }
 
 .vignette-gradient {
@@ -355,4 +322,57 @@ button:disabled {
     100% {
         transform: rotate(360deg);
     }
+}
+
+.fade-out {
+    animation: fadeOut 0.6s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    0% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+.fade-up {
+    animation: fadeUp 0.6s ease-out forwards;
+}
+
+@keyframes fadeUp {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-down {
+    animation: fadeDown 0.6s ease forwards;
+}
+
+@keyframes fadeDown {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0px);
+    }
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield; /* Firefox */
 }

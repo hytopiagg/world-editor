@@ -24,9 +24,8 @@ const disposeObject = (object) => {
   }
 };
 
-const ModelPreview = ({ modelUrl, skybox }) => {
+const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Texture | null }) => {
   const mountRef = useRef(null);
-
   const sceneRef = useRef(new THREE.Scene());
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
@@ -127,12 +126,21 @@ const ModelPreview = ({ modelUrl, skybox }) => {
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(newWidth, newHeight);
     };
-    window.addEventListener('resize', handleResize);
+
+    let resizeObserver;
+    if (currentMount) {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(currentMount);
+    }
 
     return () => {
       console.log("--- Cleaning up THREE Scene --- (ModelPreview)");
       cancelAnimationFrame(frameIdRef.current);
-      window.removeEventListener('resize', handleResize);
+      if (resizeObserver && currentMount) {
+        resizeObserver.unobserve(currentMount);
+      }
       if (controlsRef.current) {
         controlsRef.current.dispose();
         controlsRef.current = null;
@@ -158,6 +166,18 @@ const ModelPreview = ({ modelUrl, skybox }) => {
         currentMount.removeChild(rendererRef.current.domElement);
       }
       if (rendererRef.current) {
+        // Explicitly lose the WebGL context to avoid the browser keeping too many alive
+        try {
+          const gl = rendererRef.current.getContext();
+          const loseContextExt = gl?.getExtension('WEBGL_lose_context');
+          if (loseContextExt && typeof loseContextExt.loseContext === 'function') {
+            loseContextExt.loseContext();
+          }
+        } catch (err) {
+          // In very rare cases getContext can throw if renderer already disposed
+          console.warn('ModelPreview cleanup: Unable to explicitly lose WebGL context:', err);
+        }
+
         rendererRef.current.dispose();
         rendererRef.current = null;
       }
@@ -194,19 +214,65 @@ const ModelPreview = ({ modelUrl, skybox }) => {
           const size = box.getSize(new THREE.Vector3());
           const center = box.getCenter(new THREE.Vector3());
 
+          // Always position the model so its base is at y=0 and it's centered on X and Z
+          loadedModel.position.x = -center.x;
+          loadedModel.position.y = -box.min.y;
+          loadedModel.position.z = -center.z;
+          scene.add(loadedModel);
 
+          // Auto-zoom logic
+          if (size.lengthSq() > 1e-9) { // Check if the model has any dimensions (not a point)
+            const camera = cameraRef.current;
+            const controls = controlsRef.current;
 
-          if (size.x === 0 || size.y === 0 || size.z === 0) {
-            console.warn("Model has zero dimensions. Placing at origin.");
-            scene.add(loadedModel);
+            if (camera && controls) {
+              const actualModelCenter = new THREE.Vector3(0, center.y - box.min.y, 0); // Center after repositioning
 
+              let determinedCameraDistance;
+              const fovY_rad = THREE.MathUtils.degToRad(camera.fov);
+              const tanFovY_half = Math.tan(fovY_rad / 2);
+
+              const distY = (size.y > 0 && tanFovY_half > 0) ? (size.y / 2) / tanFovY_half : 0;
+
+              let distX = 0;
+              if (camera.aspect > 0 && Number.isFinite(camera.aspect) && size.x > 0 && tanFovY_half > 0) {
+                const fovX_rad = 2 * Math.atan(tanFovY_half * camera.aspect);
+                const tanFovX_half = Math.tan(fovX_rad / 2);
+                if (tanFovX_half > 0) {
+                  distX = (size.x / 2) / tanFovX_half;
+                }
+              }
+
+              determinedCameraDistance = Math.max(distX, distY);
+
+              const minPracticalDistance = 0.75;
+              if (determinedCameraDistance < minPracticalDistance) {
+                const maxDim = Math.max(size.x, size.y, size.z);
+                if (maxDim > 0) {
+                  // Ensure distance is at least minPracticalDistance or a larger multiple of max dimension
+                  determinedCameraDistance = Math.max(maxDim * 3, minPracticalDistance); // Multiplier increased from 2 to 3
+                } else {
+                  // Fallback for a model that somehow registered as non-point but has no maxDim
+                  determinedCameraDistance = 5;
+                }
+              }
+
+              determinedCameraDistance *= 1.25; // Add 25% padding
+
+              // Use a consistent viewing direction vector (derived from initial camera setup)
+              const offsetDirection = new THREE.Vector3(1.5, 1.5, 2.5).normalize();
+              const newCameraPosition = actualModelCenter.clone().add(offsetDirection.multiplyScalar(determinedCameraDistance));
+
+              camera.position.copy(newCameraPosition);
+              controls.target.copy(actualModelCenter);
+              controls.update();
+            } else {
+              console.warn("Camera or controls not ready for auto-zoom.");
+            }
           } else {
-
-            loadedModel.position.x = -center.x;
-            loadedModel.position.y = -box.min.y; // Position bottom at y=0 using original box
-            loadedModel.position.z = -center.z;
-            scene.add(loadedModel);
-
+            // Model is a point, or has no dimensions. Use default camera setup.
+            // (Optional: could reset to a default wide view if needed)
+            console.warn("Model has no significant dimensions for auto-zoom. Using default camera view.");
           }
         },
         undefined, // onProgress

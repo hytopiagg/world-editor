@@ -1,33 +1,28 @@
 import { generatePerlinNoise } from "perlin-noise";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-    FaBorderAll,
-    FaBorderStyle,
-    FaCircle,
-    FaCube,
+    FaCloud,
     FaCubes,
     FaDrawPolygon,
-    FaExpand,
-    FaLock,
-    FaLockOpen,
     FaMinus,
     FaMountain,
+    FaMousePointer,
     FaPlus,
     FaRedo,
     FaRobot,
     FaSave,
-    FaSeedling,
     FaSquare,
+    FaThLarge,
     FaTrash,
     FaUndo,
-    FaMousePointer,
+    FaWrench
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
-import Tooltip from "./Tooltip";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
 import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
+import Tooltip from "./Tooltip";
 const ToolBar = ({
     terrainBuilderRef,
     mode,
@@ -36,22 +31,21 @@ const ToolBar = ({
     setAxisLockEnabled,
     placementSize,
     setPlacementSize,
-    setGridSize,
     undoRedoManager,
     currentBlockType,
     environmentBuilderRef,
-    toggleAIAssistant,
-    isAIAssistantVisible,
     setIsSaving,
+    onOpenTextureModal,
+    toggleAIComponents,
+    isAIComponentsActive,
 }) => {
-    const [newGridSize, setNewGridSize] = useState(100);
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
+    const [showImportExportMenu, setShowImportExportMenu] = useState(false);
     const [dimensions, setDimensions] = useState({
         width: 1,
         length: 1,
         height: 1,
     });
-    const [showGridSizeModal, setShowGridSizeModal] = useState(false);
     const [showBorderModal, setShowBorderModal] = useState(false);
     const [borderDimensions, setBorderDimensions] = useState({
         width: 1,
@@ -59,6 +53,8 @@ const ToolBar = ({
         height: 1,
     });
     const [showTerrainModal, setShowTerrainModal] = useState(false);
+    const [showAISubmenu, setShowAISubmenu] = useState(false);
+    const [showUtilsSubmenu, setShowUtilsSubmenu] = useState(false);
     const [terrainSettings, setTerrainSettings] = useState({
         width: 32,
         length: 32,
@@ -72,6 +68,7 @@ const ToolBar = ({
     const [canRedo, setCanRedo] = useState(false);
 
     const [activeTool, setActiveTool] = useState(null);
+    const [showPlacementMenu, setShowPlacementMenu] = useState(false);
 
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
@@ -80,6 +77,7 @@ const ToolBar = ({
         y: 0,
         z: 0,
     };
+
     const handleGenerateBlocks = () => {
         if (currentBlockType.id > 199) {
             alert(
@@ -298,23 +296,62 @@ const ToolBar = ({
             alert("Error exporting map. Please try again.");
         }
     };
-    const applyNewGridSize = async (newGridSize) => {
-        if (newGridSize > 10) {
-            setGridSize(newGridSize);
 
-            if (
-                terrainBuilderRef.current &&
-                terrainBuilderRef.current.updateGridSize
-            ) {
-                await terrainBuilderRef.current.updateGridSize(newGridSize);
-            } else {
-                console.warn(
-                    "TerrainBuilder updateGridSize method not available"
-                );
+    const handleRemoveHiddenBlocks = () => {
+        if (!terrainBuilderRef?.current?.getCurrentTerrainData) {
+            console.error("TerrainBuilder reference not available for removing hidden blocks");
+            return;
+        }
+
+        const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+        if (!terrainData) return;
+
+        const originalCount = Object.keys(terrainData).length;
+        const removedBlocks = {};
+
+        for (const key in terrainData) {
+            const [xStr, yStr, zStr] = key.split(",");
+            const x = parseInt(xStr);
+            const y = parseInt(yStr);
+            const z = parseInt(zStr);
+
+            const neighborKeys = [
+                `${x + 1},${y},${z}`,
+                `${x - 1},${y},${z}`,
+                `${x},${y + 1},${z}`,
+                `${x},${y - 1},${z}`,
+                `${x},${y},${z + 1}`,
+                `${x},${y},${z - 1}`,
+            ];
+
+            let isHidden = true;
+            for (const nKey of neighborKeys) {
+                if (!(nKey in terrainData)) {
+                    isHidden = false;
+                    break;
+                }
             }
-            setShowGridSizeModal(false);
-        } else {
-            alert("Grid size must be greater than 10");
+
+            if (isHidden) {
+                removedBlocks[key] = terrainData[key];
+            }
+        }
+
+        const removedCount = Object.keys(removedBlocks).length;
+
+        if (removedCount === 0) {
+            alert("No hidden blocks found to remove.");
+            return;
+        }
+
+        try {
+            terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks, { syncPendingChanges: true });
+            alert(
+                `Hidden Blocks Removed!\nOriginal Blocks: ${originalCount}\nBlocks Removed: ${removedCount}\nRemaining Blocks: ${originalCount - removedCount}`
+            );
+        } catch (error) {
+            console.error("Error removing hidden blocks:", error);
+            alert("An error occurred while removing hidden blocks. Check console for details.");
         }
     };
 
@@ -397,30 +434,343 @@ const ToolBar = ({
 
         handleModeChange(newMode);
     };
+
+    // Listen for tool change events from ToolManager instead of polling
+    useEffect(() => {
+        const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
+        if (!manager || typeof manager.addToolChangeListener !== "function") return;
+
+        const listener = (toolName) => {
+            setActiveTool(toolName || null);
+        };
+
+        manager.addToolChangeListener(listener);
+
+        return () => {
+            if (typeof manager.removeToolChangeListener === "function") {
+                manager.removeToolChangeListener(listener);
+            }
+        };
+    }, [terrainBuilderRef]);
+
+    // Listen for tab change events dispatched from BlockToolsSidebar and pointer lock state changes
+    useEffect(() => {
+        const handleTabChangeReset = () => {
+            setActiveTool(null);
+            setShowPlacementMenu(false);
+        };
+        window.addEventListener("blockToolsTabChanged", handleTabChangeReset);
+        window.addEventListener("pointerLockModeChanged", handleTabChangeReset);
+        return () => {
+            window.removeEventListener("blockToolsTabChanged", handleTabChangeReset);
+            window.removeEventListener("pointerLockModeChanged", handleTabChangeReset);
+        };
+    }, []);
+
     return (
         <>
             <div className="controls-container">
-                <div className="control-group contol-group-start">
+                {/*     background-color: rgba(13, 13, 13, 0.7);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px); */}
+                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg rounded-l-xl pl-2">
                     <div className="control-button-wrapper">
-                        <Tooltip text="Import just the map file">
+                        <Tooltip text="Add blocks">
                             <button
                                 onClick={() =>
-                                    document
-                                        .getElementById("mapFileInput")
-                                        .click()
+                                    handleModeChangeWithToolReset("add")
                                 }
-                                className="control-button import-export-button"
+                                className={`control-button ${mode === "add" ? "selected" : ""
+                                    }`}
                             >
-                                Map
+                                <FaPlus className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
-                            <input
-                                id="mapFileInput"
-                                type="file"
-                                accept=".json"
-                                onChange={onMapFileSelected}
-                                style={{ display: "none" }}
-                            />
                         </Tooltip>
+                        <Tooltip text="Remove Hidden Blocks">
+                            <button
+                                onClick={() =>
+                                    handleModeChangeWithToolReset("remove")
+                                }
+                                className={`control-button ${mode === "remove" ? "selected" : ""
+                                    }`}
+                            >
+                                <FaMinus className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        {/* <Tooltip
+                            text={
+                                axisLockEnabled
+                                    ? "Disable axis lock"
+                                    : "Enable axis lock (Not currently working)"
+                            }
+                        >
+                            <button
+                                onClick={() =>
+                                    setAxisLockEnabled(!axisLockEnabled)
+                                }
+                                className={`control-button ${axisLockEnabled ? "selected" : ""
+                                    }`}
+                            >
+                                {axisLockEnabled ? <FaLock /> : <FaLockOpen />}
+                            </button>
+                        </Tooltip> */}
+                        <Tooltip text="Undo (Ctrl+Z)">
+                            <button
+                                onClick={() =>
+                                    undoRedoManager?.current?.handleUndo()
+                                }
+                                className={`control-button ${!canUndo ? "disabled" : ""
+                                    }`}
+                                disabled={!canUndo}
+                            >
+                                <FaUndo className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Redo (Ctrl+Y)">
+                            <button
+                                onClick={() =>
+                                    undoRedoManager?.current?.handleRedo()
+                                }
+                                className={`control-button ${!canRedo ? "disabled" : ""
+                                    }`}
+                                disabled={!canRedo}
+                            >
+                                <FaRedo className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <div className="control-divider-vertical"></div>
+                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu}>
+                            <div className="relative">
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showPlacementMenu ? 'selected' : ''}`}
+                                    onClick={() => setShowPlacementMenu(!showPlacementMenu)}
+                                >
+                                    <FaThLarge className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+
+                                {showPlacementMenu && (
+                                    <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                        {[
+                                            { label: '1×1', value: 'single' },
+                                            { label: '3×3', value: '3x3' },
+                                            { label: '5×5', value: '5x5' },
+                                            { label: '◇3', value: '3x3diamond' },
+                                            { label: '◇5', value: '5x5diamond' },
+                                        ].map((opt, idx) => (
+                                            <button
+                                                key={idx}
+                                                className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${placementSize === opt.value ? 'bg-white/90 text-black' : ''}`}
+                                                style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
+                                                onClick={() => {
+                                                    if (activeTool) {
+                                                        try {
+                                                            terrainBuilderRef.current?.activateTool(null);
+                                                        } catch (_) { }
+                                                        setActiveTool(null);
+                                                    }
+
+                                                    setPlacementSize(opt.value);
+                                                    setShowPlacementMenu(false);
+                                                }}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </Tooltip>
+                        <div className="control-divider-vertical"></div>
+                        <Tooltip text="Selection Tool - Click to start selection, click again to confirm. Click and drag to move selection. Press Escape to cancel.">
+                            <button
+                                onClick={() => {
+                                    handleToolToggle("selection");
+                                    setPlacementSize("single");
+                                }}
+                                className={`control-button ${activeTool === "selection" ? "selected" : ""
+                                    }`}
+                            >
+                                <FaMousePointer className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
+                            <button
+                                onClick={() => {
+                                    handleToolToggle("ground");
+                                    setPlacementSize("single");
+                                }}
+                                className={`control-button ${activeTool === "ground" ? "selected" : ""
+                                    }`}
+                            >
+                                <FaSquare className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
+                            <button
+                                onClick={() => {
+                                    handleToolToggle("wall");
+                                    setPlacementSize("single");
+                                }}
+                                className={`control-button ${activeTool === "wall" ? "selected" : ""
+                                    }`}
+                            >
+                                <FaDrawPolygon className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                    </div>
+                </div>
+
+                <div className="control-group bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
+                    <div className="control-button-wrapper">
+                        <Tooltip text="Generate terrain">
+                            <button
+                                onClick={() => setShowTerrainModal(true)}
+                                className="control-button"
+                            >
+                                <FaMountain className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Import Minecraft Map">
+                            <button
+                                onClick={() =>
+                                    setShowMinecraftImportModal(true)
+                                }
+                                className="control-button"
+                            >
+                                <FaCubes />
+                            </button>
+                        </Tooltip>
+                        <div className="relative">
+                            <Tooltip text="AI Tools" hideTooltip={showAISubmenu}>
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showAISubmenu || isAIComponentsActive ? 'selected' : ''}`}
+                                    onClick={() => setShowAISubmenu(!showAISubmenu)}
+                                >
+                                    <FaRobot className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+
+                            {showAISubmenu && (
+                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                    <button
+                                        className="w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
+                                        style={{ animationDelay: '0.05s' }}
+                                        onClick={() => {
+                                            onOpenTextureModal && onOpenTextureModal();
+                                            setShowAISubmenu(false);
+                                        }}
+                                    >
+                                        {"Textures"}
+                                    </button>
+                                    <button
+                                        className="w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
+                                        style={{ animationDelay: '0.1s' }}
+                                        onClick={() => {
+                                            toggleAIComponents && toggleAIComponents();
+                                            setShowAISubmenu(false);
+                                        }}
+                                    >
+                                        {"Components"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        {/* Utils / Tools submenu */}
+                        <div className="relative">
+                            <Tooltip text="Tools" hideTooltip={showUtilsSubmenu}>
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showUtilsSubmenu ? 'selected' : ''}`}
+                                    onClick={() => setShowUtilsSubmenu(!showUtilsSubmenu)}
+                                >
+                                    <FaWrench className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+
+                            {showUtilsSubmenu && (
+                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                    <button
+                                        className="w-fit flex items-center whitespace-nowrap justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
+                                        style={{ animationDelay: '0.05s' }}
+                                        onClick={() => {
+                                            handleRemoveHiddenBlocks();
+                                            setShowUtilsSubmenu(false);
+                                        }}
+                                    >
+                                        {"Remove Hidden Blocks"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {/* <div className="control-label">Map Tools</div> */}
+                </div>
+                <div className="control-group rounded-r-xl pr-2 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
+                    <div className="control-button-wrapper">
+                        <Tooltip text="Clear entire map">
+                            <button
+                                onClick={handleClearMap}
+                                className="control-button"
+                            >
+                                <FaTrash className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Save terrain (Ctrl+S)">
+                            <button
+                                onClick={async () => {
+                                    setIsSaving(true);
+                                    try {
+                                        if (terrainBuilderRef.current) {
+                                            await terrainBuilderRef.current.saveTerrainManually();
+                                        }
+
+                                        if (environmentBuilderRef.current) {
+                                            await environmentBuilderRef.current.updateLocalStorage();
+                                        }
+                                    } finally {
+                                        setIsSaving(false);
+                                    }
+                                }}
+                                className="control-button"
+                            >
+                                <FaSave className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <div className="relative">
+                            <Tooltip text="Import / Export Map" hideTooltip={showImportExportMenu}>
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showImportExportMenu ? 'selected' : ''}`}
+                                    onClick={() => setShowImportExportMenu(!showImportExportMenu)}
+                                >
+                                    <FaCloud className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+
+                            {showImportExportMenu && <div className={`absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2`}>
+                                <input
+                                    id="mapFileInput"
+                                    type="file"
+                                    accept=".json"
+                                    onChange={onMapFileSelected}
+                                    style={{ display: "none" }}
+                                />
+                                <button
+                                    className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
+                                    onClick={() => document.getElementById("mapFileInput").click()}
+                                    style={{ animationDelay: '0.1s' }}
+                                >
+                                    {"Import"}
+                                </button>
+                                <button
+                                    className={`w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
+                                    onClick={handleExportMap}
+                                    style={{ animationDelay: '0.2s' }}
+                                >
+                                    {"Export"}
+                                </button>
+                            </div>}
+                        </div>
+
+
                         {!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
                             <Tooltip text="Import complete asset pack (includes map and textures)">
                                 <button
@@ -442,269 +792,6 @@ const ToolBar = ({
                             </Tooltip>
                         )}
                     </div>
-                    <div className="control-label">Import</div>
-                </div>
-                <div className="control-group">
-                    <div className="control-button-wrapper">
-                        {!DISABLE_ASSET_PACK_IMPORT_EXPORT && (
-                            <Tooltip text="Export map and assets as a complete package">
-                                <button className="control-button import-export-button">
-                                    Asset Pack
-                                </button>
-                            </Tooltip>
-                        )}
-                        <Tooltip text="Export just the map file">
-                            <button
-                                onClick={() => handleExportMap()}
-                                className="control-button import-export-button"
-                            >
-                                Map
-                            </button>
-                        </Tooltip>
-                    </div>
-                    <div className="control-label">Export</div>
-                </div>
-                <div className="control-group">
-                    <div className="control-button-wrapper">
-                        <Tooltip text="Add blocks">
-                            <button
-                                onClick={() =>
-                                    handleModeChangeWithToolReset("add")
-                                }
-                                className={`control-button ${mode === "add" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaPlus />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Remove blocks">
-                            <button
-                                onClick={() =>
-                                    handleModeChangeWithToolReset("remove")
-                                }
-                                className={`control-button ${mode === "remove" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaMinus />
-                            </button>
-                        </Tooltip>
-                        <Tooltip
-                            text={
-                                axisLockEnabled
-                                    ? "Disable axis lock"
-                                    : "Enable axis lock (Not currently working)"
-                            }
-                        >
-                            <button
-                                onClick={() =>
-                                    setAxisLockEnabled(!axisLockEnabled)
-                                }
-                                className={`control-button ${axisLockEnabled ? "selected" : ""
-                                    }`}
-                            >
-                                {axisLockEnabled ? <FaLock /> : <FaLockOpen />}
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Undo (Ctrl+Z)">
-                            <button
-                                onClick={() =>
-                                    undoRedoManager?.current?.handleUndo()
-                                }
-                                className={`control-button ${!canUndo ? "disabled" : ""
-                                    }`}
-                                disabled={!canUndo}
-                            >
-                                <FaUndo />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Redo (Ctrl+Y)">
-                            <button
-                                onClick={() =>
-                                    undoRedoManager?.current?.handleRedo()
-                                }
-                                className={`control-button ${!canRedo ? "disabled" : ""
-                                    }`}
-                                disabled={!canRedo}
-                            >
-                                <FaRedo />
-                            </button>
-                        </Tooltip>
-                        <div className="control-divider-vertical"></div>
-                        <Tooltip text="Single block placement">
-                            <button
-                                onClick={() => setPlacementSize("single")}
-                                className={`control-button ${placementSize === "single" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaCircle
-                                    style={{ width: "5px", height: "5px" }}
-                                />
-                            </button>
-                        </Tooltip>
-                        <div className="control-divider-vertical"></div>
-                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("wall");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "wall" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaDrawPolygon />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("ground");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "ground" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaSquare />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Selection Tool - Click to start selection, click again to confirm. Click and drag to move selection. Press Escape to cancel.">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("selection");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "selection" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaMousePointer />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Pipe Tool - Click to start, click again to place hollow pipe-like structures. Use 1 | 2 to adjust height. Use 3 | 4 to adjust edge depth. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("pipe");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "pipe" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaBorderAll />
-                            </button>
-                        </Tooltip>
-                    </div>
-                    <div className="control-label">Placement Tools</div>
-                </div>
-                <div className="control-group">
-                    <div className="control-button-wrapper">
-                        <Tooltip text="Generate solid cube">
-                            <button
-                                onClick={() => setShowDimensionsModal(true)}
-                                className="control-button"
-                            >
-                                <FaCube />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Generate wall of Blocks">
-                            <button
-                                onClick={() => setShowBorderModal(true)}
-                                className="control-button"
-                            >
-                                <FaBorderStyle />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Generate terrain">
-                            <button
-                                onClick={() => setShowTerrainModal(true)}
-                                className="control-button"
-                            >
-                                <FaMountain />
-                            </button>
-                        </Tooltip>
-                    </div>
-                    <div className="control-label">Generative Tools</div>
-                </div>
-                <div className="control-group">
-                    <div className="control-button-wrapper">
-                        <Tooltip text="Change grid size">
-                            <button
-                                onClick={() => setShowGridSizeModal(true)}
-                                className="control-button"
-                            >
-                                <FaExpand />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Clear entire map">
-                            <button
-                                onClick={handleClearMap}
-                                className="control-button"
-                            >
-                                <FaTrash />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Import Minecraft Map">
-                            <button
-                                onClick={() =>
-                                    setShowMinecraftImportModal(true)
-                                }
-                                className="control-button"
-                            >
-                                <FaCubes />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Generate world from seed">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("seed");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "seed" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaSeedling />
-                            </button>
-                        </Tooltip>
-                        <Tooltip
-                            text={
-                                isAIAssistantVisible
-                                    ? "Hide AI Assistant"
-                                    : "Show AI Assistant"
-                            }
-                        >
-                            <button
-                                onClick={toggleAIAssistant}
-                                className={`control-button ${isAIAssistantVisible ? "selected" : ""
-                                    }`}
-                            >
-                                <FaRobot />
-                            </button>
-                        </Tooltip>
-                    </div>
-                    <div className="control-label">Map Tools</div>
-                </div>
-                <div className="control-group contol-group-end">
-                    <div className="control-button-wrapper">
-                        <Tooltip text="Save terrain (Ctrl+S)">
-                            <button
-                                onClick={async () => {
-                                    setIsSaving(true);
-                                    try {
-                                        if (terrainBuilderRef.current) {
-                                            await terrainBuilderRef.current.saveTerrainManually();
-                                        }
-
-                                        if (environmentBuilderRef.current) {
-                                            await environmentBuilderRef.current.updateLocalStorage();
-                                        }
-                                    } finally {
-                                        setIsSaving(false);
-                                    }
-                                }}
-                                className="control-button"
-                            >
-                                <FaSave />
-                            </button>
-                        </Tooltip>
-                    </div>
-                    <div className="control-label">Save</div>
                 </div>
             </div>
             {showDimensionsModal && (
@@ -782,49 +869,6 @@ const ToolBar = ({
                             <button
                                 className="menu-button"
                                 onClick={() => setShowDimensionsModal(false)}
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {showGridSizeModal && (
-                <div
-                    className="modal-overlay"
-                    onClick={(e) =>
-                        handleModalOverlayClick(e, setShowGridSizeModal)
-                    }
-                >
-                    <div className="modal-content">
-                        <h3 className="modal-title">Change Grid Size</h3>
-                        <p className="modal-description">
-                            Adjust the size of the building grid. This affects
-                            the visible grid and the area where you can place
-                            blocks.
-                        </p>
-                        <div className="modal-input">
-                            <label>New Grid Size (10-500): </label>
-                            <input
-                                type="number"
-                                value={newGridSize}
-                                onChange={(e) =>
-                                    setNewGridSize(parseInt(e.target.value))
-                                }
-                                min="10"
-                                max="500"
-                            />
-                        </div>
-                        <div className="modal-buttons">
-                            <button
-                                className="menu-button"
-                                onClick={() => applyNewGridSize(newGridSize)}
-                            >
-                                Apply
-                            </button>
-                            <button
-                                className="menu-button"
-                                onClick={() => setShowGridSizeModal(false)}
                             >
                                 Cancel
                             </button>

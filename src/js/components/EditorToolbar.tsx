@@ -25,19 +25,20 @@ const EditorToolbar = ({
     canRedo,
 }) => {
     return (
-        <div className="editor-toolbar">
-            <label className="face-selector-label">Tools:</label>
-            <button
-                className={`tool-button ${
-                    selectedTool === TOOLS.PENCIL ? "active" : ""
-                }`}
+        <div className="flex flex-col gap-1">
+            <label className="text-xs text-white/50">Tools:</label>
+            <div className="flex flex-wrap gap-1.5">
+                <button
+                    className={`border border-white/10 items-center justify-center flex w-1/3 grow py-1.5 px-1 rounded-md transition-colors duration-200 cursor-pointer active:scale-95 hover:border-white ${
+                        selectedTool === TOOLS.PENCIL ? "active" : ""
+                    }`}
                 onClick={() => onSelectTool(TOOLS.PENCIL)}
                 title="Pencil"
             >
                 <FaPencilAlt />
             </button>
             <button
-                className={`tool-button ${
+                className={`border border-white/10 items-center justify-center flex w-1/3 grow py-1.5 px-1 rounded-md transition-colors duration-200 cursor-pointer active:scale-95 hover:border-white ${
                     selectedTool === TOOLS.ERASER ? "active" : ""
                 }`}
                 onClick={() => onSelectTool(TOOLS.ERASER)}
@@ -46,7 +47,7 @@ const EditorToolbar = ({
                 <FaEraser />
             </button>
             <button
-                className={`tool-button ${
+                className={`border border-white/10 items-center justify-center flex w-1/3 grow py-1.5 px-1 rounded-md transition-colors duration-200 cursor-pointer active:scale-95 hover:border-white ${
                     selectedTool === TOOLS.FILL ? "active" : ""
                 }`}
                 onClick={() => onSelectTool(TOOLS.FILL)}
@@ -55,7 +56,7 @@ const EditorToolbar = ({
                 <FaFillDrip />
             </button>
             <button
-                className={`tool-button ${
+                className={`border border-white/10 items-center justify-center flex w-1/3 grow py-1.5 px-1 rounded-md transition-colors duration-200 cursor-pointer active:scale-95 hover:border-white ${
                     selectedTool === TOOLS.EYEDROPPER ? "active" : ""
                 }`}
                 onClick={() => onSelectTool(TOOLS.EYEDROPPER)}
@@ -67,7 +68,7 @@ const EditorToolbar = ({
                 onClick={onUndo}
                 disabled={!canUndo}
                 title="Undo"
-                className="tool-button-undo-redo"
+                className="border border-white/10 items-center justify-center flex w-1/3 grow py-1.5 px-1 rounded-md transition-colors duration-200 cursor-pointer active:scale-95 hover:border-white"
             >
                 <FaUndo />
             </button>
@@ -75,10 +76,11 @@ const EditorToolbar = ({
                 onClick={onRedo}
                 disabled={!canRedo}
                 title="Redo"
-                className="tool-button-undo-redo"
+                className="border border-white/10 items-center justify-center flex w-1/3 grow py-1.5 px-1 rounded-md transition-colors duration-200 cursor-pointer active:scale-95 hover:border-white"
             >
                 <FaRedo />
             </button>
+            </div>
         </div>
     );
 };

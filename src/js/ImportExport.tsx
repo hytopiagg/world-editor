@@ -24,7 +24,6 @@ export const importMap = async (
                     );
 
                     const importData = JSON.parse(event.target.result as string);
-                    console.log("Importing map data:", importData);
                     let terrainData = {};
                     let environmentData = [];
 
@@ -120,16 +119,11 @@ export const importMap = async (
 
                                 if (currentBlockNameToId.hasOwnProperty(blockName)) {
                                     blockIdMapping[importedId] = currentBlockNameToId[blockName];
-                                    console.log(`Mapped imported block "${importedBlockType.name}" (ID: ${importedId}) to editor ID: ${blockIdMapping[importedId]}`);
                                 } else {
-
                                     blockIdMapping[importedId] = importedId;
-                                    console.log(`No name match for imported block "${importedBlockType.name}" (ID: ${importedId}), using original ID`);
                                 }
                             });
                         } else {
-
-                            console.log("No block types in import file, using direct ID mapping");
                             currentBlockTypes.forEach(blockType => {
                                 blockIdMapping[blockType.id] = blockType.id;
                             });
@@ -158,10 +152,6 @@ export const importMap = async (
                                 "Calculating map dimensions...",
                                 40
                             );
-                            console.log(
-                                "Calculating map dimensions to update grid size..."
-                            );
-
                             let minX = Infinity,
                                 minZ = Infinity;
                             let maxX = -Infinity,
@@ -173,30 +163,6 @@ export const importMap = async (
                                 minZ = Math.min(minZ, z);
                                 maxZ = Math.max(maxZ, z);
                             });
-
-                            const width = maxX - minX + 10;
-                            const length = maxZ - minZ + 10;
-
-                            const gridSize =
-                                Math.ceil(Math.max(width, length) / 16) * 16;
-
-                            if (terrainBuilderRef.current.updateGridSize) {
-                                loadingManager.updateLoading(
-                                    `Updating grid size to ${gridSize}...`,
-                                    50
-                                );
-
-                                terrainBuilderRef.current.updateGridSize(
-                                    gridSize
-                                );
-                                console.log(
-                                    `Grid size update completed, should now be ${gridSize}`
-                                );
-                            } else {
-                                console.warn(
-                                    "updateGridSize method not found on terrainBuilderRef"
-                                );
-                            }
                         }
 
                         if (importData.entities) {
@@ -204,10 +170,11 @@ export const importMap = async (
                                 "Processing environment objects...",
                                 60
                             );
+                            const instanceIdCounters: Record<string, number> = {};
                             environmentData = Object.entries(
                                 importData.entities
                             )
-                                .map(([key, entity]: [string, any], index) => {
+                                .map(([key, entity]: [string, any]) => {
                                     const [x, y, z] = key
                                         .split(",")
                                         .map(Number);
@@ -233,27 +200,32 @@ export const importMap = async (
                                             (model) => model.name === modelName
                                         );
 
-                                    const boundingBoxHeight =
-                                        matchingModel?.boundingBoxHeight || 1;
-                                    const verticalOffset =
-                                        (boundingBoxHeight *
-                                            entity.modelScale) /
-                                        2;
-                                    const adjustedY = y - 0.5 - verticalOffset;
-                                    
-                                    const boundingBoxWidth = 
-                                        matchingModel?.boundingBoxWidth || 1;
-                                    const boundingBoxDepth =
-                                        matchingModel?.boundingBoxDepth || 1;
-                                        
-                                    const horizontalOffsetX = 
-                                        (boundingBoxWidth * entity.modelScale) / 2;
-                                    const horizontalOffsetZ =
-                                        (boundingBoxDepth * entity.modelScale) / 2;
-                                        
-                                    const adjustedX = x - horizontalOffsetX;
-                                    const adjustedZ = z - horizontalOffsetZ;
-                                    
+                                    // --- Reverse of export: from centre to origin ---
+                                    let localCentreOffset: THREE.Vector3;
+                                    if (matchingModel?.boundingBoxCenter instanceof THREE.Vector3) {
+                                        localCentreOffset = matchingModel.boundingBoxCenter.clone();
+                                    } else {
+                                        localCentreOffset = new THREE.Vector3(
+                                            (matchingModel?.boundingBoxWidth || 1) / 2,
+                                            (matchingModel?.boundingBoxHeight || 1) / 2,
+                                            (matchingModel?.boundingBoxDepth || 1) / 2
+                                        );
+                                    }
+
+                                    // Apply scale
+                                    const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(entity.modelScale, entity.modelScale, entity.modelScale));
+
+                                    // Apply rotation around Y
+                                    const qInv = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), euler.y);
+                                    scaledOffset.applyQuaternion(qInv);
+
+                                    // Convert centre position (x,y,z) to origin (adjustedX etc.)
+                                    const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset).sub(new THREE.Vector3(0.5, 0.5, 0.5));
+
+                                    const adjustedX = originPos.x;
+                                    const adjustedY = originPos.y;
+                                    const adjustedZ = originPos.z;
+
                                     return {
                                         position: { x: adjustedX, y: adjustedY, z: adjustedZ },
                                         rotation: {
@@ -275,13 +247,18 @@ export const importMap = async (
                                                 "idle",
                                             ],
 
-                                        instanceId: index, // Use the array index as a unique ID
+                                        // Assign a sequential ID for **this** model type only
+                                        instanceId: (() => {
+                                            const modelKey = matchingModel
+                                                ? matchingModel.modelUrl
+                                                : `assets/${entity.modelUri}`;
+                                            const nextId = instanceIdCounters[modelKey] ?? 0;
+                                            instanceIdCounters[modelKey] = nextId + 1;
+                                            return nextId;
+                                        })(),
                                     };
                                 })
                                 .filter((obj) => obj !== null);
-                            console.log(
-                                `Imported ${environmentData.length} environment objects`
-                            );
                         }
                     } else {
                         loadingManager.hideLoading();
@@ -316,7 +293,6 @@ export const importMap = async (
                             "Rebuilding terrain from imported data...",
                             85
                         );
-                        console.log("Refreshing terrain from DB after import");
                         await terrainBuilderRef.current.refreshTerrainFromDB();
 
 
@@ -359,29 +335,22 @@ export const importMap = async (
 };
 export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) => {
     try {
-        if (
-            !terrainBuilderRef.current.getCurrentTerrainData() ||
-            Object.keys(terrainBuilderRef.current.getCurrentTerrainData())
-                .length === 0
-        ) {
-            alert("No map found to export!");
+        const currentTerrainData = terrainBuilderRef.current.getCurrentTerrainData() || {};
+        const hasBlocks = Object.keys(currentTerrainData).length > 0;
+
+        const environmentObjects = environmentBuilderRef.current.getAllEnvironmentObjects();
+
+        if (!hasBlocks && (!environmentObjects || environmentObjects.length === 0)) {
+            alert("Nothing to export! Add blocks or models first.");
             return;
         }
 
         loadingManager.showLoading("Preparing to export map...", 0);
 
         loadingManager.updateLoading("Retrieving environment data...", 10);
-        const environmentObjects = environmentBuilderRef.current.getAllEnvironmentObjects();
-        // (await DatabaseManager.getData(STORES.ENVIRONMENT, "current")) ||
-        // [];
-        console.log("Retrieved environmentObjects for export:", environmentObjects);
-
-        console.log("Exporting environment data:", environmentObjects);
 
         loadingManager.updateLoading("Processing terrain data...", 30);
-        const simplifiedTerrain = Object.entries(
-            terrainBuilderRef.current.getCurrentTerrainData()
-        ).reduce((acc, [key, value]) => {
+        const simplifiedTerrain = Object.entries(currentTerrainData).reduce((acc, [key, value]) => {
             if (key.split(",").length === 3) {
                 acc[key] = value;
             }
@@ -392,7 +361,23 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             50
         );
         const allBlockTypes = getBlockTypes();
-        console.log("Exporting block types:", allBlockTypes);
+
+        // === Helper utilities for texture handling ===
+        const sanitizeName = (name: string) => name.replace(/\s+/g, "_").toLowerCase();
+        const FACE_KEYS = ["+x", "-x", "+y", "-y", "+z", "-z"] as const;
+
+        const getFileExtensionFromUri = (uri: string) => {
+            if (uri.startsWith("data:")) {
+                const match = uri.match(/^data:image\/([a-zA-Z0-9+]+);/);
+                if (match && match[1]) {
+                    return match[1] === "jpeg" ? "jpg" : match[1];
+                }
+                return "png"; // default when mime not recognised
+            }
+            const parts = uri.split(".");
+            return parts.length > 1 ? parts.pop()!.split("?")[0].toLowerCase() : "png";
+        };
+        // === End helper utilities ===
 
         // --- Determine Used Block IDs ---
         const usedBlockIds = new Set<number>();
@@ -401,36 +386,41 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 usedBlockIds.add(blockId);
             }
         });
-        console.log("Used Block IDs in terrain:", usedBlockIds);
 
-        // --- Filter Block Types to only those used ---
+        // --- Filter Block Types ---
+        // Include only block types that actually appear in the terrain.
         const usedBlockTypes = allBlockTypes.filter(block => usedBlockIds.has(block.id));
-        console.log("Filtered Block Types (used in terrain):", usedBlockTypes);
+        // If no blocks used but custom blocks may still exist; nothing wrong. Proceed.
 
         // --- Collect Asset URIs ---
         loadingManager.updateLoading("Collecting asset URIs...", 60);
-        // Store texture info: { uri: string, blockName: string | null, isMulti: boolean }
-        const textureInfos = new Set<{ uri: string; blockName: string | null; isMulti: boolean }>();
+        // Store texture info: { uri: string, blockName: string | null, isMulti: boolean, fileName: string }
+        const textureInfos = new Set<{ uri: string; blockName: string | null; isMulti: boolean; fileName: string }>();
         const modelUris = new Set<string>();
 
-        // Iterate over ONLY the used block types to collect textures
+        // Iterate over ONLY the used block types to collect textures (including data URIs)
         usedBlockTypes.forEach((block) => {
             const isMulti = block.isMultiTexture || false;
+            const sanitizedBlockName = sanitizeName(block.name);
             const blockNameForPath = isMulti ? block.name : null;
 
-            // Handle main texture URI if it exists and isn't data
-            if (block.textureUri && typeof block.textureUri === 'string' && !block.textureUri.startsWith('data:')) {
-                // For multi-texture blocks, the main textureUri might represent a convention or primary texture.
-                // We add it like any other texture associated with this block.
-                textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti });
+            // Handle main texture URI only for NON-multi-texture blocks
+            if (!isMulti && block.textureUri && typeof block.textureUri === "string") {
+                const ext = getFileExtensionFromUri(block.textureUri);
+                const fileName = `${sanitizedBlockName}.${ext}`;
+                textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti, fileName });
             }
 
-            // Add side textures if they exist and are not data URIs
-            if (block.sideTextures) {
-                Object.values(block.sideTextures).forEach(uri => {
-                    if (uri && typeof uri === 'string' && !uri.startsWith('data:')) {
-                        textureInfos.add({ uri: uri, blockName: blockNameForPath, isMulti });
+            // For multi-texture blocks, collect each face texture. Single-texture blocks need only the main texture.
+            if (isMulti) {
+                FACE_KEYS.forEach(faceKey => {
+                    const uri = block.sideTextures?.[faceKey] || block.sideTextures?.["+y"] || block.textureUri;
+                    if (!uri) {
+                        return; // Skip this face if no texture found
                     }
+                    const ext = getFileExtensionFromUri(uri);
+                    const fileName = `${faceKey}.${ext}`;
+                    textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
                 });
             }
         });
@@ -445,8 +435,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             }
         });
 
-        console.log("Collected Texture Infos:", Array.from(textureInfos));
-        console.log("Collected Model URIs:", Array.from(modelUris));
         // --- End Collect Asset URIs ---
 
 
@@ -455,47 +443,28 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             // Export block type definitions only for the blocks actually used
             blockTypes: usedBlockTypes.map((block) => {
                 // Determine JSON paths based on zip structure
-                let textureUriForJson: string | undefined;
                 const isMulti = block.isMultiTexture || false;
+                const sanitizedBlockName = sanitizeName(block.name);
 
-                if (block.textureUri && block.textureUri.startsWith('data:')) {
-                    textureUriForJson = block.textureUri; // Keep data URI as is
-                } else if (isMulti) {
-                    // Multi-texture blocks point to their folder in the zip
-                    textureUriForJson = `blocks/${block.name}`; // Represents the folder
+                // --- Main texture path (single-texture blocks) ---
+                let textureUriForJson: string | undefined;
+                if (isMulti) {
+                    // Multi-texture blocks reference their folder
+                    textureUriForJson = `blocks/${block.name}`;
                 } else if (block.textureUri) {
-                    // Single-texture blocks point to the file in the root textures folder
-                    const fileName = block.textureUri.split('/').pop();
-                    textureUriForJson = `blocks/${fileName}`;
-                } else {
-                    textureUriForJson = undefined; // No texture URI provided
+                    const ext = getFileExtensionFromUri(block.textureUri);
+                    const fileNameSingle = `${sanitizedBlockName}.${ext}`;
+                    textureUriForJson = `blocks/${fileNameSingle}`;
                 }
 
-                // Process side textures for JSON paths
-                const sideTexturesForJson = block.sideTextures ? Object.entries(block.sideTextures).reduce((acc, [side, uri]) => {
-                    if (uri && typeof uri === 'string') {
-                        if (uri.startsWith('data:')) {
-                            acc[side] = uri; // Keep data URI as is
-                        } else {
-                            const fileName = uri.split('/').pop();
-                            if (fileName) {
-                                acc[side] = isMulti
-                                    ? `blocks/${block.name}/${fileName}` // Path within block's subfolder
-                                    : `blocks/${fileName}`; // Path in root textures folder
-                            }
-                        }
-                    }
-                    return acc;
-                }, {}) : undefined;
 
 
                 return {
                     id: block.id,
                     name: block.name,
-                    textureUri: textureUriForJson, // Use adjusted path for zip structure
+                    textureUri: textureUriForJson, // For multi texture blocks this will be folder path; single texture blocks file path
                     isCustom: block.isCustom || (block.id >= 100 && block.id < 200),
-                    isMultiTexture: isMulti, // Ensure this is exported
-                    sideTextures: sideTexturesForJson, // Use adjusted paths for zip structure
+                    isMultiTexture: isMulti,
                 };
             }),
             blocks: simplifiedTerrain,
@@ -506,15 +475,15 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 if (entityType) {
                     // ... (keep existing entity processing logic)
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
-                    const rotY = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
+                    const rotYVal = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
 
 
-                    const hasRotation = Math.abs(rotY) > 0.001;
+                    const hasRotation = Math.abs(rotYVal) > 0.001;
 
 
                     const quaternion = new THREE.Quaternion();
                     if (hasRotation) {
-                        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
+                        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotYVal);
                     } else {
 
                         quaternion.identity();
@@ -531,25 +500,32 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
                     }
 
+                    let localCentreOffset: THREE.Vector3;
+                    if (entityType.boundingBoxCenter instanceof THREE.Vector3) {
+                        localCentreOffset = entityType.boundingBoxCenter.clone();
+                    } else {
+                        localCentreOffset = new THREE.Vector3(
+                            (entityType.boundingBoxWidth || 1) / 2,
+                            (entityType.boundingBoxHeight || 1) / 2,
+                            (entityType.boundingBoxDepth || 1) / 2
+                        );
+                    }
 
-                    const boundingBoxHeight = entityType.boundingBoxHeight || 1;
-                    const verticalOffset =
-                        (boundingBoxHeight * obj.scale.y) / 2;
-                    const adjustedY = obj.position.y + 0.5 + verticalOffset;
+                    const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(obj.scale.x, obj.scale.y, obj.scale.z));
 
-                    const boundingBoxWidth = entityType.boundingBoxWidth || 1;
-                    const boundingBoxDepth = entityType.boundingBoxDepth || 1;
-                    
-                    const horizontalOffsetX = (boundingBoxWidth * obj.scale.x) / 2;
-                    const horizontalOffsetZ = (boundingBoxDepth * obj.scale.z) / 2;
-                    
-                    const adjustedX = obj.position.x + horizontalOffsetX;
-                    const adjustedZ = obj.position.z + horizontalOffsetZ;
+                    const qOffset = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotYVal);
+                    scaledOffset.applyQuaternion(qOffset);
 
-                    const key = `${adjustedX},${adjustedY},${adjustedZ}`;
+                    const adjustedPos = new THREE.Vector3(
+                        obj.position.x,
+                        obj.position.y,
+                        obj.position.z
+                    ).add(new THREE.Vector3(0.5, 0.5, 0.5)).add(scaledOffset);
+
+                    const key = `${adjustedPos.x},${adjustedPos.y},${adjustedPos.z}`;
                     acc[key] = {
                         modelUri: modelUriForJson, // Use adjusted relative path
-                        modelPreferredShape: "trimesh",
+                        modelPreferredShape: (entityType.addCollider === false) ? "none" : "trimesh",
                         modelLoopedAnimations: entityType.animations || [
                             "idle",
                         ],
@@ -580,44 +556,89 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
         const fetchedAssetUrls = new Set<string>(); // Keep track of URLs already being fetched/added
 
+        // --- Helper to create a blank PNG blob (24x24 transparent) ---
+        const blankPngBlobPromise = (() => {
+            let cache = null;
+            return async () => {
+                if (cache) return cache;
+                const canvas = document.createElement('canvas');
+                canvas.width = 24;
+                canvas.height = 24;
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                cache = blob;
+                return blob;
+            };
+        })();
+
+        // Cache fetched blobs so duplicate URIs don't trigger network again but all face files are still written.
+        const uriBlobCache = new Map<string, Blob>();
+
         textureInfos.forEach(texInfo => {
-            if (texInfo.uri && !texInfo.uri.startsWith('data:') && !fetchedAssetUrls.has(texInfo.uri)) {
-                fetchedAssetUrls.add(texInfo.uri);
-                const fileName = texInfo.uri.split('/').pop();
+            const fileName = texInfo.fileName;
+            if (!fileName || !blocksRootFolder) return;
 
-                if (fileName && blocksRootFolder) {
-                    // Determine the target folder within the zip
-                    const targetFolder = texInfo.isMulti && texInfo.blockName
-                        ? blocksRootFolder.folder(texInfo.blockName) // Get or create subfolder
-                        : blocksRootFolder; // Use root textures folder
+            const targetFolder = texInfo.isMulti && texInfo.blockName
+                ? blocksRootFolder.folder(texInfo.blockName)
+                : blocksRootFolder;
 
-                    if (!targetFolder) {
-                        console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
-                        return; // Skip this texture if folder creation fails
-                    }
-
-                    fetchPromises.push(
-                        fetch(texInfo.uri)
-                            .then(response => {
-                                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${texInfo.uri}`);
-                                return response.blob();
-                            })
-                            .then(blob => {
-                                targetFolder.file(fileName, blob); // Add to the correct folder (root or subfolder)
-                                const pathInZip = texInfo.isMulti && texInfo.blockName ? `${texInfo.blockName}/${fileName}` : fileName;
-                                console.log(`Added texture: ${pathInZip} to zip folder textures/`);
-                            })
-                            .catch(error => console.error(`Failed to fetch/add texture ${texInfo.uri}:`, error))
-                    );
-                }
+            if (!targetFolder) {
+                console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
+                return;
             }
+
+            const addFileToZip = (blob: Blob) => {
+                targetFolder.file(fileName, blob);
+            };
+
+            if (!texInfo.uri) {
+                // No texture URI provided – create blank PNG
+                fetchPromises.push(
+                    blankPngBlobPromise().then(addFileToZip)
+                );
+                return;
+            }
+
+            // If we've already fetched this URI, reuse the blob
+            if (uriBlobCache.has(texInfo.uri)) {
+                addFileToZip(uriBlobCache.get(texInfo.uri));
+                return;
+            }
+
+            // Fetch (or convert data URI) then cache and add
+            const fetchPromise = (async () => {
+                let blob: Blob;
+                try {
+                    if (texInfo.uri.startsWith('data:image')) {
+                        const res = await fetch(texInfo.uri);
+                        blob = await res.blob();
+                    } else {
+                        const response = await fetch(texInfo.uri);
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${texInfo.uri}`);
+                        blob = await response.blob();
+                    }
+                } catch (error) {
+                    console.warn(`Failed to fetch texture ${texInfo.uri}, using blank PNG.`, error);
+                    blob = await blankPngBlobPromise();
+                }
+                uriBlobCache.set(texInfo.uri, blob);
+                addFileToZip(blob);
+            })();
+
+            fetchPromises.push(fetchPromise);
         });
 
 
         modelUris.forEach(uri => {
             if (uri && !uri.startsWith('data:') && !fetchedAssetUrls.has(uri)) { // Avoid data URIs and duplicates
                 fetchedAssetUrls.add(uri);
-                const fileName = uri.split('/').pop(); // Extract filename
+                let fileName: string | undefined;
+                const matchingModel = environmentModels.find(m => m.modelUrl === uri);
+                if (matchingModel && matchingModel.isCustom) {
+                    fileName = `${matchingModel.name}.gltf`;
+                } else {
+                    fileName = uri.split('/').pop();
+                }
+
                 if (fileName && modelsFolder) {
                     fetchPromises.push(
                         fetch(uri)
@@ -627,7 +648,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                             })
                             .then(blob => {
                                 modelsFolder.file(fileName, blob);
-                                console.log(`Added model: ${fileName} to zip`);
                             })
                             .catch(error => console.error(`Failed to fetch/add model ${uri}:`, error))
                     );
@@ -637,7 +657,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
 
         await Promise.all(fetchPromises);
-        console.log("Asset fetching complete.");
         // --- End Fetch Assets and Create ZIP ---
 
         loadingManager.updateLoading("Creating export files...", 90);
@@ -646,7 +665,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
         // Add terrain.json to the zip file root
         zip.file("terrain.json", jsonBlob);
-        console.log("Added terrain.json to zip");
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
 

@@ -774,7 +774,7 @@ const PixelEditorCanvas = forwardRef(
             [historyIndex, history.length]
         );
         return (
-            <div className="pixel-editor-wrapper">
+            <div className="flex p-3">
                 <canvas
                     ref={canvasRef}
                     width={canvasSize}

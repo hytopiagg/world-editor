@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
-import BlockMaterial from "../blocks/BlockMaterial"; // Import BlockMaterial for preview
 import { blockTypes } from "../managers/BlockTypesManager"; // For getting block type info
 
 class SchematicPlacementTool extends BaseTool {
@@ -33,12 +32,9 @@ class SchematicPlacementTool extends BaseTool {
         this.name = "SchematicPlacementTool";
         this.schematicData = null;
         this.previewGroup = new THREE.Group();
-        this.previewMeshes = {}; // Store meshes by relative position string "x,y,z"
         this.anchorOffset = new THREE.Vector3(0, 0, 0); // Offset from cursor to schematic anchor (e.g., corner)
         this.currentRotation = 0; // 0: 0°, 1: 90°, 2: 180°, 3: 270°
-
-        this.tooltip =
-            "Schematic Placement Tool: Click to place. Tap R to rotate. Press Escape to cancel.";
+        this.verticalOffset = 0; // Y offset applied via 1 / 2 keys
 
         if (this.scene) {
             this.scene.add(this.previewGroup);
@@ -49,6 +45,18 @@ class SchematicPlacementTool extends BaseTool {
         }
 
         this.previewGeometry = new THREE.BoxGeometry(1, 1, 1);
+        this.previewInstancedMesh = null;
+        this.dummy = new THREE.Object3D(); // For setting instance matrices
+        this.previewInstancedMaterial = new THREE.MeshPhongMaterial({
+            opacity: 0.5,
+            transparent: true,
+            depthWrite: false,
+            // vertexColors: true is not needed for InstancedMesh.setColorAt
+        });
+
+        // For debouncing mouse move updates
+        this.mouseMoveTimeout = null;
+        this.mouseMoveDelay = 0; // ms, adjust as needed
     }
 
     onActivate(schematicData) {
@@ -61,26 +69,37 @@ class SchematicPlacementTool extends BaseTool {
         }
 
         this.schematicData = schematicData;
-        this.previewGroup.visible = true;
         this.currentRotation = 0; // Reset rotation on new schematic activation
+        this.verticalOffset = 0;
+        this.anchorOffset.y = 0;
+        this._rebuildPreviewInstancedMesh(); // Build/rebuild the InstancedMesh
+        this._updatePreviewAnchorPosition(); // Position the group
+        this.previewGroup.visible = true;
         console.log(
             "SchematicPlacementTool specific activation with data:",
             this.schematicData
         );
 
-        this.updatePreview(); // Initial preview update
         return true; // Indicate activation succeeded
     }
 
     onDeactivate() {
         this.schematicData = null;
         this.previewGroup.visible = false;
-        this.clearPreviewMeshes();
+        this._clearPreviewInstancedMesh(); // Clear the instanced mesh
         this.currentRotation = 0; // Reset rotation
+        this.verticalOffset = 0;
+        this.anchorOffset.set(0, 0, 0);
         console.log("SchematicPlacementTool specific deactivation");
 
         if (this.terrainBuilderProps.clearAISchematic) {
             this.terrainBuilderProps.clearAISchematic();
+        }
+
+        // Clear any pending mouse move updates
+        if (this.mouseMoveTimeout) {
+            clearTimeout(this.mouseMoveTimeout);
+            this.mouseMoveTimeout = null;
         }
     }
 
@@ -107,21 +126,40 @@ class SchematicPlacementTool extends BaseTool {
     }
 
     handleMouseMove(event, intersectionPoint) {
-        if (!this.isActive || !this.schematicData) return; // Use the getter from BaseTool
+        if (!this.isActive || !this.schematicData) return;
 
-        this.updatePreview();
+        // Debounce the preview update
+        clearTimeout(this.mouseMoveTimeout);
+        this.mouseMoveTimeout = setTimeout(() => {
+            this._updatePreviewAnchorPosition();
+        }, this.mouseMoveDelay);
     }
 
-    updatePreview() {
-        if (
-            !this.isActive || // Use the getter
-            !this.schematicData ||
-            !this.previewPositionRef.current
-        )
-            return;
-        const basePosition = this.previewPositionRef.current;
+    _rebuildPreviewInstancedMesh() {
+        if (!this.schematicData) return;
 
-        for (const [relPosStr, blockId] of Object.entries(this.schematicData)) {
+        this._clearPreviewInstancedMesh(); // Clear existing instanced mesh first
+
+        const blocks = Object.entries(this.schematicData);
+        const count = blocks.length;
+
+        if (count === 0) return;
+
+        this.previewInstancedMesh = new THREE.InstancedMesh(
+            this.previewGeometry,
+            this.previewInstancedMaterial,
+            count
+        );
+
+        const colorInstance = new THREE.Color();
+
+        let minX = Infinity,
+            maxX = -Infinity,
+            minZ = Infinity,
+            maxZ = -Infinity;
+
+        for (let i = 0; i < count; i++) {
+            const [relPosStr, blockId] = blocks[i];
             const [relX, relY, relZ] = relPosStr.split(",").map(Number);
             const rotatedRel = this.getRotatedRelativePosition(
                 relX,
@@ -129,42 +167,66 @@ class SchematicPlacementTool extends BaseTool {
                 relZ
             );
 
-            const worldX = basePosition.x + rotatedRel.x + this.anchorOffset.x;
-            const worldY = basePosition.y + rotatedRel.y + this.anchorOffset.y;
-            const worldZ = basePosition.z + rotatedRel.z + this.anchorOffset.z;
-            if (this.previewMeshes[relPosStr]) {
-                this.previewMeshes[relPosStr].position.set(
-                    worldX,
-                    worldY,
-                    worldZ
-                );
-            } else {
-                const blockType = blockTypes.find((b) => b.id === blockId);
-                const color = blockType ? 0x00ff00 : 0xff00ff; // Green for known, magenta for unknown
+            // Track bounds for centering
+            minX = Math.min(minX, rotatedRel.x);
+            maxX = Math.max(maxX, rotatedRel.x);
+            minZ = Math.min(minZ, rotatedRel.z);
+            maxZ = Math.max(maxZ, rotatedRel.z);
 
-                let material;
-                if (BlockMaterial.instance) {
-                    material = new THREE.MeshPhongMaterial({
-                        color: color,
-                        opacity: 0.5,
-                        transparent: true,
-                        depthWrite: false, // Render correctly with existing blocks
-                    });
-                } else {
-                    material = new THREE.MeshBasicMaterial({
-                        color: color,
-                        opacity: 0.5,
-                        transparent: true,
-                        depthWrite: false,
-                    });
-                }
-                const mesh = new THREE.Mesh(this.previewGeometry, material);
-                mesh.position.set(worldX, worldY, worldZ);
-                mesh.userData = { blockId }; // Store blockId for potential future use
-                this.previewGroup.add(mesh);
-                this.previewMeshes[relPosStr] = mesh;
-            }
+            // Instance transform
+            this.dummy.position.set(rotatedRel.x, rotatedRel.y, rotatedRel.z);
+            this.dummy.rotation.set(0, 0, 0);
+            this.dummy.scale.set(1, 1, 1);
+            this.dummy.updateMatrix();
+            this.previewInstancedMesh.setMatrixAt(i, this.dummy.matrix);
+
+            // Instance color
+            const blockType = blockTypes.find((b) => b.id === blockId);
+            const colorHex = blockType ? 0x00ff00 : 0xff00ff;
+            this.previewInstancedMesh.setColorAt(
+                i,
+                colorInstance.setHex(colorHex)
+            );
         }
+
+        this.previewInstancedMesh.instanceMatrix.needsUpdate = true;
+        if (this.previewInstancedMesh.instanceColor)
+            this.previewInstancedMesh.instanceColor.needsUpdate = true;
+
+        this.previewGroup.add(this.previewInstancedMesh);
+
+        // Center the schematic horizontally (bottom-center)
+        const centerX = (minX + maxX) / 2;
+        const centerZ = (minZ + maxZ) / 2;
+        this.anchorOffset.x = -centerX;
+        this.anchorOffset.z = -centerZ;
+        // ensure Y offset maintained
+        this.anchorOffset.y = this.verticalOffset;
+    }
+
+    _clearPreviewInstancedMesh() {
+        if (this.previewInstancedMesh) {
+            this.previewGroup.remove(this.previewInstancedMesh);
+            // Geometry and Material are shared, dispose them in the main dispose() method
+            this.previewInstancedMesh.dispose(); // Disposes internal buffer attributes
+            this.previewInstancedMesh = null;
+        }
+    }
+
+    _updatePreviewAnchorPosition() {
+        if (
+            !this.isActive || // Check inherited isActive getter
+            !this.previewPositionRef.current
+        ) {
+            return;
+        }
+
+        const basePosition = this.previewPositionRef.current;
+        this.previewGroup.position.set(
+            basePosition.x + this.anchorOffset.x,
+            basePosition.y + this.anchorOffset.y,
+            basePosition.z + this.anchorOffset.z
+        );
     }
 
     handleMouseDown(event, intersectionPoint, button) {
@@ -185,7 +247,18 @@ class SchematicPlacementTool extends BaseTool {
         } else if (event.key.toLowerCase() === "r") {
             this.currentRotation = (this.currentRotation + 1) % 4;
             console.log(`Schematic rotation: ${this.currentRotation * 90}°`);
-            this.updatePreview();
+            this._rebuildPreviewInstancedMesh(); // Rebuild with new relative positions
+            this._updatePreviewAnchorPosition(); // Ensure group is correctly positioned
+        } else if (event.key === "1") {
+            // Shift down
+            this.verticalOffset -= 1;
+            this.anchorOffset.y = this.verticalOffset;
+            this._updatePreviewAnchorPosition();
+        } else if (event.key === "2") {
+            // Shift up
+            this.verticalOffset += 1;
+            this.anchorOffset.y = this.verticalOffset;
+            this._updatePreviewAnchorPosition();
         }
     }
 
@@ -276,35 +349,41 @@ class SchematicPlacementTool extends BaseTool {
             pendingChanges.terrain.removed = removedBlocks;
         }
 
-        if (this.terrainBuilderProps.activateTool) {
-            console.log("Schematic placed, activating Brush tool...");
-            this.terrainBuilderProps.activateTool("brush");
+        const repeatPlacement =
+            localStorage.getItem("schematicRepeatPlacement") === "true";
+
+        if (!repeatPlacement) {
+            if (this.terrainBuilderProps.activateTool) {
+                this.terrainBuilderProps.activateTool(null);
+            } else {
+                console.warn(
+                    "activateTool not found in props, deactivating schematic tool."
+                );
+                this.deactivate();
+            }
         } else {
-            console.warn(
-                "activateTool not found in props, deactivating schematic tool."
-            );
-            this.deactivate();
+            // Keep preview visible and allow further placements.
+            this._updatePreviewAnchorPosition();
         }
     }
 
-    clearPreviewMeshes() {
-        while (this.previewGroup.children.length > 0) {
-            const mesh = this.previewGroup.children[0];
-            this.previewGroup.remove(mesh);
-        }
-        this.previewMeshes = {};
-    }
     dispose() {
-        this.clearPreviewMeshes();
+        this._clearPreviewInstancedMesh(); // Use the new clear method
 
         if (this.scene) {
-            this.scene.remove(this.previewGroup);
+            this.scene.remove(this.previewGroup); // previewGroup itself
         }
 
         if (this.previewGeometry) {
             this.previewGeometry.dispose();
             this.previewGeometry = null;
         }
+        if (this.previewInstancedMaterial) {
+            // Dispose the shared material
+            this.previewInstancedMaterial.dispose();
+            this.previewInstancedMaterial = null;
+        }
+        // this.dummy is a simple Object3D and doesn't need explicit disposal
         console.log("SchematicPlacementTool disposed");
     }
 }

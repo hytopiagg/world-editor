@@ -6,7 +6,12 @@
     right: 20px; /* Will adjust this later */
     width: 300px; /* Will adjust this later */
     padding: 15px;
-    background: rgba(26, 26, 26, 0.95); /* Darker background to match App theme */
+    background: rgba(
+        26,
+        26,
+        26,
+        0.95
+    ); /* Darker background to match App theme */
     border: 1px solid #333;
     border-radius: 8px;
     color: white;
@@ -23,29 +28,38 @@
     min-height: 80px;
     background: #222;
     color: white;
+    outline: none;
     border: 1px solid #444;
     border-radius: 8px;
     padding: 10px;
     box-sizing: border-box; /* Include padding in width */
     resize: vertical; /* Allow vertical resize */
-    font-family: 'Inter', sans-serif;
+    font-family: "Inter", sans-serif;
     font-size: 14px;
+}
+
+.ai-assistant-textarea:focus {
+    border: 1px solid #f1f1f1;
 }
 
 .ai-assistant-button {
     padding: 8px 15px;
-    background-color: transparent;
-    color: white;
-    border: none;
+    background-color: #f1f1f1;
+    color: #000;
+    font-weight: 600;
     border-radius: 8px;
     cursor: pointer;
     height: 40px;
     font-size: 16px;
-    transition: background 0.2s ease-in-out;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.ai-assistant-button:hover:disabled {
+    scale: 1;
 }
 
 .ai-assistant-button:hover {
-    background: rgba(255, 255, 255, 0.2);
+    scale: 1.01;
 }
 
 .ai-assistant-button:active {
@@ -53,9 +67,8 @@
 }
 
 .ai-assistant-button:disabled {
-    background-color: rgba(255, 255, 255, 0.2);
     cursor: not-allowed;
-    opacity: 0.7;
+    opacity: 0.5;
 }
 
 .ai-assistant-error {
@@ -89,37 +102,6 @@
     background: #333;
 }
 
-/* Captcha Container Styling */
-.ai-assistant-captcha-container {
-    margin-top: 10px;
-    /* min-width: 304px; /* REMOVED - Let container shrink */
-    display: flex;
-    justify-content: center; /* Center captcha if container is wider */
-    width: 100%; /* Ensure container takes available width */
-    overflow: hidden; /* Hide potential overflow */
-}
-
-/* Style the hCaptcha iframe directly if needed (e.g., for scaling) */
-.ai-assistant-captcha-container > div {
-    /* This targets the div hCaptcha injects */
-    /* max-width: 100%; /* REMOVED - We set width/scale directly */
-    /* overflow: hidden; /* Moved to container */
-}
-
-/* Improve HCaptcha container styles for dark theme */
-.h-captcha {
-    display: flex;
-    justify-content: center;
-    margin: 5px 0;
-}
-
-/* Custom dark theme styles that work with hcaptcha iframe */
-.h-captcha iframe {
-    background: #222 !important;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
 /* Basic Responsiveness */
 @media (max-width: 600px) {
     .ai-assistant-panel {
@@ -129,26 +111,36 @@
         top: auto; /* Remove fixed top */
         bottom: 20px; /* Stick to bottom */
     }
+}
 
-    /* Scale captcha container on smaller screens if it overflows */
-    .ai-assistant-captcha-container {
-        /* width: 100%; /* Already set above */
-        /* overflow: hidden; /* REMOVING - Might clip compact view */
-        /* Explicitly set height to match scaled content */
-        /* height: calc(78px * 0.9); /* REMOVED - No longer needed for compact */
-        min-height: 144px; /* Add min-height for compact captcha */
-    }
+.ai-assistant-panel.embedded {
+    position: static;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    width: 100%;
+    color: #f1f1f1;
+}
 
-    /* Target the actual captcha iframe container */
-    .ai-assistant-captcha-container > div {
-        /* REMOVED Styles related to scaling normal size */
-        /* width: 304px; */
-        /* height: 78px; */
-        /* transform: scale(0.9); */
-        /* transform-origin: 0 0; */
-    }
+.ai-assistant-panel.embedded h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
 
-    .h-captcha {
-        min-height: 144px;
-    }
-} 
+.ai-assistant-panel.embedded .ai-assistant-textarea {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-assistant-panel.embedded .ai-assistant-button {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    font-size: 0.75rem;
+    height: auto;
+    padding: 6px 10px;
+}
+
+.ai-assistant-panel.embedded .ai-assistant-history-list {
+    max-height: 90px;
+}

@@ -152,17 +152,22 @@ async function migrateSchematicStoreV2IfNeeded(
     });
 }
 
+interface AIAssistantPanelProps {
+    getAvailableBlocks: () => Promise<any> | any;
+    loadAISchematic: (schematic: any) => void;
+    isVisible: boolean;
+    isEmbedded?: boolean;
+}
+
 const AIAssistantPanel = ({
     getAvailableBlocks,
     loadAISchematic,
     isVisible,
-}) => {
+    isEmbedded = false,
+}: AIAssistantPanelProps) => {
     const [prompt, setPrompt] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [generationHistory, setGenerationHistory] = useState<
-        SchematicHistoryEntry[]
-    >([]);
     const [hCaptchaToken, setHCaptchaToken] = useState<string | null>(null);
     const [captchaError, setCaptchaError] = useState<string | null>(null);
     const hCaptchaRef = useRef<HCaptcha>(null);
@@ -211,16 +216,6 @@ const AIAssistantPanel = ({
                             );
                         }
                         cursor.continue();
-                    } else {
-                        if (loadedHistory.length > 0) {
-                            loadedHistory.sort(
-                                (a, b) => b.timestamp - a.timestamp
-                            );
-                            setGenerationHistory(loadedHistory);
-                            console.log(
-                                `[AI Panel] Loaded ${loadedHistory.length} V2 schematics.`
-                            );
-                        }
                     }
                 };
                 cursorRequest.onerror = (event) => {
@@ -241,7 +236,7 @@ const AIAssistantPanel = ({
         }
     }, [isVisible]);
 
-    const handleGenerate = useCallback(async () => {
+    const generateStructure = useCallback(async () => {
         if (!prompt.trim() || isLoading) return;
         setIsLoading(true);
         setError(null);
@@ -288,16 +283,6 @@ const AIAssistantPanel = ({
                     schematic: schematicData,
                     timestamp: Date.now(),
                 };
-
-                const newHistoryEntry: SchematicHistoryEntry = {
-                    id: newId,
-                    ...newSchematicValue,
-                };
-
-                setGenerationHistory((prevHistory) => [
-                    newHistoryEntry,
-                    ...prevHistory,
-                ]);
                 loadAISchematic(schematicData); // loadAISchematic expects the raw schematic
 
                 try {
@@ -336,15 +321,44 @@ const AIAssistantPanel = ({
         }
     }, [prompt, isLoading, getAvailableBlocks, loadAISchematic, hCaptchaToken]);
 
+    const handleGenerateClick = () => {
+        if (!prompt.trim() || isLoading) return;
+
+        if (hCaptchaToken) {
+            generateStructure();
+            return;
+        }
+
+        setCaptchaError(null);
+        // Execute the captcha verification programmatically
+        if (hCaptchaRef.current) {
+            try {
+                hCaptchaRef.current.execute();
+            } catch (error) {
+                console.error("Failed to execute hCaptcha:", error);
+                setCaptchaError("Failed to initiate CAPTCHA. Please try again.");
+            }
+        } else {
+            setCaptchaError("CAPTCHA component not ready. Please try again.");
+        }
+    };
+
+    useEffect(() => {
+        if (hCaptchaToken) {
+            generateStructure();
+        }
+    }, [hCaptchaToken, generateStructure]);
+
     if (!isVisible) {
         return null;
     }
 
     return (
-        <div className="ai-assistant-panel">
-            <h4>AI Building Assistant</h4>
+        <div className={`ai-assistant-panel ${isEmbedded ? 'embedded' : ''}`}>
+            {/* Prevent inputs triggering keyboard shortcuts in the main app */}
             <textarea
-                className="ai-assistant-textarea"
+                onKeyDown={(e) => e.stopPropagation()}
+                className="text-xs bg-transparent rounded-md h-20 p-2 ring-0 outline-none border border-white/10 resize-none focus:border-white hover:border-white/20 transition-all duration-200"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Describe what you want to build (e.g., 'a small stone hut', 'a 5 block high brick tower')"
@@ -352,56 +366,42 @@ const AIAssistantPanel = ({
             />
             <button
                 className="ai-assistant-button"
-                onClick={handleGenerate}
+                onClick={handleGenerateClick}
                 disabled={isLoading || !prompt.trim()}
             >
-                {isLoading ? "Generating..." : "Generate Structure"}
+                {isLoading ? <div className="flex items-center gap-1.5 justify-center">Generating <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black/80 rounded-full animate-spin" /> </div> : "Generate Structure"}
             </button>
             {error && <div className="ai-assistant-error">{error}</div>}
-            <HCaptcha
-                ref={hCaptchaRef}
-                sitekey={
-                    process.env.REACT_APP_HCAPTCHA_SITE_KEY ||
-                    "10000000-ffff-ffff-ffff-000000000001"
-                } // Fallback for local dev if .env is missing
-                size="compact"
-                theme="dark"
-                onVerify={(token) => {
-                    setHCaptchaToken(token);
-                    setCaptchaError(null);
-                }}
-                onExpire={() => {
-                    setHCaptchaToken(null);
-                    setCaptchaError("CAPTCHA expired. Please verify again.");
-                }}
-                onError={(err) => {
-                    setHCaptchaToken(null);
-                    setCaptchaError(`CAPTCHA error: ${err}`);
-                }}
-            />
+
+            {/* Invisible hCaptcha - always in DOM but hidden */}
+            <div style={{ position: "fixed", visibility: "hidden", bottom: 0, right: 0 }}>
+                <HCaptcha
+                    ref={hCaptchaRef}
+                    sitekey={
+                        process.env.REACT_APP_HCAPTCHA_SITE_KEY ||
+                        "10000000-ffff-ffff-ffff-000000000001"
+                    } // Fallback for local dev if .env is missing
+                    size="invisible"
+                    theme="light"
+                    onVerify={(token) => {
+                        setHCaptchaToken(token);
+                        setCaptchaError(null);
+                    }}
+                    onExpire={() => {
+                        setHCaptchaToken(null);
+                        setCaptchaError("CAPTCHA expired. Please try again.");
+                    }}
+                    onError={(err) => {
+                        setHCaptchaToken(null);
+                        setCaptchaError(`CAPTCHA error: ${err}`);
+                    }}
+                />
+            </div>
+
             {captchaError && (
                 <div className="ai-assistant-error">{captchaError}</div>
             )}
-            {generationHistory.length > 0 && (
-                <div
-                    onWheel={(e) => {
-                        e.stopPropagation(); // Prevent page scroll while scrolling history
-                    }}
-                    className="ai-assistant-history-list"
-                >
-                    <h5>History:</h5>
-                    {generationHistory.map((entry) => (
-                        <div
-                            key={entry.id} // Use unique ID for key
-                            className="ai-assistant-history-item"
-                            onClick={() => loadAISchematic(entry.schematic)}
-                            title={`Load: ${entry.prompt}`}
-                        >
-                            {entry.prompt}
-                        </div>
-                    ))}
-                </div>
-            )}
+
         </div>
     );
 };

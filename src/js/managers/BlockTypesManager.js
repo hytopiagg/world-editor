@@ -13,7 +13,6 @@ let blockTypesArray = (() => {
     const blockMap = new Map();
     let idCounter = 1;
     texturePaths.forEach((path) => {
-
         if (path.includes("environment") || path.includes("error")) {
             return;
         }
@@ -33,8 +32,9 @@ let blockTypesArray = (() => {
             }
             if (side) {
                 const sideKey = side.slice(1);
-                blockMap.get(blockName).sideTextures[sideKey] =
-                    `./assets/blocks/${blockName}${side}.png`;
+                blockMap.get(blockName).sideTextures[
+                    sideKey
+                ] = `./assets/blocks/${blockName}${side}.png`;
             }
         }
     });
@@ -101,10 +101,8 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
             needsRegistryUpdate = !existingBlock;
         }
     } else if (finalTextureUri && finalTextureUri.startsWith("data:image/")) {
-
         needsRegistryUpdate = true;
     } else if (!finalTextureUri) {
-
         console.warn(
             `No texture URI provided for custom block ${blockId} (${block.name}). Using error texture.`
         );
@@ -195,7 +193,6 @@ const batchProcessCustomBlocks = async (blocks) => {
     }
 
     const processedBlocks = blocks.map((block) => {
-
         processCustomBlock(block, true); // defer atlas rebuild
         return {
             blockId: block.id || parseInt(block.id),
@@ -206,7 +203,6 @@ const batchProcessCustomBlocks = async (blocks) => {
 
     if (window.batchRegisterCustomTextures) {
         try {
-
             await window.batchRegisterCustomTextures(
                 processedBlocks.map((pb) => ({
                     blockId: pb.blockId,
@@ -229,19 +225,18 @@ const batchProcessCustomBlocks = async (blocks) => {
  * @returns {Promise<boolean>} - Success status
  */
 const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
-
     const block = getBlockById(blockId);
     if (!block) {
         console.error(`Block with ID ${blockId} not found`);
         return false;
     }
     try {
-
         if (window.createBlockAt) {
             return await window.createBlockAt(blockId, x, y, z);
-        }
-
-        else if (window.terrainBuilderRef && window.terrainBuilderRef.current) {
+        } else if (
+            window.terrainBuilderRef &&
+            window.terrainBuilderRef.current
+        ) {
             const terrainBuilder = window.terrainBuilderRef.current;
             if (terrainBuilder.fastUpdateBlock) {
                 terrainBuilder.fastUpdateBlock({ x, y, z }, blockId);
@@ -284,7 +279,6 @@ const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
  * @returns {Array} - The updated block types array
  */
 const removeCustomBlock = (blockIdToRemove) => {
-
     const id = parseInt(blockIdToRemove);
 
     if (id < 100) {
@@ -340,6 +334,44 @@ const isCustomBlock = (id) => {
     return parseInt(id) >= 100;
 };
 
+/**
+ * Update the name of a custom block.
+ * @param {number} blockId - The ID of the block to update.
+ * @param {string} newName - The new name for the block.
+ * @returns {Promise<boolean>} - True if the update was successful, false otherwise.
+ */
+const updateCustomBlockName = async (blockId, newName) => {
+    const id = parseInt(blockId);
+    const trimmedName = newName.trim();
+
+    if (id < 100) {
+        console.warn("Cannot rename built-in blocks.");
+        return false;
+    }
+    if (!trimmedName) {
+        console.warn("Block name cannot be empty.");
+        return false;
+    }
+
+    const blockIndex = blockTypesArray.findIndex((block) => block.id === id);
+
+    if (blockIndex === -1) {
+        console.warn(`Block with ID ${id} not found.`);
+        return false;
+    }
+
+    // Update name in the array
+    blockTypesArray[blockIndex].name = trimmedName;
+
+    // Optional: If name affects registry or requires other updates, add logic here.
+    // For now, we assume name change doesn't require re-registering textures.
+
+    console.log(
+        `Block ID ${id} renamed to "${trimmedName}" in BlockTypesManager.`
+    );
+    return true; // Indicate success
+};
+
 const blockTypes = blockTypesArray;
 export {
     blockTypes,
@@ -347,6 +379,7 @@ export {
     processCustomBlock,
     batchProcessCustomBlocks,
     removeCustomBlock,
+    updateCustomBlockName,
     getBlockTypes,
     getCustomBlocks,
     searchBlocks,

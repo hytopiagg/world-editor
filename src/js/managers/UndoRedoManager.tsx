@@ -136,45 +136,7 @@ function UndoRedoManager(
         }
         return { newTerrain, newEnvironment };
     };
-    const commitOldStates = async (undoStates) => {
-        try {
-
-            const statesToKeep = undoStates.slice(0, MIN_UNDO_STATES);
-            const statesToCommit = undoStates.slice(MIN_UNDO_STATES);
-
-            const reversedStatesToCommit = [...statesToCommit].reverse();
-
-            const currentTerrain =
-                (await DatabaseManager.getData(STORES.TERRAIN, "current")) ||
-                {};
-            const currentEnv =
-                (await DatabaseManager.getData(
-                    STORES.ENVIRONMENT,
-                    "current"
-                )) || [];
-
-            const { newTerrain, newEnvironment } = await applyStates(
-                reversedStatesToCommit,
-                currentTerrain,
-                currentEnv
-            );
-
-            await Promise.all([
-                DatabaseManager.saveData(STORES.TERRAIN, "current", newTerrain),
-                DatabaseManager.saveData(
-                    STORES.ENVIRONMENT,
-                    "current",
-                    newEnvironment
-                ),
-                DatabaseManager.saveData(STORES.UNDO, "states", statesToKeep),
-                DatabaseManager.saveData(STORES.REDO, "states", []),
-            ]);
-            return { newTerrain, newEnvironment };
-        } catch (error) {
-            console.error("Error committing old states:", error);
-            throw error;
-        }
-    };
+    
     const undo = async () => {
         try {
             const undoStates =
@@ -502,10 +464,10 @@ function UndoRedoManager(
                                 );
                                 await terrainBuilderRef.current.refreshTerrainFromDB();
                             }
-                        } 
-                        
+                        }
+
                         if (changeData.store === STORES.ENVIRONMENT) {
-                                if (environmentBuilderRef?.current?.updateEnvironmentForUndoRedo) {
+                            if (environmentBuilderRef?.current?.updateEnvironmentForUndoRedo) {
                                 console.log("Updating environment for undo redo");
                                 console.log("added", added);
                                 console.log("removed", removed);
@@ -872,27 +834,23 @@ function UndoRedoManager(
 
             const newUndoStates = [changes, ...undoStates];
 
-            if (newUndoStates.length > MIN_UNDO_STATES) {
-                await commitOldStates(newUndoStates);
-            } else {
 
-                console.log(`Saving new undo state and clearing redo stack...`);
-                try {
-                    await Promise.all([
-                        DatabaseManager.saveData(
-                            STORES.UNDO,
-                            "states",
-                            newUndoStates
-                        ),
-                        DatabaseManager.saveData(STORES.REDO, "states", []),
-                    ]);
-                } catch (saveError) {
-                    console.error(
-                        "Error saving undo state to database:",
-                        saveError
-                    );
-                    throw saveError;
-                }
+            console.log(`Saving new undo state and clearing redo stack...`);
+            try {
+                await Promise.all([
+                    DatabaseManager.saveData(
+                        STORES.UNDO,
+                        "states",
+                        newUndoStates
+                    ),
+                    DatabaseManager.saveData(STORES.REDO, "states", []),
+                ]);
+            } catch (saveError) {
+                console.error(
+                    "Error saving undo state to database:",
+                    saveError
+                );
+                throw saveError;
             }
             console.log("=== UNDO STATE SAVED ===");
         } catch (error) {

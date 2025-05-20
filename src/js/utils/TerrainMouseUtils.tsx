@@ -15,6 +15,12 @@ function handleTerrainMouseUp(
     getRaycastIntersection
 ) {
     console.log("handleTerrainMouseUp");
+    console.log('e',e);
+
+    if (e.type !== "mouseup") {
+        return;
+    }
+
     const isToolActive =
         toolManagerRef.current && toolManagerRef.current.getActiveTool();
     if (isToolActive) {
@@ -107,8 +113,13 @@ function handleTerrainMouseDown(
     updatePreviewPosition,
     handleBlockPlacement,
     playPlaceSound,
-    threeRaycaster
+    threeRaycaster,
+    cameraManager
 ) {
+    // if (!cameraManager.isPointerUnlockedMode && !cameraManager.isPointerLocked) {
+    //     cameraManager.isPointerLocked = true;
+    //     return;
+    // }
     const isToolActive =
         toolManagerRef.current && toolManagerRef.current.getActiveTool();
     console.log("handleTerrainMouseDown");
@@ -128,7 +139,8 @@ function handleTerrainMouseDown(
             return;
         }
     }
-    if (e.button === 0) {
+    // TODO: Handle pointer lock mode
+    if (e.button === 0 || (!cameraManager.isPointerUnlockedMode && cameraManager.isPointerLocked && e.button === 2)) {
         if (!isToolActive) {
             console.log("isPlacingRef.current = true");
             isPlacingRef.current = true;

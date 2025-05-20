@@ -1,23 +1,3 @@
-/**
- * SchematicPreviewRenderer
- * -----------------------
- * A tiny helper that turns the raw schematic data structure used by the
- * SchematicPlacementTool into a small isometric preview image that can be
- * dropped straight into an <img> tag.
- *
- * Usage example (inside a React component):
- *
- *   import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
- *   const dataUrl = await generateSchematicPreview(schematicData, { width: 96, height: 96 });
- *   <img src={dataUrl} />
- *
- * The function purposefully keeps all heavy lifting (THREE.Scene, geometry, etc.)
- * completely self-contained so that nothing is leaked into the rest of the
- * application.  Every call builds a throw-away scene, renders once to an
- * off-screen WebGL canvas and immediately disposes all THREE resources so that
- * we don't leave GPU memory lying around.
- */
-
 import * as THREE from "three";
 import BlockTypeRegistryModule from "../blocks/BlockTypeRegistry";
 
@@ -45,8 +25,6 @@ interface BlockTypeRegistryInstance {
 const BlockTypeRegistry: { instance?: BlockTypeRegistryInstance } | null =
     BlockTypeRegistryModule || null;
 
-// A tiny, global texture cache so we don't reload the exact same PNG dozens of
-// times when the preview contains many instances of the same block type.
 const _textureLoader = new THREE.TextureLoader();
 const _textureCache = new Map<string, Promise<THREE.Texture | null>>();
 
@@ -100,10 +78,6 @@ interface FacePaths {
     back: string | null;
 }
 
-/**
- * Attempt to resolve file paths for each box face texture for the given block
- * id using BlockTypeRegistry (if available).
- */
 function _getFaceTexturePaths(blockId: number): FacePaths | null {
     if (!BlockTypeRegistry?.instance) return null;
 
@@ -150,59 +124,6 @@ function _getFaceTexturePaths(blockId: number): FacePaths | null {
         return null;
     }
 }
-
-/**
- * Create a THREE.Mesh for a block that uses real textures if we managed to
- * look them up and load them.  Falls back to a flat coloured material when no
- * textures are available.
- */
-function createBlockMeshWithTextures(
-    blockId: number,
-    loadedTextures: Map<string, THREE.Texture | null>
-): THREE.Mesh {
-    const facePaths = _getFaceTexturePaths(blockId);
-    if (!facePaths) {
-        return createBlockMesh(blockId); // Fallback to colored cube
-    }
-
-    const faceOrder: (string | null)[] = [
-        facePaths.right,
-        facePaths.left,
-        facePaths.top,
-        facePaths.bottom,
-        facePaths.front,
-        facePaths.back,
-    ];
-
-    const materials = faceOrder.map((path) => {
-        const texture = path ? loadedTextures.get(path) : null;
-        if (texture) {
-            return new THREE.MeshLambertMaterial({
-                map: texture,
-                transparent: true, // Assuming textures might have alpha
-            });
-        }
-        // Fallback material for this face if texture is missing or failed to load
-        return new THREE.MeshLambertMaterial({
-            color: colourFromBlockId(blockId),
-        });
-    });
-
-    const geom = new THREE.BoxGeometry(1, 1, 1);
-    return new THREE.Mesh(geom, materials);
-}
-
-/**
- * Build and return a THREE.Mesh for a single block using a flat colour.
- */
-function createBlockMesh(blockId: number): THREE.Mesh {
-    const geom = new THREE.BoxGeometry(1, 1, 1);
-    return new THREE.Mesh(
-        geom,
-        new THREE.MeshLambertMaterial({ color: colourFromBlockId(blockId) })
-    );
-}
-
 export interface SchematicData {
     [coordStr: string]: number;
 }
@@ -228,6 +149,8 @@ export async function generateSchematicPreview(
         useTextures = true,
     }: GeneratePreviewOptions = {}
 ): Promise<string> {
+    console.log("generateSchematicPreview called with inputWidth:", inputWidth, "inputHeight:", inputHeight);
+    
     // Ensure width and height are positive for stable rendering
     const renderWidth = Math.max(1, inputWidth);
     const renderHeight = Math.max(1, inputHeight);
@@ -408,8 +331,6 @@ export async function generateSchematicPreview(
         scene.add(instancedMesh);
     });
 
-    // The old scene.children.forEach loop for recentering is no longer needed.
-
     scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
     dirLight.position.set(5, 10, 7); // Position relative to the group of blocks
@@ -424,14 +345,6 @@ export async function generateSchematicPreview(
 
     const maxDim = Math.max(effectiveWidth, effectiveHeight, effectiveDepth, 1);
     const aspect = renderWidth / renderHeight;
-    // Adjust frustumSize based on how far blocks can be from the center after recentering
-    // The max deviation from center for any block coordinate is maxDim / 2.
-    // The camera needs to see from (0,0,0) out to these extents.
-    // A larger multiplier like 1.5 was okay, but let's try to be a bit tighter.
-    // Max extent from origin is roughly maxDim * sqrt(3)/2 for a corner, but orthographic.
-    // We need frustum to contain all blocks after they are centered around (0,0,0).
-    // So, from -maxDim/2 to +maxDim/2 for each axis. FrustumSize should be maxDim.
-    // A bit of padding is good, so 1.2 * maxDim.
     const frustumSize = maxDim * 1.2 + 1; // Add 1 for single block case, ensure it's not too tight
 
     const camera = new THREE.OrthographicCamera(
@@ -443,8 +356,6 @@ export async function generateSchematicPreview(
         maxDim * 5 // Far plane, needs to encompass the camera distance + scene depth
     );
 
-    // Distance should ensure the entire schematic is visible.
-    // The camera looks at (0,0,0). Its position is (distance, distance, distance).
     const distance = maxDim * 1.5; // Distance from origin for isometric view
     camera.position.set(distance, distance, distance);
     camera.lookAt(scene.position); // scene.position is (0,0,0) as blocks are centered
@@ -467,23 +378,24 @@ export async function generateSchematicPreview(
 
     const dataUrl = renderer.domElement.toDataURL("image/png");
 
-    // Dispose WebGL resources
     renderer.dispose();
+    if (renderer.forceContextLoss) {
+        renderer.forceContextLoss();
+    }
+    if (renderer.domElement && renderer.domElement.remove) {
+        renderer.domElement.remove();
+    }
+
     sharedBoxGeometry.dispose();
     materialsToDispose.forEach((mat) => {
         if (Array.isArray(mat)) {
-            // Should not happen based on current logic, but good check
             mat.forEach((m) => m.dispose());
         } else if (mat) {
             mat.dispose();
         }
     });
 
-    // Textures loaded via _textureLoader are potentially shared via THREE.Cache.
-    // Disposing them here can cause flickers if the main app uses them.
-    // We will clear our local promise cache, but not dispose the textures themselves,
-    // as they are managed by THREE.Cache and may be used elsewhere in the application.
-    _textureCache.clear(); // Clear the local promise cache for this renderer instance.
+    _textureCache.clear();
 
     return dataUrl;
 }

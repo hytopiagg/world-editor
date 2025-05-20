@@ -10,7 +10,8 @@ class GroundTool extends BaseTool {
      * Creates a new GroundTool instance
      */
     groundHeight = 1;
-    groundSides = 4; // Number of sides (4 = square, 5 = pentagon, etc.)
+    isCircleShape = false; // false = square, true = circle
+    groundEdgeDepth = 0; // 0 = solid, >=1 = hollow with specified wall thickness
     isCtrlPressed = false;
     groundStartPosition = null;
     groundPreview = null;
@@ -25,17 +26,16 @@ class GroundTool extends BaseTool {
     isPlacingRef = null;
     previewPositionRef = null;
     pendingChangesRef = null;
-
+    environmentBuilderRef = null;
     constructor(terrainBuilderProps) {
-        console.log("GroundTool initialized");
         super(terrainBuilderProps);
 
         this.name = "GroundTool";
         this.tooltip =
-            "Ground Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.";
+            "Ground Tool: Click to start, click again to place. Use 1 | 2 to adjust height. Use 5 to toggle rounded edges. Use 3 | 4 to adjust hollowness. Hold Ctrl to erase. Press Escape to cancel.";
         this.groundHeight = 1;
-        this.groundSides = 4; // Number of sides (4 = square, 5 = pentagon, etc.)
-        this.isCtrlPressed = false;
+        this.isCircleShape = false;
+        this.groundEdgeDepth = 0;
         this.groundStartPosition = null;
         this.groundPreview = null;
 
@@ -45,35 +45,11 @@ class GroundTool extends BaseTool {
             this.scene = terrainBuilderProps.scene;
             this.toolManagerRef = terrainBuilderProps.toolManagerRef;
             this.terrainBuilderRef = terrainBuilderProps.terrainBuilderRef;
+            this.environmentBuilderRef = terrainBuilderProps.environmentBuilderRef;
             this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
             this.undoRedoManager = terrainBuilderProps.undoRedoManager;
-            console.log(
-                "GroundTool: Got undoRedoManager reference:",
-                !!this.undoRedoManager
-            );
-            console.log(
-                "GroundTool: undoRedoManager is ref:",
-                this.undoRedoManager && "current" in this.undoRedoManager
-            );
-            console.log(
-                "GroundTool: undoRedoManager.current exists:",
-                this.undoRedoManager && !!this.undoRedoManager.current
-            );
-            console.log(
-                "GroundTool: undoRedoManager.current has saveUndo:",
-                this.undoRedoManager &&
-                    this.undoRedoManager.current &&
-                    typeof this.undoRedoManager.current.saveUndo === "function"
-            );
-
             this.placementChangesRef = terrainBuilderProps.placementChangesRef;
             this.isPlacingRef = terrainBuilderProps.isPlacingRef;
-            console.log(
-                "GroundTool: Got placementChangesRef:",
-                !!this.placementChangesRef
-            );
-            console.log("GroundTool: Got isPlacingRef:", !!this.isPlacingRef);
-
             this.previewPositionRef = terrainBuilderProps.previewPositionRef;
         } else {
             console.error(
@@ -85,10 +61,7 @@ class GroundTool extends BaseTool {
     onActivate(activationData) {
         super.onActivate(activationData);
 
-        console.log("GroundTool activated");
-
         if (this.terrainRef && !this.terrainRef.current) {
-            console.log("Initializing empty terrainRef.current in onActivate");
             this.terrainRef.current = {};
         }
 
@@ -111,6 +84,17 @@ class GroundTool extends BaseTool {
         super.onDeactivate();
         this.removeGroundPreview();
         this.groundStartPosition = null;
+        // Ensure global placing state is reset in case the tool is deactivated mid-action
+        if (this.isPlacingRef) {
+            this.isPlacingRef.current = false;
+        }
+        // Clear any in-progress placement records to avoid leaking into other tools / default mode
+        if (this.placementChangesRef) {
+            this.placementChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
+        }
     }
     /**
      * Handles mouse down events for ground placement
@@ -136,23 +120,14 @@ class GroundTool extends BaseTool {
                     return;
                 }
                 if (!this.terrainRef.current) {
-                    console.log(
-                        "GroundTool: terrainRef.current is undefined, initializing empty object"
-                    );
                     this.terrainRef.current = {};
                 }
 
                 if (this.isPlacingRef) {
-                    console.log(
-                        "GroundTool: Setting isPlacingRef to true (directly)"
-                    );
                     this.isPlacingRef.current = true;
                 }
 
                 if (this.placementChangesRef) {
-                    console.log(
-                        "GroundTool: Ensuring placementChangesRef is initialized (directly)"
-                    );
                     this.placementChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
@@ -180,7 +155,6 @@ class GroundTool extends BaseTool {
                     return;
                 }
 
-                console.log("GroundTool: Saving undo state directly");
                 if (this.placementChangesRef) {
                     const changes = this.placementChangesRef.current;
 
@@ -189,17 +163,11 @@ class GroundTool extends BaseTool {
                         Object.keys(changes.terrain.removed).length > 0;
                     if (hasChanges) {
                         if (this.undoRedoManager?.current?.saveUndo) {
-                            console.log(
-                                "GroundTool: Calling saveUndo with undoRedoManager.current"
-                            );
                             this.undoRedoManager.current.saveUndo(changes);
                         } else if (
                             this.terrainBuilderRef?.current?.undoRedoManager
                                 ?.current?.saveUndo
                         ) {
-                            console.log(
-                                "GroundTool: Calling saveUndo with terrainBuilderRef fallback"
-                            );
                             this.terrainBuilderRef.current.undoRedoManager.current.saveUndo(
                                 changes
                             );
@@ -226,9 +194,6 @@ class GroundTool extends BaseTool {
                 this.removeGroundPreview();
 
                 if (this.isPlacingRef) {
-                    console.log(
-                        "GroundTool: Setting isPlacingRef to false (directly)"
-                    );
                     this.isPlacingRef.current = false;
                 }
             } else {
@@ -236,18 +201,12 @@ class GroundTool extends BaseTool {
                 this.groundStartPosition = currentPosition.clone();
 
                 if (this.placementChangesRef) {
-                    console.log(
-                        "GroundTool: Initializing placementChangesRef for new ground area (directly)"
-                    );
                     this.placementChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
                     };
 
                     if (this.isPlacingRef) {
-                        console.log(
-                            "GroundTool: Setting isPlacingRef to true for new ground area (directly)"
-                        );
                         this.isPlacingRef.current = true;
                     }
                 } else {
@@ -278,21 +237,18 @@ class GroundTool extends BaseTool {
      */
     handleKeyDown(event) {
         if (event.key === "Control") {
-            console.log("GroundTool: Ctrl pressed, switching to erase mode");
-            this.isCtrlPressed = true;
+            this.isCtrlPressed = !this.isCtrlPressed; // toggle mode
             this.updateGroundPreviewMaterial();
         } else if (event.key === "1") {
-            console.log("GroundTool: Decreasing ground height");
             this.setGroundHeight(this.groundHeight - 1);
         } else if (event.key === "2") {
-            console.log("GroundTool: Increasing ground height");
             this.setGroundHeight(this.groundHeight + 1);
+        } else if (event.key === "3") {
+            this.setGroundEdgeDepth(this.groundEdgeDepth - 1);
+        } else if (event.key === "4") {
+            this.setGroundEdgeDepth(this.groundEdgeDepth + 1);
         } else if (event.key === "5") {
-            console.log("GroundTool: Decreasing number of sides");
-            this.setGroundSides(this.groundSides - 1);
-        } else if (event.key === "6") {
-            console.log("GroundTool: Increasing number of sides");
-            this.setGroundSides(this.groundSides + 1);
+            this.toggleShape();
         } else if (event.key === "Escape") {
             this.removeGroundPreview();
             this.groundStartPosition = null;
@@ -302,17 +258,12 @@ class GroundTool extends BaseTool {
      * Handle key up events for the tool
      */
     handleKeyUp(event) {
-        if (event.key === "Control") {
-            console.log("GroundTool: Ctrl released, switching to build mode");
-            this.isCtrlPressed = false;
-            this.updateGroundPreviewMaterial();
-        }
+        // no-op for Control now (toggle handled on keydown)
     }
     /**
      * Updates the ground height
      */
     setGroundHeight(height) {
-        console.log("Setting ground height to:", Math.max(1, height));
         this.groundHeight = Math.max(1, height);
 
         if (
@@ -324,74 +275,81 @@ class GroundTool extends BaseTool {
                 this.groundStartPosition,
                 this.previewPositionRef.current
             );
-        } else {
-            console.log("Ground preview not updated - missing references:", {
-                groundStartPosition: !!this.groundStartPosition,
-                previewPositionRef: !!this.previewPositionRef,
-                previewPositionRefCurrent:
-                    this.previewPositionRef &&
-                    !!this.previewPositionRef.current,
-            });
         }
     }
 
-    setGroundSides(sides) {
-        const newSides = Math.max(4, Math.min(8, sides));
-        if (newSides !== this.groundSides) {
-            console.log("Setting ground sides to:", newSides);
-            this.groundSides = newSides;
-
-            if (
-                this.groundStartPosition &&
-                this.previewPositionRef &&
+    toggleShape() {
+        this.isCircleShape = !this.isCircleShape;
+        if (
+            this.groundStartPosition &&
+            this.previewPositionRef &&
+            this.previewPositionRef.current
+        ) {
+            this.updateGroundPreview(
+                this.groundStartPosition,
                 this.previewPositionRef.current
-            ) {
-                this.updateGroundPreview(
-                    this.groundStartPosition,
-                    this.previewPositionRef.current
-                );
-            }
+            );
         }
     }
 
-    isInGroundShape(
+    /**
+     * Determine if a point is on the ground wall based on hollowness.
+     */
+    isInGroundWall(
         x: number,
         z: number,
         minX: number,
         maxX: number,
         minZ: number,
         maxZ: number,
-        sides = 4
+        edgeDepth: number,
+        isCircle = false
     ) {
-        if (sides === 4) {
-            return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
-        } else {
+        if (edgeDepth <= 0) {
+            // Solid fill behaves like original isInGroundShape
+            if (!isCircle) {
+                return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
+            }
             const width = maxX - minX + 1;
             const length = maxZ - minZ + 1;
-
             const centerX = minX + width / 2;
             const centerZ = minZ + length / 2;
+            const dx = x - centerX;
+            const dz = z - centerZ;
+            const distSquared = dx * dx + dz * dz;
+            const radius = Math.min(width, length) / 2;
+            return distSquared <= radius * radius;
+        }
 
-            const distFromCenterX = x - centerX;
-            const distFromCenterZ = z - centerZ;
+        // Hollow walls determination
+        const width = maxX - minX + 1;
+        const length = maxZ - minZ + 1;
 
-            const distSquared =
-                distFromCenterX * distFromCenterX +
-                distFromCenterZ * distFromCenterZ;
+        if (!isCircle) {
+            const distFromLeft = x - minX;
+            const distFromRight = maxX - x;
+            const distFromTop = z - minZ;
+            const distFromBottom = maxZ - z;
 
-            const radius = Math.min(width / 2, length / 2);
+            return (
+                distFromLeft < edgeDepth ||
+                distFromRight < edgeDepth ||
+                distFromTop < edgeDepth ||
+                distFromBottom < edgeDepth
+            );
+        } else {
+            const centerX = minX + width / 2;
+            const centerZ = minZ + length / 2;
+            const dx = x - centerX;
+            const dz = z - centerZ;
+            const distSquared = dx * dx + dz * dz;
+            const radius = Math.min(width, length) / 2;
 
             const outerRadiusSquared = radius * radius;
+            const innerRadius = Math.max(0, radius - edgeDepth);
+            const innerRadiusSquared = innerRadius * innerRadius;
 
-            if (distSquared > outerRadiusSquared) {
-                return false;
-            }
-
-            if (sides >= 8) {
-                return true;
-            }
-
-            return true;
+            return distSquared <= outerRadiusSquared && distSquared >= innerRadiusSquared;
         }
     }
     /**
@@ -401,16 +359,6 @@ class GroundTool extends BaseTool {
      * @returns {boolean} True if the ground was placed, false otherwise
      */
     placeGround(startPos, endPos) {
-        console.log(
-            "GroundTool: Placing ground from",
-            startPos,
-            "to",
-            endPos,
-            "with height",
-            this.groundHeight,
-            "and sides",
-            this.groundSides
-        );
         if (!startPos || !endPos) {
             console.error("Invalid start or end position for ground placement");
             return false;
@@ -420,6 +368,11 @@ class GroundTool extends BaseTool {
             console.error(
                 "GroundTool: Cannot place ground - terrainBuilderRef not available"
             );
+            return false;
+        }
+
+        if (!this.currentBlockTypeRef || !this.currentBlockTypeRef.current) {
+            console.error("GroundTool: currentBlockTypeRef is null – no block selected");
             return false;
         }
 
@@ -438,20 +391,21 @@ class GroundTool extends BaseTool {
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
                 if (
-                    this.isInGroundShape(
+                    this.isInGroundWall(
                         x,
                         z,
                         minX,
                         maxX,
                         minZ,
                         maxZ,
-                        this.groundSides
+                        this.groundEdgeDepth,
+                        this.isCircleShape
                     )
                 ) {
                     for (let y = 0; y < this.groundHeight; y++) {
                         const posKey = `${x},${baseY + y},${z}`;
 
-                        if (this.terrainRef.current[posKey]) continue;
+                        if (this.terrainRef.current[posKey] || this.environmentBuilderRef.current.hasInstanceAtPosition(posKey)) continue;
 
                         addedBlocks[posKey] = blockTypeId;
                         this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
@@ -467,11 +421,6 @@ class GroundTool extends BaseTool {
             );
             return false;
         }
-        console.log(
-            `GroundTool: Adding ${
-                Object.keys(addedBlocks).length
-            } blocks in batch`
-        );
 
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             this.terrainRef.current[posKey] = blockId;
@@ -540,7 +489,7 @@ class GroundTool extends BaseTool {
             "with height",
             this.groundHeight,
             "and sides",
-            this.groundSides
+            this.isCircleShape
         );
         if (!startPos || !endPos) {
             console.error("Invalid start or end position for erasing");
@@ -567,14 +516,15 @@ class GroundTool extends BaseTool {
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
                 if (
-                    this.isInGroundShape(
+                    this.isInGroundWall(
                         x,
                         z,
                         minX,
                         maxX,
                         minZ,
                         maxZ,
-                        this.groundSides
+                        this.groundEdgeDepth,
+                        this.isCircleShape
                     )
                 ) {
                     for (let y = 0; y < this.groundHeight; y++) {
@@ -595,8 +545,7 @@ class GroundTool extends BaseTool {
             return false;
         }
         console.log(
-            `GroundTool: Removing ${
-                Object.keys(removedBlocks).length
+            `GroundTool: Removing ${Object.keys(removedBlocks).length
             } blocks in batch`
         );
 
@@ -673,14 +622,15 @@ class GroundTool extends BaseTool {
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
                 if (
-                    this.isInGroundShape(
+                    this.isInGroundWall(
                         x,
                         z,
                         minX,
                         maxX,
                         minZ,
                         maxZ,
-                        this.groundSides
+                        this.groundEdgeDepth,
+                        this.isCircleShape
                     )
                 ) {
                     totalBlocks += this.groundHeight;
@@ -711,14 +661,15 @@ class GroundTool extends BaseTool {
             for (let x = minX; x <= maxX; x++) {
                 for (let z = minZ; z <= maxZ; z++) {
                     if (
-                        this.isInGroundShape(
+                        this.isInGroundWall(
                             x,
                             z,
                             minX,
                             maxX,
                             minZ,
                             maxZ,
-                            this.groundSides
+                            this.groundEdgeDepth,
+                            this.isCircleShape
                         )
                     ) {
                         for (let y = 0; y < this.groundHeight; y++) {
@@ -778,6 +729,21 @@ class GroundTool extends BaseTool {
         this.terrainBuilderRef = null;
 
         super.dispose();
+    }
+
+    setGroundEdgeDepth(depth) {
+        this.groundEdgeDepth = Math.max(0, depth);
+
+        if (
+            this.groundStartPosition &&
+            this.previewPositionRef &&
+            this.previewPositionRef.current
+        ) {
+            this.updateGroundPreview(
+                this.groundStartPosition,
+                this.previewPositionRef.current
+            );
+        }
     }
 }
 

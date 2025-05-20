@@ -10,8 +10,9 @@ import BaseTool from "./BaseTool";
 class ToolManager {
     tools: Record<string, BaseTool>;
     activeTool: BaseTool | null;
-    toolChangeListeners: ((toolName: string) => void)[];
+    toolChangeListeners: ((toolName: string | null) => void)[];
     terrainBuilder: any;
+    _handleGlobalDeactivate: (_e?: Event) => void;
 
     constructor(terrainBuilderProps: any) {
 
@@ -29,6 +30,19 @@ class ToolManager {
                 (key) => terrainBuilderProps[key] !== undefined
             )
         );
+
+        // Deactivate current tool when certain global editor events occur
+        this._handleGlobalDeactivate = (_e?: Event) => {
+            // Only deactivate if something is active to avoid unnecessary work
+            if (this.activeTool) {
+                this.activateTool(null, undefined);
+            }
+        };
+
+        if (typeof window !== "undefined") {
+            window.addEventListener("pointerLockModeChanged", this._handleGlobalDeactivate);
+            window.addEventListener("blockToolsTabChanged", this._handleGlobalDeactivate);
+        }
     }
     /**
      * Register a new tool with the manager
@@ -62,6 +76,18 @@ class ToolManager {
 
         if (this.activeTool) {
             this.activeTool.deactivate();
+            // Notify listeners of deactivation
+            this.toolChangeListeners.forEach((cb) => {
+                try {
+                    cb(null);
+                } catch (_) { }
+            });
+
+            // Broadcast a global event so UI components can react even if they don't have
+            // a direct reference to the ToolManager instance.
+            try {
+                window.dispatchEvent(new CustomEvent("activeToolChanged", { detail: null }));
+            } catch (_) { }
         }
 
         if (!toolName) {
@@ -69,6 +95,7 @@ class ToolManager {
             console.log("All tools deactivated");
 
             QuickTipsManager.setToDefaultTip();
+            // Listeners already notified above
             return true;
         }
 
@@ -89,6 +116,18 @@ class ToolManager {
             if (this.activeTool.tooltip) {
                 QuickTipsManager.setToolTip(this.activeTool.tooltip);
             }
+
+            // Notify listeners
+            this.toolChangeListeners.forEach((cb) => {
+                try {
+                    cb(toolName);
+                } catch (_) { }
+            });
+
+            try {
+                window.dispatchEvent(new CustomEvent("activeToolChanged", { detail: toolName }));
+            } catch (_) { }
+
             return true;
         } else {
             console.warn(`Tool not found: ${toolName}`);
@@ -103,6 +142,9 @@ class ToolManager {
      * @returns {BaseTool|null} The active tool or null if none is active
      */
     getActiveTool() {
+        if (this.activeTool && !this.activeTool.active) {
+            return null;
+        }
         return this.activeTool;
     }
     /**
@@ -164,6 +206,23 @@ class ToolManager {
         });
         this.tools = {};
         this.activeTool = null;
+
+        if (typeof window !== "undefined" && this._handleGlobalDeactivate) {
+            window.removeEventListener("pointerLockModeChanged", this._handleGlobalDeactivate);
+            window.removeEventListener("blockToolsTabChanged", this._handleGlobalDeactivate);
+        }
+    }
+    /** Add a listener that will be called whenever the active tool changes */
+    addToolChangeListener(listener: (toolName: string | null) => void) {
+        if (typeof listener === "function") {
+            this.toolChangeListeners.push(listener);
+        }
+    }
+
+    removeToolChangeListener(listener: (toolName: string | null) => void) {
+        this.toolChangeListeners = this.toolChangeListeners.filter(
+            (l) => l !== listener
+        );
     }
 }
 export default ToolManager;

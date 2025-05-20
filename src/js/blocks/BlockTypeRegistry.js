@@ -1,8 +1,28 @@
-
-
 import BlockType from "./BlockType";
 import { getBlockTypes } from "../managers/BlockTypesManager";
 import BlockTextureAtlas from "./BlockTextureAtlas";
+
+// Utility to translate side texture keys from coordinate notation ("+x", "-y", etc.)
+// to human-readable face names ("right", "bottom", etc.) expected by BlockType.
+// If the key is already a face name it is passed through unchanged.
+const COORD_TO_FACE_MAP = {
+    "+x": "right",
+    "-x": "left",
+    "+y": "top",
+    "-y": "bottom",
+    "+z": "front",
+    "-z": "back",
+};
+
+function convertSideTexturesToFaceNames(sideTextures = {}) {
+    const result = {};
+    Object.entries(sideTextures).forEach(([key, uri]) => {
+        const faceKey = COORD_TO_FACE_MAP[key] || key; // default to existing key if already a face name
+        result[faceKey] = uri;
+    });
+    return result;
+}
+
 /**
  * Registry for block types
  */
@@ -11,10 +31,7 @@ class BlockTypeRegistry {
         this._blockTypes = {};
         this._initialized = false;
 
-
-        this._essentialBlockTypes = new Set([
-
-        ]);
+        this._essentialBlockTypes = new Set([]);
     }
     /**
      * Get the singleton instance
@@ -71,18 +88,14 @@ class BlockTypeRegistry {
         const blockTypes = getBlockTypes();
 
         for (const blockTypeData of blockTypes) {
-
-
             const isLiquid = false;
-
-
 
             const blockType = new BlockType({
                 id: blockTypeData.id,
                 isLiquid: blockTypeData.isLiquid || isLiquid,
                 name: blockTypeData.name || "Unknown",
                 textureUris: blockTypeData.isMultiTexture
-                    ? blockTypeData.sideTextures
+                    ? convertSideTexturesToFaceNames(blockTypeData.sideTextures)
                     : BlockType.textureUriToTextureUris(
                           blockTypeData.textureUri
                       ),
@@ -91,7 +104,9 @@ class BlockTypeRegistry {
         }
         this._initialized = true;
         console.log(
-            `BlockTypeRegistry initialized with ${Object.keys(this._blockTypes).length} block types`
+            `BlockTypeRegistry initialized with ${
+                Object.keys(this._blockTypes).length
+            } block types`
         );
         console.timeEnd("BlockTypeRegistry.initialize");
     }
@@ -132,7 +147,9 @@ class BlockTypeRegistry {
                     isLiquid: blockTypeData.isLiquid || false,
                     name: blockTypeData.name || "Unknown",
                     textureUris: blockTypeData.isMultiTexture
-                        ? blockTypeData.sideTextures
+                        ? convertSideTexturesToFaceNames(
+                              blockTypeData.sideTextures
+                          )
                         : BlockType.textureUriToTextureUris(
                               blockTypeData.textureUri
                           ),
@@ -144,7 +161,7 @@ class BlockTypeRegistry {
             }
             if (blockTypeData.textureUri || blockTypeData.sideTextures) {
                 const textureUris = blockTypeData.isMultiTexture
-                    ? blockTypeData.sideTextures
+                    ? convertSideTexturesToFaceNames(blockTypeData.sideTextures)
                     : BlockType.textureUriToTextureUris(
                           blockTypeData.textureUri
                       );
@@ -225,9 +242,6 @@ class BlockTypeRegistry {
             this._blockTypes[blockId] = blockType;
         }
 
-
-
-
         const shouldRebuildAtlas = options.rebuildAtlas === true || isNewBlock;
 
         const success = await blockType.applyCustomTextureDataUri(
@@ -254,7 +268,6 @@ class BlockTypeRegistry {
         const shouldUpdateMeshes = options.updateMeshes !== false; // default to true
         if (shouldUpdateMeshes) {
             try {
-
                 const blockTypeChangedEvent = new CustomEvent(
                     "blockTypeChanged",
                     {
@@ -326,7 +339,6 @@ class BlockTypeRegistry {
             terrainBuilder.fastUpdateBlock({ x, y, z }, blockId);
             return true;
         } else if (terrainBuilder.updateTerrainBlocks) {
-
             const position = `${x},${y},${z}`;
             const blocks = {};
             blocks[position] = blockId;
@@ -337,7 +349,6 @@ class BlockTypeRegistry {
             );
             return true;
         } else if (terrainBuilder.buildUpdateTerrain) {
-
             const blockData = {};
             blockData[`${x},${y},${z}`] = blockId;
             terrainBuilder.buildUpdateTerrain({ blocks: blockData });
@@ -384,7 +395,6 @@ class BlockTypeRegistry {
      */
     generateTextureDataURI(color = "#FF00FF") {
         try {
-
             const canvas = document.createElement("canvas");
             canvas.width = 16;
             canvas.height = 16;
@@ -415,7 +425,6 @@ class BlockTypeRegistry {
      */
     async createBlockAt(blockId, x, y, z, color = "#FF00FF") {
         try {
-
             const dataUri = this.generateTextureDataURI(color);
 
             const blockType = await this.registerCustomTextureForBlockId(
@@ -590,7 +599,6 @@ class BlockTypeRegistry {
         for (const entry of textureEntries) {
             const { blockId, dataUri } = entry;
             try {
-
                 const entryOptions = {
                     ...options,
                     rebuildAtlas: false, // Prevent individual rebuilds during batch operation
@@ -618,13 +626,11 @@ class BlockTypeRegistry {
 
         if (blockTypes.length > 0) {
             try {
-
                 if (BlockTextureAtlas.instance) {
                     await BlockTextureAtlas.instance.rebuildTextureAtlas();
                 }
 
                 if (options.updateMeshes !== false) {
-
                     const blockTypeChangedEvent = new CustomEvent(
                         "blockTypesChanged",
                         {

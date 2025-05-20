@@ -1,54 +1,48 @@
 import { defaultTheme, Provider } from "@adobe/react-spectrum";
 import { Canvas } from "@react-three/fiber";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FaCamera, FaDatabase, FaVolumeMute } from "react-icons/fa";
+import { saveAs } from "file-saver";
+import JSZip from "jszip";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./css/App.css";
+import "./css/output.css";
+import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
-import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
-import { isMuted, toggleMute } from "./js/Sound";
-import TerrainBuilder, {
-    blockTypes,
-    getCustomBlocks,
-} from "./js/TerrainBuilder";
-import UndoRedoManager from "./js/managers/UndoRedoManager";
-import AIAssistantPanel from "./js/components/AIAssistantPanel";
+import TerrainBuilder from "./js/TerrainBuilder";
+import { BlockToolOptions } from "./js/components/BlockToolOptions";
 import BlockToolsSidebar, {
-    ActiveTabType,
     refreshBlockTools,
 } from "./js/components/BlockToolsSidebar";
-import DebugInfo from "./js/components/DebugInfo";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
-import QuickTips from "./js/components/QuickTips";
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import ToolBar from "./js/components/ToolBar";
-import Tooltip from "./js/components/Tooltip";
 import UnderConstruction from "./js/components/UnderConstruction";
-import { processCustomBlock } from "./js/managers/BlockTypesManager";
-import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import {
+    blockTypes,
+    getCustomBlocks,
+    processCustomBlock,
+    removeCustomBlock,
+    updateCustomBlockName,
+} from "./js/managers/BlockTypesManager";
+import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
+import UndoRedoManager from "./js/managers/UndoRedoManager";
+import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
+import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+
 function App() {
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
     const [mode, setMode] = useState("add");
-    const [debugInfo, setDebugInfo] = useState({
-        mouse: {},
-        preview: {},
-        grid: {},
-    });
-    const [totalBlocks, setTotalBlocks] = useState(0);
     const [axisLockEnabled, setAxisLockEnabled] = useState(false);
     const [cameraReset, setCameraReset] = useState(false);
-    const [cameraAngle, setCameraAngle] = useState(0);
     const [placementSize, setPlacementSize] = useState("single");
-    const [activeTab, setActiveTab] = useState<ActiveTabType>("blocks");
+    const [activeTab, setActiveTab] = useState("blocks");
     const [pageIsLoaded, setPageIsLoaded] = useState(false);
     const [scene, setScene] = useState(null);
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
-    const [gridSize, setGridSize] = useState(100);
     const [currentPreviewPosition, setCurrentPreviewPosition] = useState(null);
     const environmentBuilderRef = useRef(null);
-    const blockToolsRef = useRef(null);
     const terrainBuilderRef = useRef(null);
     const [placementSettings, setPlacementSettings] = useState({
         randomScale: false,
@@ -59,20 +53,49 @@ function App() {
         maxRotation: 360,
         scale: 1.0,
         rotation: 0,
+        snapToGrid: true,
     });
     const [isSaving, setIsSaving] = useState(false);
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
-
-    // AI Assistant State
-    const [currentSchematic, setCurrentSchematic] = useState(null);
-    const [isAIAssistantVisible, setIsAIAssistantVisible] = useState(false);
+    const [isAIComponentsActive, setIsAIComponentsActive] = useState(false);
+    const [showBlockSidebar, setShowBlockSidebar] = useState(true);
+    const [showOptionsPanel, setShowOptionsPanel] = useState(true);
+    const [showToolbar, setShowToolbar] = useState(true);
+    const [isCompactMode, setIsCompactMode] = useState(true);
+    const [showCrosshair, setShowCrosshair] = useState(cameraManager.isPointerLocked);
+    const cameraAngle = 0;
+    const gridSize = 5000;
 
     useEffect(() => {
-        const loadSavedToolSelection = () => {
+        if (terrainBuilderRef.current) {
+            terrainBuilderRef.current.updateGridSize(gridSize);
+        }
+    }, [gridSize, terrainBuilderRef.current?.updateGridSize]);
+
+    useEffect(() => {
+        const loadAppSettings = async () => {
+            try {
+                const savedCompactMode = await DatabaseManager.getData(STORES.SETTINGS, "compactMode");
+                if (savedCompactMode === false) {
+                    setIsCompactMode(false);
+                }
+
+                const savedPointerLockMode = await DatabaseManager.getData(STORES.SETTINGS, "pointerLockMode");
+                if (typeof savedPointerLockMode === "boolean") {
+                    cameraManager.isPointerUnlockedMode = savedPointerLockMode;
+                }
+
+                const savedSensitivity = await DatabaseManager.getData(STORES.SETTINGS, "cameraSensitivity");
+                if (typeof savedSensitivity === "number") {
+                    cameraManager.setPointerSensitivity(savedSensitivity);
+                }
+            } catch (error) {
+                console.error("Error loading app settings:", error);
+            }
+
             const savedBlockId = localStorage.getItem("selectedBlock");
             if (savedBlockId) {
                 const blockId = parseInt(savedBlockId);
-
                 if (blockId < 200) {
                     const block = [...blockTypes, ...getCustomBlocks()].find(
                         (b) => b.id === blockId
@@ -91,7 +114,7 @@ function App() {
                                 ...envModel,
                                 isEnvironment: true,
                             });
-                            setActiveTab("environment");
+                            setActiveTab("models");
                         }
                     }
                 }
@@ -103,18 +126,15 @@ function App() {
         }
 
         if (pageIsLoaded) {
-            loadSavedToolSelection();
+            loadAppSettings();
         }
     }, [pageIsLoaded]);
 
-    // Add Ctrl+S hotkey for saving
     useEffect(() => {
         const handleKeyDown = async (e) => {
-            // Check for Ctrl+S (or Cmd+S on Mac)
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-                e.preventDefault(); // Prevent browser's save dialog
+                e.preventDefault();
 
-                // Set saving state directly for immediate feedback
                 setIsSaving(true);
 
                 try {
@@ -135,7 +155,6 @@ function App() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, []);
 
-    // Log undoRedoManager initialization and updates
     useEffect(() => {
         console.log("App: undoRedoManagerRef initialized");
 
@@ -164,28 +183,29 @@ function App() {
         }
     }, [undoRedoManagerRef.current]);
 
-    // Add useEffect to load grid size from IndexedDB
-    useEffect(() => {
-        const loadGridSize = async () => {
-            try {
-                const savedGridSize = await DatabaseManager.getData(
-                    STORES.SETTINGS,
-                    "gridSize"
-                );
-                if (savedGridSize) {
-                    setGridSize(+savedGridSize);
-                }
-            } catch (error) {
-                console.error("Error loading grid size from IndexedDB:", error);
-            }
-        };
-        loadGridSize();
-    }, []);
-
     useEffect(() => {
         DatabaseManager.clearStore(STORES.UNDO);
         DatabaseManager.clearStore(STORES.REDO);
     }, []);
+
+    useEffect(() => {
+        // Poll pointer lock state to update crosshair visibility
+        const crosshairInterval = setInterval(() => {
+            setShowCrosshair(cameraManager.isPointerLocked);
+        }, 100);
+        return () => clearInterval(crosshairInterval);
+    }, []);
+
+    const handleToggleCompactMode = async () => {
+        const newCompactValue = !isCompactMode;
+        setIsCompactMode(newCompactValue);
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "compactMode", newCompactValue);
+            console.log("Compact mode setting saved:", newCompactValue);
+        } catch (error) {
+            console.error("Error saving compact mode setting:", error);
+        }
+    };
 
     const LoadingScreen = () => (
         <div className="loading-screen">
@@ -202,7 +222,6 @@ function App() {
         </div>
     );
 
-    // Callback for when the modal finishes editing/generating
     const handleTextureReady = async (faceTextures, textureName) => {
         console.log(
             "Texture ready:",
@@ -211,7 +230,6 @@ function App() {
             Object.keys(faceTextures).length
         );
         try {
-            // Map face names to coordinate system keys
             const faceMap = {
                 top: "+y",
                 bottom: "-y",
@@ -221,20 +239,17 @@ function App() {
                 back: "-z",
             };
 
-            // Prepare the block data for processCustomBlock
             const newBlockData = {
                 name:
                     textureName
                         .replace(/[^a-zA-Z0-9_\-\s]/g, "")
                         .replace(/\s+/g, "_") || "custom_texture",
-                // Use 'all' or fallback to 'top' if 'all' is missing but others exist
                 textureUri: faceTextures.all || faceTextures.top || null,
                 sideTextures: {},
                 isCustom: true,
                 isMultiTexture: false,
             };
 
-            // Populate sideTextures using the mapped keys, excluding 'all'
             let hasSpecificFaces = false;
             for (const face in faceTextures) {
                 if (face !== "all" && faceTextures[face] && faceMap[face]) {
@@ -245,38 +260,29 @@ function App() {
                 }
             }
 
-            // If only 'all' texture was provided, but we expect multi-texture, copy 'all' to '+y'
-            // This helps with previews if the modal only returned an 'all' texture.
             if (!hasSpecificFaces && faceTextures.all) {
                 newBlockData.sideTextures["+y"] = faceTextures.all;
-                // Technically not multi-texture, but lets BlockButton preview work
-                // isMultiTexture will be false based on hasSpecificFaces below.
             } else if (
                 hasSpecificFaces &&
                 !newBlockData.sideTextures["+y"] &&
                 newBlockData.textureUri
             ) {
-                // If we have specific faces but somehow miss +y, use the main textureUri as +y fallback for preview
                 newBlockData.sideTextures["+y"] = newBlockData.textureUri;
             }
 
-            // Set isMultiTexture based only on whether specific faces (top, bottom, etc.) were provided
             newBlockData.isMultiTexture = hasSpecificFaces;
 
-            // Fallback textureUri if 'all' and 'top' were missing
             if (!newBlockData.textureUri && hasSpecificFaces) {
-                newBlockData.textureUri = newBlockData.sideTextures["+y"]; // Use top as the main URI
+                newBlockData.textureUri = newBlockData.sideTextures["+y"];
             }
 
             console.log("Processing block data:", newBlockData);
 
-            // Process the new texture as a custom block
             await processCustomBlock(newBlockData);
             console.log("Custom block processed:", newBlockData.name);
 
-            // Save updated custom blocks to DB
             try {
-                const updatedCustomBlocks = getCustomBlocks(); // Get the latest list including the new one
+                const updatedCustomBlocks = getCustomBlocks();
                 await DatabaseManager.saveData(
                     STORES.CUSTOM_BLOCKS,
                     "blocks",
@@ -292,55 +298,157 @@ function App() {
                 );
             }
 
-            // Refresh the block tools sidebar to show the new block
             refreshBlockTools();
         } catch (error) {
             console.error("Error processing generated texture:", error);
-            // Show an error message to the user?
         }
     };
 
-    // Callback to get available blocks for AI Panel
     const handleGetAvailableBlocks = useCallback(() => {
         try {
             return getHytopiaBlocks();
         } catch (error) {
             console.error("Error getting Hytopia blocks:", error);
-            return []; // Return empty array on error
+            return [];
         }
     }, []);
 
-    // Callback to load schematic data and activate the placement tool
     const handleLoadAISchematic = useCallback((schematic) => {
         console.log("App: Loading AI schematic and activating tool", schematic);
-        setCurrentSchematic(schematic); // Store schematic data
-        // Activate the tool via TerrainBuilder's ref
         terrainBuilderRef.current?.activateTool("schematic", schematic);
     }, []);
+
+    const handleUpdateBlockName = async (blockId: number, newName: string) => {
+        console.log(`App: Updating block ${blockId} name to ${newName}`);
+        try {
+            const success = await updateCustomBlockName(blockId, newName);
+            if (!success) {
+                throw new Error("BlockTypesManager failed to update name.");
+            }
+            const updatedBlocks = getCustomBlocks();
+            await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedBlocks);
+
+            if (currentBlockType?.id === blockId) {
+                setCurrentBlockType(prev => ({ ...prev, name: newName }));
+            }
+            refreshBlockTools();
+            console.log(`App: Block ${blockId} renamed successfully.`);
+        } catch (error) {
+            console.error("App: Error updating block name:", error);
+            alert(`Failed to rename block: ${error.message || "Unknown error"}`);
+            throw error;
+        }
+    };
+
+    const handleDownloadBlock = async (blockType: any) => {
+        if (!blockType) return;
+        console.log("App: Downloading block:", blockType.name);
+        const zip = new JSZip();
+        const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
+        const textures = blockType.sideTextures || {};
+        const mainTexture = blockType.textureUri;
+        let hasError = false;
+
+        for (const key of faceKeys) {
+            const dataUrl = textures[key] || mainTexture;
+            let blob: Blob | null = null;
+
+            if (dataUrl && dataUrl.startsWith('data:image')) {
+                blob = dataURLtoBlob(dataUrl);
+            } else if (dataUrl && (dataUrl.startsWith('./') || dataUrl.startsWith('/'))) {
+                try {
+                    const response = await fetch(dataUrl);
+                    if (response.ok) {
+                        blob = await response.blob();
+                    } else {
+                        console.warn(`Failed to fetch texture ${key} from path ${dataUrl}, status: ${response.status}`);
+                    }
+                } catch (fetchError) {
+                    console.error(`Error fetching texture from ${dataUrl}:`, fetchError);
+                }
+            }
+
+            if (!blob) {
+                console.warn(`Missing texture ${key} for ${blockType.name}, using placeholder.`);
+                try {
+                    blob = await createPlaceholderBlob();
+                    if (!blob) {
+                        console.error(`Placeholder failed for ${key}, skipping.`);
+                        hasError = true; continue;
+                    }
+                } catch (placeholderError) {
+                    console.error(`Error creating placeholder for ${key}:`, placeholderError);
+                    hasError = true; continue;
+                }
+            }
+            const fileName = `${key.replace('+', 'positive_').replace('-', 'negative_')}.png`;
+            zip.file(fileName, blob);
+        }
+        if (hasError) alert("Warning: Some textures missing/invalid; placeholders used or skipped. Check console.");
+        try {
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            saveAs(zipBlob, `${blockType.name}.zip`);
+            console.log(`App: Downloaded ${blockType.name}.zip`);
+        } catch (err) {
+            console.error("App: Error saving zip:", err);
+            alert("Failed to save zip. See console.");
+        }
+    };
+
+    const handleDeleteBlock = async (blockType: any) => {
+        if (!blockType || !blockType.isCustom) return;
+        const confirmMessage = `Deleting "${blockType.name}" (ID: ${blockType.id}) cannot be undone. Instances of this block in the world will be lost. Are you sure?`;
+        if (window.confirm(confirmMessage)) {
+            console.log("App: Deleting block:", blockType.name);
+            try {
+                removeCustomBlock(blockType.id);
+                const updatedBlocks = getCustomBlocks();
+                await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedBlocks);
+                console.log("App: Updated custom blocks in DB after deletion.");
+                const errorId = 0;
+                const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, "current") || {};
+                let blocksReplaced = 0;
+                const newTerrain = Object.entries(currentTerrain).reduce((acc, [pos, id]) => {
+                    if (id === blockType.id) {
+                        acc[pos] = errorId; blocksReplaced++;
+                    } else {
+                        acc[pos] = id;
+                    }
+                    return acc;
+                }, {});
+                if (blocksReplaced > 0) {
+                    console.log(`App: Replacing ${blocksReplaced} instances of deleted block ${blockType.id} with ID ${errorId}.`);
+                    await DatabaseManager.saveData(STORES.TERRAIN, "current", newTerrain);
+                    terrainBuilderRef.current?.buildUpdateTerrain();
+                    console.log("App: Triggered terrain update.");
+                } else {
+                    console.log("App: No instances found.");
+                }
+                refreshBlockTools();
+                if (currentBlockType?.id === blockType.id) {
+                    console.log("App: Resetting selected block type.");
+                    setCurrentBlockType(blockTypes[0]);
+                    setActiveTab('blocks');
+                    localStorage.setItem("selectedBlock", blockTypes[0].id.toString());
+                }
+                console.log(`App: Block ${blockType.name} deleted.`);
+            } catch (error) {
+                console.error("App: Error deleting block:", error);
+                alert(`Failed to delete block: ${error.message}`);
+            }
+        }
+    };
 
     return (
         <Provider theme={defaultTheme}>
             <div className="App">
                 {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
 
-                {/* Loading Screen */}
                 {!pageIsLoaded && <LoadingScreen />}
 
-                {/* Global Loading Screen for heavy operations */}
                 <GlobalLoadingScreen />
 
-                {/* Hytopia Logo */}
-                <div className="hytopia-logo-wrapper">
-                    <img
-                        src={"/assets/img/hytopia_logo_white.png"}
-                        alt="Hytopia Logo"
-                    />
-                    <p className="hytopia-version-text">
-                        World Editor Version {version}
-                    </p>
-                </div>
-
-                {pageIsLoaded && <QuickTips />}
+                {/* QuickTips removed per UX update */}
 
                 <UndoRedoManager
                     ref={undoRedoManagerRef}
@@ -348,34 +456,51 @@ function App() {
                     environmentBuilderRef={environmentBuilderRef}
                 />
 
-                <BlockToolsSidebar
-                    onOpenTextureModal={() => setIsTextureModalOpen(true)}
-                    terrainBuilderRef={terrainBuilderRef}
-                    activeTab={activeTab}
-                    onLoadSchematicFromHistory={handleLoadAISchematic}
-                    setActiveTab={setActiveTab}
-                    setCurrentBlockType={setCurrentBlockType}
-                    environmentBuilder={environmentBuilderRef.current}
-                    onPlacementSettingsChange={setPlacementSettings}
-                />
+                {showBlockSidebar && (
+                    <BlockToolsSidebar
+                        isCompactMode={isCompactMode}
+                        onOpenTextureModal={() => setIsTextureModalOpen(true)}
+                        terrainBuilderRef={terrainBuilderRef}
+                        activeTab={activeTab}
+                        onLoadSchematicFromHistory={handleLoadAISchematic}
+                        setActiveTab={setActiveTab}
+                        setCurrentBlockType={setCurrentBlockType}
+                        environmentBuilder={environmentBuilderRef.current}
+                        onPlacementSettingsChange={setPlacementSettings}
+                    />
+                )}
 
-                {/* Texture Generation Modal */}
+                {showOptionsPanel && (
+                    <BlockToolOptions
+                        totalEnvironmentObjects={totalEnvironmentObjects}
+                        terrainBuilderRef={terrainBuilderRef}
+                        onResetCamera={() => setCameraReset(prev => !prev)}
+                        onToggleSidebar={() => setShowBlockSidebar(prev => !prev)}
+                        onToggleOptions={() => setShowOptionsPanel(prev => !prev)}
+                        onToggleToolbar={() => setShowToolbar(prev => !prev)}
+                        activeTab={activeTab}
+                        selectedBlock={currentBlockType}
+                        onUpdateBlockName={handleUpdateBlockName}
+                        onDownloadBlock={handleDownloadBlock}
+                        onDeleteBlock={handleDeleteBlock}
+                        placementSettings={placementSettings}
+                        onPlacementSettingsChange={setPlacementSettings}
+                        isCompactMode={isCompactMode}
+                        onToggleCompactMode={handleToggleCompactMode}
+                        showAIComponents={isAIComponentsActive}
+                        getAvailableBlocks={handleGetAvailableBlocks}
+                        loadAISchematic={handleLoadAISchematic}
+                    />
+                )}
+
                 <TextureGenerationModal
                     isOpen={isTextureModalOpen}
                     onClose={() => setIsTextureModalOpen(false)}
                     onTextureReady={handleTextureReady}
                 />
 
-                {/* AI Assistant Panel */}
-                <AIAssistantPanel
-                    isVisible={isAIAssistantVisible}
-                    getAvailableBlocks={handleGetAvailableBlocks}
-                    loadAISchematic={handleLoadAISchematic}
-                />
-
                 <div className="vignette-gradient"></div>
 
-                {/* Saving indicator */}
                 {isSaving && (
                     <div
                         style={{
@@ -395,7 +520,7 @@ function App() {
                             fontFamily: "Arial, sans-serif",
                             fontSize: "14px",
                             fontWeight: "bold",
-                            pointerEvents: "none", // Ensure it doesn't interfere with clicks
+                            pointerEvents: "none",
                         }}
                     >
                         <div
@@ -418,8 +543,6 @@ function App() {
                         ref={terrainBuilderRef}
                         currentBlockType={currentBlockType}
                         mode={mode}
-                        setDebugInfo={setDebugInfo}
-                        sendTotalBlocks={setTotalBlocks}
                         axisLockEnabled={axisLockEnabled}
                         placementSize={placementSize}
                         cameraReset={cameraReset}
@@ -431,12 +554,12 @@ function App() {
                         previewPositionToAppJS={setCurrentPreviewPosition}
                         undoRedoManager={undoRedoManagerRef}
                         customBlocks={getCustomBlocks()}
+                        snapToGrid={placementSettings.snapToGrid}
                     />
                     <EnvironmentBuilder
                         ref={environmentBuilderRef}
                         scene={scene}
                         currentBlockType={currentBlockType}
-                        mode={mode}
                         onTotalObjectsChange={setTotalEnvironmentObjects}
                         placementSize={placementSize}
                         previewPositionFromAppJS={currentPreviewPosition}
@@ -446,54 +569,65 @@ function App() {
                     />
                 </Canvas>
 
-                <DebugInfo
-                    debugInfo={debugInfo}
-                    totalBlocks={totalBlocks}
-                    totalEnvironmentObjects={totalEnvironmentObjects}
-                    terrainBuilderRef={terrainBuilderRef}
-                />
+                {showToolbar && (
+                    <ToolBar
+                        terrainBuilderRef={terrainBuilderRef}
+                        environmentBuilderRef={environmentBuilderRef}
+                        mode={mode}
+                        handleModeChange={setMode}
+                        axisLockEnabled={axisLockEnabled}
+                        setAxisLockEnabled={setAxisLockEnabled}
+                        placementSize={placementSize}
+                        setPlacementSize={setPlacementSize}
+                        undoRedoManager={undoRedoManagerRef}
+                        currentBlockType={currentBlockType}
+                        onOpenTextureModal={() => setIsTextureModalOpen(true)}
+                        toggleAIComponents={() => setIsAIComponentsActive((v) => !v)}
+                        isAIComponentsActive={isAIComponentsActive}
+                        setIsSaving={setIsSaving}
+                    />
+                )}
 
-                <ToolBar
-                    terrainBuilderRef={terrainBuilderRef}
-                    environmentBuilderRef={environmentBuilderRef}
-                    mode={mode}
-                    handleModeChange={setMode}
-                    axisLockEnabled={axisLockEnabled}
-                    setAxisLockEnabled={setAxisLockEnabled}
-                    placementSize={placementSize}
-                    setPlacementSize={setPlacementSize}
-                    setGridSize={setGridSize}
-                    undoRedoManager={undoRedoManagerRef}
-                    currentBlockType={currentBlockType}
-                    toggleAIAssistant={() => setIsAIAssistantVisible((v) => !v)}
-                    isAIAssistantVisible={isAIAssistantVisible}
-                    setIsSaving={setIsSaving}
-                />
-
-                <div className="camera-controls-wrapper">
-                    <div className="camera-buttons">
-                        <Tooltip text="Reset camera position">
-                            <button
-                                onClick={() => setCameraReset((prev) => !prev)}
-                                className="camera-control-button"
-                            >
-                                <FaCamera />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text={isMuted ? "Unmute" : "Mute"}>
-                            <button
-                                onClick={toggleMute}
-                                className={`camera-control-button ${
-                                    !isMuted ? "active" : ""
-                                }`}
-                            >
-                                <FaVolumeMute />
-                            </button>
-                        </Tooltip>
+                {/* Crosshair visible while pointer is locked */}
+                {showCrosshair && !cameraManager.isPointerUnlockedMode && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            width: "20px",
+                            height: "20px",
+                            pointerEvents: "none",
+                            zIndex: 10000,
+                        }}
+                    >
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: "50%",
+                                top: "0",
+                                width: "2px",
+                                height: "100%",
+                                background: "#ffffff",
+                                transform: "translateX(-50%)",
+                            }}
+                        />
+                        <div
+                            style={{
+                                position: "absolute",
+                                top: "50%",
+                                left: "0",
+                                width: "100%",
+                                height: "2px",
+                                background: "#ffffff",
+                                transform: "translateY(-50%)",
+                            }}
+                        />
                     </div>
-                </div>
+                )}
 
-                <button
+                {/* <button
                     className="toolbar-button"
                     onClick={async () => await DatabaseManager.clearDatabase()}
                     title="Clear Database"
@@ -504,7 +638,7 @@ function App() {
                     }}
                 >
                     <FaDatabase />
-                </button>
+                </button> */}
             </div>
         </Provider>
     );

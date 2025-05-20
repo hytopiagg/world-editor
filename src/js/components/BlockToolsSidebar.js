@@ -1,27 +1,24 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { FaDownload, FaWrench } from "react-icons/fa";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FaDownload, FaWrench, FaUpload } from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
+import { cameraManager } from "../Camera";
 import { environmentModels } from "../EnvironmentBuilder";
 import {
     batchProcessCustomBlocks,
     blockTypes,
     getCustomBlocks,
     processCustomBlock,
-    removeCustomBlock,
 } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
 import BlockButton from "./BlockButton";
 import EnvironmentButton from "./EnvironmentButton";
-import ModelPreview from "./ModelPreview";
-import { cameraManager } from "../Camera";
+import { BlockIcon } from "./icons/BlockIcon";
+import { PalmTreeIcon } from "./icons/PalmTreeIcon";
+import { BlocksIcon } from "./icons/BlocksIcon";
 
-const SCALE_MIN = 0.1;
-const SCALE_MAX = 5.0;
-const ROTATION_MIN = 0;
-const ROTATION_MAX = 360;
 let selectedBlockID = 0;
 export const refreshBlockTools = () => {
     const event = new CustomEvent("refreshBlockTools");
@@ -68,21 +65,6 @@ const createPlaceholderBlob = () => {
 const firstDefaultModel = environmentModels.find((m) => !m.isCustom);
 const initialPreviewUrl = firstDefaultModel?.modelUrl ?? null;
 
-/**
- * @typedef {"blocks" | "environment" | "schematics"} ActiveTabType
- */
-
-/**
- * @param {object} props
- * @param {ActiveTabType} props.activeTab
- * @param {React.RefObject<any>} props.terrainBuilderRef
- * @param {(tab: ActiveTabType) => void} props.setActiveTab
- * @param {(block: any | null) => void} props.setCurrentBlockType
- * @param {React.RefObject<any>} props.environmentBuilder
- * @param {(settings: any) => void} [props.onPlacementSettingsChange]
- * @param {() => void} props.onOpenTextureModal
- * @param {(schematic: import("./AIAssistantPanel").RawSchematicType) => void} props.onLoadSchematicFromHistory
- */
 const BlockToolsSidebar = ({
     activeTab,
     terrainBuilderRef,
@@ -92,19 +74,10 @@ const BlockToolsSidebar = ({
     onPlacementSettingsChange,
     onOpenTextureModal,
     onLoadSchematicFromHistory,
+    isCompactMode,
 }) => {
-    const [settings, setSettings] = useState({
-        randomScale: false,
-        randomRotation: false,
-        minScale: 0.5,
-        maxScale: 1.5,
-        minRotation: 0,
-        maxRotation: 360,
-        scale: 1.0,
-        rotation: 0,
-    });
     const [customBlocks, setCustomBlocks] = useState([]);
-    const [previewModelUrl, setPreviewModelUrl] = useState(initialPreviewUrl);
+    const [searchQuery, setSearchQuery] = useState("");
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -112,6 +85,13 @@ const BlockToolsSidebar = ({
     const schematicListStateRef = useRef(schematicList);
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
+
+    useEffect(() => {
+        const savedBlockId = localStorage.getItem("selectedBlock");
+        if (savedBlockId) {
+            selectedBlockID = parseInt(savedBlockId);
+        }
+    }, []);
 
     const loadSchematicsFromDB = useCallback(async () => {
         console.log("[BlockToolsSidebar] Loading schematics from DB...");
@@ -141,6 +121,7 @@ const BlockToolsSidebar = ({
                         loadedSchematics.push({
                             id: dbKey,
                             prompt: dbValue.prompt,
+                            name: dbValue.name || "",
                             schematic: dbValue.schematic,
                             timestamp: dbValue.timestamp,
                         });
@@ -196,7 +177,7 @@ const BlockToolsSidebar = ({
     }, []);
 
     useEffect(() => {
-        if (activeTab === "schematics") {
+        if (activeTab === "components") {
             loadSchematicsFromDB();
         }
         const handleSchematicsUpdated = () => {
@@ -205,7 +186,7 @@ const BlockToolsSidebar = ({
             );
             if (
                 document.visibilityState === "visible" &&
-                activeTab === "schematics"
+                activeTab === "components"
             ) {
                 loadSchematicsFromDB();
             }
@@ -325,47 +306,72 @@ const BlockToolsSidebar = ({
                 schematicPreviewsRef.current[entry.id] === undefined ||
                 schematicPreviewsRef.current[entry.id] === null
             ) {
-                // Schematic data exists, and preview is missing or previously failed. Try/Retry generating.
-                let newPreviewDataUrl = null;
-                let errorOccurred = false;
+                // Check if preview already exists in IndexedDB and use it if available
+                let previewFromDB = null;
                 try {
-                    console.log(
-                        `[BlockToolsSidebar] Generating preview for schematic (index ${
-                            currentPreviewIndex.current
-                        }): ${entry.prompt.substring(0, 30)}...`
+                    previewFromDB = await DatabaseManager.getData(
+                        STORES.PREVIEWS,
+                        entry.id
                     );
-                    newPreviewDataUrl = await generateSchematicPreview(
-                        entry.schematic,
-                        {
-                            width: 48,
-                            height: 48,
-                            background: "transparent",
-                        }
-                    );
-                } catch (error) {
-                    console.error(
-                        `[BlockToolsSidebar] Error generating preview for schematic ${entry.id}:`,
-                        error
-                    );
-                    errorOccurred = true;
+                } catch (dbErr) {
+                    // ignore, will generate preview below
                 }
 
-                setSchematicPreviews((prevPreviews) => ({
-                    ...prevPreviews,
-                    [entry.id]: errorOccurred
-                        ? null
-                        : newPreviewDataUrl || null,
-                }));
-            } else {
-                // Preview already exists and is valid (not undefined or null), or no schematic data (handled above)
-                console.log(
-                    `[BlockToolsSidebar] Skipping preview for schematic (index ${
-                        currentPreviewIndex.current
-                    }): ${entry.prompt.substring(
-                        0,
-                        30
-                    )} - already processed or no retry needed.`
-                );
+                if (previewFromDB && typeof previewFromDB === "string") {
+                    setSchematicPreviews((prev) => ({
+                        ...prev,
+                        [entry.id]: previewFromDB,
+                    }));
+                    schematicPreviewsRef.current[entry.id] = previewFromDB;
+                    // Skip generation as we already have it
+                } else {
+                    let newPreviewDataUrl = null;
+                    let errorOccurred = false;
+                    try {
+                        console.log(
+                            `[BlockToolsSidebar] Generating preview for schematic (index ${
+                                currentPreviewIndex.current
+                            }): ${entry.prompt.substring(0, 30)}...`
+                        );
+                        newPreviewDataUrl = await generateSchematicPreview(
+                            entry.schematic,
+                            {
+                                width: 48,
+                                height: 48,
+                                background: "transparent",
+                            }
+                        );
+                    } catch (error) {
+                        console.error(
+                            `[BlockToolsSidebar] Error generating preview for schematic ${entry.id}:`,
+                            error
+                        );
+                        errorOccurred = true;
+                    }
+
+                    // If preview was generated (and not errored), cache it in DB for future sessions
+                    if (!errorOccurred && newPreviewDataUrl) {
+                        try {
+                            await DatabaseManager.saveData(
+                                STORES.PREVIEWS,
+                                entry.id,
+                                newPreviewDataUrl
+                            );
+                        } catch (saveErr) {
+                            console.warn(
+                                "Failed to cache schematic preview:",
+                                saveErr
+                            );
+                        }
+                    }
+
+                    setSchematicPreviews((prevPreviews) => ({
+                        ...prevPreviews,
+                        [entry.id]: errorOccurred
+                            ? null
+                            : newPreviewDataUrl || null,
+                    }));
+                }
             }
 
             currentPreviewIndex.current++;
@@ -415,48 +421,35 @@ const BlockToolsSidebar = ({
         };
     }, [schematicList]);
 
-    const updateSettings = (updates) => {
-        const newSettings = { ...settings, ...updates };
-        setSettings(newSettings);
-        onPlacementSettingsChange?.(newSettings);
-    };
+    // Load previews from DB when schematic list changes
+    useEffect(() => {
+        const fetchPreviews = async () => {
+            if (schematicList.length === 0) return;
+            const updates = {};
+            for (const entry of schematicList) {
+                if (schematicPreviewsRef.current[entry.id] !== undefined)
+                    continue;
+                try {
+                    const preview = await DatabaseManager.getData(
+                        STORES.PREVIEWS,
+                        entry.id
+                    );
+                    if (preview) {
+                        updates[entry.id] = preview;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+            if (Object.keys(updates).length > 0) {
+                setSchematicPreviews((prev) => ({ ...prev, ...updates }));
+            }
+        };
+        fetchPreviews();
+    }, [schematicList]);
 
     const handleDragStart = (blockId) => {
         console.log("Drag started with block:", blockId);
-    };
-
-    const handleDownloadBlock = async (blockType) => {
-        if (!blockType || !blockType.isCustom) return;
-        const zip = new JSZip();
-        const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
-        const textures = blockType.sideTextures || {};
-        const mainTexture = blockType.textureUri;
-        let hasError = false;
-        for (const key of faceKeys) {
-            const dataUrl = textures[key] || mainTexture;
-            let blob = dataURLtoBlob(dataUrl);
-            if (!blob) {
-                console.warn(
-                    `Missing texture ${key} for ${blockType.name}, using placeholder.`
-                );
-                blob = await createPlaceholderBlob();
-                if (!blob) {
-                    console.error(`Placeholder failed for ${key}, skipping.`);
-                    hasError = true;
-                    continue;
-                }
-            }
-            zip.file(`${key}.png`, blob);
-        }
-        if (hasError) console.warn("Some textures missing; placeholders used.");
-        try {
-            const zipBlob = await zip.generateAsync({ type: "blob" });
-            saveAs(zipBlob, `${blockType.name}.zip`);
-            console.log(`Downloaded ${blockType.name}.zip`);
-        } catch (err) {
-            console.error("Error saving zip: ", err);
-            alert("Failed to save zip. See console.");
-        }
     };
 
     const handleDownloadAllCustom = async () => {
@@ -485,156 +478,49 @@ const BlockToolsSidebar = ({
         }
     };
 
-    /** @param {ActiveTabType} newTab */
     const handleTabChange = (newTab) => {
+        terrainBuilderRef?.current?.activateTool(null);
+        setSearchQuery("");
+        // Notify other components (e.g., ToolBar) of tab change so they can reset state
+        window.dispatchEvent(new Event("blockToolsTabChanged"));
         if (newTab === "blocks") {
-            setCurrentBlockType(blockTypes[0]);
-            setPreviewModelUrl(null);
-        } else if (newTab === "environment") {
+            const defaultBlock = blockTypes[0];
+            setCurrentBlockType(defaultBlock);
+            selectedBlockID = defaultBlock.id;
+        } else if (newTab === "models") {
             const defaultEnvModel = environmentModels.find((m) => !m.isCustom);
+            console.log("defaultEnvModel", defaultEnvModel);
             if (defaultEnvModel) {
-                setCurrentBlockType(defaultEnvModel);
-                setPreviewModelUrl(defaultEnvModel.modelUrl);
+                setCurrentBlockType({
+                    ...defaultEnvModel,
+                    isEnvironment: true,
+                });
                 selectedBlockID = defaultEnvModel.id;
             } else {
                 setCurrentBlockType(null);
-                setPreviewModelUrl(null);
+                selectedBlockID = 0;
             }
-        } else if (newTab === "schematics") {
-            setPreviewModelUrl(null);
+        } else if (newTab === "components") {
             setCurrentBlockType(null);
+            selectedBlockID = 0;
             loadSchematicsFromDB();
         }
         setActiveTab(newTab);
     };
 
-    const handleDeleteCustomBlock = async (blockType) => {
-        const confirmMessage = `Deleting "${blockType.name}" will replace any instances of this block with an error texture. Are you sure you want to proceed?`;
-        if (window.confirm(confirmMessage)) {
-            removeCustomBlock(blockType.id);
-            setCustomBlocks(getCustomBlocks());
-            try {
-                await DatabaseManager.saveData(
-                    STORES.CUSTOM_BLOCKS,
-                    "blocks",
-                    getCustomBlocks()
-                );
-            } catch (err) {
-                console.error(
-                    "Error saving custom blocks after deletion:",
-                    err
-                );
-            }
-            try {
-                const currentTerrain =
-                    (await DatabaseManager.getData(
-                        STORES.TERRAIN,
-                        "current"
-                    )) || {};
-                const newTerrain = { ...currentTerrain };
-                const errorBlock = {
-                    id: 999,
-                    name: `missing_${blockType.name}`,
-                    textureUri: "./assets/blocks/error.png",
-                    hasMissingTexture: true,
-                    originalId: blockType.id,
-                };
-                const errorId = errorBlock.id;
-                console.log("blockType", blockType);
-                Object.entries(newTerrain).forEach(([position, block]) => {
-                    console.log("block", block);
-                    console.log(
-                        "blockType.id == block.id",
-                        blockType.id == block.id
-                    );
-                    if (block === blockType.id) {
-                        newTerrain[position] = errorId;
-                    }
-                });
-                console.log("newTerrain", newTerrain);
-                await DatabaseManager.saveData(
-                    STORES.TERRAIN,
-                    "current",
-                    newTerrain
-                );
-                terrainBuilderRef.current.buildUpdateTerrain();
-            } catch (error) {
-                console.error(
-                    "Error updating database after block deletion:",
-                    error
-                );
-            }
-            refreshBlockTools();
-        }
-    };
-
-    const handleDeleteEnvironmentModel = async (modelId) => {
-        if (
-            window.confirm("Are you sure you want to delete this custom model?")
-        ) {
-            try {
-                const existingModels =
-                    (await DatabaseManager.getData(
-                        STORES.CUSTOM_MODELS,
-                        "models"
-                    )) || [];
-                const modelToDelete = environmentModels.find(
-                    (model) => model.id === modelId
-                );
-                if (!modelToDelete) return;
-                const modelIndex = environmentModels.findIndex(
-                    (model) => model.id === modelId
-                );
-                if (modelIndex !== -1) {
-                    environmentModels.splice(modelIndex, 1);
-                }
-                const updatedModels = existingModels.filter(
-                    (model) => model.name !== modelToDelete.name
-                );
-                await DatabaseManager.saveData(
-                    STORES.CUSTOM_MODELS,
-                    "models",
-                    updatedModels
-                );
-                const currentEnvironment =
-                    (await DatabaseManager.getData(
-                        STORES.ENVIRONMENT,
-                        "current"
-                    )) || [];
-                const updatedEnvironment = currentEnvironment.filter(
-                    (obj) => obj.name !== modelToDelete.name
-                );
-                await DatabaseManager.saveData(
-                    STORES.ENVIRONMENT,
-                    "current",
-                    updatedEnvironment
-                );
-                if (environmentBuilder && environmentBuilder.current) {
-                    await environmentBuilder.current.refreshEnvironmentFromDB();
-                }
-                if (
-                    modelToDelete &&
-                    previewModelUrl === modelToDelete.modelUrl
-                ) {
-                    setPreviewModelUrl(null);
-                }
-            } catch (error) {
-                console.error("Error deleting environment model:", error);
-            }
-        }
-    };
-
     const handleEnvironmentSelect = (envType) => {
         console.log("Environment selected:", envType);
+        terrainBuilderRef?.current?.activateTool(null);
         setCurrentBlockType({
             ...envType,
             isEnvironment: true,
         });
         selectedBlockID = envType.id;
-        setPreviewModelUrl(envType.modelUrl);
     };
 
     const handleBlockSelect = (blockType) => {
+        console.log("Block selected:", blockType);
+        terrainBuilderRef?.current?.activateTool(null);
         setCurrentBlockType({
             ...blockType,
             isEnvironment: false,
@@ -645,6 +531,10 @@ const BlockToolsSidebar = ({
     /** @param {import("./AIAssistantPanel").SchematicHistoryEntry} schematicEntry */
     const handleSchematicSelect = (schematicEntry) => {
         console.log("Schematic selected:", schematicEntry.prompt);
+        setCurrentBlockType({
+            ...schematicEntry,
+            isComponent: true,
+        });
         onLoadSchematicFromHistory(schematicEntry.schematic);
     };
 
@@ -726,7 +616,7 @@ const BlockToolsSidebar = ({
                     refreshBlockTools();
                 }
             }
-        } else if (activeTab === "environment") {
+        } else if (activeTab === "models") {
             const modelFiles = files.filter(
                 (file) =>
                     file.name.endsWith(".gltf") || file.name.endsWith(".glb")
@@ -885,35 +775,117 @@ const BlockToolsSidebar = ({
         }
     };
 
+    // ---------- Search Filtering ----------
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    const isMatch = (str) => {
+        if (!normalizedQuery) return true;
+        return str && str.toString().toLowerCase().includes(normalizedQuery);
+    };
+
+    const visibleDefaultBlocks = blockTypes
+        .filter((block) => block.id < 100)
+        .filter((block) => isMatch(block.name) || isMatch(block.id));
+
+    const visibleCustomBlocks = customBlocks
+        .filter((block) => block.id >= 100 && block.id < 200)
+        .filter((block) => isMatch(block.name) || isMatch(block.id));
+
+    const visibleDefaultModels = environmentModels
+        .filter((envType) => !envType.isCustom)
+        .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
+
+    const visibleCustomModels = environmentModels
+        .filter((envType) => envType.isCustom)
+        .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
+
+    const visibleSchematics = schematicList.filter((entry) => {
+        return (
+            isMatch(entry.name) || isMatch(entry.prompt) || isMatch(entry.id)
+        );
+    });
+
     return (
-        <div className="block-tools-container">
-            <div className="dead-space"></div>
-            <div className="block-tools-sidebar">
-                <div className="tab-button-wrapper">
-                    <button
-                        className={`tab-button tab-button-start ${
-                            activeTab === "blocks" ? "active" : ""
-                        }`}
-                        onClick={() => handleTabChange("blocks")}
+        <div
+            className="block-tools-container"
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+                width: "100%",
+            }}
+        >
+            <div
+                className="block-tools-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"
+                style={{
+                    width: isCompactMode ? "205px" : "295px",
+                }}
+            >
+                <div className="tab-button-outer-wrapper w-full flex">
+                    <div
+                        className="tab-button-inner-wrapper flex w-full"
+                        style={{ width: "100%" }}
                     >
-                        Blocks
-                    </button>
-                    <button
-                        className={`tab-button tab-button-middle ${
-                            activeTab === "environment" ? "active" : ""
-                        }`}
-                        onClick={() => handleTabChange("environment")}
-                    >
-                        Models
-                    </button>
-                    <button
-                        className={`tab-button tab-button-end ${
-                            activeTab === "schematics" ? "active" : ""
-                        }`}
-                        onClick={() => handleTabChange("schematics")}
-                    >
-                        Schematics
-                    </button>
+                        {["blocks", "models", "components"].map(
+                            (tab, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => handleTabChange(tab)}
+                                    className={`tab-button w-full ${
+                                        activeTab === tab ? "active" : ""
+                                    }`}
+                                    title={
+                                        isCompactMode
+                                            ? tab.charAt(0).toUpperCase() +
+                                              tab.slice(1)
+                                            : undefined
+                                    }
+                                >
+                                    {isCompactMode ? (
+                                        tab === "blocks" ? (
+                                            <BlockIcon className="mx-auto h-4.5 w-4.5" />
+                                        ) : tab === "models" ? (
+                                            <PalmTreeIcon className="mx-auto h-4.5 w-4.5" />
+                                        ) : (
+                                            <BlocksIcon className="mx-auto h-4.5 w-4.5" />
+                                        )
+                                    ) : (
+                                        tab
+                                    )}
+                                </button>
+                            )
+                        )}
+                        <div
+                            className="tab-indicator"
+                            style={{
+                                left: `${
+                                    activeTab === "blocks"
+                                        ? "calc(0%)"
+                                        : activeTab === "models"
+                                        ? "calc(33.333% + 2px)"
+                                        : "calc(66.666% + 4px)"
+                                }`,
+                            }}
+                        />
+                    </div>
+                </div>
+                <div
+                    className="block-tools-divider"
+                    style={{
+                        width: "100%",
+                        height: "1px",
+                        backgroundColor: "rgba(255, 255, 255, 0.15)",
+                        marginBottom: "15px",
+                    }}
+                />
+                <div className="px-3">
+                    <input
+                        type="text"
+                        placeholder="Search..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-md bg-black/30 border border-white/20 text-white focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
+                    />
                 </div>
                 <div className="block-buttons-grid">
                     {activeTab === "blocks" ? (
@@ -921,143 +893,117 @@ const BlockToolsSidebar = ({
                             <div className="block-tools-section-label">
                                 Default Blocks (ID: 1-99)
                             </div>
-                            {blockTypes
-                                .filter((block) => block.id < 100)
-                                .map((blockType) => (
-                                    <BlockButton
-                                        key={blockType.id}
-                                        blockType={blockType}
-                                        isSelected={
-                                            selectedBlockID === blockType.id
-                                        }
-                                        onSelect={(block) => {
-                                            handleBlockSelect(block);
-                                            localStorage.setItem(
-                                                "selectedBlock",
-                                                block.id
-                                            );
-                                        }}
-                                        onDelete={handleDeleteCustomBlock}
-                                        onDownload={handleDownloadBlock}
-                                        handleDragStart={handleDragStart}
-                                    />
-                                ))}
-                            <div className="block-tools-section-label custom-label-with-icon">
+                            {visibleDefaultBlocks.map((blockType) => (
+                                <BlockButton
+                                    key={blockType.id}
+                                    blockType={blockType}
+                                    isSelected={
+                                        selectedBlockID === blockType.id
+                                    }
+                                    onSelect={(block) => {
+                                        handleBlockSelect(block);
+                                        localStorage.setItem(
+                                            "selectedBlock",
+                                            block.id
+                                        );
+                                    }}
+                                    handleDragStart={handleDragStart}
+                                />
+                            ))}
+                            <div className="block-tools-section-label custom-label-with-icon mt-2">
                                 Custom Blocks (ID: 100-199)
                                 <button
                                     className="download-all-icon-button"
                                     onClick={handleDownloadAllCustom}
                                     title="Download all custom textures"
                                 >
-                                    <FaDownload />
+                                    {visibleCustomBlocks.length > 0 && (
+                                        <FaDownload />
+                                    )}
                                 </button>
                             </div>
-                            {customBlocks
-                                .filter(
-                                    (block) => block.id >= 100 && block.id < 200
-                                )
-                                .map((blockType) => (
-                                    <BlockButton
-                                        key={blockType.id}
-                                        blockType={blockType}
-                                        isSelected={
-                                            selectedBlockID === blockType.id
-                                        }
-                                        onSelect={(block) => {
-                                            handleBlockSelect(block);
-                                            localStorage.setItem(
-                                                "selectedBlock",
-                                                block.id
-                                            );
-                                        }}
-                                        onDelete={handleDeleteCustomBlock}
-                                        onDownload={handleDownloadBlock}
-                                        handleDragStart={handleDragStart}
-                                        needsTexture={blockType.needsTexture}
-                                    />
-                                ))}
+                            {visibleCustomBlocks.map((blockType) => (
+                                <BlockButton
+                                    key={blockType.id}
+                                    blockType={blockType}
+                                    isSelected={
+                                        selectedBlockID === blockType.id
+                                    }
+                                    onSelect={(block) => {
+                                        handleBlockSelect(block);
+                                        localStorage.setItem(
+                                            "selectedBlock",
+                                            block.id
+                                        );
+                                    }}
+                                    handleDragStart={handleDragStart}
+                                    needsTexture={blockType.needsTexture}
+                                />
+                            ))}
                         </>
-                    ) : activeTab === "environment" ? (
+                    ) : activeTab === "models" ? (
                         <>
-                            <div className="environment-preview-container">
-                                {previewModelUrl ? (
-                                    <ModelPreview modelUrl={previewModelUrl} />
-                                ) : (
-                                    <div className="no-preview-text">
-                                        Select an object to preview
-                                    </div>
-                                )}
-                            </div>
                             <div className="environment-button-wrapper">
                                 <div className="block-tools-section-label">
                                     Default Models (ID: 200-299)
                                 </div>
-                                {environmentModels
-                                    .filter((envType) => !envType.isCustom)
-                                    .map((envType) => (
-                                        <EnvironmentButton
-                                            key={envType.id}
-                                            envType={envType}
-                                            isSelected={
-                                                selectedBlockID === envType.id
-                                            }
-                                            onSelect={(envType) => {
-                                                handleEnvironmentSelect(
-                                                    envType
-                                                );
-                                                localStorage.setItem(
-                                                    "selectedBlock",
-                                                    envType.id
-                                                );
-                                            }}
-                                            onDelete={
-                                                handleDeleteEnvironmentModel
-                                            }
-                                        />
-                                    ))}
-                                <div className="block-tools-section-label">
+                                {visibleDefaultModels.map((envType) => (
+                                    <EnvironmentButton
+                                        key={envType.id}
+                                        envType={envType}
+                                        isSelected={
+                                            selectedBlockID === envType.id
+                                        }
+                                        onSelect={(envType) => {
+                                            handleEnvironmentSelect(envType);
+                                            localStorage.setItem(
+                                                "selectedBlock",
+                                                envType.id
+                                            );
+                                        }}
+                                    />
+                                ))}
+                                <div className="block-tools-section-label mt-2">
                                     Custom Models (ID: 300+)
                                 </div>
-                                {environmentModels
-                                    .filter((envType) => envType.isCustom)
-                                    .map((envType) => (
-                                        <EnvironmentButton
-                                            key={envType.id}
-                                            envType={envType}
-                                            isSelected={
-                                                selectedBlockID === envType.id
-                                            }
-                                            onSelect={(envType) => {
-                                                handleEnvironmentSelect(
-                                                    envType
-                                                );
-                                                localStorage.setItem(
-                                                    "selectedBlock",
-                                                    envType.id
-                                                );
-                                            }}
-                                            onDelete={
-                                                handleDeleteEnvironmentModel
-                                            }
-                                        />
-                                    ))}
+                                {visibleCustomModels.map((envType) => (
+                                    <EnvironmentButton
+                                        key={envType.id}
+                                        envType={envType}
+                                        isSelected={
+                                            selectedBlockID === envType.id
+                                        }
+                                        onSelect={(envType) => {
+                                            handleEnvironmentSelect(envType);
+                                            localStorage.setItem(
+                                                "selectedBlock",
+                                                envType.id
+                                            );
+                                        }}
+                                    />
+                                ))}
                             </div>
                         </>
-                    ) : activeTab === "schematics" ? (
+                    ) : activeTab === "components" ? (
                         <>
                             <div className="block-tools-section-label">
                                 Saved Schematics
                             </div>
-                            {schematicList.length === 0 && (
+                            {visibleSchematics.length === 0 && (
                                 <div className="no-schematics-text">
                                     No schematics saved yet. Generate some using
                                     the AI Assistant!
                                 </div>
                             )}
-                            {schematicList.map((entry) => (
+                            {visibleSchematics.map((entry) => (
                                 <div
                                     key={entry.id}
-                                    className="schematic-button"
+                                    className="schematic-button bg-white/10 border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white"
+                                    style={{
+                                        width: isCompactMode
+                                            ? "calc(50% - 6px)"
+                                            : "calc(33.333% - 4px)",
+                                    }}
                                     onClick={() => handleSchematicSelect(entry)}
                                     title={`Load: ${entry.prompt}`}
                                 >
@@ -1086,7 +1032,12 @@ const BlockToolsSidebar = ({
                                         )}
                                     </div>
                                     <div className="schematic-button-prompt">
-                                        {entry.prompt.length > 50
+                                        {entry.name && entry.name.trim()
+                                            ? entry.name.length > 50
+                                                ? entry.name.substring(0, 47) +
+                                                  "..."
+                                                : entry.name
+                                            : entry.prompt.length > 50
                                             ? entry.prompt.substring(0, 47) +
                                               "..."
                                             : entry.prompt}
@@ -1096,352 +1047,44 @@ const BlockToolsSidebar = ({
                         </>
                     ) : null}
                 </div>
-                {activeTab === "environment" && (
-                    <div className="placement-tools">
-                        <div className="placement-tools-grid">
-                            <div className="placement-tool full-width">
-                                <div className="randomize-header">
-                                    <input
-                                        type="checkbox"
-                                        id="randomScale"
-                                        className="placement-checkbox"
-                                        checked={settings.randomScale}
-                                        onChange={(e) =>
-                                            updateSettings({
-                                                randomScale: e.target.checked,
-                                            })
-                                        }
-                                    />
-                                    <label
-                                        id="randomScaleLabel"
-                                        htmlFor="randomScale"
-                                    >
-                                        Randomize Scale
-                                    </label>
+                {(activeTab === "blocks" || activeTab === "models") && (
+                    <div className="flex w-full px-3 mb-3">
+                        <div
+                            className="texture-drop-zone w-full py-2 h-[120px]"
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.add("drag-over");
+                            }}
+                            onDragLeave={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove("drag-over");
+                            }}
+                            onDrop={handleCustomAssetDropUpload}
+                        >
+                            <div className="drop-zone-content">
+                                <div className="drop-zone-icons">
+                                    <FaUpload />
                                 </div>
-                                <div className="min-max-inputs">
-                                    <div className="min-max-input">
-                                        <label>Range: </label>
-                                        <input
-                                            type="number"
-                                            className="slider-value-input"
-                                            value={settings.minScale}
-                                            min={SCALE_MIN}
-                                            max={SCALE_MAX}
-                                            step="0.1"
-                                            disabled={!settings.randomScale}
-                                            onChange={(e) =>
-                                                updateSettings({
-                                                    minScale: Number(
-                                                        e.target.value
-                                                    ),
-                                                })
-                                            }
-                                            onBlur={(e) => {
-                                                const value = Number(
-                                                    e.target.value
-                                                );
-                                                if (
-                                                    value < SCALE_MIN ||
-                                                    value > SCALE_MAX
-                                                ) {
-                                                    alert(
-                                                        `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
-                                                    );
-                                                    updateSettings({
-                                                        minScale: 0.5,
-                                                    });
-                                                }
-                                            }}
-                                            onKeyDown={(e) =>
-                                                e.stopPropagation()
-                                            }
-                                        />
-                                    </div>
-                                    <div className="min-max-input">
-                                        <label>-</label>
-                                        <input
-                                            type="number"
-                                            className="slider-value-input"
-                                            value={settings.maxScale}
-                                            min={SCALE_MIN}
-                                            max={SCALE_MAX}
-                                            step="0.1"
-                                            disabled={!settings.randomScale}
-                                            onChange={(e) =>
-                                                updateSettings({
-                                                    maxScale: Number(
-                                                        e.target.value
-                                                    ),
-                                                })
-                                            }
-                                            onBlur={(e) => {
-                                                const value = Number(
-                                                    e.target.value
-                                                );
-                                                if (
-                                                    value < SCALE_MIN ||
-                                                    value > SCALE_MAX
-                                                ) {
-                                                    alert(
-                                                        `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
-                                                    );
-                                                    updateSettings({
-                                                        maxScale: 1.5,
-                                                    });
-                                                }
-                                            }}
-                                            onKeyDown={(e) =>
-                                                e.stopPropagation()
-                                            }
-                                        />
-                                    </div>
+                                <div className="drop-zone-text">
+                                    {activeTab === "blocks"
+                                        ? "Upload new blocks or fix missing textures"
+                                        : activeTab === "models"
+                                        ? "Upload .gltf files here to add custom models"
+                                        : ""}
                                 </div>
-                            </div>
-                            <div className="placement-tool full-width">
-                                <div className="randomize-header">
-                                    <input
-                                        type="checkbox"
-                                        id="randomRotation"
-                                        className="placement-checkbox"
-                                        checked={settings.randomRotation}
-                                        onChange={(e) =>
-                                            updateSettings({
-                                                randomRotation:
-                                                    e.target.checked,
-                                            })
-                                        }
-                                    />
-                                    <label
-                                        id="randomRotationLabel"
-                                        htmlFor="randomRotation"
-                                    >
-                                        Randomize Rotation
-                                    </label>
-                                </div>
-                                <div className="min-max-inputs">
-                                    <div className="min-max-input">
-                                        <label>Range: </label>
-                                        <input
-                                            type="number"
-                                            className="slider-value-input"
-                                            value={settings.minRotation}
-                                            min={ROTATION_MIN}
-                                            max={ROTATION_MAX}
-                                            step="15"
-                                            disabled={!settings.randomRotation}
-                                            onChange={(e) =>
-                                                updateSettings({
-                                                    minRotation: Number(
-                                                        e.target.value
-                                                    ),
-                                                })
-                                            }
-                                            onBlur={(e) => {
-                                                const value = Number(
-                                                    e.target.value
-                                                );
-                                                if (
-                                                    value < ROTATION_MIN ||
-                                                    value > ROTATION_MAX
-                                                ) {
-                                                    alert(
-                                                        `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
-                                                    );
-                                                    updateSettings({
-                                                        minRotation: 0,
-                                                    });
-                                                }
-                                            }}
-                                            onKeyDown={(e) =>
-                                                e.stopPropagation()
-                                            }
-                                        />
-                                    </div>
-                                    <div className="min-max-input">
-                                        <label>-</label>
-                                        <input
-                                            type="number"
-                                            className="slider-value-input"
-                                            value={settings.maxRotation}
-                                            min={ROTATION_MIN}
-                                            max={ROTATION_MAX}
-                                            step="15"
-                                            disabled={!settings.randomRotation}
-                                            onChange={(e) =>
-                                                updateSettings({
-                                                    maxRotation: Number(
-                                                        e.target.value
-                                                    ),
-                                                })
-                                            }
-                                            onBlur={(e) => {
-                                                const value = Number(
-                                                    e.target.value
-                                                );
-                                                if (
-                                                    value < ROTATION_MIN ||
-                                                    value > ROTATION_MAX
-                                                ) {
-                                                    alert(
-                                                        `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
-                                                    );
-                                                    updateSettings({
-                                                        maxRotation: 360,
-                                                    });
-                                                }
-                                            }}
-                                            onKeyDown={(e) =>
-                                                e.stopPropagation()
-                                            }
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="placement-tool-slider">
-                                <div className="slider-header">
-                                    <label htmlFor="placementScale">
-                                        Object Scale
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="slider-value-input"
-                                        value={settings.scale}
-                                        min={SCALE_MIN}
-                                        max={SCALE_MAX}
-                                        step="0.1"
-                                        disabled={settings.randomScale}
-                                        onChange={(e) =>
-                                            updateSettings({
-                                                scale: Number(e.target.value),
-                                            })
-                                        }
-                                        onBlur={(e) => {
-                                            const value = Number(
-                                                e.target.value
-                                            );
-                                            if (
-                                                value < SCALE_MIN ||
-                                                value > SCALE_MAX
-                                            ) {
-                                                alert(
-                                                    `Please enter a value between ${SCALE_MIN} and ${SCALE_MAX}!`
-                                                );
-                                                updateSettings({ scale: 1.0 });
-                                            }
-                                        }}
-                                        onKeyDown={(e) => e.stopPropagation()}
-                                    />
-                                </div>
-                                <input
-                                    type="range"
-                                    id="placementScale"
-                                    min={SCALE_MIN}
-                                    max={SCALE_MAX}
-                                    step="0.1"
-                                    value={settings.scale}
-                                    className="placement-slider"
-                                    onChange={(e) =>
-                                        updateSettings({
-                                            scale: Number(e.target.value),
-                                        })
-                                    }
-                                    disabled={settings.randomScale}
-                                />
-                            </div>
-                            <div className="placement-tool-slider">
-                                <div className="slider-header">
-                                    <label htmlFor="placementRotation">
-                                        Rotation
-                                    </label>
-                                    <input
-                                        type="number"
-                                        className="slider-value-input"
-                                        value={settings.rotation}
-                                        min={ROTATION_MIN}
-                                        max={ROTATION_MAX}
-                                        step="15"
-                                        disabled={settings.randomRotation}
-                                        onChange={(e) =>
-                                            updateSettings({
-                                                rotation: Number(
-                                                    e.target.value
-                                                ),
-                                            })
-                                        }
-                                        onBlur={(e) => {
-                                            const value = Number(
-                                                e.target.value
-                                            );
-                                            if (
-                                                value < ROTATION_MIN ||
-                                                value > ROTATION_MAX
-                                            ) {
-                                                alert(
-                                                    `Please enter a value between ${ROTATION_MIN} and ${ROTATION_MAX}!`
-                                                );
-                                                updateSettings({ rotation: 0 });
-                                            }
-                                        }}
-                                        onKeyDown={(e) => e.stopPropagation()}
-                                    />
-                                    <span className="degree-symbol">°</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    id="placementRotation"
-                                    min={ROTATION_MIN}
-                                    max={ROTATION_MAX}
-                                    step="15"
-                                    value={settings.rotation}
-                                    className="placement-slider"
-                                    onChange={(e) =>
-                                        updateSettings({
-                                            rotation: Number(e.target.value),
-                                        })
-                                    }
-                                    disabled={settings.randomRotation}
-                                />
                             </div>
                         </div>
                     </div>
                 )}
-                <div
-                    className="texture-drop-zone"
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.add("drag-over");
-                    }}
-                    onDragLeave={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.remove("drag-over");
-                    }}
-                    onDrop={handleCustomAssetDropUpload}
-                >
-                    <div className="drop-zone-content">
-                        <div className="drop-zone-icons">
-                            <img
-                                className="upload-icon"
-                                src="./assets/ui/icons/upload-icon.png"
-                            />
-                        </div>
-                        <div className="drop-zone-text">
-                            {activeTab === "blocks"
-                                ? "Drag textures here to add new blocks or fix missing textures"
-                                : activeTab === "environment"
-                                ? "Drag .gltf files here to add custom models"
-                                : "Use AI Assistant to generate schematics"}
-                        </div>
-                    </div>
-                </div>
-                <button
-                    className="create-texture-button"
-                    onClick={onOpenTextureModal}
-                >
-                    Create Texture
-                </button>
+                {activeTab === "blocks" && <div className="flex px-3 w-full mb-3">
+                    <button
+                        className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"
+                        onClick={onOpenTextureModal}
+                    >
+                        Create Texture
+                    </button>
+                </div>}
             </div>
-            <div className="dead-space"></div>
         </div>
     );
 };

@@ -1,13 +1,10 @@
 import React from "react";
-import { FaTrash, FaDownload } from "react-icons/fa";
-import Tooltip from "./Tooltip";
 import { playUIClick } from "../Sound";
+import Tooltip from "./Tooltip";
 const BlockButton = ({
     blockType,
     isSelected,
     onSelect,
-    onDelete,
-    onDownload,
     handleDragStart,
 }) => {
     const getTextureUrl = (blockType) => {
@@ -34,12 +31,15 @@ const BlockButton = ({
         <Tooltip text={blockType.name}>
             <button
                 className={`block-button ${isSelected ? "selected" : ""}`}
+                style={{
+                    border: isSelected ? "2px solid #fff" : "2px solid rgba(255, 255, 255, 0.1)",
+                }}
                 onClick={() => {
                     if (isMissingTexture && !blockType.isCustom) {
                         alert(
-                            "Missing Texture! \n \nThis means the map has this block, but the texture hasn't been added yet. Please select a different block, or upload the correct texture of the same name.\n \nTexture Name: \"" +
-                                blockType.name +
-                                '"'
+                            "Missing system texture! \n \nThis means the map has this block, but the texture hasn't been added yet. Please select a different block, or upload the correct texture of the same name.\n \nTexture Name: \"" +
+                            blockType.name +
+                            '"'
                         );
                         return;
                     }
@@ -49,47 +49,17 @@ const BlockButton = ({
                 draggable={true}
                 onDragStart={() => handleDragStart(blockType.id)}
             >
-                {blockType.isCustom && (
-                    <div className="custom-block-actions">
-                        <Tooltip text="Download Textures (.zip)">
-                            <div
-                                className="download-button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    playUIClick();
-                                    if (onDownload) {
-                                        onDownload(blockType);
-                                    }
-                                }}
-                            >
-                                <FaDownload />
-                            </div>
-                        </Tooltip>
-                        <Tooltip text="Delete Block">
-                            <div
-                                className="delete-button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    playUIClick();
-                                    onDelete(blockType);
-                                }}
-                            >
-                                <FaTrash />
-                            </div>
-                        </Tooltip>
-                    </div>
-                )}
                 <div
                     className="block-preview"
                     style={{
                         backgroundImage: `url(${getTextureUrl(
                             blockType.isMultiTexture
                                 ? {
-                                      ...blockType,
-                                      textureUri:
-                                          blockType.sideTextures["+y"] ||
-                                          blockType.textureUri,
-                                  }
+                                    ...blockType,
+                                    textureUri:
+                                        blockType.sideTextures["+y"] ||
+                                        blockType.textureUri,
+                                }
                                 : blockType
                         )})`,
                         backgroundSize: "cover",
