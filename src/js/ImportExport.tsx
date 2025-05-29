@@ -663,14 +663,14 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         const jsonContent = JSON.stringify(exportData, null, 2);
         const jsonBlob = new Blob([jsonContent], { type: "application/json" });
 
-        // Add terrain.json to the zip file root
-        zip.file("terrain.json", jsonBlob);
+        // Add map.json to the zip file root
+        zip.file("map.json", jsonBlob);
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
 
         loadingManager.updateLoading("Preparing download...", 95);
 
-        // Download ZIP (which now includes terrain.json)
+        // Download ZIP (which now includes map.json)
         const zipUrl = URL.createObjectURL(zipBlob);
         const zipLink = document.createElement("a");
         zipLink.href = zipUrl;
