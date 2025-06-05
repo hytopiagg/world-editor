@@ -152,6 +152,9 @@ class ChunkSystem {
                 );
             }
 
+            // Clear cached block types so neighbouring face visibility is recalculated
+            this._chunkManager.clearBlockTypeCache({ x, y, z }, 2);
+
             chunksToUpdate.add(chunkId);
 
             if (!chunkOptions.has(chunkId)) {
@@ -245,6 +248,9 @@ class ChunkSystem {
                 },
                 block.id
             );
+
+            // Newly placed blocks may expose/occlude neighbouring faces; clear a smaller cache radius
+            this._chunkManager.clearBlockTypeCache({ x, y, z }, 1);
 
             chunksToUpdate.add(chunkId);
 
