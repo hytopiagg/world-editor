@@ -135,7 +135,7 @@ function UndoRedoManager(
         }
         return { newTerrain, newEnvironment };
     };
-    
+
     const undo = async () => {
         try {
             const undoStates =
@@ -417,16 +417,14 @@ function UndoRedoManager(
 
                     try {
                         if (changeData.store === STORES.TERRAIN) {
-                            if (
-                                terrainBuilderRef.current.updateTerrainForUndoRedo
-                            ) {
-                                terrainBuilderRef.current.updateTerrainForUndoRedo(
+                            if (terrainBuilderRef.current.updateTerrainBlocks) {
+                                terrainBuilderRef.current.updateTerrainBlocks(
                                     added,
                                     removed,
-                                    "undo"
+                                    { syncPendingChanges: true, skipUndoSave: true }
                                 );
                                 console.log(
-                                    "Terrain updated successfully with optimized method"
+                                    "Terrain updated successfully with standard method, and pending changes are synced."
                                 );
 
                                 const addedBlocksCount =
@@ -442,21 +440,11 @@ function UndoRedoManager(
                                     );
                                     if (
                                         terrainBuilderRef.current
-                                            .updateVisibleChunks
+                                            .forceRefreshAllChunks
                                     ) {
-                                        terrainBuilderRef.current.updateVisibleChunks();
+                                        terrainBuilderRef.current.forceRefreshAllChunks();
                                     }
                                 }
-                            } else if (
-                                terrainBuilderRef.current.updateTerrainBlocks
-                            ) {
-                                terrainBuilderRef.current.updateTerrainBlocks(
-                                    added,
-                                    removed
-                                );
-                                console.log(
-                                    "Terrain updated successfully with standard method"
-                                );
                             } else {
                                 console.warn(
                                     "No update terrain function available, falling back to refreshTerrainFromDB"
@@ -698,16 +686,14 @@ function UndoRedoManager(
                         console.log("removed", removed);
 
                         if (changeData.store === STORES.TERRAIN) {
-                            if (
-                                terrainBuilderRef.current.updateTerrainForUndoRedo
-                            ) {
-                                terrainBuilderRef.current.updateTerrainForUndoRedo(
+                            if (terrainBuilderRef.current.updateTerrainBlocks) {
+                                terrainBuilderRef.current.updateTerrainBlocks(
                                     added,
                                     removed,
-                                    "redo"
+                                    { syncPendingChanges: true, skipUndoSave: true }
                                 );
                                 console.log(
-                                    "Terrain updated successfully with optimized method"
+                                    "Terrain updated successfully with standard method, and pending changes are synced."
                                 );
 
                                 const addedBlocksCount =
@@ -723,22 +709,11 @@ function UndoRedoManager(
                                     );
                                     if (
                                         terrainBuilderRef.current
-                                            .updateVisibleChunks
+                                            .forceRefreshAllChunks
                                     ) {
-                                        console.log("Updating visible chunks");
-                                        terrainBuilderRef.current.updateVisibleChunks();
+                                        terrainBuilderRef.current.forceRefreshAllChunks();
                                     }
                                 }
-                            } else if (
-                                terrainBuilderRef.current.updateTerrainBlocks
-                            ) {
-                                terrainBuilderRef.current.updateTerrainBlocks(
-                                    added,
-                                    removed
-                                );
-                                console.log(
-                                    "Terrain updated successfully with standard method"
-                                );
                             } else {
                                 console.warn(
                                     "No update terrain function available, falling back to refreshTerrainFromDB"
