@@ -987,7 +987,7 @@ const BlockToolsSidebar = ({
                     ) : activeTab === "components" ? (
                         <>
                             <div className="block-tools-section-label">
-                                Saved Schematics
+                                Saved Components
                             </div>
                             {visibleSchematics.length === 0 && (
                                 <div className="no-schematics-text">
