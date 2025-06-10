@@ -738,7 +738,8 @@ function TerrainBuilder(
                 handleBlockPlacement,
                 playPlaceSound,
                 threeRaycaster,
-                cameraManager
+                cameraManager,
+                currentBlockTypeRef
             );
         },
         [threeRaycaster.ray, gl, cameraManager]
