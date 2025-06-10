@@ -1,7 +1,6 @@
 import React, {
     useImperativeHandle
 } from "react";
-import { MIN_UNDO_STATES } from "../Constants";
 import { DatabaseManager, STORES } from "./DatabaseManager";
 import { UndoRedoState } from "../types/DatabaseTypes";
 function UndoRedoManager(
