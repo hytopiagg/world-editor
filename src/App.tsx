@@ -156,6 +156,20 @@ function App() {
     }, []);
 
     useEffect(() => {
+        const disableTabbing = (e) => {
+            if (e.key === "Tab") {
+                e.preventDefault();
+            }
+        };
+
+        window.addEventListener("keydown", disableTabbing);
+
+        return () => {
+            window.removeEventListener("keydown", disableTabbing);
+        };
+    }, []);
+
+    useEffect(() => {
         console.log("App: undoRedoManagerRef initialized");
 
         return () => {

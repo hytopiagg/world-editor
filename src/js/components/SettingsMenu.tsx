@@ -16,6 +16,7 @@ interface SettingsMenuProps {
 }
 
 export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar, isCompactMode, onToggleCompactMode }: SettingsMenuProps) {
+    const [loadedDefaults, setLoadedDefaults] = useState(false);
     const [viewDistance, setViewDistance] = useState(128);
     const [selectionDistance, setSelectionDistance] = useState(128);
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
@@ -56,11 +57,49 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                 } catch (error) {
                     console.error("Error loading camera move speed:", error);
                 }
+
+                // >>> Load saved view distance
+                try {
+                    console.log("Loading view distance...");
+                    const savedViewDistance = await DatabaseManager.getData(STORES.SETTINGS, "viewDistance");
+                    console.log("Saved view distance:", savedViewDistance);
+                    if (typeof savedViewDistance === "number") {
+                        console.log("Setting view distance...");
+                        setViewDistance(savedViewDistance);
+                        if (terrainBuilderRef?.current?.setViewDistance) {
+                            console.log("Setting view distance in terrain builder...");
+                            terrainBuilderRef.current.setViewDistance(savedViewDistance);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading view distance:", error);
+                }
+
+                // >>> Load saved selection distance
+                try {
+                    const savedSelectionDistance = await DatabaseManager.getData(STORES.SETTINGS, "selectionDistance");
+                    if (typeof savedSelectionDistance === "number") {
+                        setSelectionDistance(savedSelectionDistance);
+                        if (terrainBuilderRef?.current?.setSelectionDistance) {
+                            terrainBuilderRef.current.setSelectionDistance(savedSelectionDistance);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading selection distance:", error);
+                }
             } catch (error) {
                 console.error("Error loading camera sensitivity:", error);
             }
         })();
     }, []);
+
+    useEffect(() => {
+        if (terrainBuilderRef?.current?.setSelectionDistance && terrainBuilderRef?.current?.setViewDistance && !loadedDefaults) {
+            setLoadedDefaults(true);
+            terrainBuilderRef.current.setSelectionDistance(selectionDistance);
+            terrainBuilderRef.current.setViewDistance(viewDistance);
+        }
+    }, [terrainBuilderRef?.current, selectionDistance, viewDistance]);
 
     // Sync state if user toggles camera mode via keyboard ('0')
     useEffect(() => {
@@ -76,18 +115,20 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         return () => window.removeEventListener("keydown", keyListener);
     }, []);
 
-    const handleViewDistanceChange = (value: number) => {
+    const handleViewDistanceChange = async (value: number) => {
         setViewDistance(value);
         if (terrainBuilderRef?.current?.setViewDistance) {
             terrainBuilderRef.current.setViewDistance(value);
         }
+        await DatabaseManager.saveData(STORES.SETTINGS, "viewDistance", value);
     };
 
-    const handleSelectionDistanceChange = (value: number) => {
+    const handleSelectionDistanceChange = async (value: number) => {
         setSelectionDistance(value);
         if (terrainBuilderRef?.current?.setSelectionDistance) {
             terrainBuilderRef.current.setSelectionDistance(value);
         }
+        await DatabaseManager.saveData(STORES.SETTINGS, "selectionDistance", value);
     };
 
     const handleAutoSaveToggle = (checked: boolean) => {

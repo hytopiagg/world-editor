@@ -987,7 +987,7 @@ const BlockToolsSidebar = ({
                     ) : activeTab === "components" ? (
                         <>
                             <div className="block-tools-section-label">
-                                Saved Schematics
+                                Saved Components
                             </div>
                             {visibleSchematics.length === 0 && (
                                 <div className="no-schematics-text">
@@ -1076,14 +1076,16 @@ const BlockToolsSidebar = ({
                         </div>
                     </div>
                 )}
-                {activeTab === "blocks" && <div className="flex px-3 w-full mb-3">
-                    <button
-                        className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"
-                        onClick={onOpenTextureModal}
-                    >
-                        Create Texture
-                    </button>
-                </div>}
+                {activeTab === "blocks" && (
+                    <div className="flex px-3 w-full mb-3">
+                        <button
+                            className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"
+                            onClick={onOpenTextureModal}
+                        >
+                            Create Texture
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
