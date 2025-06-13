@@ -54,10 +54,22 @@ const ModelPreview = ({ modelUrl, onRenderComplete }) => {
 };
 
 const MAX_SIMULTANEOUS_RENDERS = 2; // Allow a couple renders at the same time for faster overall loading
-const MAX_RETRIES = 20;
+const MAX_RETRIES = 50;
 const RETRY_DELAY_MS = 300; // 300-500 ms window per request
 let activeRenders = 0;
 let renderQueue = [];
+
+// In-memory cache to avoid database lookups and prevent reloading
+const imageCache = new Map();
+
+// Clear cache if it gets too large (optional cleanup)
+const clearCacheIfNeeded = () => {
+    if (imageCache.size > 100) {
+        console.log("Clearing image cache (size limit reached)");
+        imageCache.clear();
+    }
+};
+
 const startNextRender = () => {
     setTimeout(() => {
         if (
@@ -93,11 +105,26 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
         if (!envType) return;
 
         mountedRef.current = true;
-        setIsLoading(true);
 
         const loadCachedImage = async () => {
             console.log(`[EnvButton] (${envType.name}) Checking cache…`);
             const cacheKey = getCacheKey();
+
+            // First check in-memory cache
+            if (imageCache.has(cacheKey)) {
+                const cachedImage = imageCache.get(cacheKey);
+                if (mountedRef.current) {
+                    setImageUrl(cachedImage);
+                    setIsLoading(false);
+                    setRetryCount(0);
+                    console.log(
+                        `[EnvButton] (${envType.name}) Memory cache hit. activeRenders=${activeRenders}`
+                    );
+                    return true;
+                }
+            }
+
+            // Then check database cache
             try {
                 const cachedImage = await DatabaseManager.getData(
                     STORES.PREVIEWS,
@@ -108,11 +135,13 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                     cachedImage.startsWith("data:image/") &&
                     mountedRef.current
                 ) {
+                    // Store in memory cache for future use
+                    imageCache.set(cacheKey, cachedImage);
                     setImageUrl(cachedImage);
                     setIsLoading(false);
                     setRetryCount(0);
                     console.log(
-                        `[EnvButton] (${envType.name}) Cache hit. activeRenders=${activeRenders}`
+                        `[EnvButton] (${envType.name}) Database cache hit. activeRenders=${activeRenders}`
                     );
                     return true;
                 }
@@ -137,7 +166,9 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
             }
         };
 
+        // Only load/render if we don't have an image already
         if (!imageUrl && !showCanvas && !isQueued && !hasError) {
+            setIsLoading(true);
             loadCachedImage().then((hasCache) => {
                 if (!mountedRef.current) return; // Check if still mounted
 
@@ -149,6 +180,8 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                     } else {
                         renderQueue.push(startRender);
                     }
+                } else {
+                    setIsLoading(false);
                 }
             });
         }
@@ -162,13 +195,10 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
             }
         };
     }, [
-        imageUrl,
-        showCanvas,
-        isQueued,
         envType,
         getCacheKey,
-        hasError,
-        retryCount,
+        // Removed imageUrl, showCanvas, isQueued, hasError, retryCount from dependencies
+        // to prevent unnecessary re-runs when these change
     ]);
 
     if (!envType) {
@@ -188,10 +218,15 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                     }`
                 );
                 const url = canvas.toDataURL("image/png");
+                const cacheKey = getCacheKey();
+
+                // Store in both memory and database cache
+                clearCacheIfNeeded();
+                imageCache.set(cacheKey, url);
                 setImageUrl(url);
                 setIsLoading(false);
                 setRetryCount(0);
-                const cacheKey = getCacheKey();
+
                 console.log("Saving preview to cache with key:", cacheKey);
                 DatabaseManager.saveData(STORES.PREVIEWS, cacheKey, url)
                     .then(() =>
