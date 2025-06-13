@@ -8,8 +8,8 @@ const SCALE_MIN = 0.1;
 const SCALE_MAX = 5.0;
 const ROTATION_MIN = 0;
 const ROTATION_MAX = 360;
-const SHIFT_MIN = -5.0;
-const SHIFT_MAX = 5.0;
+const SHIFT_MIN = -1.0;
+const SHIFT_MAX = 1.0;
 
 interface ModelOptionsProps {
     selectedModel: any;
