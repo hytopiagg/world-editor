@@ -289,6 +289,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 onChange={(e) => handleViewDistanceChange(Number(e.target.value))}
                                 onBlur={(e) => handleViewDistanceChange(Math.max(32, Math.min(256, Number(e.target.value))))}
                                 onKeyDown={(e: any) => {
+                                    e.stopPropagation();
                                     if (e.key === 'Enter') {
                                         handleViewDistanceChange(Math.max(32, Math.min(256, Number(e.target.value))));
                                         e.target.blur();
@@ -326,6 +327,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 onChange={(e) => handleSelectionDistanceChange(Number(e.target.value))}
                                 onBlur={(e) => handleSelectionDistanceChange(Math.max(16, Math.min(256, Number(e.target.value))))}
                                 onKeyDown={(e: any) => {
+                                    e.stopPropagation();
                                     if (e.key === 'Enter') {
                                         handleSelectionDistanceChange(Math.max(16, Math.min(256, Number(e.target.value))));
                                         e.target.blur();
@@ -359,6 +361,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             <input
                                 type="number"
                                 value={cameraSensitivity}
+                                onKeyDown={(e) => e.stopPropagation()}
                                 onChange={(e) => handleSensitivityChange(parseInt(e.target.value))}
                                 onBlur={(e) => handleSensitivityChange(Math.max(1, Math.min(10, parseInt(e.target.value))))}
                                 className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -388,6 +391,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 onChange={(e) => handleMoveSpeedChange(Number(e.target.value))}
                                 onBlur={(e) => handleMoveSpeedChange(Math.max(0.05, Math.min(5, Number(e.target.value))))}
                                 onKeyDown={(e: any) => {
+                                    e.stopPropagation();
                                     if (e.key === 'Enter') {
                                         handleMoveSpeedChange(Math.max(0.05, Math.min(5, Number(e.target.value))));
                                         e.target.blur();

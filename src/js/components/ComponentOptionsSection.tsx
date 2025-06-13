@@ -181,6 +181,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                             onChange={(e) => setEditableName(e.target.value)}
                             onBlur={handleSaveName}
                             onKeyDown={(e) => {
+                                e.stopPropagation();
                                 if (e.key === "Enter") handleSaveName();
                                 else if (e.key === "Escape") { setIsEditing(false); setEditableName(selectedComponent.name || ""); }
                             }}
@@ -197,6 +198,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                             value={editableName || "(unnamed)"}
                             disabled
                             onClick={() => setIsEditing(true)}
+                            onKeyDown={(e) => e.stopPropagation()}
                             className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1] cursor-text hover:bg-black/30"
                             style={{
                                 width: 'calc(100% - 8px)',

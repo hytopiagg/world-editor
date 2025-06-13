@@ -222,7 +222,9 @@ export default function ModelOptionsSection({
         commitVerticalShift(parseFloat(parsed.toFixed(2)));
     };
 
-    const handleVerticalShiftKeyDown = (e: React.KeyboardEvent) => {
+    const handleVerticalShiftKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        // Prevent global shortcuts / key listeners from firing while typing
+        e.stopPropagation();
         if (e.key === "Enter") {
             handleVerticalShiftInputBlur();
         }
@@ -472,6 +474,7 @@ export default function ModelOptionsSection({
                                     min={SCALE_MIN}
                                     max={SCALE_MAX}
                                     step="0.1"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ minScale: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -488,6 +491,7 @@ export default function ModelOptionsSection({
                                     min={SCALE_MIN}
                                     max={SCALE_MAX}
                                     step="0.1"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ maxScale: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -522,6 +526,7 @@ export default function ModelOptionsSection({
                                     min={ROTATION_MIN}
                                     max={ROTATION_MAX}
                                     step="15"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ minRotation: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -538,6 +543,7 @@ export default function ModelOptionsSection({
                                     min={ROTATION_MIN}
                                     max={ROTATION_MAX}
                                     step="15"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ maxRotation: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -561,6 +567,7 @@ export default function ModelOptionsSection({
                                 min={SCALE_MIN}
                                 max={SCALE_MAX}
                                 step="0.1"
+                                onKeyDown={(e) => e.stopPropagation()}
                                 onChange={(e) => updateSettings({ scale: Number(e.target.value) })}
                                 onBlur={(e) => {
                                     const value = Number(e.target.value);
@@ -598,6 +605,7 @@ export default function ModelOptionsSection({
                                     min={ROTATION_MIN}
                                     max={ROTATION_MAX}
                                     step="15"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ rotation: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);

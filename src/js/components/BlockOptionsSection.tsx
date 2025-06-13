@@ -90,6 +90,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                     <label className="text-xs text-[#F1F1F1]/80 w-10">ID:</label>
                     <input
                         type="text"
+                        onKeyDown={(e) => e.stopPropagation()}
                         value={selectedBlock.id}
                         disabled
                         className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
@@ -116,6 +117,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                             type="text"
                             value={selectedBlock.name}
                             disabled
+                            onKeyDown={(e) => e.stopPropagation()}
                             onClick={() => selectedBlock.isCustom && setIsEditing(true)} // Enable editing on click for custom blocks
                             className={`flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md ${selectedBlock.isCustom ? 'text-[#F1F1F1] cursor-text hover:bg-black/30' : 'text-[#F1F1F1]/70'}`}
                             style={{

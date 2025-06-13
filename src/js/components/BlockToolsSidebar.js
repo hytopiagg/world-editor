@@ -883,6 +883,7 @@ const BlockToolsSidebar = ({
                         type="text"
                         placeholder="Search..."
                         value={searchQuery}
+                        onKeyDown={(e) => e.stopPropagation()}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full px-3 py-2 text-xs rounded-md bg-black/30 border border-white/20 text-white focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
                     />
