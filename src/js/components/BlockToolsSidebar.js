@@ -1,7 +1,13 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaDownload, FaWrench, FaUpload } from "react-icons/fa";
+import {
+    FaDownload,
+    FaWrench,
+    FaUpload,
+    FaChevronLeft,
+    FaChevronRight,
+} from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
 import { cameraManager } from "../Camera";
 import { environmentModels } from "../EnvironmentBuilder";
@@ -79,6 +85,9 @@ const BlockToolsSidebar = ({
     const [customBlocks, setCustomBlocks] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedModelCategory, setSelectedModelCategory] = useState("All");
+    const [categoryScrollIndex, setCategoryScrollIndex] = useState(0);
+    const [hasNavigatedCategories, setHasNavigatedCategories] = useState(false);
+    const [netNavigationCount, setNetNavigationCount] = useState(0);
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -483,6 +492,9 @@ const BlockToolsSidebar = ({
         terrainBuilderRef?.current?.activateTool(null);
         setSearchQuery("");
         setSelectedModelCategory("All");
+        setCategoryScrollIndex(0);
+        setHasNavigatedCategories(false);
+        setNetNavigationCount(0);
         // Notify other components (e.g., ToolBar) of tab change so they can reset state
         window.dispatchEvent(new Event("blockToolsTabChanged"));
         if (newTab === "blocks") {
@@ -538,6 +550,57 @@ const BlockToolsSidebar = ({
             isComponent: true,
         });
         onLoadSchematicFromHistory(schematicEntry.schematic);
+    };
+
+    // Category navigation functions
+    const getAllCategories = () => {
+        const categories = Array.from(
+            new Set(environmentModels.map((m) => m.category || "Misc"))
+        ).sort();
+        const fullList = ["All", ...categories, "Custom"];
+        return fullList.filter((v, i, a) => a.indexOf(v) === i);
+    };
+
+    const navigateCategories = (direction) => {
+        const categories = getAllCategories();
+        const visibleCount = 2; // Number of categories to show at once
+        const stepSize = visibleCount; // Move by full visible width (90-100%)
+        const maxIndex = Math.max(0, categories.length - visibleCount);
+
+        if (direction === "left") {
+            // Only allow left navigation if we have net forward progress
+            if (netNavigationCount > 0) {
+                setNetNavigationCount((prev) => prev - 1);
+                setCategoryScrollIndex((prev) => {
+                    const newIndex = prev - stepSize;
+                    return Math.max(0, newIndex);
+                });
+            }
+        } else {
+            // Only allow right navigation if we haven't reached the end
+            if (categoryScrollIndex < maxIndex) {
+                setHasNavigatedCategories(true); // Mark that we've navigated
+                setNetNavigationCount((prev) => prev + 1);
+                setCategoryScrollIndex((prev) => {
+                    const newIndex = prev + stepSize;
+                    return Math.min(maxIndex, newIndex);
+                });
+            }
+        }
+    };
+
+    // Get categories for display - no more repetitions
+    const getCategoriesForDisplay = () => {
+        return getAllCategories();
+    };
+
+    const getVisibleCategories = () => {
+        const categories = getAllCategories();
+        const visibleCount = 2;
+        return categories.slice(
+            categoryScrollIndex,
+            categoryScrollIndex + visibleCount
+        );
     };
 
     const handleCustomAssetDropUpload = async (e) => {
@@ -900,34 +963,80 @@ const BlockToolsSidebar = ({
                     />
                 </div>
                 {activeTab === "models" && (
-                    <div className="flex flex-wrap gap-1 px-3 py-2">
-                        {(() => {
-                            const categories = Array.from(
-                                new Set(
-                                    environmentModels.map(
-                                        (m) => m.category || "Misc"
-                                    )
-                                )
-                            ).sort();
-                            const fullList = ["All", ...categories, "Custom"];
-                            return fullList
-                                .filter((v, i, a) => a.indexOf(v) === i)
-                                .map((cat) => (
+                    <div className="flex items-center px-3 py-2">
+                        <div className="flex items-center w-full">
+                            {hasNavigatedCategories &&
+                                netNavigationCount > 0 && (
                                     <button
-                                        key={cat}
-                                        className={`text-xs px-2 py-1 rounded border transition-all ${
-                                            selectedModelCategory === cat
-                                                ? "bg-white text-black"
-                                                : "bg-white/10 text-white hover:bg-white/20"
-                                        }`}
                                         onClick={() =>
-                                            setSelectedModelCategory(cat)
+                                            navigateCategories("left")
                                         }
+                                        className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all mr-2 cursor-pointer"
+                                        title="Previous categories"
                                     >
-                                        {cat}
+                                        <FaChevronLeft className="w-3 h-3" />
                                     </button>
-                                ));
-                        })()}
+                                )}
+
+                            <div
+                                className={`flex-1 overflow-hidden ${
+                                    hasNavigatedCategories
+                                        ? "justify-center"
+                                        : "justify-start"
+                                }`}
+                            >
+                                <div
+                                    className="flex gap-1.5 transition-transform duration-300 ease-in-out"
+                                    style={{
+                                        transform: `translateX(-${
+                                            (categoryScrollIndex / 2) * 120
+                                        }px)`, // Translation based on visible count steps
+                                    }}
+                                >
+                                    {getCategoriesForDisplay().map(
+                                        (cat, index) => (
+                                            <button
+                                                key={`${cat}-${index}`}
+                                                className={`text-xs cursor-pointer px-2 py-1 rounded-lg border transition-all duration-300 whitespace-nowrap flex-shrink-0 ${
+                                                    selectedModelCategory ===
+                                                    cat
+                                                        ? "bg-white text-black border-white"
+                                                        : "bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40"
+                                                }`}
+                                                onClick={() =>
+                                                    setSelectedModelCategory(
+                                                        cat
+                                                    )
+                                                }
+                                            >
+                                                {cat}
+                                            </button>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+
+                            {(() => {
+                                const categories = getAllCategories();
+                                const maxIndex = Math.max(
+                                    0,
+                                    categories.length - 2
+                                );
+                                return (
+                                    categoryScrollIndex < maxIndex && (
+                                        <button
+                                            onClick={() =>
+                                                navigateCategories("right")
+                                            }
+                                            className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all ml-2 cursor-pointer"
+                                            title="Next categories"
+                                        >
+                                            <FaChevronRight className="w-3 h-3" />
+                                        </button>
+                                    )
+                                );
+                            })()}
+                        </div>
                     </div>
                 )}
                 <div className="block-buttons-grid">
