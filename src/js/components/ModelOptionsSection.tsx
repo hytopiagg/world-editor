@@ -51,6 +51,7 @@ export default function ModelOptionsSection({
     const [isSaving, setIsSaving] = useState(false);
     const [addColliderEnabled, setAddColliderEnabled] = useState(true);
     const [verticalShift, setVerticalShift] = useState(0);
+    const [verticalShiftInput, setVerticalShiftInput] = useState("0");
 
     useEffect(() => {
         setSettings({
@@ -116,6 +117,7 @@ export default function ModelOptionsSection({
                 const idKey = String(selectedModel.id);
                 const shiftValue = Object.prototype.hasOwnProperty.call(shiftPrefs, idKey) ? shiftPrefs[idKey] : 0;
                 setVerticalShift(shiftValue);
+                setVerticalShiftInput(String(shiftValue));
                 const idx = environmentModels.findIndex((m) => m.id === selectedModel.id);
                 if (idx !== -1) {
                     environmentModels[idx].yShift = shiftValue;
@@ -164,9 +166,10 @@ export default function ModelOptionsSection({
         }
     };
 
-    const handleVerticalShiftChange = async (value: number) => {
+    const commitVerticalShift = async (value: number) => {
         if (!selectedModel) return;
         setVerticalShift(value);
+        setVerticalShiftInput(String(value));
         try {
             const storeKey = "yShiftSettings";
             let existingPrefs: Record<string, number> = {};
@@ -198,6 +201,30 @@ export default function ModelOptionsSection({
             }
         } catch (err) {
             console.error("Failed to save y-shift preference:", err);
+        }
+    };
+
+    const handleVerticalShiftInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const val = e.target.value;
+        // Allow only - digits and single dot
+        if (/^-?\d*\.?\d*$/.test(val)) {
+            setVerticalShiftInput(val);
+        }
+    };
+
+    const handleVerticalShiftInputBlur = () => {
+        let parsed = parseFloat(verticalShiftInput);
+        if (isNaN(parsed)) {
+            parsed = 0;
+        }
+        parsed = Math.min(SHIFT_MAX, Math.max(SHIFT_MIN, parsed));
+        commitVerticalShift(parseFloat(parsed.toFixed(2)));
+    };
+
+    const handleVerticalShiftKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter") {
+            handleVerticalShiftInputBlur();
         }
     };
 
@@ -629,13 +656,14 @@ export default function ModelOptionsSection({
                         <div className="flex items-center gap-x-2 w-full">
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Vertical Offset</label>
                             <input
-                                type="number"
-                                value={verticalShift}
-                                min={SHIFT_MIN}
-                                max={SHIFT_MAX}
-                                step="0.1"
-                                onChange={(e) => handleVerticalShiftChange(Number(e.target.value))}
-                                className="w-[45px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                type="text"
+                                inputMode="decimal"
+                                pattern="-?[0-9]*[.]?[0-9]*"
+                                value={verticalShiftInput}
+                                onChange={handleVerticalShiftInputChange}
+                                onBlur={handleVerticalShiftInputBlur}
+                                onKeyDown={handleVerticalShiftKeyDown}
+                                className="w-[34.5px] max-w-[34.5px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"
@@ -643,7 +671,7 @@ export default function ModelOptionsSection({
                                 max={SHIFT_MAX}
                                 step="0.1"
                                 value={verticalShift}
-                                onChange={(e) => handleVerticalShiftChange(Number(e.target.value))}
+                                onChange={(e) => commitVerticalShift(Number(e.target.value))}
                                 className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
                                 style={{
                                     transition: "all 0.3s ease-in-out",
