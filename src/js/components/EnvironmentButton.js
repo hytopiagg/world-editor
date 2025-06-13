@@ -54,7 +54,7 @@ const ModelPreview = ({ modelUrl, onRenderComplete }) => {
 };
 
 const MAX_SIMULTANEOUS_RENDERS = 2; // Allow a couple renders at the same time for faster overall loading
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 20;
 const RETRY_DELAY_MS = 300; // 300-500 ms window per request
 let activeRenders = 0;
 let renderQueue = [];

@@ -78,6 +78,7 @@ const BlockToolsSidebar = ({
 }) => {
     const [customBlocks, setCustomBlocks] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [selectedModelCategory, setSelectedModelCategory] = useState("All");
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -481,6 +482,7 @@ const BlockToolsSidebar = ({
     const handleTabChange = (newTab) => {
         terrainBuilderRef?.current?.activateTool(null);
         setSearchQuery("");
+        setSelectedModelCategory("All");
         // Notify other components (e.g., ToolBar) of tab change so they can reset state
         window.dispatchEvent(new Event("blockToolsTabChanged"));
         if (newTab === "blocks") {
@@ -791,12 +793,21 @@ const BlockToolsSidebar = ({
         .filter((block) => block.id >= 100 && block.id < 200)
         .filter((block) => isMatch(block.name) || isMatch(block.id));
 
+    // --------- Category Filtering Helpers ---------
+    const modelCategoryMatch = (envType) => {
+        if (selectedModelCategory === "All") return true;
+        if (selectedModelCategory === "Custom") return envType.isCustom;
+        return envType.category === selectedModelCategory;
+    };
+
     const visibleDefaultModels = environmentModels
         .filter((envType) => !envType.isCustom)
+        .filter(modelCategoryMatch)
         .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
 
     const visibleCustomModels = environmentModels
         .filter((envType) => envType.isCustom)
+        .filter(modelCategoryMatch)
         .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
 
     const visibleSchematics = schematicList.filter((entry) => {
@@ -888,6 +899,37 @@ const BlockToolsSidebar = ({
                         className="w-full px-3 py-2 text-xs rounded-md bg-black/30 border border-white/20 text-white focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
                     />
                 </div>
+                {activeTab === "models" && (
+                    <div className="flex flex-wrap gap-1 px-3 py-2">
+                        {(() => {
+                            const categories = Array.from(
+                                new Set(
+                                    environmentModels.map(
+                                        (m) => m.category || "Misc"
+                                    )
+                                )
+                            ).sort();
+                            const fullList = ["All", ...categories, "Custom"];
+                            return fullList
+                                .filter((v, i, a) => a.indexOf(v) === i)
+                                .map((cat) => (
+                                    <button
+                                        key={cat}
+                                        className={`text-xs px-2 py-1 rounded border transition-all ${
+                                            selectedModelCategory === cat
+                                                ? "bg-white text-black"
+                                                : "bg-white/10 text-white hover:bg-white/20"
+                                        }`}
+                                        onClick={() =>
+                                            setSelectedModelCategory(cat)
+                                        }
+                                    >
+                                        {cat}
+                                    </button>
+                                ));
+                        })()}
+                    </div>
+                )}
                 <div className="block-buttons-grid">
                     {activeTab === "blocks" ? (
                         <>

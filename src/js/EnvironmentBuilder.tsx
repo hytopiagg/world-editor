@@ -23,22 +23,27 @@ export const environmentModels = (() => {
             }
             return JSON.parse(xhr.responseText);
         };
-        let idCounter = 1000;
+        let idCounter = 200; // Default models occupy 200-299 range
         const models = new Map();
         const result = [];
 
         const modelList = fetchModelList();
         modelList.forEach((fileName) => {
-            const name = fileName.replace(".gltf", "");
+            // Derive category (first folder) and base filename for display name
+            const parts = fileName.split("/");
+            const baseName = parts.pop().replace(".gltf", "");
+            const category = parts.length > 0 ? parts[0] : "Misc";
+
             const model = {
                 id: idCounter++,
-                name: name,
+                name: baseName,
                 modelUrl: `assets/models/environment/${fileName}`,
+                category,
                 isEnvironment: true,
                 animations: ["idle"],
                 addCollider: true,
             };
-            models.set(name, model);
+            models.set(baseName, model);
             result.push(model);
         });
         return result;
@@ -300,6 +305,7 @@ const EnvironmentBuilder = (
                         modelUrl: fileUrl,
                         isEnvironment: true,
                         isCustom: true,
+                        category: "Custom",
                         animations: ["idle"],
                         addCollider: true,
                     };
