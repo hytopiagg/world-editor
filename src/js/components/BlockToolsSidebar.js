@@ -95,6 +95,7 @@ const BlockToolsSidebar = ({
     const schematicListStateRef = useRef(schematicList);
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         const savedBlockId = localStorage.getItem("selectedBlock");
@@ -840,6 +841,33 @@ const BlockToolsSidebar = ({
         }
     };
 
+    const handleDropzoneClick = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleFileInputChange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+            // Create a synthetic event object similar to drag and drop
+            const syntheticEvent = {
+                preventDefault: () => {},
+                currentTarget: {
+                    classList: {
+                        remove: () => {},
+                    },
+                },
+                dataTransfer: {
+                    files: files,
+                },
+            };
+            await handleCustomAssetDropUpload(syntheticEvent);
+            // Reset the file input so the same file can be selected again if needed
+            e.target.value = "";
+        }
+    };
+
     // ---------- Search Filtering ----------
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -1201,8 +1229,22 @@ const BlockToolsSidebar = ({
                 </div>
                 {(activeTab === "blocks" || activeTab === "models") && (
                     <div className="flex w-full px-3 mb-3">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept={
+                                activeTab === "blocks"
+                                    ? "image/*"
+                                    : activeTab === "models"
+                                    ? ".gltf,.glb"
+                                    : ""
+                            }
+                            onChange={handleFileInputChange}
+                            style={{ display: "none" }}
+                        />
                         <div
-                            className="texture-drop-zone w-full py-2 h-[120px]"
+                            className="texture-drop-zone w-full py-2 h-[120px] cursor-pointer"
                             onDragOver={(e) => {
                                 e.preventDefault();
                                 e.currentTarget.classList.add("drag-over");
@@ -1212,6 +1254,7 @@ const BlockToolsSidebar = ({
                                 e.currentTarget.classList.remove("drag-over");
                             }}
                             onDrop={handleCustomAssetDropUpload}
+                            onClick={handleDropzoneClick}
                         >
                             <div className="drop-zone-content">
                                 <div className="drop-zone-icons">
@@ -1219,9 +1262,9 @@ const BlockToolsSidebar = ({
                                 </div>
                                 <div className="drop-zone-text">
                                     {activeTab === "blocks"
-                                        ? "Upload new blocks or fix missing textures"
+                                        ? "Click or drag images to upload new blocks"
                                         : activeTab === "models"
-                                        ? "Upload .gltf files here to add custom models"
+                                        ? "Click or drag .gltf files to add custom models"
                                         : ""}
                                 </div>
                             </div>
