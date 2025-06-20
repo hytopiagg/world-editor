@@ -79,6 +79,7 @@ export default function GroundToolOptionsSection({ groundTool, isCompactMode }: 
                         type="number"
                         min={1}
                         value={groundHeight}
+                        onKeyDown={(e) => e.stopPropagation()}
                         onChange={e => updateHeight(parseInt(e.target.value))}
                         className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
@@ -98,6 +99,7 @@ export default function GroundToolOptionsSection({ groundTool, isCompactMode }: 
                         type="number"
                         min={0}
                         value={edgeDepth}
+                        onKeyDown={(e) => e.stopPropagation()}
                         onChange={e => updateEdge(parseInt(e.target.value))}
                         className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />

@@ -1,7 +1,13 @@
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaDownload, FaWrench, FaUpload } from "react-icons/fa";
+import {
+    FaDownload,
+    FaWrench,
+    FaUpload,
+    FaChevronLeft,
+    FaChevronRight,
+} from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
 import { cameraManager } from "../Camera";
 import { environmentModels } from "../EnvironmentBuilder";
@@ -78,6 +84,10 @@ const BlockToolsSidebar = ({
 }) => {
     const [customBlocks, setCustomBlocks] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
+    const [selectedModelCategory, setSelectedModelCategory] = useState("All");
+    const [categoryScrollIndex, setCategoryScrollIndex] = useState(0);
+    const [hasNavigatedCategories, setHasNavigatedCategories] = useState(false);
+    const [netNavigationCount, setNetNavigationCount] = useState(0);
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -85,6 +95,7 @@ const BlockToolsSidebar = ({
     const schematicListStateRef = useRef(schematicList);
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         const savedBlockId = localStorage.getItem("selectedBlock");
@@ -481,6 +492,10 @@ const BlockToolsSidebar = ({
     const handleTabChange = (newTab) => {
         terrainBuilderRef?.current?.activateTool(null);
         setSearchQuery("");
+        setSelectedModelCategory("All");
+        setCategoryScrollIndex(0);
+        setHasNavigatedCategories(false);
+        setNetNavigationCount(0);
         // Notify other components (e.g., ToolBar) of tab change so they can reset state
         window.dispatchEvent(new Event("blockToolsTabChanged"));
         if (newTab === "blocks") {
@@ -536,6 +551,57 @@ const BlockToolsSidebar = ({
             isComponent: true,
         });
         onLoadSchematicFromHistory(schematicEntry.schematic);
+    };
+
+    // Category navigation functions
+    const getAllCategories = () => {
+        const categories = Array.from(
+            new Set(environmentModels.map((m) => m.category || "Misc"))
+        ).sort();
+        const fullList = ["All", ...categories, "Custom"];
+        return fullList.filter((v, i, a) => a.indexOf(v) === i);
+    };
+
+    const navigateCategories = (direction) => {
+        const categories = getAllCategories();
+        const visibleCount = 2; // Number of categories to show at once
+        const stepSize = visibleCount; // Move by full visible width (90-100%)
+        const maxIndex = Math.max(0, categories.length - visibleCount);
+
+        if (direction === "left") {
+            // Only allow left navigation if we have net forward progress
+            if (netNavigationCount > 0) {
+                setNetNavigationCount((prev) => prev - 1);
+                setCategoryScrollIndex((prev) => {
+                    const newIndex = prev - stepSize;
+                    return Math.max(0, newIndex);
+                });
+            }
+        } else {
+            // Only allow right navigation if we haven't reached the end
+            if (categoryScrollIndex < maxIndex) {
+                setHasNavigatedCategories(true); // Mark that we've navigated
+                setNetNavigationCount((prev) => prev + 1);
+                setCategoryScrollIndex((prev) => {
+                    const newIndex = prev + stepSize;
+                    return Math.min(maxIndex, newIndex);
+                });
+            }
+        }
+    };
+
+    // Get categories for display - no more repetitions
+    const getCategoriesForDisplay = () => {
+        return getAllCategories();
+    };
+
+    const getVisibleCategories = () => {
+        const categories = getAllCategories();
+        const visibleCount = 2;
+        return categories.slice(
+            categoryScrollIndex,
+            categoryScrollIndex + visibleCount
+        );
     };
 
     const handleCustomAssetDropUpload = async (e) => {
@@ -775,6 +841,33 @@ const BlockToolsSidebar = ({
         }
     };
 
+    const handleDropzoneClick = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleFileInputChange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+            // Create a synthetic event object similar to drag and drop
+            const syntheticEvent = {
+                preventDefault: () => {},
+                currentTarget: {
+                    classList: {
+                        remove: () => {},
+                    },
+                },
+                dataTransfer: {
+                    files: files,
+                },
+            };
+            await handleCustomAssetDropUpload(syntheticEvent);
+            // Reset the file input so the same file can be selected again if needed
+            e.target.value = "";
+        }
+    };
+
     // ---------- Search Filtering ----------
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -791,12 +884,21 @@ const BlockToolsSidebar = ({
         .filter((block) => block.id >= 100 && block.id < 200)
         .filter((block) => isMatch(block.name) || isMatch(block.id));
 
+    // --------- Category Filtering Helpers ---------
+    const modelCategoryMatch = (envType) => {
+        if (selectedModelCategory === "All") return true;
+        if (selectedModelCategory === "Custom") return envType.isCustom;
+        return envType.category === selectedModelCategory;
+    };
+
     const visibleDefaultModels = environmentModels
         .filter((envType) => !envType.isCustom)
+        .filter(modelCategoryMatch)
         .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
 
     const visibleCustomModels = environmentModels
         .filter((envType) => envType.isCustom)
+        .filter(modelCategoryMatch)
         .filter((envType) => isMatch(envType.name) || isMatch(envType.id));
 
     const visibleSchematics = schematicList.filter((entry) => {
@@ -883,10 +985,88 @@ const BlockToolsSidebar = ({
                         type="text"
                         placeholder="Search..."
                         value={searchQuery}
+                        onKeyDown={(e) => e.stopPropagation()}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full px-3 py-2 text-xs rounded-md bg-black/30 border border-white/20 text-white focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
                     />
                 </div>
+                {activeTab === "models" && (
+                    <div className="flex items-center px-3 py-2">
+                        <div className="flex items-center w-full">
+                            {hasNavigatedCategories &&
+                                netNavigationCount > 0 && (
+                                    <button
+                                        onClick={() =>
+                                            navigateCategories("left")
+                                        }
+                                        className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all mr-2 cursor-pointer"
+                                        title="Previous categories"
+                                    >
+                                        <FaChevronLeft className="w-3 h-3" />
+                                    </button>
+                                )}
+
+                            <div
+                                className={`flex-1 overflow-hidden ${
+                                    hasNavigatedCategories
+                                        ? "justify-center"
+                                        : "justify-start"
+                                }`}
+                            >
+                                <div
+                                    className="flex gap-1.5 transition-transform duration-300 ease-in-out"
+                                    style={{
+                                        transform: `translateX(-${
+                                            (categoryScrollIndex / 2) * 120
+                                        }px)`, // Translation based on visible count steps
+                                    }}
+                                >
+                                    {getCategoriesForDisplay().map(
+                                        (cat, index) => (
+                                            <button
+                                                key={`${cat}-${index}`}
+                                                className={`text-xs cursor-pointer px-2 py-1 rounded-lg border transition-all duration-300 whitespace-nowrap flex-shrink-0 ${
+                                                    selectedModelCategory ===
+                                                    cat
+                                                        ? "bg-white text-black border-white"
+                                                        : "bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40"
+                                                }`}
+                                                onClick={() =>
+                                                    setSelectedModelCategory(
+                                                        cat
+                                                    )
+                                                }
+                                            >
+                                                {cat}
+                                            </button>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+
+                            {(() => {
+                                const categories = getAllCategories();
+                                const maxIndex = Math.max(
+                                    0,
+                                    categories.length - 2
+                                );
+                                return (
+                                    categoryScrollIndex < maxIndex && (
+                                        <button
+                                            onClick={() =>
+                                                navigateCategories("right")
+                                            }
+                                            className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all ml-2 cursor-pointer"
+                                            title="Next categories"
+                                        >
+                                            <FaChevronRight className="w-3 h-3" />
+                                        </button>
+                                    )
+                                );
+                            })()}
+                        </div>
+                    </div>
+                )}
                 <div className="block-buttons-grid">
                     {activeTab === "blocks" ? (
                         <>
@@ -1049,8 +1229,22 @@ const BlockToolsSidebar = ({
                 </div>
                 {(activeTab === "blocks" || activeTab === "models") && (
                     <div className="flex w-full px-3 mb-3">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept={
+                                activeTab === "blocks"
+                                    ? "image/*"
+                                    : activeTab === "models"
+                                    ? ".gltf,.glb"
+                                    : ""
+                            }
+                            onChange={handleFileInputChange}
+                            style={{ display: "none" }}
+                        />
                         <div
-                            className="texture-drop-zone w-full py-2 h-[120px]"
+                            className="texture-drop-zone w-full py-2 h-[120px] cursor-pointer"
                             onDragOver={(e) => {
                                 e.preventDefault();
                                 e.currentTarget.classList.add("drag-over");
@@ -1060,6 +1254,7 @@ const BlockToolsSidebar = ({
                                 e.currentTarget.classList.remove("drag-over");
                             }}
                             onDrop={handleCustomAssetDropUpload}
+                            onClick={handleDropzoneClick}
                         >
                             <div className="drop-zone-content">
                                 <div className="drop-zone-icons">
@@ -1067,9 +1262,9 @@ const BlockToolsSidebar = ({
                                 </div>
                                 <div className="drop-zone-text">
                                     {activeTab === "blocks"
-                                        ? "Upload new blocks or fix missing textures"
+                                        ? "Click or drag images to upload new blocks"
                                         : activeTab === "models"
-                                        ? "Upload .gltf files here to add custom models"
+                                        ? "Click or drag .gltf files to add custom models"
                                         : ""}
                                 </div>
                             </div>

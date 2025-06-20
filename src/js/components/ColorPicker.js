@@ -27,6 +27,7 @@ const CustomNumberInput = ({ value, onChange, min, max, step = 1 }) => {
             value={localValue}
             onChange={handleChange}
             onBlur={handleBlur}
+            onKeyDown={(e) => e.stopPropagation()}
             min={min}
             max={max}
             step={step}
@@ -76,6 +77,7 @@ const CustomHexInput = ({ label, hexValue, onChange }) => {
             value={localValue}
             onChange={handleChange}
             onBlur={handleBlur}
+            onKeyDown={(e) => e.stopPropagation()}
             maxLength={7}
             placeholder="#RRGGBB"
         />

@@ -23,22 +23,27 @@ export const environmentModels = (() => {
             }
             return JSON.parse(xhr.responseText);
         };
-        let idCounter = 1000;
+        let idCounter = 200; // Default models occupy 200-299 range
         const models = new Map();
         const result = [];
 
         const modelList = fetchModelList();
         modelList.forEach((fileName) => {
-            const name = fileName.replace(".gltf", "");
+            // Derive category (first folder) and base filename for display name
+            const parts = fileName.split("/");
+            const baseName = parts.pop().replace(".gltf", "");
+            const category = parts.length > 0 ? parts[0] : "Misc";
+
             const model = {
                 id: idCounter++,
-                name: name,
+                name: baseName,
                 modelUrl: `assets/models/environment/${fileName}`,
+                category,
                 isEnvironment: true,
                 animations: ["idle"],
                 addCollider: true,
             };
-            models.set(name, model);
+            models.set(baseName, model);
             result.push(model);
         });
         return result;
@@ -47,6 +52,14 @@ export const environmentModels = (() => {
         return [];
     }
 })();
+
+// Helper: returns stored vertical y-shift (in units) for the given model URL, defaulting to 0
+const getModelYShift = (modelUrl?: string) => {
+    if (!modelUrl) return 0;
+    const model = environmentModels.find((m) => m.modelUrl === modelUrl);
+    return model && typeof model.yShift === "number" ? model.yShift : 0;
+};
+
 const EnvironmentBuilder = (
     {
         scene,
@@ -74,7 +87,6 @@ const EnvironmentBuilder = (
     const isUndoRedoOperation = useRef(false);
 
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
-
 
     const getAllEnvironmentObjects = () => {
         const instances = [];
@@ -131,9 +143,10 @@ const EnvironmentBuilder = (
         const instances = getAllEnvironmentObjects();
         console.log("instances", instances);
         instances.forEach((instance) => {
+            const yOffsetFR = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
             terrainBuilderRef.current.updateSpatialHashForBlocks([{
                 x: instance.position.x,
-                y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                y: instance.position.y - yOffsetFR,
                 z: instance.position.z,
                 blockId: 1000,
             }], [], {
@@ -141,7 +154,6 @@ const EnvironmentBuilder = (
             });
         });
     };
-
 
     // Check if any instance has this position, if so, return the true
     const hasInstanceAtPosition = (position) => {
@@ -159,9 +171,10 @@ const EnvironmentBuilder = (
             }) => {
                 console.log("removing", instance);
                 removeInstance(instance.modelUrl, instance.instanceId, false);
+                const yOffsetRemove = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
                 terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
                     x: instance.position.x,
-                    y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                    y: instance.position.y - yOffsetRemove,
                     z: instance.position.z,
                     blockId: 1000,
                 }], {
@@ -204,9 +217,10 @@ const EnvironmentBuilder = (
                         matrix
                     });
 
+                    const yOffsetAdd = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
                     terrainBuilderRef.current.updateSpatialHashForBlocks([{
                         x: instance.position.x,
-                        y: instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
+                        y: instance.position.y - yOffsetAdd,
                         z: instance.position.z,
                         blockId: 1000,
                     }], [], {
@@ -291,6 +305,7 @@ const EnvironmentBuilder = (
                         modelUrl: fileUrl,
                         isEnvironment: true,
                         isCustom: true,
+                        category: "Custom",
                         animations: ["idle"],
                         addCollider: true,
                     };
@@ -738,16 +753,15 @@ const EnvironmentBuilder = (
             scale,
             matrix,
         });
-        if (terrainBuilderRef.current) {
-            terrainBuilderRef.current.updateSpatialHashForBlocks([{
-                x: position.x,
-                y: position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
-                z: position.z,
-                blockId: 1000,
-            }], [], {
-                force: true,
-            });
-        }
+        const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+        terrainBuilderRef.current.updateSpatialHashForBlocks([{
+            x: position.x,
+            y: position.y - yOffsetForAdd,
+            z: position.z,
+            blockId: 1000,
+        }], [], {
+            force: true,
+        });
         return {
             modelUrl,
             instanceId,
@@ -885,16 +899,15 @@ const EnvironmentBuilder = (
                     });
 
                     removedObjects.push(removedObject);
-                    if (terrainBuilderRef.current && removedObject.position) {
-                        terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
-                            x: removedObject.position.x,
-                            y: removedObject.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
-                            z: removedObject.position.z,
-                            blockId: 1000,
-                        }], {
-                            force: true,
-                        });
-                    }
+                    const yOffsetRemove = getModelYShift(removedObject.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+                    terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+                        x: removedObject.position.x,
+                        y: removedObject.position.y - yOffsetRemove,
+                        z: removedObject.position.z,
+                        blockId: 1000,
+                    }], {
+                        force: true,
+                    });
                 });
             });
 
@@ -1031,16 +1044,15 @@ const EnvironmentBuilder = (
                         z: transform.scale.z,
                     },
                 };
-                if (terrainBuilderRef.current && newObject.position) {
-                    terrainBuilderRef.current.updateSpatialHashForBlocks([{
-                        x: newObject.position.x,
-                        y: newObject.position.y - ENVIRONMENT_OBJECT_Y_OFFSET,
-                        z: newObject.position.z,
-                        blockId: 1000,
-                    }], [], {
-                        force: true,
-                    });
-                }
+                const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+                terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                    x: newObject.position.x,
+                    y: newObject.position.y - yOffsetForAdd,
+                    z: newObject.position.z,
+                    blockId: 1000,
+                }], [], {
+                    force: true,
+                });
                 addedObjects.push(newObject);
             } else {
                 console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);
@@ -1243,6 +1255,13 @@ const EnvironmentBuilder = (
                 );
             }
         }
+        const yOffsetRemove = getModelYShift(removedObject.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+        terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+            x: removedObject.position.x,
+            y: removedObject.position.y - yOffsetRemove,
+            z: removedObject.position.z,
+            blockId: 1000,
+        }], { force: true });
     };
     const refreshEnvironment = () => {
         const savedEnv = getAllEnvironmentObjects();
@@ -1353,6 +1372,13 @@ const EnvironmentBuilder = (
         }
     }, [placementSize]);
 
+    useEffect(() => {
+        if (currentBlockType?.isEnvironment) {
+            const shift = currentBlockType?.yShift || 0;
+            positionOffset.current.set(0, ENVIRONMENT_OBJECT_Y_OFFSET + shift, 0);
+        }
+    }, [currentBlockType?.id, currentBlockType?.yShift]);
+
     const beginUndoRedoOperation = () => {
         isUndoRedoOperation.current = true;
     };
@@ -1382,7 +1408,20 @@ const EnvironmentBuilder = (
             updateEnvironmentForUndoRedo,
             getModelType,
             hasInstanceAtPosition,
-            forceRebuildSpatialHash
+            forceRebuildSpatialHash,
+            setModelYShift: (modelId, newShift) => {
+                const model = environmentModels.find((m) => m.id === modelId);
+                if (model) {
+                    model.yShift = newShift;
+                }
+                if (currentBlockType && currentBlockType.id === modelId) {
+                    positionOffset.current.set(0, ENVIRONMENT_OBJECT_Y_OFFSET + newShift, 0);
+                    if (placeholderMeshRef.current) {
+                        const basePos = placeholderMeshRef.current.position.clone().sub(positionOffset.current);
+                        placeholderMeshRef.current.position.copy(basePos.add(positionOffset.current));
+                    }
+                }
+            }
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );
