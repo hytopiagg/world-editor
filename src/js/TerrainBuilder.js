@@ -961,6 +961,7 @@ function TerrainBuilder(
         );
     }, [pointer, scene, threeCamera, threeRaycaster, cameraManager]);
     const updatePreviewPosition = () => {
+
         if (updatePreviewPosition.isProcessing) {
             return;
         }
@@ -969,6 +970,33 @@ function TerrainBuilder(
             canvasRectRef.current = gl.domElement.getBoundingClientRect();
         }
         const blockIntersection = getRaycastIntersection();
+
+        // Anchor-Y correction: keep drag locked on original Y layer
+        const anchorY = currentPlacingYRef.current;
+        if (
+            isPlacingRef.current &&
+            !isFirstBlockRef.current &&
+            blockIntersection &&
+            blockIntersection.point &&
+            Math.floor(blockIntersection.point.y) !== anchorY
+        ) {
+            const anchorPlane = new THREE.Plane(
+                new THREE.Vector3(0, 1, 0),
+                -anchorY
+            );
+            const anchorPt = new THREE.Vector3();
+            threeRaycaster.ray.intersectPlane(anchorPlane, anchorPt);
+            blockIntersection.point.copy(anchorPt);
+            blockIntersection.normal.set(0, 1, 0);
+            blockIntersection.isGroundPlane = true;
+            blockIntersection.block = {
+                x: Math.floor(anchorPt.x),
+                y: anchorY,
+                z: Math.floor(anchorPt.z),
+            };
+            blockIntersection.blockId = null;
+        }
+
         const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
         const currentGroundPoint = new THREE.Vector3();
         const normalizedMouse =
@@ -1154,7 +1182,6 @@ function TerrainBuilder(
         }
         updatePreviewPosition.isProcessing = false;
     };
-    updatePreviewPosition.isProcessing = false;
     const handleMouseUp = useCallback(
         (e) => {
             handleTerrainMouseUp(
