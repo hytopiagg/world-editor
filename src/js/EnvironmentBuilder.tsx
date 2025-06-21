@@ -894,11 +894,9 @@ const EnvironmentBuilder = (
                     instancedData.instances.delete(instance.instanceId);
 
                     instancedData.meshes.forEach((mesh) => {
-                        mesh.setMatrixAt(
-                            instance.instanceId,
-                            // new THREE.Matrix4()
-                            new THREE.Matrix4().scale(new THREE.Vector3(0, 0, 0))
-                        );
+                        // Set to zero-scale matrix so the ghost mesh is not rendered at origin
+                        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+                        mesh.setMatrixAt(instance.instanceId, zeroMatrix);
 
                         mesh.count =
                             Math.max(
@@ -1230,7 +1228,9 @@ const EnvironmentBuilder = (
         instancedData.instances.delete(instanceId);
 
         instancedData.meshes.forEach((mesh) => {
-            mesh.setMatrixAt(instanceId, new THREE.Matrix4());
+            // Set to zero-scale matrix so the ghost mesh is not rendered at origin
+            const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+            mesh.setMatrixAt(instanceId, zeroMatrix);
 
             mesh.count =
                 Math.max(...Array.from(instancedData.instances.keys()) as number[], -1) + 1;
