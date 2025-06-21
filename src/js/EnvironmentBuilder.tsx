@@ -88,6 +88,13 @@ const EnvironmentBuilder = (
 
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
 
+    const ensureInstancedMeshesAdded = (modelUrl: string) => {
+        const data = instancedMeshes.current.get(modelUrl);
+        if (!scene || !data || data.addedToScene) return;
+        data.meshes.forEach((mesh: THREE.InstancedMesh) => scene.add(mesh));
+        data.addedToScene = true;
+    };
+
     const getAllEnvironmentObjects = () => {
         const instances = [];
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
@@ -192,6 +199,7 @@ const EnvironmentBuilder = (
             }) => {
                 console.log("adding", instance);
                 if (instancedMeshes.current.has(instance.modelUrl)) {
+                    ensureInstancedMeshesAdded(instance.modelUrl);
                     const instancedData = instancedMeshes.current.get(instance.modelUrl);
                     const position = new THREE.Vector3(instance.position.x, instance.position.y, instance.position.z);
                     const rotation = new THREE.Euler(instance.rotation.x, instance.rotation.y, instance.rotation.z);
@@ -445,16 +453,16 @@ const EnvironmentBuilder = (
                 instancedMesh.frustumCulled = false;
                 instancedMesh.renderOrder = 1;
                 instancedMesh.count = 0;
-                scene.add(instancedMesh);
-                instancedMeshArray.push(instancedMesh);
                 mergedGeometry.computeBoundingBox();
                 mergedGeometry.computeBoundingSphere();
+                instancedMeshArray.push(instancedMesh);
             }
         }
         instancedMeshes.current.set(modelType.modelUrl, {
             meshes: instancedMeshArray,
             instances: new Map(),
             modelHeight: boundingHeight,
+            addedToScene: false,
         });
     };
 
@@ -762,6 +770,10 @@ const EnvironmentBuilder = (
         }], [], {
             force: true,
         });
+
+        // Lazily attach InstancedMesh group to scene on first use
+        ensureInstancedMeshesAdded(modelUrl);
+
         return {
             modelUrl,
             instanceId,
@@ -882,11 +894,9 @@ const EnvironmentBuilder = (
                     instancedData.instances.delete(instance.instanceId);
 
                     instancedData.meshes.forEach((mesh) => {
-                        mesh.setMatrixAt(
-                            instance.instanceId,
-                            // new THREE.Matrix4()
-                            new THREE.Matrix4().scale(new THREE.Vector3(0, 0, 0))
-                        );
+                        // Set to zero-scale matrix so the ghost mesh is not rendered at origin
+                        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+                        mesh.setMatrixAt(instance.instanceId, zeroMatrix);
 
                         mesh.count =
                             Math.max(
@@ -952,6 +962,9 @@ const EnvironmentBuilder = (
             );
             return [];
         }
+
+        // Ensure instanced meshes are attached to the scene now that we'll place objects
+        ensureInstancedMeshesAdded(modelUrl);
 
         const placementPositions = getPlacementPositions(
             placeholderMeshRef.current.position,
@@ -1215,7 +1228,9 @@ const EnvironmentBuilder = (
         instancedData.instances.delete(instanceId);
 
         instancedData.meshes.forEach((mesh) => {
-            mesh.setMatrixAt(instanceId, new THREE.Matrix4());
+            // Set to zero-scale matrix so the ghost mesh is not rendered at origin
+            const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+            mesh.setMatrixAt(instanceId, zeroMatrix);
 
             mesh.count =
                 Math.max(...Array.from(instancedData.instances.keys()) as number[], -1) + 1;

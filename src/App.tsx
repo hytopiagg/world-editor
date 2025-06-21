@@ -210,6 +210,35 @@ function App() {
         return () => clearInterval(crosshairInterval);
     }, []);
 
+    useEffect(() => {
+        const shouldDefocus = (el: HTMLElement | null) => {
+            if (!el) return false;
+            const tag = el.tagName;
+            if (tag === "BUTTON") return true;
+            if (tag === "INPUT") {
+                const input = el as HTMLInputElement;
+                return input.type === "range" || input.type === "checkbox";
+            }
+            return false;
+        };
+
+        const defocusHandler = (e: Event) => {
+            const target = e.target as HTMLElement | null;
+            if (shouldDefocus(target)) {
+                // Use a micro-delay so default click behaviour executes first
+                setTimeout(() => target?.blur(), 0);
+            }
+        };
+
+        window.addEventListener("click", defocusHandler, true);
+        window.addEventListener("focusin", defocusHandler, true);
+
+        return () => {
+            window.removeEventListener("click", defocusHandler, true);
+            window.removeEventListener("focusin", defocusHandler, true);
+        };
+    }, []);
+
     const handleToggleCompactMode = async () => {
         const newCompactValue = !isCompactMode;
         setIsCompactMode(newCompactValue);
