@@ -532,7 +532,10 @@ class GroundTool extends BaseTool {
 
                         if (!this.terrainRef.current[posKey]) continue;
 
-                        removedBlocks[posKey] = this.terrainRef.current[posKey];
+                        const blockId = this.terrainRef.current[posKey];
+                        removedBlocks[posKey] = blockId;
+                        this.pendingChangesRef.current.terrain.removed[posKey] = blockId;
+                        delete this.pendingChangesRef.current.terrain.added[posKey];
                     }
                 }
             }

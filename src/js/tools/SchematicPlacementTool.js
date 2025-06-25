@@ -216,8 +216,8 @@ class SchematicPlacementTool extends BaseTool {
         this.previewGroup.add(this.previewInstancedMesh);
 
         // Center the schematic horizontally (bottom-center)
-        const centerX = (minX + maxX) / 2;
-        const centerZ = (minZ + maxZ) / 2;
+        const centerX = Math.round((minX + maxX) / 2);
+        const centerZ = Math.round((minZ + maxZ) / 2);
         this.anchorOffset.x = -centerX;
         this.anchorOffset.z = -centerZ;
         // ensure Y offset maintained

@@ -491,6 +491,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         placeholder="Texture name"
                         value={textureName}
                         onChange={(e) => setTextureName(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
                     />
                     <Button
                         design="primary"

@@ -149,8 +149,13 @@ export async function generateSchematicPreview(
         useTextures = true,
     }: GeneratePreviewOptions = {}
 ): Promise<string> {
-    console.log("generateSchematicPreview called with inputWidth:", inputWidth, "inputHeight:", inputHeight);
-    
+    console.log(
+        "generateSchematicPreview called with inputWidth:",
+        inputWidth,
+        "inputHeight:",
+        inputHeight
+    );
+
     // Ensure width and height are positive for stable rendering
     const renderWidth = Math.max(1, inputWidth);
     const renderHeight = Math.max(1, inputHeight);
@@ -268,9 +273,9 @@ export async function generateSchematicPreview(
             .positions.push(new THREE.Vector3(x, y, z));
     });
 
-    const centreX = (minX + maxX) / 2;
-    const centreY = (minY + maxY) / 2;
-    const centreZ = (minZ + maxZ) / 2;
+    const centreX = Math.round((minX + maxX) / 2);
+    const centreY = Math.round((minY + maxY) / 2);
+    const centreZ = Math.round((minZ + maxZ) / 2);
 
     const sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
 

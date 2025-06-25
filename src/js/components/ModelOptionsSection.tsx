@@ -8,6 +8,8 @@ const SCALE_MIN = 0.1;
 const SCALE_MAX = 5.0;
 const ROTATION_MIN = 0;
 const ROTATION_MAX = 360;
+const SHIFT_MIN = -1.0;
+const SHIFT_MAX = 1.0;
 
 interface ModelOptionsProps {
     selectedModel: any;
@@ -48,6 +50,8 @@ export default function ModelOptionsSection({
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [addColliderEnabled, setAddColliderEnabled] = useState(true);
+    const [verticalShift, setVerticalShift] = useState(0);
+    const [verticalShiftInput, setVerticalShiftInput] = useState("0");
 
     useEffect(() => {
         setSettings({
@@ -92,6 +96,39 @@ export default function ModelOptionsSection({
                 console.warn("Failed to load collider preference:", err);
                 setAddColliderEnabled(true);
             }
+            // NEW: load vertical shift preference
+            try {
+                let shiftPrefs: Record<string, number> = {};
+                try {
+                    shiftPrefs = (await DatabaseManager.getData(
+                        STORES.ENVIRONMENT_MODEL_SETTINGS,
+                        "yShiftSettings"
+                    )) as Record<string, number> || {};
+                } catch (e) {
+                    try {
+                        shiftPrefs = (await DatabaseManager.getData(
+                            STORES.SETTINGS,
+                            "yShiftSettings"
+                        )) as Record<string, number> || {};
+                    } catch {
+                        shiftPrefs = {};
+                    }
+                }
+                const idKey = String(selectedModel.id);
+                const shiftValue = Object.prototype.hasOwnProperty.call(shiftPrefs, idKey) ? shiftPrefs[idKey] : 0;
+                setVerticalShift(shiftValue);
+                setVerticalShiftInput(String(shiftValue));
+                const idx = environmentModels.findIndex((m) => m.id === selectedModel.id);
+                if (idx !== -1) {
+                    environmentModels[idx].yShift = shiftValue;
+                }
+                if (selectedModel) {
+                    selectedModel.yShift = shiftValue;
+                }
+            } catch (err) {
+                console.warn("Failed to load y-shift preference:", err);
+                setVerticalShift(0);
+            }
         };
         loadColliderPref();
     }, [selectedModel]);
@@ -126,6 +163,70 @@ export default function ModelOptionsSection({
             }
         } catch (err) {
             console.error("Failed to save collider preference:", err);
+        }
+    };
+
+    const commitVerticalShift = async (value: number) => {
+        if (!selectedModel) return;
+        setVerticalShift(value);
+        setVerticalShiftInput(String(value));
+        try {
+            const storeKey = "yShiftSettings";
+            let existingPrefs: Record<string, number> = {};
+            let saveStore = STORES.ENVIRONMENT_MODEL_SETTINGS;
+            try {
+                existingPrefs = (await DatabaseManager.getData(
+                    STORES.ENVIRONMENT_MODEL_SETTINGS,
+                    storeKey
+                )) as Record<string, number> || {};
+            } catch (e) {
+                saveStore = STORES.SETTINGS;
+                existingPrefs = (await DatabaseManager.getData(
+                    STORES.SETTINGS,
+                    storeKey
+                )) as Record<string, number> || {};
+            }
+            existingPrefs[String(selectedModel.id)] = value;
+            await DatabaseManager.saveData(saveStore, storeKey, existingPrefs);
+            const idx = environmentModels.findIndex((m) => m.id === selectedModel.id);
+            if (idx !== -1) {
+                environmentModels[idx].yShift = value;
+            }
+            selectedModel.yShift = value;
+            // Inform EnvironmentBuilder if available
+            if (environmentBuilder?.current?.setModelYShift) {
+                try {
+                    environmentBuilder.current.setModelYShift(selectedModel.id, value);
+                } catch { /* ignore */ }
+            }
+        } catch (err) {
+            console.error("Failed to save y-shift preference:", err);
+        }
+    };
+
+    const handleVerticalShiftInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const val = e.target.value;
+        // Allow only - digits and single dot
+        if (/^-?\d*\.?\d*$/.test(val)) {
+            setVerticalShiftInput(val);
+        }
+    };
+
+    const handleVerticalShiftInputBlur = () => {
+        let parsed = parseFloat(verticalShiftInput);
+        if (isNaN(parsed)) {
+            parsed = 0;
+        }
+        parsed = Math.min(SHIFT_MAX, Math.max(SHIFT_MIN, parsed));
+        commitVerticalShift(parseFloat(parsed.toFixed(2)));
+    };
+
+    const handleVerticalShiftKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        // Prevent global shortcuts / key listeners from firing while typing
+        e.stopPropagation();
+        if (e.key === "Enter") {
+            handleVerticalShiftInputBlur();
         }
     };
 
@@ -373,6 +474,7 @@ export default function ModelOptionsSection({
                                     min={SCALE_MIN}
                                     max={SCALE_MAX}
                                     step="0.1"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ minScale: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -389,6 +491,7 @@ export default function ModelOptionsSection({
                                     min={SCALE_MIN}
                                     max={SCALE_MAX}
                                     step="0.1"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ maxScale: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -423,6 +526,7 @@ export default function ModelOptionsSection({
                                     min={ROTATION_MIN}
                                     max={ROTATION_MAX}
                                     step="15"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ minRotation: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -439,6 +543,7 @@ export default function ModelOptionsSection({
                                     min={ROTATION_MIN}
                                     max={ROTATION_MAX}
                                     step="15"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ maxRotation: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -462,6 +567,7 @@ export default function ModelOptionsSection({
                                 min={SCALE_MIN}
                                 max={SCALE_MAX}
                                 step="0.1"
+                                onKeyDown={(e) => e.stopPropagation()}
                                 onChange={(e) => updateSettings({ scale: Number(e.target.value) })}
                                 onBlur={(e) => {
                                     const value = Number(e.target.value);
@@ -499,6 +605,7 @@ export default function ModelOptionsSection({
                                     min={ROTATION_MIN}
                                     max={ROTATION_MAX}
                                     step="15"
+                                    onKeyDown={(e) => e.stopPropagation()}
                                     onChange={(e) => updateSettings({ rotation: Number(e.target.value) })}
                                     onBlur={(e) => {
                                         const value = Number(e.target.value);
@@ -550,6 +657,36 @@ export default function ModelOptionsSection({
                                 className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                             />
                         </label>
+                    </div>
+
+                    {/* NEW: Vertical Offset Slider */}
+                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.2s" }}>
+                        <div className="flex items-center gap-x-2 w-full">
+                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Vertical Offset</label>
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                pattern="-?[0-9]*[.]?[0-9]*"
+                                value={verticalShiftInput}
+                                onChange={handleVerticalShiftInputChange}
+                                onBlur={handleVerticalShiftInputBlur}
+                                onKeyDown={handleVerticalShiftKeyDown}
+                                className="w-[34.5px] max-w-[34.5px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <input
+                                type="range"
+                                min={SHIFT_MIN}
+                                max={SHIFT_MAX}
+                                step="0.1"
+                                value={verticalShift}
+                                onChange={(e) => commitVerticalShift(Number(e.target.value))}
+                                className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
+                                style={{
+                                    transition: "all 0.3s ease-in-out",
+                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(verticalShift - SHIFT_MIN) / (SHIFT_MAX - SHIFT_MIN) * 100}%, rgba(255, 255, 255, 0.1) ${(verticalShift - SHIFT_MIN) / (SHIFT_MAX - SHIFT_MIN) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
 
