@@ -1359,6 +1359,19 @@ const EnvironmentBuilder = (
     const endUndoRedoOperation = () => {
         isUndoRedoOperation.current = false;
     };
+    const getAllAvailableModels = () => {
+        // Return all models (default + custom) in a format suitable for AI
+        return environmentModels.map(model => ({
+            name: model.name,
+            displayName: model.name
+                .split("-")
+                .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(" "),
+            modelUrl: model.modelUrl,
+            isCustom: model.isCustom || false
+        }));
+    };
+
     useImperativeHandle(
         ref,
         () => ({
@@ -1382,7 +1395,8 @@ const EnvironmentBuilder = (
             updateEnvironmentForUndoRedo,
             getModelType,
             hasInstanceAtPosition,
-            forceRebuildSpatialHash
+            forceRebuildSpatialHash,
+            getAllAvailableModels
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

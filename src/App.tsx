@@ -28,7 +28,7 @@ import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
-import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { getHytopiaBlocks, getAvailableEntities } from "./js/utils/minecraft/BlockMapper";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -313,6 +313,21 @@ function App() {
         }
     }, []);
 
+    const handleGetAvailableEntities = useCallback(() => {
+        try {
+            // Get entities from EnvironmentBuilder which includes both default and custom models
+            const environmentBuilder = environmentBuilderRef.current;
+            if (environmentBuilder && environmentBuilder.getAllAvailableModels) {
+                return environmentBuilder.getAllAvailableModels();
+            }
+            // Fallback to static list if EnvironmentBuilder not ready
+            return getAvailableEntities();
+        } catch (error) {
+            console.error("Error getting available entities:", error);
+            return [];
+        }
+    }, []);
+
     const handleLoadAISchematic = useCallback((schematic) => {
         console.log("App: Loading AI schematic and activating tool", schematic);
         terrainBuilderRef.current?.activateTool("schematic", schematic);
@@ -489,6 +504,7 @@ function App() {
                         onToggleCompactMode={handleToggleCompactMode}
                         showAIComponents={isAIComponentsActive}
                         getAvailableBlocks={handleGetAvailableBlocks}
+                        getAvailableEntities={handleGetAvailableEntities}
                         loadAISchematic={handleLoadAISchematic}
                     />
                 )}

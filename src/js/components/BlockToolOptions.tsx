@@ -30,6 +30,7 @@ interface BlockToolOptionsProps {
     onToggleCompactMode: () => void;
     showAIComponents: boolean;
     getAvailableBlocks: () => Promise<any> | any;
+    getAvailableEntities?: () => Promise<any[]> | any[];
     loadAISchematic: (schematic: any) => void;
 }
 
@@ -90,6 +91,7 @@ export function BlockToolOptions({
     onToggleCompactMode,
     showAIComponents,
     getAvailableBlocks,
+    getAvailableEntities,
     loadAISchematic,
 }: BlockToolOptionsProps) {
     const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -181,6 +183,7 @@ export function BlockToolOptions({
                             isVisible={true}
                             isEmbedded={true}
                             getAvailableBlocks={getAvailableBlocks}
+                            getAvailableEntities={getAvailableEntities}
                             loadAISchematic={loadAISchematic}
                         />
                     </CollapsibleSection>

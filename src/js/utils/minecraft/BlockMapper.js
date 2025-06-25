@@ -493,3 +493,55 @@ export function getHytopiaBlockById(id) {
     const blocks = getHytopiaBlocks();
     return blocks.find((block) => block.id === id);
 }
+
+export function getAvailableEntities() {
+    try {
+        // Load the mattifest.json to get the list of available entities
+        const manifestUrl = `${process.env.PUBLIC_URL || ''}/assets/models/environment/mattifest.json`;
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", manifestUrl, false); // synchronous for simplicity
+        xhr.send();
+        
+        if (xhr.status !== 200) {
+            console.warn("Failed to load entity manifest, using default entities");
+            return getDefaultEntities();
+        }
+        
+        const entityFiles = JSON.parse(xhr.responseText);
+        
+        return entityFiles.map(fileName => {
+            const name = fileName.replace(".gltf", "");
+            const displayName = name
+                .split("-")
+                .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(" ");
+                
+            return {
+                name: name,
+                displayName: displayName,
+                modelUrl: `assets/models/environment/${fileName}`
+            };
+        });
+    } catch (error) {
+        console.warn("Error loading available entities:", error);
+        return getDefaultEntities();
+    }
+}
+
+function getDefaultEntities() {
+    // Fallback entity list if mattifest.json cannot be loaded
+    return [
+        { name: "Palm1", displayName: "Palm Tree 1", modelUrl: "assets/models/environment/Palm1.gltf" },
+        { name: "Palm2", displayName: "Palm Tree 2", modelUrl: "assets/models/environment/Palm2.gltf" },
+        { name: "Palm3", displayName: "Palm Tree 3", modelUrl: "assets/models/environment/Palm3.gltf" },
+        { name: "Palm4", displayName: "Palm Tree 4", modelUrl: "assets/models/environment/Palm4.gltf" },
+        { name: "Palm5", displayName: "Palm Tree 5", modelUrl: "assets/models/environment/Palm5.gltf" },
+        { name: "basic-tree", displayName: "Basic Tree", modelUrl: "assets/models/environment/basic-tree.gltf" },
+        { name: "environment-cactus-1", displayName: "Cactus 1", modelUrl: "assets/models/environment/environment-cactus-1.gltf" },
+        { name: "environment-cactus-2", displayName: "Cactus 2", modelUrl: "assets/models/environment/environment-cactus-2.gltf" },
+        { name: "environment-cactus-3", displayName: "Cactus 3", modelUrl: "assets/models/environment/environment-cactus-3.gltf" },
+        { name: "Pottery1", displayName: "Pottery 1", modelUrl: "assets/models/environment/Pottery1.gltf" },
+        { name: "Skull", displayName: "Skull", modelUrl: "assets/models/environment/Skull.gltf" },
+        { name: "tombstone", displayName: "Tombstone", modelUrl: "assets/models/environment/tombstone.gltf" }
+    ];
+}
