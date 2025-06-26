@@ -28,7 +28,7 @@ import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
-import { getHytopiaBlocks, getAvailableEntities } from "./js/utils/minecraft/BlockMapper";
+import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -358,13 +358,14 @@ function App() {
 
     const handleGetAvailableEntities = useCallback(() => {
         try {
-            // Get entities from EnvironmentBuilder which includes both default and custom models
-            const environmentBuilder = environmentBuilderRef.current;
-            if (environmentBuilder && environmentBuilder.getAllAvailableModels) {
-                return environmentBuilder.getAllAvailableModels();
-            }
-            // Fallback to static list if EnvironmentBuilder not ready
-            return getAvailableEntities();
+            return environmentModels.map(model => ({
+                name: model.name,
+                displayName: model.name
+                    .split("-")
+                    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                    .join(" "),
+                modelUrl: model.modelUrl
+            }));
         } catch (error) {
             console.error("Error getting available entities:", error);
             return [];

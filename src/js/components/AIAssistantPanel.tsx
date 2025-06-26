@@ -404,7 +404,7 @@ const AIAssistantPanel = ({
                     disabled={isLoading}
                     className="w-3.5 h-3.5 rounded border-white/30 bg-transparent focus:ring-1 focus:ring-white/50"
                 />
-                Include Environment Objects
+                Include Models
             </label>
             <button
                 className="ai-assistant-button"
