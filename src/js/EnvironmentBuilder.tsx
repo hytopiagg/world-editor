@@ -9,10 +9,7 @@ import {
     forwardRef,
 } from "react";
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
-import {
-    ENVIRONMENT_OBJECT_Y_OFFSET,
-    MAX_ENVIRONMENT_OBJECTS,
-} from "./Constants";
+import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 import { CustomModel } from "./types/DatabaseTypes";
 export const environmentModels = (() => {
     try {
@@ -80,9 +77,7 @@ const EnvironmentBuilder = (
     const placeholderMeshRef = useRef(null);
     const loadedModels = useRef(new Map());
     const instancedMeshes = useRef(new Map());
-    const positionOffset = useRef(
-        new THREE.Vector3(0, ENVIRONMENT_OBJECT_Y_OFFSET, 0)
-    );
+    const positionOffset = useRef(new THREE.Vector3(0, ENVIRONMENT_OBJECT_Y_OFFSET, 0));
     const placementSizeRef = useRef(placementSize);
     const lastPreviewTransform = useRef({
         scale: new THREE.Vector3(1, 1, 1),
@@ -136,185 +131,113 @@ const EnvironmentBuilder = (
     const getAllEnvironmentPositionsAsObject = () => {
         const positions = {};
         let instanceData = [];
-        console.log(
-            "getAllEnvironmentPositionsAsObject - instancedMeshes.current",
-            instancedMeshes.current
-        );
-        console.log(
-            "getAllEnvironmentPositionsAsObject - instancedMeshes.current.entries()",
-            instancedMeshes.current.size
-        );
+        console.log("getAllEnvironmentPositionsAsObject - instancedMeshes.current", instancedMeshes.current);
+        console.log("getAllEnvironmentPositionsAsObject - instancedMeshes.current.entries()", instancedMeshes.current.size);
         for (const x of [...instancedMeshes.current]) {
             instanceData.push(...x[1].instances);
             console.log("instanceData", instanceData);
             instanceData.forEach((instance) => {
                 console.log("instance", instance);
-                positions[
-                    `${instance[1]?.position?.x}-${instance[1]?.position?.y}-${instance[1]?.position?.z}`
-                ] = 1000;
+                positions[`${instance[1]?.position?.x}-${instance[1]?.position?.y}-${instance[1]?.position?.z}`] = 1000;
             });
         }
-        console.log(
-            "getAllEnvironmentPositionsAsObject - positions",
-            positions
-        );
+        console.log("getAllEnvironmentPositionsAsObject - positions", positions);
         return positions;
-    };
+    }
 
     const forceRebuildSpatialHash = () => {
         console.log("forceRebuildSpatialHash - env builder");
         const instances = getAllEnvironmentObjects();
         console.log("instances", instances);
         instances.forEach((instance) => {
-            const yOffsetFR =
-                getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
-            terrainBuilderRef.current.updateSpatialHashForBlocks(
-                [
-                    {
-                        x: instance.position.x,
-                        y: instance.position.y - yOffsetFR,
-                        z: instance.position.z,
-                        blockId: 1000,
-                    },
-                ],
-                [],
-                {
-                    force: true,
-                }
-            );
+            const yOffsetFR = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+            terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                x: instance.position.x,
+                y: instance.position.y - yOffsetFR,
+                z: instance.position.z,
+                blockId: 1000,
+            }], [], {
+                force: true,
+            });
         });
     };
 
     // Check if any instance has this position, if so, return the true
     const hasInstanceAtPosition = (position) => {
         const instances = getAllEnvironmentObjects();
-        return instances.some(
-            (instance) =>
-                instance.position.x === position.x &&
-                instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET ===
-                    position.y &&
-                instance.position.z === position.z
-        );
+        return instances.some((instance) => instance.position.x === position.x && instance.position.y - ENVIRONMENT_OBJECT_Y_OFFSET === position.y && instance.position.z === position.z);
     };
 
-    const updateEnvironmentForUndoRedo = (
-        added,
-        removed,
-        source: "undo" | "redo"
-    ) => {
+    const updateEnvironmentForUndoRedo = (added, removed, source: "undo" | "redo") => {
         console.log("updateEnvironmentForUndoRedo", added, removed, source);
         if (removed && Object.keys(removed).length > 0) {
-            Object.values(removed).forEach(
-                (instance: {
-                    instanceId: number;
-                    modelUrl: string;
-                    position: { x: number; y: number; z: number };
-                }) => {
-                    console.log("removing", instance);
-                    removeInstance(
-                        instance.modelUrl,
-                        instance.instanceId,
-                        false
-                    );
-                    const yOffsetRemove =
-                        getModelYShift(instance.modelUrl) +
-                        ENVIRONMENT_OBJECT_Y_OFFSET;
-                    terrainBuilderRef.current.updateSpatialHashForBlocks(
-                        [],
-                        [
-                            {
-                                x: instance.position.x,
-                                y: instance.position.y - yOffsetRemove,
-                                z: instance.position.z,
-                                blockId: 1000,
-                            },
-                        ],
-                        {
-                            force: true,
-                        }
-                    );
-                }
-            );
+            Object.values(removed).forEach((instance: {
+                instanceId: number;
+                modelUrl: string;
+                position: { x: number; y: number; z: number };
+            }) => {
+                console.log("removing", instance);
+                removeInstance(instance.modelUrl, instance.instanceId, false);
+                const yOffsetRemove = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+                terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+                    x: instance.position.x,
+                    y: instance.position.y - yOffsetRemove,
+                    z: instance.position.z,
+                    blockId: 1000,
+                }], {
+                    force: true,
+                });
+            });
         }
         if (added && Object.keys(added).length > 0) {
-            Object.values(added).forEach(
-                (instance: {
-                    instanceId: number;
-                    modelUrl: string;
-                    position: { x: number; y: number; z: number };
-                    rotation: { x: number; y: number; z: number };
-                    scale: { x: number; y: number; z: number };
-                }) => {
-                    console.log("adding", instance);
-                    if (instancedMeshes.current.has(instance.modelUrl)) {
-                        ensureInstancedMeshesAdded(instance.modelUrl);
-                        const instancedData = instancedMeshes.current.get(
-                            instance.modelUrl
-                        );
-                        const position = new THREE.Vector3(
-                            instance.position.x,
-                            instance.position.y,
-                            instance.position.z
-                        );
-                        const rotation = new THREE.Euler(
-                            instance.rotation.x,
-                            instance.rotation.y,
-                            instance.rotation.z
-                        );
-                        const scale = new THREE.Vector3(
-                            instance.scale.x,
-                            instance.scale.y,
-                            instance.scale.z
-                        );
+            Object.values(added).forEach((instance: {
+                instanceId: number;
+                modelUrl: string;
+                position: { x: number; y: number; z: number };
+                rotation: { x: number; y: number; z: number };
+                scale: { x: number; y: number; z: number };
+            }) => {
+                console.log("adding", instance);
+                if (instancedMeshes.current.has(instance.modelUrl)) {
+                    ensureInstancedMeshesAdded(instance.modelUrl);
+                    const instancedData = instancedMeshes.current.get(instance.modelUrl);
+                    const position = new THREE.Vector3(instance.position.x, instance.position.y, instance.position.z);
+                    const rotation = new THREE.Euler(instance.rotation.x, instance.rotation.y, instance.rotation.z);
+                    const scale = new THREE.Vector3(instance.scale.x, instance.scale.y, instance.scale.z);
 
-                        const matrix = new THREE.Matrix4();
-                        matrix.compose(
-                            position,
-                            new THREE.Quaternion().setFromEuler(rotation),
-                            scale
-                        );
+                    const matrix = new THREE.Matrix4();
+                    matrix.compose(
+                        position,
+                        new THREE.Quaternion().setFromEuler(rotation),
+                        scale
+                    );
 
-                        instancedData.meshes.forEach((mesh) => {
-                            mesh.count = Math.max(
-                                mesh.count,
-                                instance.instanceId + 1
-                            );
-                            mesh.setMatrixAt(instance.instanceId, matrix);
-                            mesh.instanceMatrix.needsUpdate = true;
-                        });
+                    instancedData.meshes.forEach((mesh) => {
+                        mesh.count = Math.max(mesh.count, instance.instanceId + 1);
+                        mesh.setMatrixAt(instance.instanceId, matrix);
+                        mesh.instanceMatrix.needsUpdate = true;
+                    });
 
-                        instancedData.instances.set(instance.instanceId, {
-                            position,
-                            rotation,
-                            scale,
-                            matrix,
-                        });
+                    instancedData.instances.set(instance.instanceId, {
+                        position,
+                        rotation,
+                        scale,
+                        matrix
+                    });
 
-                        const yOffsetAdd =
-                            getModelYShift(instance.modelUrl) +
-                            ENVIRONMENT_OBJECT_Y_OFFSET;
-                        terrainBuilderRef.current.updateSpatialHashForBlocks(
-                            [
-                                {
-                                    x: instance.position.x,
-                                    y: instance.position.y - yOffsetAdd,
-                                    z: instance.position.z,
-                                    blockId: 1000,
-                                },
-                            ],
-                            [],
-                            {
-                                force: true,
-                            }
-                        );
-                    } else {
-                        console.log(
-                            "no instanced meshes found for",
-                            instance.modelUrl
-                        );
-                    }
+                    const yOffsetAdd = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+                    terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                        x: instance.position.x,
+                        y: instance.position.y - yOffsetAdd,
+                        z: instance.position.z,
+                        blockId: 1000,
+                    }], [], {
+                        force: true,
+                    });
+                } else {
+                    console.log("no instanced meshes found for", instance.modelUrl);
                 }
-            );
+            });
         }
     };
 
@@ -361,10 +284,10 @@ const EnvironmentBuilder = (
     };
     const preloadModels = async () => {
         try {
-            const customModels = (await DatabaseManager.getData(
+            const customModels = await DatabaseManager.getData(
                 STORES.CUSTOM_MODELS,
                 "models"
-            )) as CustomModel[];
+            ) as CustomModel[];
             if (customModels) {
                 const customModelIndices = environmentModels
                     .filter((model) => model.isCustom)
@@ -411,22 +334,12 @@ const EnvironmentBuilder = (
                         STORES.SETTINGS,
                         "colliderSettings"
                     );
-                } catch {
-                    /* ignore */
-                }
+                } catch {/* ignore */ }
             }
-            if (
-                savedColliderSettings &&
-                typeof savedColliderSettings === "object"
-            ) {
+            if (savedColliderSettings && typeof savedColliderSettings === "object") {
                 environmentModels.forEach((model) => {
                     const idKey = String(model.id);
-                    if (
-                        Object.prototype.hasOwnProperty.call(
-                            savedColliderSettings,
-                            idKey
-                        )
-                    ) {
+                    if (Object.prototype.hasOwnProperty.call(savedColliderSettings, idKey)) {
                         model.addCollider = !!savedColliderSettings[idKey];
                     }
                 });
@@ -645,10 +558,7 @@ const EnvironmentBuilder = (
             return;
         }
 
-        if (
-            !placeholderMeshRef.current ||
-            placeholderMeshRef.current.userData.modelId !== currentBlockType.id
-        ) {
+        if (!placeholderMeshRef.current || placeholderMeshRef.current.userData.modelId !== currentBlockType.id) {
             await setupPreview(position);
         } else if (position) {
             const currentRotation = placeholderMeshRef.current.rotation.clone();
@@ -657,8 +567,12 @@ const EnvironmentBuilder = (
             placeholderMeshRef.current.position.copy(
                 position.clone().add(positionOffset.current)
             );
-            placeholderMeshRef.current.scale.copy(currentScale);
-            placeholderMeshRef.current.rotation.copy(currentRotation);
+            placeholderMeshRef.current.scale.copy(
+                currentScale
+            );
+            placeholderMeshRef.current.rotation.copy(
+                currentRotation
+            );
         }
     };
 
@@ -669,15 +583,11 @@ const EnvironmentBuilder = (
 
             const currentObjects = new Map();
             const targetObjects = new Map();
-            const createCompositeKey = (modelUrl, instanceId) =>
-                `${modelUrl}:${instanceId}`;
+            const createCompositeKey = (modelUrl, instanceId) => `${modelUrl}:${instanceId}`;
 
             for (const [modelUrl, instancedData] of instancedMeshes.current) {
                 instancedData.instances.forEach((data, instanceId) => {
-                    const compositeKey = createCompositeKey(
-                        modelUrl,
-                        instanceId
-                    );
+                    const compositeKey = createCompositeKey(modelUrl, instanceId);
                     currentObjects.set(compositeKey, {
                         modelUrl,
                         instanceId,
@@ -701,10 +611,7 @@ const EnvironmentBuilder = (
                         obj.rotation?.z || 0
                     );
 
-                    const compositeKey = createCompositeKey(
-                        modelType.modelUrl,
-                        obj.instanceId
-                    );
+                    const compositeKey = createCompositeKey(modelType.modelUrl, obj.instanceId);
                     targetObjects.set(compositeKey, {
                         ...obj,
                         modelUrl: modelType.modelUrl, // Use the current modelUrl from environmentModels
@@ -726,6 +633,7 @@ const EnvironmentBuilder = (
                     );
                 }
             });
+
 
             // Remove objects that are no longer in the target state
             for (const [compositeKey, obj] of currentObjects) {
@@ -766,7 +674,9 @@ const EnvironmentBuilder = (
 
     const getModelType = (modelName, modelUrl) => {
         return environmentModels.find(
-            (model) => model.name === modelName || model.modelUrl === modelUrl
+            (model) =>
+                model.name === modelName ||
+                model.modelUrl === modelUrl
         );
     };
 
@@ -851,22 +761,15 @@ const EnvironmentBuilder = (
             scale,
             matrix,
         });
-        const yOffsetForAdd =
-            getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
-        terrainBuilderRef.current.updateSpatialHashForBlocks(
-            [
-                {
-                    x: position.x,
-                    y: position.y - yOffsetForAdd,
-                    z: position.z,
-                    blockId: 1000,
-                },
-            ],
-            [],
-            {
-                force: true,
-            }
-        );
+        const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+        terrainBuilderRef.current.updateSpatialHashForBlocks([{
+            x: position.x,
+            y: position.y - yOffsetForAdd,
+            z: position.z,
+            blockId: 1000,
+        }], [], {
+            force: true,
+        });
 
         // Lazily attach InstancedMesh group to scene on first use
         ensureInstancedMeshesAdded(modelUrl);
@@ -920,22 +823,18 @@ const EnvironmentBuilder = (
     const findCollidingInstances = (position, tolerance = 0.5) => {
         const collidingInstances = [];
 
-        for (const [
-            modelUrl,
-            instancedData,
-        ] of instancedMeshes.current.entries()) {
-            const instances = Array.from(instancedData.instances.entries()).map(
-                ([instanceId, data]) => ({
+        for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+            const instances = Array.from(instancedData.instances.entries())
+                .map(([instanceId, data]) => ({
                     instanceId,
                     modelUrl,
                     position: data.position,
                     rotation: data.rotation,
                     scale: data.scale,
                     matrix: data.matrix,
-                })
-            );
+                }));
 
-            const matchingInstances = instances.filter((instance) => {
+            const matchingInstances = instances.filter(instance => {
                 return (
                     Math.abs(instance.position.x - position.x) < tolerance &&
                     Math.abs(instance.position.y - position.y) < tolerance &&
@@ -963,22 +862,14 @@ const EnvironmentBuilder = (
             const removedObjects = [];
 
             placementPositions.forEach((placementPosition) => {
-                const collidingInstances =
-                    findCollidingInstances(placementPosition);
+                const collidingInstances = findCollidingInstances(placementPosition);
 
                 collidingInstances.forEach((instance) => {
-                    const instancedData = instancedMeshes.current.get(
-                        instance.modelUrl
-                    );
-                    if (
-                        !instancedData ||
-                        !instancedData.instances.has(instance.instanceId)
-                    ) {
+                    const instancedData = instancedMeshes.current.get(instance.modelUrl);
+                    if (!instancedData || !instancedData.instances.has(instance.instanceId)) {
                         return;
                     }
-                    const objectData = instancedData.instances.get(
-                        instance.instanceId
-                    );
+                    const objectData = instancedData.instances.get(instance.instanceId);
 
                     const removedObject = {
                         modelUrl: instance.modelUrl,
@@ -1004,48 +895,34 @@ const EnvironmentBuilder = (
 
                     instancedData.meshes.forEach((mesh) => {
                         // Set to zero-scale matrix so the ghost mesh is not rendered at origin
-                        const zeroMatrix = new THREE.Matrix4().makeScale(
-                            0,
-                            0,
-                            0
-                        );
+                        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
                         mesh.setMatrixAt(instance.instanceId, zeroMatrix);
 
                         mesh.count =
                             Math.max(
-                                ...(Array.from(
+                                ...Array.from(
                                     instancedData.instances.keys()
-                                ) as number[]),
+                                ) as number[],
                                 -1
                             ) + 1;
                         mesh.instanceMatrix.needsUpdate = true;
                     });
 
                     removedObjects.push(removedObject);
-                    const yOffsetRemove =
-                        getModelYShift(removedObject.modelUrl) +
-                        ENVIRONMENT_OBJECT_Y_OFFSET;
-                    terrainBuilderRef.current.updateSpatialHashForBlocks(
-                        [],
-                        [
-                            {
-                                x: removedObject.position.x,
-                                y: removedObject.position.y - yOffsetRemove,
-                                z: removedObject.position.z,
-                                blockId: 1000,
-                            },
-                        ],
-                        {
-                            force: true,
-                        }
-                    );
+                    const yOffsetRemove = getModelYShift(removedObject.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+                    terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+                        x: removedObject.position.x,
+                        y: removedObject.position.y - yOffsetRemove,
+                        z: removedObject.position.z,
+                        blockId: 1000,
+                    }], {
+                        force: true,
+                    });
                 });
             });
 
             if (removedObjects.length > 0) {
-                setTotalEnvironmentObjects(
-                    (prev) => prev - removedObjects.length
-                );
+                setTotalEnvironmentObjects(prev => prev - removedObjects.length);
 
                 console.log(
                     `Removed ${removedObjects.length} environment objects`
@@ -1093,32 +970,22 @@ const EnvironmentBuilder = (
             placeholderMeshRef.current.position,
             placementSizeRef.current
         );
-        console.log(
-            "placeholderMeshRef.current.position",
-            placeholderMeshRef.current.position
-        );
+        console.log("placeholderMeshRef.current.position", placeholderMeshRef.current.position);
         console.log("placementPositions", placementPositions);
         const addedObjects = [];
 
-        const validPlacementPositions = placementPositions.filter(
-            (placementPosition) =>
-                findCollidingInstances(placementPosition).length === 0
+
+        const validPlacementPositions = placementPositions.filter(placementPosition =>
+            findCollidingInstances(placementPosition).length === 0
         );
 
         if (validPlacementPositions.length === 0) {
-            console.log(
-                "No valid positions to place models - all positions are occupied"
-            );
+            console.log("No valid positions to place models - all positions are occupied");
             return [];
         }
 
-        const currentTotalObjects = Array.from(
-            instancedMeshes.current.values()
-        ).reduce((sum, data) => sum + data.instances.size, 0);
-        if (
-            currentTotalObjects + validPlacementPositions.length >
-            MAX_ENVIRONMENT_OBJECTS
-        ) {
+        const currentTotalObjects = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+        if (currentTotalObjects + validPlacementPositions.length > MAX_ENVIRONMENT_OBJECTS) {
             alert(
                 `Placing these objects would exceed the maximum limit of ${MAX_ENVIRONMENT_OBJECTS}. Current: ${currentTotalObjects}, Trying to add: ${validPlacementPositions.length}`
             );
@@ -1127,9 +994,7 @@ const EnvironmentBuilder = (
 
         validPlacementPositions.forEach((placementPosition) => {
             let instanceId = 0;
-            const existingIds = new Set(
-                Array.from(instancedData.instances.keys()) as number[]
-            );
+            const existingIds = new Set(Array.from(instancedData.instances.keys()) as number[]);
             while (existingIds.has(instanceId)) {
                 instanceId++;
             }
@@ -1158,12 +1023,8 @@ const EnvironmentBuilder = (
                 }
                 const capacity = mesh.instanceMatrix.count;
                 if (instanceId >= capacity) {
-                    console.error(
-                        `Cannot place object: Instance ID ${instanceId} exceeds mesh capacity ${capacity} for model ${modelUrl}.`
-                    );
-                    alert(
-                        `Maximum instances reached for model type ${modelData.name}.`
-                    );
+                    console.error(`Cannot place object: Instance ID ${instanceId} exceeds mesh capacity ${capacity} for model ${modelUrl}.`);
+                    alert(`Maximum instances reached for model type ${modelData.name}.`);
                     placementSuccessful = false;
                     return;
                 }
@@ -1196,29 +1057,18 @@ const EnvironmentBuilder = (
                         z: transform.scale.z,
                     },
                 };
-                const yOffsetForAdd =
-                    getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
-                terrainBuilderRef.current.updateSpatialHashForBlocks(
-                    [
-                        {
-                            x: newObject.position.x,
-                            y: newObject.position.y - yOffsetForAdd,
-                            z: newObject.position.z,
-                            blockId: 1000,
-                        },
-                    ],
-                    [],
-                    {
-                        force: true,
-                    }
-                );
+                const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+                terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                    x: newObject.position.x,
+                    y: newObject.position.y - yOffsetForAdd,
+                    z: newObject.position.z,
+                    blockId: 1000,
+                }], [], {
+                    force: true,
+                });
                 addedObjects.push(newObject);
             } else {
-                console.warn(
-                    `Placement failed for instanceId ${instanceId} at position ${JSON.stringify(
-                        placementPosition
-                    )} (likely due to capacity limit)`
-                );
+                console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);
             }
         });
 
@@ -1248,9 +1098,7 @@ const EnvironmentBuilder = (
 
                 if (placeholderMeshRef.current) {
                     placeholderMeshRef.current.scale.copy(nextTransform.scale);
-                    placeholderMeshRef.current.rotation.copy(
-                        nextTransform.rotation
-                    );
+                    placeholderMeshRef.current.rotation.copy(nextTransform.rotation);
                 }
             }
         }
@@ -1266,11 +1114,13 @@ const EnvironmentBuilder = (
                 (model) => model.modelUrl === modelUrl
             );
             instancedData.instances.forEach((data, instanceId) => {
+
                 const serializablePosition = {
                     x: data.position.x,
                     y: data.position.y,
                     z: data.position.z,
                 };
+
 
                 const serializableRotation = {
                     x: Number(data.rotation.x.toFixed(5)),
@@ -1383,10 +1233,7 @@ const EnvironmentBuilder = (
             mesh.setMatrixAt(instanceId, zeroMatrix);
 
             mesh.count =
-                Math.max(
-                    ...(Array.from(instancedData.instances.keys()) as number[]),
-                    -1
-                ) + 1;
+                Math.max(...Array.from(instancedData.instances.keys()) as number[], -1) + 1;
             mesh.instanceMatrix.needsUpdate = true;
         });
 
@@ -1423,21 +1270,13 @@ const EnvironmentBuilder = (
                 );
             }
         }
-        const yOffsetRemove =
-            getModelYShift(removedObject.modelUrl) +
-            ENVIRONMENT_OBJECT_Y_OFFSET;
-        terrainBuilderRef.current.updateSpatialHashForBlocks(
-            [],
-            [
-                {
-                    x: removedObject.position.x,
-                    y: removedObject.position.y - yOffsetRemove,
-                    z: removedObject.position.z,
-                    blockId: 1000,
-                },
-            ],
-            { force: true }
-        );
+        const yOffsetRemove = getModelYShift(removedObject.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+        terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+            x: removedObject.position.x,
+            y: removedObject.position.y - yOffsetRemove,
+            z: removedObject.position.z,
+            blockId: 1000,
+        }], { force: true });
     };
     const refreshEnvironment = () => {
         const savedEnv = getAllEnvironmentObjects();
@@ -1455,9 +1294,7 @@ const EnvironmentBuilder = (
             console.log("savedEnv", savedEnv);
             if (Object.keys(savedEnv).length > 0) {
                 console.log(
-                    `Loading ${
-                        Object.keys(savedEnv).length
-                    } environment objects from database`
+                    `Loading ${Object.keys(savedEnv).length} environment objects from database`
                 );
 
                 updateEnvironmentToMatch(Object.values(savedEnv));
@@ -1553,11 +1390,7 @@ const EnvironmentBuilder = (
     useEffect(() => {
         if (currentBlockType?.isEnvironment) {
             const shift = currentBlockType?.yShift || 0;
-            positionOffset.current.set(
-                0,
-                ENVIRONMENT_OBJECT_Y_OFFSET + shift,
-                0
-            );
+            positionOffset.current.set(0, ENVIRONMENT_OBJECT_Y_OFFSET + shift, 0);
         }
     }, [currentBlockType?.id, currentBlockType?.yShift]);
 
@@ -1567,19 +1400,19 @@ const EnvironmentBuilder = (
     const endUndoRedoOperation = () => {
         isUndoRedoOperation.current = false;
     };
+
     const getAllAvailableModels = () => {
         // Return all models (default + custom) in a format suitable for AI
         return environmentModels.map((model) => ({
             name: model.name,
             displayName: model.name
                 .split("-")
-                .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                .map(part => part.charAt(0).toUpperCase() + part.slice(1))
                 .join(" "),
             modelUrl: model.modelUrl,
             isCustom: model.isCustom || false,
         }));
     };
-
     useImperativeHandle(
         ref,
         () => ({
@@ -1611,21 +1444,13 @@ const EnvironmentBuilder = (
                     model.yShift = newShift;
                 }
                 if (currentBlockType && currentBlockType.id === modelId) {
-                    positionOffset.current.set(
-                        0,
-                        ENVIRONMENT_OBJECT_Y_OFFSET + newShift,
-                        0
-                    );
+                    positionOffset.current.set(0, ENVIRONMENT_OBJECT_Y_OFFSET + newShift, 0);
                     if (placeholderMeshRef.current) {
-                        const basePos = placeholderMeshRef.current.position
-                            .clone()
-                            .sub(positionOffset.current);
-                        placeholderMeshRef.current.position.copy(
-                            basePos.add(positionOffset.current)
-                        );
+                        const basePos = placeholderMeshRef.current.position.clone().sub(positionOffset.current);
+                        placeholderMeshRef.current.position.copy(basePos.add(positionOffset.current));
                     }
                 }
-            },
+            }
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );
