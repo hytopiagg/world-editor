@@ -493,4 +493,3 @@ export function getHytopiaBlockById(id) {
     const blocks = getHytopiaBlocks();
     return blocks.find((block) => block.id === id);
 }
-
