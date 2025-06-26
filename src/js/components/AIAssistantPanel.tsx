@@ -8,16 +8,14 @@ export const generateUniqueId = (): string => {
 };
 
 // Type for the raw schematic data from the backend (block coordinates to block ID)
-export type RawSchematicType =
-    | Record<string, number>
-    | {
-          blocks: Record<string, number>;
-          entities?: Array<{
-              position: [number, number, number];
-              entityName: string;
-              rotation?: [number, number, number];
-          }>;
-      };
+export type RawSchematicType = {
+    blocks: Record<string, number>;
+    entities?: Array<{
+        position: [number, number, number];
+        entityName: string;
+        rotation?: [number, number, number];
+    }>;
+};
 
 // Type for the value stored in IndexedDB against a unique ID
 export interface SchematicValue {

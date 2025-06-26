@@ -68,16 +68,8 @@ class SchematicPlacementTool extends BaseTool {
             return false;
         }
 
-        // Handle both old format (just blocks) and new format (blocks + entities)
-        if (schematicData.blocks) {
-            // New format with separate blocks and entities
-            this.schematicData = schematicData.blocks;
-            this.schematicEntities = schematicData.entities || [];
-        } else {
-            // Old format - just blocks
-            this.schematicData = schematicData;
-            this.schematicEntities = [];
-        }
+        this.schematicData = schematicData.blocks;
+        this.schematicEntities = schematicData.entities || [];
 
         if (Object.keys(this.schematicData).length === 0 && this.schematicEntities.length === 0) {
             console.warn(
