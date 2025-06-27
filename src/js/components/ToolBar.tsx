@@ -749,7 +749,7 @@ const ToolBar = ({
                                 <input
                                     id="mapFileInput"
                                     type="file"
-                                    accept=".json"
+                                    accept=".json,.zip"
                                     onChange={onMapFileSelected}
                                     style={{ display: "none" }}
                                 />
