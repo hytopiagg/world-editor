@@ -27,7 +27,6 @@ import { meshesNeedsRefresh } from "./constants/performance";
 import {
     CHUNK_SIZE,
     getViewDistance,
-    MAX_SELECTION_DISTANCE,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
 import { processCustomBlock } from "./managers/BlockTypesManager";
@@ -476,7 +475,7 @@ function TerrainBuilder(
     const previewPositionRef = useRef(new THREE.Vector3());
     const rawPlacementAnchorRef = useRef(new THREE.Vector3());
     const lockedAxisRef = useRef(null);
-    const selectionDistanceRef = useRef(MAX_SELECTION_DISTANCE / 2);
+    const selectionDistanceRef = useRef(256);
     const axisLockEnabledRef = useRef(axisLockEnabled);
     const currentBlockTypeRef = useRef(currentBlockType);
     const isFirstBlockRef = useRef(true);
@@ -1920,12 +1919,7 @@ function TerrainBuilder(
             forceRefreshAllChunks();
             return true;
         },
-        setSelectionDistance: (distance) => {
-            const { setSelectionDistance } = require("./constants/terrain");
-            setSelectionDistance(distance);
-            selectionDistanceRef.current = distance;
-            return true;
-        },
+
         getSelectionDistance: () => {
             return selectionDistanceRef.current;
         },

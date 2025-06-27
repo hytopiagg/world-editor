@@ -18,7 +18,7 @@ interface SettingsMenuProps {
 export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar, isCompactMode, onToggleCompactMode }: SettingsMenuProps) {
     const [loadedDefaults, setLoadedDefaults] = useState(false);
     const [viewDistance, setViewDistance] = useState(128);
-    const [selectionDistance, setSelectionDistance] = useState(128);
+
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
     const [showSidebar, setShowSidebar] = useState(true);
     const [showOptions, setShowOptions] = useState(true);
@@ -75,18 +75,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     console.error("Error loading view distance:", error);
                 }
 
-                // >>> Load saved selection distance
-                try {
-                    const savedSelectionDistance = await DatabaseManager.getData(STORES.SETTINGS, "selectionDistance");
-                    if (typeof savedSelectionDistance === "number") {
-                        setSelectionDistance(savedSelectionDistance);
-                        if (terrainBuilderRef?.current?.setSelectionDistance) {
-                            terrainBuilderRef.current.setSelectionDistance(savedSelectionDistance);
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error loading selection distance:", error);
-                }
+
             } catch (error) {
                 console.error("Error loading camera sensitivity:", error);
             }
@@ -94,12 +83,11 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     }, []);
 
     useEffect(() => {
-        if (terrainBuilderRef?.current?.setSelectionDistance && terrainBuilderRef?.current?.setViewDistance && !loadedDefaults) {
+        if (terrainBuilderRef?.current?.setViewDistance && !loadedDefaults) {
             setLoadedDefaults(true);
-            terrainBuilderRef.current.setSelectionDistance(selectionDistance);
             terrainBuilderRef.current.setViewDistance(viewDistance);
         }
-    }, [terrainBuilderRef?.current, selectionDistance, viewDistance]);
+    }, [terrainBuilderRef?.current, viewDistance]);
 
     // Sync state if user toggles camera mode via keyboard ('0')
     useEffect(() => {
@@ -123,13 +111,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         await DatabaseManager.saveData(STORES.SETTINGS, "viewDistance", value);
     };
 
-    const handleSelectionDistanceChange = async (value: number) => {
-        setSelectionDistance(value);
-        if (terrainBuilderRef?.current?.setSelectionDistance) {
-            terrainBuilderRef.current.setSelectionDistance(value);
-        }
-        await DatabaseManager.saveData(STORES.SETTINGS, "selectionDistance", value);
-    };
+
 
     const handleAutoSaveToggle = (checked: boolean) => {
         setAutoSaveEnabled(checked);
@@ -316,44 +298,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
 
                         </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{
-                            animationDelay: "0.15s"
-                        }}>
-                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Pointer Range</label>
-                            <input
-                                type="number"
-                                value={selectionDistance}
-                                onChange={(e) => handleSelectionDistanceChange(Number(e.target.value))}
-                                onBlur={(e) => handleSelectionDistanceChange(Math.max(16, Math.min(256, Number(e.target.value))))}
-                                onKeyDown={(e: any) => {
-                                    e.stopPropagation();
-                                    if (e.key === 'Enter') {
-                                        handleSelectionDistanceChange(Math.max(16, Math.min(256, Number(e.target.value))));
-                                        e.target.blur();
-                                    }
-                                }}
-                                min={16}
-                                max={256}
-                                step={16}
-                                className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                            <input
-                                type="range"
-                                min="32"
-                                max="256"
-                                step="16"
-                                value={selectionDistance}
-                                onChange={(e) => handleSelectionDistanceChange(Number(e.target.value))}
-                                className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
-                                style={{
-                                    transition: "all 0.3s ease-in-out",
-                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(selectionDistance - 32) / (256 - 32) * 100}%, rgba(255, 255, 255, 0.1) ${(selectionDistance - 32) / (256 - 32) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
-                                }}
-                            />
 
-                        </div>
-                    </div>
                     {/* Camera sensitivity visible only when pointer-lock capable (Glide mode) */}
                     {!isPointerUnlockedMode && (
                         <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.17s" }}>
