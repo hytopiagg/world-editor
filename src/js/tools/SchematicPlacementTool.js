@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
 import { blockTypes } from "../managers/BlockTypesManager"; // For getting block type info
+import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
 
 class SchematicPlacementTool extends BaseTool {
     constructor(terrainBuilderProps) {
@@ -60,15 +61,26 @@ class SchematicPlacementTool extends BaseTool {
     }
 
     onActivate(schematicData) {
-        if (!schematicData || Object.keys(schematicData).length === 0) {
+        if (!schematicData) {
             console.warn(
                 "SchematicPlacementTool activated without valid schematic data."
             );
-
-            return false; // Indicate activation failed
+            return false;
         }
 
-        this.schematicData = schematicData;
+        this.schematicData = schematicData.blocks;
+        this.schematicEntities = schematicData.entities || [];
+
+        if (
+            Object.keys(this.schematicData).length === 0 &&
+            this.schematicEntities.length === 0
+        ) {
+            console.warn(
+                "SchematicPlacementTool activated with empty schematic data."
+            );
+            return false;
+        }
+
         this.currentRotation = 0; // Reset rotation on new schematic activation
         this.verticalOffset = 0;
         this.anchorOffset.y = 0;
@@ -77,7 +89,9 @@ class SchematicPlacementTool extends BaseTool {
         this.previewGroup.visible = true;
         console.log(
             "SchematicPlacementTool specific activation with data:",
-            this.schematicData
+            this.schematicData,
+            "entities:",
+            this.schematicEntities
         );
 
         return true; // Indicate activation succeeded
@@ -85,6 +99,7 @@ class SchematicPlacementTool extends BaseTool {
 
     onDeactivate() {
         this.schematicData = null;
+        this.schematicEntities = [];
         this.previewGroup.visible = false;
         this._clearPreviewInstancedMesh(); // Clear the instanced mesh
         this.currentRotation = 0; // Reset rotation
@@ -270,6 +285,7 @@ class SchematicPlacementTool extends BaseTool {
         const basePosition = this.previewPositionRef.current;
         const addedBlocks = {};
         const removedBlocks = {};
+        const placedEntities = [];
         const terrain = this.terrainRef.current;
         const pendingChanges = this.terrainBuilderProps?.pendingChangesRef
             ?.current || {
@@ -316,27 +332,116 @@ class SchematicPlacementTool extends BaseTool {
                 removedBlocks,
                 "ai-schematic"
             );
-            if (this.undoRedoManager && this.undoRedoManager.current) {
-                const changes = {
-                    terrain: { added: addedBlocks, removed: removedBlocks },
-                    environment: {
-                        added: this.terrainBuilderProps?.environment?.added,
-                        removed: this.terrainBuilderProps?.environment?.removed,
-                    },
-                };
-                this.undoRedoManager.current.saveUndo(changes);
-                console.log(
-                    "[Schematic Tool] Saved placement action to undo stack."
-                );
-            } else {
-                console.warn(
-                    "[Schematic Tool] UndoRedoManager not available, cannot save undo state."
-                );
-            }
         } else {
             console.error(
                 "updateTerrainForUndoRedo function not found on this tool instance!"
             );
+        }
+
+        // Handle entity placement if entities are present
+        if (this.schematicEntities && this.schematicEntities.length > 0) {
+            const environmentBuilder =
+                this.terrainBuilderProps?.environmentBuilderRef?.current;
+            if (
+                environmentBuilder &&
+                environmentBuilder.placeEnvironmentModelWithoutSaving
+            ) {
+                for (const entity of this.schematicEntities) {
+                    const [relX, relY, relZ] = entity.position;
+                    const rotatedRel = this.getRotatedRelativePosition(
+                        relX,
+                        relY,
+                        relZ
+                    );
+
+                    const worldX =
+                        basePosition.x + rotatedRel.x + this.anchorOffset.x;
+                    const worldY =
+                        basePosition.y + rotatedRel.y + this.anchorOffset.y;
+                    const worldZ =
+                        basePosition.z + rotatedRel.z + this.anchorOffset.z;
+
+                    // Calculate rotation (combine schematic rotation with entity rotation)
+                    let finalRotation = 0;
+                    if (entity.rotation && entity.rotation[1]) {
+                        finalRotation =
+                            entity.rotation[1] +
+                            (this.currentRotation * Math.PI) / 2;
+                    } else {
+                        finalRotation = (this.currentRotation * Math.PI) / 2;
+                    }
+
+                    // Get the model type from the entity name
+                    // First try to find by name alone (works for custom models)
+                    let modelType = environmentBuilder.getModelType(
+                        entity.entityName
+                    );
+
+                    // If not found, try with the default model path (for built-in models)
+                    if (!modelType) {
+                        modelType = environmentBuilder.getModelType(
+                            entity.entityName,
+                            `assets/models/environment/${entity.entityName}.gltf`
+                        );
+                    }
+
+                    if (!modelType) {
+                        console.warn(
+                            `Could not find model type for entity: ${entity.entityName}`
+                        );
+                        continue;
+                    }
+
+                    // Create a temporary mesh with the position and rotation
+                    // Apply the same Y offset that normal entity placement uses
+                    const tempMesh = new THREE.Object3D();
+                    tempMesh.position.set(
+                        worldX,
+                        worldY + ENVIRONMENT_OBJECT_Y_OFFSET,
+                        worldZ
+                    );
+                    tempMesh.rotation.set(0, finalRotation, 0);
+                    tempMesh.scale.set(1, 1, 1);
+
+                    // Place the entity
+                    const placedInstance =
+                        environmentBuilder.placeEnvironmentModelWithoutSaving(
+                            modelType,
+                            tempMesh
+                        );
+                    console.log(
+                        `[SchematicTool] Placing entity ${entity.entityName} at (${worldX}, ${worldY}, ${worldZ})`
+                    );
+                    console.log(
+                        "[SchematicTool] placedInstance:",
+                        placedInstance
+                    );
+
+                    if (placedInstance) {
+                        const placedEntity = {
+                            modelUrl: modelType.modelUrl, // Use the actual model URL (works for both default and custom)
+                            position: { x: worldX, y: worldY, z: worldZ },
+                            rotation: { x: 0, y: finalRotation, z: 0 },
+                            scale: { x: 1, y: 1, z: 1 },
+                            instanceId: placedInstance.instanceId,
+                        };
+                        placedEntities.push(placedEntity);
+                    } else {
+                        console.warn(
+                            `[SchematicTool] Failed to place entity ${entity.entityName}`
+                        );
+                    }
+                }
+
+                // Update local storage to persist the entities
+                if (placedEntities.length > 0) {
+                    environmentBuilder.updateLocalStorage();
+                }
+            } else {
+                console.warn(
+                    "Environment builder not available for entity placement"
+                );
+            }
         }
 
         console.log("pendingChanges", pendingChanges);
@@ -347,6 +452,30 @@ class SchematicPlacementTool extends BaseTool {
                 ...addedBlocks,
             };
             pendingChanges.terrain.removed = removedBlocks;
+
+            if (placedEntities.length > 0) {
+                pendingChanges.environment.added = [
+                    ...pendingChanges.environment.added,
+                    ...placedEntities,
+                ];
+            }
+        }
+
+        // Save to undo stack AFTER all placement (blocks AND entities) is complete
+        if (this.undoRedoManager && this.undoRedoManager.current) {
+            const changes = {
+                terrain: { added: addedBlocks, removed: removedBlocks },
+                environment: {
+                    added: placedEntities,
+                    removed: [],
+                },
+            };
+
+            this.undoRedoManager.current.saveUndo(changes);
+        } else {
+            console.warn(
+                "[Schematic Tool] UndoRedoManager not available, cannot save undo state."
+            );
         }
 
         const repeatPlacement =

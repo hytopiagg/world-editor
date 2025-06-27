@@ -356,6 +356,22 @@ function App() {
         }
     }, []);
 
+    const handleGetAvailableEntities = useCallback(() => {
+        try {
+            return environmentModels.map(model => ({
+                name: model.name,
+                displayName: model.name
+                    .split("-")
+                    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+                    .join(" "),
+                modelUrl: model.modelUrl
+            }));
+        } catch (error) {
+            console.error("Error getting available entities:", error);
+            return [];
+        }
+    }, []);
+
     const handleLoadAISchematic = useCallback((schematic) => {
         console.log("App: Loading AI schematic and activating tool", schematic);
         terrainBuilderRef.current?.activateTool("schematic", schematic);
@@ -532,6 +548,7 @@ function App() {
                         onToggleCompactMode={handleToggleCompactMode}
                         showAIComponents={isAIComponentsActive}
                         getAvailableBlocks={handleGetAvailableBlocks}
+                        getAvailableEntities={handleGetAvailableEntities}
                         loadAISchematic={handleLoadAISchematic}
                     />
                 )}

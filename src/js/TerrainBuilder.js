@@ -961,7 +961,6 @@ function TerrainBuilder(
         );
     }, [pointer, scene, threeCamera, threeRaycaster, cameraManager]);
     const updatePreviewPosition = () => {
-
         if (updatePreviewPosition.isProcessing) {
             return;
         }
@@ -1876,6 +1875,7 @@ function TerrainBuilder(
         saveTerrainManually, // Add manual save function
         updateTerrainBlocks, // Expose for selective updates in undo/redo
         updateTerrainForUndoRedo, // Optimized version specifically for undo/redo operations
+        syncEnvironmentChangesToPending, // Expose for syncing environment changes to pending ref
         updateSpatialHashForBlocks, // Expose for external spatial hash updates
         fastUpdateBlock, // Ultra-optimized function for drag operations
         forceChunkUpdate, // Direct chunk updating for tools
@@ -2210,6 +2210,76 @@ function TerrainBuilder(
             }
         };
     }, []);
+    const syncEnvironmentChangesToPending = (
+        addedEnvironment = [],
+        removedEnvironment = []
+    ) => {
+        if (!pendingChangesRef.current) {
+            pendingChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
+        }
+
+        // Process added environment objects: add to "added" list and remove from "removed" if present
+        addedEnvironment.forEach((envObj) => {
+            // Remove from removed list if it exists there (by instanceId and modelUrl)
+            pendingChangesRef.current.environment.removed =
+                pendingChangesRef.current.environment.removed.filter(
+                    (removedObj) =>
+                        !(
+                            removedObj.instanceId === envObj.instanceId &&
+                            removedObj.modelUrl === envObj.modelUrl
+                        )
+                );
+
+            // Add to added list (avoid duplicates by instanceId and modelUrl)
+            const existingIndex =
+                pendingChangesRef.current.environment.added.findIndex(
+                    (addedObj) =>
+                        addedObj.instanceId === envObj.instanceId &&
+                        addedObj.modelUrl === envObj.modelUrl
+                );
+            if (existingIndex === -1) {
+                pendingChangesRef.current.environment.added.push(envObj);
+            } else {
+                // Update existing entry
+                pendingChangesRef.current.environment.added[existingIndex] =
+                    envObj;
+            }
+        });
+
+        // Process removed environment objects: if it was newly added in this session, drop it from "added"; otherwise record in "removed"
+        removedEnvironment.forEach((envObj) => {
+            // Check if this object was added in this session
+            const addedIndex =
+                pendingChangesRef.current.environment.added.findIndex(
+                    (addedObj) =>
+                        addedObj.instanceId === envObj.instanceId &&
+                        addedObj.modelUrl === envObj.modelUrl
+                );
+
+            if (addedIndex !== -1) {
+                // Remove from added list since it was added in this session
+                pendingChangesRef.current.environment.added.splice(
+                    addedIndex,
+                    1
+                );
+            } else {
+                // Add to removed list (avoid duplicates)
+                const existingIndex =
+                    pendingChangesRef.current.environment.removed.findIndex(
+                        (removedObj) =>
+                            removedObj.instanceId === envObj.instanceId &&
+                            removedObj.modelUrl === envObj.modelUrl
+                    );
+                if (existingIndex === -1) {
+                    pendingChangesRef.current.environment.removed.push(envObj);
+                }
+            }
+        });
+    };
+
     const updateTerrainBlocks = (addedBlocks, removedBlocks, options = {}) => {
         if (!addedBlocks && !removedBlocks) return;
         addedBlocks = addedBlocks || {};

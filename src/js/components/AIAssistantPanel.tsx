@@ -8,7 +8,14 @@ export const generateUniqueId = (): string => {
 };
 
 // Type for the raw schematic data from the backend (block coordinates to block ID)
-export type RawSchematicType = Record<string, number>;
+export type RawSchematicType = {
+    blocks: Record<string, number>;
+    entities?: Array<{
+        position: [number, number, number];
+        entityName: string;
+        rotation?: [number, number, number];
+    }>;
+};
 
 // Type for the value stored in IndexedDB against a unique ID
 export interface SchematicValue {
@@ -102,9 +109,6 @@ async function migrateSchematicStoreV2IfNeeded(
                 const cleanSchematic: RawSchematicType = {
                     ...oldSchematicData,
                 };
-                if (cleanSchematic.timestamp !== undefined) {
-                    delete cleanSchematic.timestamp;
-                }
                 const newSchematicValue: SchematicValue = {
                     prompt: item.oldKey,
                     schematic: cleanSchematic,
@@ -154,6 +158,7 @@ async function migrateSchematicStoreV2IfNeeded(
 
 interface AIAssistantPanelProps {
     getAvailableBlocks: () => Promise<any> | any;
+    getAvailableEntities?: () => Promise<any[]> | any[];
     loadAISchematic: (schematic: any) => void;
     isVisible: boolean;
     isEmbedded?: boolean;
@@ -161,6 +166,7 @@ interface AIAssistantPanelProps {
 
 const AIAssistantPanel = ({
     getAvailableBlocks,
+    getAvailableEntities,
     loadAISchematic,
     isVisible,
     isEmbedded = false,
@@ -170,6 +176,7 @@ const AIAssistantPanel = ({
     const [error, setError] = useState<string | null>(null);
     const [hCaptchaToken, setHCaptchaToken] = useState<string | null>(null);
     const [captchaError, setCaptchaError] = useState<string | null>(null);
+    const [enableEntities, setEnableEntities] = useState(false);
     const hCaptchaRef = useRef<HCaptcha>(null);
 
     useEffect(() => {
@@ -253,6 +260,23 @@ const AIAssistantPanel = ({
             if (!availableBlocks || availableBlocks.length === 0) {
                 throw new Error("Could not retrieve available block types.");
             }
+
+            // Build request body
+            const requestBody: any = {
+                prompt,
+                availableBlocks,
+                hCaptchaToken: hCaptchaToken,
+            };
+
+            // Add entities if enabled and available
+            if (enableEntities && getAvailableEntities) {
+                const availableEntities = await getAvailableEntities();
+                if (availableEntities && availableEntities.length > 0) {
+                    requestBody.availableEntities = availableEntities;
+                    requestBody.enableEntities = true;
+                }
+            }
+
             const response = await fetch(
                 `${process.env.REACT_APP_API_URL}/generate_building`,
                 {
@@ -260,11 +284,7 @@ const AIAssistantPanel = ({
                     headers: {
                         "Content-Type": "application/json",
                     },
-                    body: JSON.stringify({
-                        prompt,
-                        availableBlocks,
-                        hCaptchaToken: hCaptchaToken,
-                    }),
+                    body: JSON.stringify(requestBody),
                 }
             );
 
@@ -319,7 +339,15 @@ const AIAssistantPanel = ({
                 hCaptchaRef.current.resetCaptcha();
             }
         }
-    }, [prompt, isLoading, getAvailableBlocks, loadAISchematic, hCaptchaToken]);
+    }, [
+        prompt,
+        isLoading,
+        getAvailableBlocks,
+        getAvailableEntities,
+        loadAISchematic,
+        hCaptchaToken,
+        enableEntities,
+    ]);
 
     const handleGenerateClick = () => {
         if (!prompt.trim() || isLoading) return;
@@ -336,7 +364,9 @@ const AIAssistantPanel = ({
                 hCaptchaRef.current.execute();
             } catch (error) {
                 console.error("Failed to execute hCaptcha:", error);
-                setCaptchaError("Failed to initiate CAPTCHA. Please try again.");
+                setCaptchaError(
+                    "Failed to initiate CAPTCHA. Please try again."
+                );
             }
         } else {
             setCaptchaError("CAPTCHA component not ready. Please try again.");
@@ -354,7 +384,7 @@ const AIAssistantPanel = ({
     }
 
     return (
-        <div className={`ai-assistant-panel ${isEmbedded ? 'embedded' : ''}`}>
+        <div className={`ai-assistant-panel ${isEmbedded ? "embedded" : ""}`}>
             {/* Prevent inputs triggering keyboard shortcuts in the main app */}
             <textarea
                 onKeyDown={(e) => e.stopPropagation()}
@@ -364,17 +394,41 @@ const AIAssistantPanel = ({
                 placeholder="Describe what you want to build (e.g., 'a small stone hut', 'a 5 block high brick tower')"
                 disabled={isLoading}
             />
+            <label className="flex items-center gap-2 text-xs text-white/80 cursor-pointer hover:text-white transition-colors">
+                <input
+                    type="checkbox"
+                    checked={enableEntities}
+                    onChange={(e) => setEnableEntities(e.target.checked)}
+                    disabled={isLoading}
+                    className="w-3.5 h-3.5 rounded border-white/30 bg-transparent focus:ring-1 focus:ring-white/50"
+                />
+                Include Models
+            </label>
             <button
                 className="ai-assistant-button"
                 onClick={handleGenerateClick}
                 disabled={isLoading || !prompt.trim()}
             >
-                {isLoading ? <div className="flex items-center gap-1.5 justify-center">Generating <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black/80 rounded-full animate-spin" /> </div> : "Generate Structure"}
+                {isLoading ? (
+                    <div className="flex items-center gap-1.5 justify-center">
+                        Generating{" "}
+                        <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black/80 rounded-full animate-spin" />{" "}
+                    </div>
+                ) : (
+                    "Generate Structure"
+                )}
             </button>
             {error && <div className="ai-assistant-error">{error}</div>}
 
             {/* Invisible hCaptcha - always in DOM but hidden */}
-            <div style={{ position: "fixed", visibility: "hidden", bottom: 0, right: 0 }}>
+            <div
+                style={{
+                    position: "fixed",
+                    visibility: "hidden",
+                    bottom: 0,
+                    right: 0,
+                }}
+            >
                 <HCaptcha
                     ref={hCaptchaRef}
                     sitekey={
@@ -401,7 +455,6 @@ const AIAssistantPanel = ({
             {captchaError && (
                 <div className="ai-assistant-error">{captchaError}</div>
             )}
-
         </div>
     );
 };
