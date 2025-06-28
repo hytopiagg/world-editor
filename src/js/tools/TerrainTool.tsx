@@ -193,8 +193,25 @@ export class TerrainTool extends BaseTool {
         this.isPlacing = false;
         console.log("Terrain tool: Finished terrain modification");
 
-        // Apply all height changes to terrain
+        // Apply all height changes to terrain and spatial hash updates
         this.applyHeightChanges();
+
+        // Persist undo state now that the drag operation is complete
+        const pending = (this.terrainBuilderProps as any)?.pendingChangesRef?.current;
+        if (
+            pending &&
+            ((pending.terrain && (Object.keys(pending.terrain.added || {}).length > 0 || Object.keys(pending.terrain.removed || {}).length > 0)) ||
+                (pending.environment && (pending.environment.added?.length > 0 || pending.environment.removed?.length > 0)))
+        ) {
+            if (this.undoRedoManager?.current?.saveUndo) {
+                this.undoRedoManager.current.saveUndo(pending);
+            }
+            // Reset pending changes for the next operation
+            (this.terrainBuilderProps as any).pendingChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
+        }
     }
 
     findGroundLevel(x, z) {
@@ -354,25 +371,13 @@ export class TerrainTool extends BaseTool {
 
                     // Add blocks up to new height using the currently selected block type from App.tsx
                     const currentBlockType = (this.terrainBuilderProps as any).currentBlockTypeRef?.current;
-                    const selectedBlockId = currentBlockType?.id || 1; // Default to stone if no block selected
+                    const selectedBlockId = currentBlockType?.id || 1; // Default fallback
 
                     for (let y = Math.min(oldGroundLevel, 0); y <= newGroundLevel; y++) {
                         const blockKey = `${x},${y},${z}`;
                         if (!terrainData[blockKey]) {
-                            // Use the currently selected block type from the sidebar
-                            let blockType = selectedBlockId;
-
-                            // If using a standard block (not environment), apply some logic for layering
-                            if (!currentBlockType?.isEnvironment) {
-                                if (y === newGroundLevel && selectedBlockId === 1) {
-                                    blockType = 2; // Use grass on top if stone is selected
-                                } else if (y >= newGroundLevel - 3 && selectedBlockId === 1) {
-                                    blockType = 3; // Use dirt below grass if stone is selected
-                                } else {
-                                    blockType = selectedBlockId; // Use selected block type
-                                }
-                            }
-
+                            // Always use the currently selected block type
+                            const blockType = selectedBlockId;
                             addedBlocks[blockKey] = blockType;
                         }
                     }
