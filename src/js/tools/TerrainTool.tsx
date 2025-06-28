@@ -182,6 +182,13 @@ export class TerrainTool extends BaseTool {
     handleMouseDown(mouseEvent, intersectionPoint) {
         if (!this.active || !intersectionPoint) return;
 
+        // First click of a stroke – enable deferred meshing so chunks are rebuilt once at the end
+        if (!this.isPlacing && (this.terrainBuilderProps as any).setDeferredChunkMeshing) {
+            try {
+                (this.terrainBuilderProps as any).setDeferredChunkMeshing(true);
+            } catch (_) { }
+        }
+
         this.isPlacing = true;
         console.log("Terrain tool: Started terrain modification");
 
@@ -200,6 +207,20 @@ export class TerrainTool extends BaseTool {
 
         // Apply all height changes to terrain and spatial hash updates
         this.applyHeightChanges();
+
+        // Re-enable chunk meshing now that the stroke is complete
+        if ((this.terrainBuilderProps as any).setDeferredChunkMeshing) {
+            try {
+                (this.terrainBuilderProps as any).setDeferredChunkMeshing(false);
+            } catch (_) { }
+        }
+
+        // Ensure rebuilt chunks are processed immediately
+        if ((this.terrainBuilderProps as any).forceRefreshAllChunks) {
+            try {
+                (this.terrainBuilderProps as any).forceRefreshAllChunks();
+            } catch (_) { }
+        }
 
         // Persist undo state now that the drag operation is complete
         const pending = (this.terrainBuilderProps as any)?.pendingChangesRef?.current;

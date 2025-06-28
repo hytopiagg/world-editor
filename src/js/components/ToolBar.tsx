@@ -1,4 +1,3 @@
-import { generatePerlinNoise } from "perlin-noise";
 import { useEffect, useState } from "react";
 import {
     FaCloud,
@@ -23,6 +22,7 @@ import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
 import Tooltip from "./Tooltip";
+
 const ToolBar = ({
     terrainBuilderRef,
     mode,
@@ -199,7 +199,26 @@ const ToolBar = ({
             terrainBuilderRef.current?.clearMap();
         }
     };
-    const generateTerrain = () => {
+    const generatePerlinNoiseAsync = (width, length, options) => {
+        return new Promise((resolve, reject) => {
+            try {
+                const worker = new Worker(new URL("../workers/perlinNoiseWorker.js", import.meta.url), { type: "module" });
+                worker.onmessage = (e) => {
+                    resolve(e.data);
+                    worker.terminate();
+                };
+                worker.onerror = (err) => {
+                    reject(err);
+                    worker.terminate();
+                };
+                worker.postMessage({ width, length, options });
+            } catch (err) {
+                reject(err);
+            }
+        });
+    };
+
+    const generateTerrain = async () => {
         if (currentBlockType.id > 199) {
             alert(
                 "Not Compatible with Environment Objects... \n\nPlease select a block and try again!"
@@ -207,17 +226,32 @@ const ToolBar = ({
             return;
         }
 
+        setShowTerrainModal(false); // close modal early to avoid blocking
+
         let terrainData = terrainSettings.clearMap
             ? {}
             : terrainBuilderRef.current.getCurrentTerrainData();
         const { width, length, height, roughness } = terrainSettings;
 
-        const baseNoiseMap = generatePerlinNoise(width, length, {
-            octaveCount: 4,
-            amplitude: 1,
-            persistence: 0.5,
-            scale: 0.1, // Base scale for all terrain types
-        });
+        let baseNoiseMap;
+        try {
+            baseNoiseMap = await generatePerlinNoiseAsync(width, length, {
+                octaveCount: 4,
+                amplitude: 1,
+                persistence: 0.5,
+                scale: 0.1,
+            });
+        } catch (err) {
+            console.error("Perlin worker failed, falling back to sync", err);
+            // fallback sync import to prevent crash
+            const { generatePerlinNoise } = await import("perlin-noise");
+            baseNoiseMap = generatePerlinNoise(width, length, {
+                octaveCount: 4,
+                amplitude: 1,
+                persistence: 0.5,
+                scale: 0.1,
+            });
+        }
 
         const startX = -Math.floor(width / 2);
         const startZ = -Math.floor(length / 2);
@@ -286,7 +320,6 @@ const ToolBar = ({
         if (terrainBuilderRef.current) {
             terrainBuilderRef.current.updateTerrainFromToolBar(terrainData);
         }
-        setShowTerrainModal(false);
     };
     const handleExportMap = () => {
         try {
@@ -1082,8 +1115,8 @@ const ToolBar = ({
                         <div className="modal-buttons">
                             <button
                                 className="menu-button"
-                                onClick={() => {
-                                    generateTerrain();
+                                onClick={async () => {
+                                    await generateTerrain();
                                 }}
                             >
                                 Generate
