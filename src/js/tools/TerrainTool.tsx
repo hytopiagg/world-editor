@@ -295,9 +295,13 @@ export class TerrainTool extends BaseTool {
         // Use effective radius for performance during fast movement
         for (let x = centerX - effectiveRadius; x <= centerX + effectiveRadius; x++) {
             for (let z = centerZ - effectiveRadius; z <= centerZ + effectiveRadius; z++) {
-                const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(z - centerZ, 2));
+                const dx = x - centerX;
+                const dz = z - centerZ;
+                const distanceSq = dx * dx + dz * dz;
+                const radiusSq = effectiveRadius * effectiveRadius;
 
-                if (distance <= effectiveRadius) {
+                if (distanceSq <= radiusSq) {
+                    const distance = Math.sqrt(distanceSq);
                     // Calculate falloff based on distance from center
                     let falloff = this.calculateFalloff(distance, radius);
 

@@ -146,7 +146,12 @@ function handleTerrainMouseDown(
         }
     }
     // TODO: Handle pointer lock mode
-    if (e.button === 0 || (!cameraManager.isPointerUnlockedMode && cameraManager.isPointerLocked && e.button === 2)) {
+    // Only respond to left-click for placement/removal
+    if (e.button !== 0) {
+        return;
+    }
+
+    if (e.button === 0) {
         if (!isToolActive) {
             console.log("isPlacingRef.current = true");
             isPlacingRef.current = true;
