@@ -127,8 +127,12 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         isMultiTexture:
             block.sideTextures && Object.keys(block.sideTextures).length > 0,
         isCustom: true,
-        hasMissingTexture:
-            !finalTextureUri || finalTextureUri === ERROR_TEXTURE_PATH,
+        // For multi-texture blocks, missing texture status depends on sideTextures.
+        // For single-texture blocks, it depends on the main textureUri.
+        hasMissingTexture: block.isMultiTexture
+            ? !block.sideTextures ||
+              Object.keys(block.sideTextures).length === 0
+            : !finalTextureUri || finalTextureUri === ERROR_TEXTURE_PATH,
     };
 
     if (existingIndex >= 0) {
