@@ -18,6 +18,7 @@ export class TerrainTool extends BaseTool {
     lastTerrainUpdate: number;
     lastPosition: THREE.Vector3;
     dirtyRegions: Set<string>;
+    falloffTable: number[];
 
     constructor(terrainBuilderProps: any) {
         super(terrainBuilderProps);
@@ -53,6 +54,10 @@ export class TerrainTool extends BaseTool {
         this.lastTerrainUpdate = 0;
         this.lastPosition = new THREE.Vector3();
         this.dirtyRegions = new Set();
+
+        // Pre-compute fall-off table for the initial radius
+        this.falloffTable = [];
+        this._rebuildFalloffTable();
 
         this.createPreviewObjects();
     }
@@ -303,7 +308,7 @@ export class TerrainTool extends BaseTool {
                 if (distanceSq <= radiusSq) {
                     const distance = Math.sqrt(distanceSq);
                     // Calculate falloff based on distance from center
-                    let falloff = this.calculateFalloff(distance, radius);
+                    const falloff = this.falloffTable[Math.min(this.falloffTable.length - 1, Math.round(distance))];
 
                     // Skip blocks with minimal effect (performance optimization)
                     if (falloff < 0.005) { // Reduced threshold to ensure more blocks are processed
@@ -549,6 +554,11 @@ export class TerrainTool extends BaseTool {
             const wireframe = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
             this.previewGroup.add(wireframe);
         }
+
+        // Rebuild fall-off table if radius or curve changed
+        if (newSettings.radius || newSettings.falloffCurve) {
+            this._rebuildFalloffTable();
+        }
     }
 
     handleKeyDown(event) {
@@ -600,5 +610,27 @@ export class TerrainTool extends BaseTool {
         this.originalHeights.clear();
         this.noiseCache.clear();
         this.dirtyRegions.clear();
+    }
+
+    _rebuildFalloffTable() {
+        const r = Math.ceil(this.settings.radius);
+        this.falloffTable.length = r + 1;
+        for (let d = 0; d <= r; d++) {
+            const normalized = d / r;
+            let val;
+            switch (this.settings.falloffCurve) {
+                case "linear":
+                    val = 1 - normalized;
+                    break;
+                case "sharp":
+                    val = 1 - Math.pow(normalized, 0.5);
+                    break;
+                case "smooth":
+                default:
+                    val = 1 - normalized * normalized;
+                    break;
+            }
+            this.falloffTable[d] = val;
+        }
     }
 } 
