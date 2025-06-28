@@ -45,6 +45,7 @@ import {
     GroundTool,
     SchematicPlacementTool,
     SelectionTool,
+    TerrainTool,
     ToolManager,
     WallTool,
 } from "./tools";
@@ -1664,6 +1665,7 @@ function TerrainBuilder(
             importedUpdateTerrainBlocks, // Direct access to optimized terrain update function
             updateSpatialHashForBlocks, // Direct access to spatial hash update function
             updateTerrainForUndoRedo, // <<< Add this function explicitly
+            updateTerrainBlocks, // Add the updateTerrainBlocks function for terrain modifications
             totalBlocksRef, // Provide access to the total block count ref
             activateTool: (toolName, activationData) =>
                 toolManagerRef.current?.activateTool(toolName, activationData),
@@ -1683,6 +1685,9 @@ function TerrainBuilder(
         );
         const selectionTool = new SelectionTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("selection", selectionTool);
+
+        const terrainTool = new TerrainTool(terrainBuilderProps);
+        toolManagerRef.current.registerTool("terrain", terrainTool);
         initialize();
         window.addEventListener("keydown", (event) => {
             if (!event.key) return;

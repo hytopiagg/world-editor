@@ -556,20 +556,27 @@ const ToolBar = ({
                                             { label: '5×5', value: '5x5' },
                                             { label: '◇3', value: '3x3diamond' },
                                             { label: '◇5', value: '5x5diamond' },
+                                            { label: '🏔️', value: 'terrain', isTool: true },
                                         ].map((opt, idx) => (
                                             <button
                                                 key={idx}
-                                                className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${placementSize === opt.value ? 'bg-white/90 text-black' : ''}`}
+                                                className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${(opt.isTool && activeTool === opt.value) || (!opt.isTool && placementSize === opt.value) ? 'bg-white/90 text-black' : ''}`}
                                                 style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
                                                 onClick={() => {
-                                                    if (activeTool) {
-                                                        try {
-                                                            terrainBuilderRef.current?.activateTool(null);
-                                                        } catch (_) { }
-                                                        setActiveTool(null);
+                                                    if (opt.isTool) {
+                                                        // Handle tool activation
+                                                        handleToolToggle(opt.value);
+                                                        setPlacementSize("single");
+                                                    } else {
+                                                        // Handle placement size change
+                                                        if (activeTool) {
+                                                            try {
+                                                                terrainBuilderRef.current?.activateTool(null);
+                                                            } catch (_) { }
+                                                            setActiveTool(null);
+                                                        }
+                                                        setPlacementSize(opt.value);
                                                     }
-
-                                                    setPlacementSize(opt.value);
                                                     setShowPlacementMenu(false);
                                                 }}
                                             >

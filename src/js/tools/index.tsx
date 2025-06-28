@@ -7,6 +7,7 @@ import GroundTool from "./GroundTool";
 import ToolManager from "./ToolManager";
 import SchematicPlacementTool from "./SchematicPlacementTool";
 import SelectionTool from "./SelectionTool";
+import { TerrainTool } from "./TerrainTool";
 
 export {
     BaseTool,
@@ -15,4 +16,5 @@ export {
     ToolManager,
     SchematicPlacementTool,
     SelectionTool,
+    TerrainTool,
 };
