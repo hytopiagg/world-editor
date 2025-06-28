@@ -19,6 +19,8 @@ export class TerrainTool extends BaseTool {
     lastPosition: THREE.Vector3;
     dirtyRegions: Set<string>;
     falloffTable: number[];
+    lastMeshUpdate: number;
+    dirtyChunks: Set<string>;
 
     constructor(terrainBuilderProps: any) {
         super(terrainBuilderProps);
@@ -54,6 +56,8 @@ export class TerrainTool extends BaseTool {
         this.lastTerrainUpdate = 0;
         this.lastPosition = new THREE.Vector3();
         this.dirtyRegions = new Set();
+        this.lastMeshUpdate = 0;
+        this.dirtyChunks = new Set();
 
         // Pre-compute fall-off table for the initial radius
         this.falloffTable = [];
@@ -215,8 +219,17 @@ export class TerrainTool extends BaseTool {
             } catch (_) { }
         }
 
-        // Ensure rebuilt chunks are processed immediately
-        if ((this.terrainBuilderProps as any).forceRefreshAllChunks) {
+        // Flush remaining dirty chunks
+        if (this.dirtyChunks.size > 0 && (this.terrainBuilderProps as any).forceChunkUpdate) {
+            try {
+                (this.terrainBuilderProps as any).forceChunkUpdate(Array.from(this.dirtyChunks));
+            } catch (_) {
+                if ((this.terrainBuilderProps as any).forceRefreshAllChunks) {
+                    (this.terrainBuilderProps as any).forceRefreshAllChunks();
+                }
+            }
+            this.dirtyChunks.clear();
+        } else if ((this.terrainBuilderProps as any).forceRefreshAllChunks) {
             try {
                 (this.terrainBuilderProps as any).forceRefreshAllChunks();
             } catch (_) { }
@@ -331,6 +344,11 @@ export class TerrainTool extends BaseTool {
                     // Calculate falloff based on distance from center
                     const falloff = this.falloffTable[Math.min(this.falloffTable.length - 1, Math.round(distance))];
 
+                    // Track dirty chunk for selective meshing
+                    const CHUNK_SIZE = 16;
+                    const chunkKey = `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
+                    this.dirtyChunks.add(chunkKey);
+
                     // Skip blocks with minimal effect (performance optimization)
                     if (falloff < 0.005) { // Reduced threshold to ensure more blocks are processed
                         continue;
@@ -424,6 +442,27 @@ export class TerrainTool extends BaseTool {
                 skipSpatialHash: true, // Skip expensive spatial hash updates during real-time editing
                 skipUndoSave: true // Skip undo operations during real-time dragging for performance
             });
+
+            // Periodically flush chunk meshing for near-real-time visuals
+            const nowFlush = performance.now();
+            if (nowFlush - this.lastMeshUpdate > 250) {
+                if (this.dirtyChunks.size > 0 && (this.terrainBuilderProps as any).forceChunkUpdate) {
+                    try {
+                        (this.terrainBuilderProps as any).forceChunkUpdate(Array.from(this.dirtyChunks));
+                    } catch (_) {
+                        // fallback to full refresh if selective update fails
+                        if ((this.terrainBuilderProps as any).forceRefreshAllChunks) {
+                            (this.terrainBuilderProps as any).forceRefreshAllChunks();
+                        }
+                    }
+                    this.dirtyChunks.clear();
+                } else if ((this.terrainBuilderProps as any).forceRefreshAllChunks) {
+                    try {
+                        (this.terrainBuilderProps as any).forceRefreshAllChunks();
+                    } catch (_) { }
+                }
+                this.lastMeshUpdate = nowFlush;
+            }
         }
     }
 
