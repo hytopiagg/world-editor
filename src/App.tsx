@@ -55,7 +55,7 @@ function App() {
         rotation: 0,
         snapToGrid: true,
     });
-    const [isSaving, setIsSaving] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'complete'>('idle');
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
     const [isAIComponentsActive, setIsAIComponentsActive] = useState(false);
     const [showBlockSidebar, setShowBlockSidebar] = useState(true);
@@ -135,7 +135,7 @@ function App() {
             if ((e.ctrlKey || e.metaKey) && e.key === "s") {
                 e.preventDefault();
 
-                setIsSaving(true);
+                setSaveStatus('saving');
 
                 try {
                     if (terrainBuilderRef.current) {
@@ -146,7 +146,8 @@ function App() {
                         await environmentBuilderRef.current.updateLocalStorage();
                     }
                 } finally {
-                    setIsSaving(false);
+                    setSaveStatus('complete');
+                    setTimeout(() => setSaveStatus('idle'), 2000);
                 }
             }
         };
@@ -561,7 +562,7 @@ function App() {
 
                 <div className="vignette-gradient"></div>
 
-                {isSaving && (
+                {saveStatus !== 'idle' && (
                     <div
                         style={{
                             position: "fixed",
@@ -583,17 +584,36 @@ function App() {
                             pointerEvents: "none",
                         }}
                     >
-                        <div
-                            style={{
-                                width: "16px",
-                                height: "16px",
-                                borderRadius: "50%",
-                                border: "3px solid rgba(255, 255, 255, 0.3)",
-                                borderTopColor: "white",
-                                animation: "spin 1s linear infinite",
-                            }}
-                        />
-                        Saving...
+                        {saveStatus === 'saving' ? (
+                            <>
+                                <div
+                                    style={{
+                                        width: "16px",
+                                        height: "16px",
+                                        borderRadius: "50%",
+                                        border: "3px solid rgba(255, 255, 255, 0.3)",
+                                        borderTopColor: "white",
+                                        animation: "spin 1s linear infinite",
+                                    }}
+                                />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <div
+                                    style={{
+                                        width: "16px",
+                                        height: "16px",
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    ✓
+                                </div>
+                                Save complete!
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -644,7 +664,7 @@ function App() {
                         onOpenTextureModal={() => setIsTextureModalOpen(true)}
                         toggleAIComponents={() => setIsAIComponentsActive((v) => !v)}
                         isAIComponentsActive={isAIComponentsActive}
-                        setIsSaving={setIsSaving}
+                        setIsSaving={setSaveStatus}
                     />
                 )}
 

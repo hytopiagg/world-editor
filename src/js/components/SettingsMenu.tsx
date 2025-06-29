@@ -25,6 +25,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [showToolbar, setShowToolbar] = useState(true);
     const [cameraSensitivity, setCameraSensitivity] = useState(5);
     const [moveSpeed, setMoveSpeed] = useState(0.2);
+    const [lowResDrag, setLowResDrag] = useState(false);
     const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(!cameraManager.isPointerUnlockedMode);
 
     // Load saved sensitivity on mount
@@ -75,6 +76,19 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     console.error("Error loading view distance:", error);
                 }
 
+                // Load low-res sculpt flag
+                try {
+                    const savedLowRes = await DatabaseManager.getData(STORES.SETTINGS, "lowResDrag");
+                    if (typeof savedLowRes === "boolean") {
+                        setLowResDrag(savedLowRes);
+                        // Expose globally for runtime checks
+                        if (typeof window !== "undefined") {
+                            (window as any).lowResDragEnabled = savedLowRes;
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error loading lowResDrag", err);
+                }
 
             } catch (error) {
                 console.error("Error loading camera sensitivity:", error);
@@ -173,6 +187,16 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         }
     };
 
+    const handleLowResToggle = async (checked: boolean) => {
+        setLowResDrag(checked);
+        if (typeof window !== "undefined") {
+            (window as any).lowResDragEnabled = checked;
+        }
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "lowResDrag", checked);
+        } catch (err) { console.error("saving lowResDrag", err); }
+    };
+
     return (
         <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-1">
@@ -241,6 +265,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             type="checkbox"
                             checked={!isPointerUnlockedMode}
                             onChange={handlePointerModeToggle}
+                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                        animationDelay: "0.11s"
+                    }}>
+                        <span>Low-Res Sculpt</span>
+                        <input
+                            type="checkbox"
+                            checked={lowResDrag}
+                            onChange={(e) => handleLowResToggle(e.target.checked)}
                             className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                         />
                     </label>

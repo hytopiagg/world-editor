@@ -122,6 +122,7 @@ function TerrainBuilder(
     const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
     const placementSizeRef = useRef(placementSize);
     const snapToGridRef = useRef(snapToGrid !== false);
+    const originalPixelRatioRef = useRef(null);
 
     useEffect(() => {
         snapToGridRef.current = snapToGrid !== false;
@@ -721,6 +722,23 @@ function TerrainBuilder(
                 }
             }
 
+            // Low-res sculpting: temporarily drop pixel ratio
+            if (
+                !isPlacingRef.current &&
+                gl &&
+                typeof gl.getPixelRatio === "function"
+            ) {
+                const lowResEnabled = window.lowResDragEnabled === true;
+                if (lowResEnabled) {
+                    try {
+                        originalPixelRatioRef.current = gl.getPixelRatio();
+                        gl.setPixelRatio(
+                            Math.max(0.3, originalPixelRatioRef.current * 0.5)
+                        );
+                    } catch (_) {}
+                }
+            }
+
             handleTerrainMouseDown(
                 e,
                 toolManagerRef,
@@ -1197,6 +1215,19 @@ function TerrainBuilder(
                 ref,
                 getRaycastIntersection
             );
+
+            // Restore pixel ratio after drag if it was lowered
+            if (
+                !isPlacingRef.current &&
+                originalPixelRatioRef.current &&
+                gl &&
+                typeof gl.setPixelRatio === "function"
+            ) {
+                try {
+                    gl.setPixelRatio(originalPixelRatioRef.current);
+                    originalPixelRatioRef.current = null;
+                } catch (_) {}
+            }
         },
         [getRaycastIntersection, undoRedoManager, ref]
     );
@@ -1836,6 +1867,12 @@ function TerrainBuilder(
         }
     }, [scene, onSceneReady]);
     const saveTerrainManually = () => {
+        // Ensure any buffered edits are flushed before saving
+        try {
+            if (toolManagerRef.current?.tools?.["terrain"]?.flushPending) {
+                toolManagerRef.current.tools["terrain"].flushPending();
+            }
+        } catch (_) {}
         return efficientTerrainSave();
     };
     const setAutoSaveEnabled = (enabled) => {

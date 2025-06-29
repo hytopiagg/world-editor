@@ -69,6 +69,7 @@ const ToolBar = ({
 
     const [activeTool, setActiveTool] = useState(null);
     const [showPlacementMenu, setShowPlacementMenu] = useState(false);
+    const [suppressPlacementTooltip, setSuppressPlacementTooltip] = useState(false);
 
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
@@ -572,11 +573,20 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu}>
+                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu || suppressPlacementTooltip}>
                             <div className="relative">
                                 <button
                                     className={`relative control-button active:translate-y-[1px] group transition-all ${showPlacementMenu ? 'selected' : ''}`}
-                                    onClick={() => setShowPlacementMenu(!showPlacementMenu)}
+                                    onClick={(e) => {
+                                        const el = e.target as HTMLElement;
+                                        if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
+                                            setShowPlacementMenu(false);
+                                            setSuppressPlacementTooltip(true);
+                                            setTimeout(() => setSuppressPlacementTooltip(false), 300);
+                                        } else {
+                                            setShowPlacementMenu(!showPlacementMenu);
+                                        }
+                                    }}
                                 >
                                     <FaThLarge className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
@@ -595,22 +605,29 @@ const ToolBar = ({
                                                 key={idx}
                                                 className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${(opt.isTool && activeTool === opt.value) || (!opt.isTool && placementSize === opt.value) ? 'bg-white/90 text-black' : ''}`}
                                                 style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
-                                                onClick={() => {
-                                                    if (opt.isTool) {
-                                                        // Handle tool activation
-                                                        handleToolToggle(opt.value);
-                                                        setPlacementSize("single");
+                                                onClick={(e) => {
+                                                    const el = e.target as HTMLElement;
+                                                    if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
+                                                        setShowPlacementMenu(false);
+                                                        setSuppressPlacementTooltip(true);
+                                                        setTimeout(() => setSuppressPlacementTooltip(false), 300);
                                                     } else {
-                                                        // Handle placement size change
-                                                        if (activeTool) {
-                                                            try {
-                                                                terrainBuilderRef.current?.activateTool(null);
-                                                            } catch (_) { }
-                                                            setActiveTool(null);
+                                                        if (opt.isTool) {
+                                                            // Handle tool activation
+                                                            handleToolToggle(opt.value);
+                                                            setPlacementSize("single");
+                                                        } else {
+                                                            // Handle placement size change
+                                                            if (activeTool) {
+                                                                try {
+                                                                    terrainBuilderRef.current?.activateTool(null);
+                                                                } catch (_) { }
+                                                                setActiveTool(null);
+                                                            }
+                                                            setPlacementSize(opt.value);
                                                         }
-                                                        setPlacementSize(opt.value);
+                                                        setShowPlacementMenu(false);
                                                     }
-                                                    setShowPlacementMenu(false);
                                                 }}
                                             >
                                                 {opt.label}
@@ -757,7 +774,7 @@ const ToolBar = ({
                         <Tooltip text="Save terrain (Ctrl+S)">
                             <button
                                 onClick={async () => {
-                                    setIsSaving(true);
+                                    setIsSaving('saving');
                                     try {
                                         if (terrainBuilderRef.current) {
                                             await terrainBuilderRef.current.saveTerrainManually();
@@ -767,7 +784,8 @@ const ToolBar = ({
                                             await environmentBuilderRef.current.updateLocalStorage();
                                         }
                                     } finally {
-                                        setIsSaving(false);
+                                        setIsSaving('complete');
+                                        setTimeout(() => setIsSaving('idle'), 2000);
                                     }
                                 }}
                                 className="control-button"

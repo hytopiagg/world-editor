@@ -21,6 +21,8 @@ export class TerrainTool extends BaseTool {
     falloffTable: number[];
     lastMeshUpdate: number;
     dirtyChunks: Set<string>;
+    pendingAdded: Record<string, number>;
+    pendingRemoved: Record<string, number>;
 
     constructor(terrainBuilderProps: any) {
         super(terrainBuilderProps);
@@ -58,6 +60,8 @@ export class TerrainTool extends BaseTool {
         this.dirtyRegions = new Set();
         this.lastMeshUpdate = 0;
         this.dirtyChunks = new Set();
+        this.pendingAdded = {};
+        this.pendingRemoved = {};
 
         // Pre-compute fall-off table for the initial radius
         this.falloffTable = [];
@@ -220,6 +224,11 @@ export class TerrainTool extends BaseTool {
         }
 
         // Flush remaining dirty chunks
+        if ((Object.keys(this.pendingAdded).length || Object.keys(this.pendingRemoved).length) && (this.terrainBuilderProps as any).updateTerrainBlocks) {
+            (this.terrainBuilderProps as any).updateTerrainBlocks(this.pendingAdded, this.pendingRemoved, { syncPendingChanges: true });
+            this.pendingAdded = {}; this.pendingRemoved = {};
+        }
+
         if (this.dirtyChunks.size > 0 && (this.terrainBuilderProps as any).forceChunkUpdate) {
             try {
                 (this.terrainBuilderProps as any).forceChunkUpdate(Array.from(this.dirtyChunks));
@@ -242,14 +251,12 @@ export class TerrainTool extends BaseTool {
             ((pending.terrain && (Object.keys(pending.terrain.added || {}).length > 0 || Object.keys(pending.terrain.removed || {}).length > 0)) ||
                 (pending.environment && (pending.environment.added?.length > 0 || pending.environment.removed?.length > 0)))
         ) {
+            // Save undo snapshot (clone to decouple from live ref)
             if (this.undoRedoManager?.current?.saveUndo) {
-                this.undoRedoManager.current.saveUndo(pending);
+                const snapshot = JSON.parse(JSON.stringify(pending));
+                this.undoRedoManager.current.saveUndo(snapshot);
             }
-            // Reset pending changes for the next operation
-            (this.terrainBuilderProps as any).pendingChangesRef.current = {
-                terrain: { added: {}, removed: {} },
-                environment: { added: [], removed: [] },
-            };
+            // Do NOT clear pendingChangesRef here – leave it for efficientTerrainSave / auto-save
         }
     }
 
@@ -436,16 +443,19 @@ export class TerrainTool extends BaseTool {
         // Apply changes to terrain in real-time (optimized for speed)
         const totalChanges = Object.keys(addedBlocks).length + Object.keys(removedBlocks).length;
         if (totalChanges > 0) {
-            // Direct application without batching for maximum responsiveness
-            (this.terrainBuilderProps as any).updateTerrainBlocks(addedBlocks, removedBlocks, {
-                syncPendingChanges: true,
-                skipSpatialHash: true, // Skip expensive spatial hash updates during real-time editing
-                skipUndoSave: true // Skip undo operations during real-time dragging for performance
-            });
+            // Buffer terrain changes; commit during flush for better performance
+            Object.assign(this.pendingAdded, addedBlocks);
+            Object.assign(this.pendingRemoved, removedBlocks);
 
             // Periodically flush chunk meshing for near-real-time visuals
             const nowFlush = performance.now();
             if (nowFlush - this.lastMeshUpdate > 250) {
+                // First push buffered terrain updates so mesher sees new blocks
+                if ((Object.keys(this.pendingAdded).length || Object.keys(this.pendingRemoved).length) && (this.terrainBuilderProps as any).updateTerrainBlocks) {
+                    (this.terrainBuilderProps as any).updateTerrainBlocks(this.pendingAdded, this.pendingRemoved, { syncPendingChanges: true, skipSpatialHash: true, skipUndoSave: true });
+                    this.pendingAdded = {}; this.pendingRemoved = {};
+                }
+
                 if (this.dirtyChunks.size > 0 && (this.terrainBuilderProps as any).forceChunkUpdate) {
                     try {
                         (this.terrainBuilderProps as any).forceChunkUpdate(Array.from(this.dirtyChunks));
@@ -692,5 +702,45 @@ export class TerrainTool extends BaseTool {
             }
             this.falloffTable[d] = val;
         }
+    }
+
+    /**
+     * Flush buffered edits by merging them into TerrainBuilder.pendingChangesRef only.
+     * We purposely avoid calling updateTerrainBlocks here to prevent unintended
+     * DB writes or extra undo-stack entries. The actual DB commit happens later
+     * via efficientTerrainSave which reads pendingChangesRef.
+     */
+    flushPending() {
+        const pendingRef = (this.terrainBuilderProps as any).pendingChangesRef?.current;
+        if (!pendingRef) {
+            return;
+        }
+
+        // Ensure terrain structures exist
+        if (!pendingRef.terrain) {
+            pendingRef.terrain = { added: {}, removed: {} };
+        }
+
+        // Merge buffered additions
+        Object.entries(this.pendingAdded).forEach(([key, val]) => {
+            if (pendingRef.terrain.removed[key]) {
+                delete pendingRef.terrain.removed[key];
+            }
+            pendingRef.terrain.added[key] = val;
+        });
+
+        // Merge buffered removals
+        Object.entries(this.pendingRemoved).forEach(([key, val]) => {
+            if (pendingRef.terrain.added[key]) {
+                delete pendingRef.terrain.added[key];
+            }
+            pendingRef.terrain.removed[key] = val;
+        });
+
+        // Clear internal buffers – changes safely transferred
+        this.pendingAdded = {};
+        this.pendingRemoved = {};
+
+        // Keep dirtyChunks so selective meshing still happens on the visual side.
     }
 } 
