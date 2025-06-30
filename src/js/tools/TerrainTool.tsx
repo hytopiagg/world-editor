@@ -23,6 +23,8 @@ export class TerrainTool extends BaseTool {
     dirtyChunks: Set<string>;
     pendingAdded: Record<string, number>;
     pendingRemoved: Record<string, number>;
+    strokeAdded: Record<string, number>;
+    strokeRemoved: Record<string, number>;
 
     constructor(terrainBuilderProps: any) {
         super(terrainBuilderProps);
@@ -62,6 +64,10 @@ export class TerrainTool extends BaseTool {
         this.dirtyChunks = new Set();
         this.pendingAdded = {};
         this.pendingRemoved = {};
+
+        // Initialize per-stroke change tracking
+        this.strokeAdded = {};
+        this.strokeRemoved = {};
 
         // Pre-compute fall-off table for the initial radius
         this.falloffTable = [];
@@ -200,6 +206,10 @@ export class TerrainTool extends BaseTool {
         this.isPlacing = true;
         console.log("Terrain tool: Started terrain modification");
 
+        // Reset per-stroke change trackers
+        this.strokeAdded = {};
+        this.strokeRemoved = {};
+
         // Store original heights for undo
         this.storeOriginalHeights();
 
@@ -244,20 +254,23 @@ export class TerrainTool extends BaseTool {
             } catch (_) { }
         }
 
-        // Persist undo state now that the drag operation is complete
-        const pending = (this.terrainBuilderProps as any)?.pendingChangesRef?.current;
-        if (
-            pending &&
-            ((pending.terrain && (Object.keys(pending.terrain.added || {}).length > 0 || Object.keys(pending.terrain.removed || {}).length > 0)) ||
-                (pending.environment && (pending.environment.added?.length > 0 || pending.environment.removed?.length > 0)))
-        ) {
-            // Save undo snapshot (clone to decouple from live ref)
-            if (this.undoRedoManager?.current?.saveUndo) {
-                const snapshot = JSON.parse(JSON.stringify(pending));
+        // Persist undo state for THIS stroke only
+        if (this.undoRedoManager?.current?.saveUndo) {
+            const hasTerrainChanges =
+                Object.keys(this.strokeAdded).length > 0 ||
+                Object.keys(this.strokeRemoved).length > 0;
+            if (hasTerrainChanges) {
+                const snapshot = {
+                    terrain: {
+                        added: { ...this.strokeAdded },
+                        removed: { ...this.strokeRemoved },
+                    },
+                    environment: null,
+                } as any;
                 this.undoRedoManager.current.saveUndo(snapshot);
             }
-            // Do NOT clear pendingChangesRef here – leave it for efficientTerrainSave / auto-save
         }
+        // Leave pendingChangesRef untouched for auto-save – stroke trackers will be cleared automatically on next handleMouseDown
     }
 
     findGroundLevel(x, z) {
@@ -446,6 +459,10 @@ export class TerrainTool extends BaseTool {
             // Buffer terrain changes; commit during flush for better performance
             Object.assign(this.pendingAdded, addedBlocks);
             Object.assign(this.pendingRemoved, removedBlocks);
+
+            // Accumulate per-stroke changes for accurate undo
+            Object.assign(this.strokeAdded, addedBlocks);
+            Object.assign(this.strokeRemoved, removedBlocks);
 
             // Periodically flush chunk meshing for near-real-time visuals
             const nowFlush = performance.now();
