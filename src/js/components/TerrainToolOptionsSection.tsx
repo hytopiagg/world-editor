@@ -73,7 +73,7 @@ export default function TerrainToolOptionsSection({
                 <input
                     type="number"
                     min={1}
-                    max={100}
+                    max={50}
                     value={settings.radius}
                     onKeyDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateSetting("radius", parseInt(e.target.value))}
@@ -201,8 +201,10 @@ export default function TerrainToolOptionsSection({
 
             {/* Quick Presets */}
             <div className="flex flex-col gap-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.225s" }}>
-                <label className="text-xs text-[#F1F1F1]/80">Quick Presets</label>
-                <div className="grid grid-cols-2 gap-1.5">
+                <label className="text-xs text-[#F1F1F1]/80 text-left">Quick Presets</label>
+                <div
+                    style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+                    className="grid gap-1.5">
                     {[
                         { name: "Hill", preset: { radius: 8, elevationRate: 4.0, smoothing: 0.8, mode: "elevate" } },
                         { name: "Plateau", preset: { radius: 16, elevationRate: 2.0, smoothing: 0.9, mode: "flatten" } },
@@ -217,7 +219,7 @@ export default function TerrainToolOptionsSection({
                                     terrainTool.updateSettings(preset.preset);
                                 }
                             }}
-                            className="px-2 py-1 text-xs bg-white/5 hover:bg-white/10 text-[#F1F1F1] border border-white/10 hover:border-white/20 rounded transition-colors"
+                            className="px-2 py-1 text-xs bg-white/5 hover:bg-white/10 text-[#F1F1F1] border border-white/10 hover:border-white/20 rounded transition-colors cursor-pointer"
                         >
                             {preset.name}
                         </button>
