@@ -46,6 +46,7 @@ import {
     SchematicPlacementTool,
     SelectionTool,
     TerrainTool,
+    ReplaceTool,
     ToolManager,
     WallTool,
 } from "./tools";
@@ -1719,6 +1720,11 @@ function TerrainBuilder(
 
         const terrainTool = new TerrainTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("terrain", terrainTool);
+
+        // Register replace tool
+        const replaceTool = new ReplaceTool(terrainBuilderProps);
+        toolManagerRef.current.registerTool("replace", replaceTool);
+
         initialize();
         window.addEventListener("keydown", (event) => {
             if (!event.key) return;

@@ -602,6 +602,7 @@ const ToolBar = ({
                                                 { label: '◇3', value: '3x3diamond' },
                                                 { label: '◇5', value: '5x5diamond' },
                                                 { label: '🏔️', value: 'terrain', isTool: true },
+                                                { label: '🎲', value: 'replace', isTool: true },
                                             ]
                                             : [
                                                 { label: '1×1', value: 'single' },
