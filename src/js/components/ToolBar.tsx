@@ -38,6 +38,7 @@ const ToolBar = ({
     onOpenTextureModal,
     toggleAIComponents,
     isAIComponentsActive,
+    activeTab,
 }) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     const [showImportExportMenu, setShowImportExportMenu] = useState(false);
@@ -593,51 +594,54 @@ const ToolBar = ({
 
                                 {showPlacementMenu && (
                                     <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
-                                        {[
-                                            { label: '1×1', value: 'single' },
-                                            { label: '3×3', value: '3x3' },
-                                            { label: '5×5', value: '5x5' },
-                                            { label: '◇3', value: '3x3diamond' },
-                                            { label: '◇5', value: '5x5diamond' },
-                                            { label: '🏔️', value: 'terrain', isTool: true },
-                                        ].map((opt, idx) => (
-                                            <button
-                                                key={idx}
-                                                className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${(opt.isTool && activeTool === opt.value) || (!opt.isTool && placementSize === opt.value) ? 'bg-white/90 text-black' : ''}`}
-                                                style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
-                                                onClick={(e) => {
-                                                    const el = e.target as HTMLElement;
-                                                    if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
-                                                        setShowPlacementMenu(false);
-                                                        setSuppressPlacementTooltip(true);
-                                                        setTimeout(() => setSuppressPlacementTooltip(false), 300);
-                                                    } else {
-                                                        if (opt.isTool) {
-                                                            // Handle tool activation
-                                                            handleToolToggle(opt.value);
-                                                            setPlacementSize("single");
+                                        {(activeTab === 'blocks'
+                                            ? [
+                                                { label: '1×1', value: 'single' },
+                                                { label: '3×3', value: '3x3' },
+                                                { label: '5×5', value: '5x5' },
+                                                { label: '◇3', value: '3x3diamond' },
+                                                { label: '◇5', value: '5x5diamond' },
+                                                { label: '🏔️', value: 'terrain', isTool: true },
+                                            ]
+                                            : [
+                                                { label: '1×1', value: 'single' },
+                                            ]).map((opt, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${(opt.isTool && activeTool === opt.value) || (!opt.isTool && placementSize === opt.value) ? 'bg-white/90 text-black' : ''}`}
+                                                    style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
+                                                    onClick={(e) => {
+                                                        const el = e.target as HTMLElement;
+                                                        if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
+                                                            setShowPlacementMenu(false);
+                                                            setSuppressPlacementTooltip(true);
+                                                            setTimeout(() => setSuppressPlacementTooltip(false), 300);
                                                         } else {
-                                                            // Handle placement size change
-                                                            if (activeTool) {
-                                                                try {
-                                                                    terrainBuilderRef.current?.activateTool(null);
-                                                                } catch (_) { }
-                                                                setActiveTool(null);
+                                                            if (opt.isTool) {
+                                                                // Handle tool activation
+                                                                handleToolToggle(opt.value);
+                                                                setPlacementSize("single");
+                                                            } else {
+                                                                // Handle placement size change
+                                                                if (activeTool) {
+                                                                    try {
+                                                                        terrainBuilderRef.current?.activateTool(null);
+                                                                    } catch (_) { }
+                                                                    setActiveTool(null);
+                                                                }
+                                                                setPlacementSize(opt.value);
                                                             }
-                                                            setPlacementSize(opt.value);
+                                                            setShowPlacementMenu(false);
                                                         }
-                                                        setShowPlacementMenu(false);
-                                                    }
-                                                }}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
+                                                    }}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
                                     </div>
                                 )}
                             </div>
                         </Tooltip>
-                        <div className="control-divider-vertical"></div>
                         <Tooltip text="Selection Tool - Click to start selection, click again to confirm. Click and drag to move selection. Press Escape to cancel.">
                             <button
                                 onClick={() => {
@@ -650,30 +654,34 @@ const ToolBar = ({
                                 <FaMousePointer className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("ground");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "ground" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaSquare className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("wall");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "wall" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaDrawPolygon className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
-                            </button>
-                        </Tooltip>
+                        {activeTab === 'blocks' && (
+                            <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
+                                <button
+                                    onClick={() => {
+                                        handleToolToggle("ground");
+                                        setPlacementSize("single");
+                                    }}
+                                    className={`control-button ${activeTool === "ground" ? "selected" : ""
+                                        }`}
+                                >
+                                    <FaSquare className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+                        )}
+                        {activeTab === 'blocks' && (
+                            <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
+                                <button
+                                    onClick={() => {
+                                        handleToolToggle("wall");
+                                        setPlacementSize("single");
+                                    }}
+                                    className={`control-button ${activeTool === "wall" ? "selected" : ""
+                                        }`}
+                                >
+                                    <FaDrawPolygon className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+                        )}
                     </div>
                 </div>
 

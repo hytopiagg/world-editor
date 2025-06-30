@@ -78,6 +78,7 @@ const BlockToolsSidebar = ({
     setCurrentBlockType,
     environmentBuilder,
     onPlacementSettingsChange,
+    setPlacementSize,
     onOpenTextureModal,
     onLoadSchematicFromHistory,
     isCompactMode,
@@ -490,16 +491,14 @@ const BlockToolsSidebar = ({
     };
 
     const handleTabChange = (newTab) => {
-        // Keep Terrain tool active while changing blocks; deactivate others
+        // Always deactivate any active tool (including Terrain) when switching tabs
         try {
-            const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
-            const activeToolInstance = manager?.getActiveTool?.();
-            const activeToolName = activeToolInstance?.name;
-            if (activeToolName && activeToolName !== "terrain") {
-                terrainBuilderRef?.current?.activateTool(null);
-            }
-        } catch (_) {
             terrainBuilderRef?.current?.activateTool(null);
+        } catch (_) {}
+
+        // Ensure placement returns to 1×1 on tab change
+        if (typeof setPlacementSize === "function") {
+            setPlacementSize("single");
         }
         setSearchQuery("");
         setSelectedModelCategory("All");

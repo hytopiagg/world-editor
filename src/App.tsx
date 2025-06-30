@@ -527,6 +527,7 @@ function App() {
                         setCurrentBlockType={setCurrentBlockType}
                         environmentBuilder={environmentBuilderRef.current}
                         onPlacementSettingsChange={setPlacementSettings}
+                        setPlacementSize={setPlacementSize}
                     />
                 )}
 
@@ -665,6 +666,7 @@ function App() {
                         toggleAIComponents={() => setIsAIComponentsActive((v) => !v)}
                         isAIComponentsActive={isAIComponentsActive}
                         setIsSaving={setSaveStatus}
+                        activeTab={activeTab}
                     />
                 )}
 

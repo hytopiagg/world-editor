@@ -131,6 +131,10 @@ function handleTerrainMouseDown(
     console.log("handleTerrainMouseDown");
     if (isToolActive) {
         console.log("isToolActive");
+        if (isToolActive.name === "terrain" && e.button !== 0) {
+            console.log("Terrain tool ignoring non-left click");
+            return;
+        }
         const intersection = getRaycastIntersection();
         if (intersection) {
             const mouseEvent = {
