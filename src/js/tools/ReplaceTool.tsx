@@ -81,8 +81,10 @@ export default class ReplaceTool extends BaseTool {
             transparent: true,
             opacity: 0.25,
             depthWrite: false,
+            depthTest: true,
         });
         this.previewMesh = new THREE.Mesh(geom, material);
+        this.previewMesh.renderOrder = 999;
         this.previewGroup?.add(this.previewMesh);
 
         // outline
@@ -98,8 +100,11 @@ export default class ReplaceTool extends BaseTool {
             transparent: true,
             opacity: 0.6,
             depthWrite: false,
+            depthTest: true,
         });
-        this.previewGroup?.add(new THREE.Mesh(outlineGeom, outlineMat));
+        const outlineMesh = new THREE.Mesh(outlineGeom, outlineMat);
+        outlineMesh.renderOrder = 1000;
+        this.previewGroup?.add(outlineMesh);
     }
 
     /* =============================== BaseTool ============================ */

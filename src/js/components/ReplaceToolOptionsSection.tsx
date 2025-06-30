@@ -50,8 +50,19 @@ export default function ReplaceToolOptionsSection({ replacementTool, isCompactMo
 
     const addBlockWeight = () => {
         const newCount = settings.blockWeights.length + 1;
-        const defaultWeight = Math.round(100 / newCount * 10) / 10;
-        const newWeights = [...settings.blockWeights.map(bw => ({ ...bw, weight: defaultWeight })), { id: 1, weight: defaultWeight }];
+        const defaultWeight = Math.round((100 / newCount) * 10) / 10;
+
+        // pick a random block not already in the list (fallback to 1)
+        const existingIds = new Set(settings.blockWeights.map((bw) => bw.id));
+        const candidates = availableBlocks.filter((b) => !existingIds.has(b.id));
+        const randomId = candidates.length
+            ? candidates[Math.floor(Math.random() * candidates.length)].id
+            : 1;
+
+        const newWeights = [
+            ...settings.blockWeights.map((bw) => ({ ...bw, weight: defaultWeight })),
+            { id: randomId, weight: defaultWeight },
+        ];
         updateTool({ blockWeights: newWeights });
     };
 
