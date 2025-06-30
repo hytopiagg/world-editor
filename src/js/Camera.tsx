@@ -51,7 +51,11 @@ class CameraManager {
         this._eventsInitialized = true;
         this.camera = camera;
         this.controls = controls;
-        this.moveSpeed = 0.2;
+        // Preserve any moveSpeed previously configured (e.g. loaded from persisted settings)
+        // If none has been set yet, fall back to default 0.2
+        if (typeof this.moveSpeed !== "number" || isNaN(this.moveSpeed)) {
+            this.moveSpeed = 0.2;
+        }
         this.rotateSpeed = 0.02;
         this.keys = new Set();
         this.isSliderDragging = false;
