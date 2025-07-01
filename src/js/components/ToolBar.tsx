@@ -72,7 +72,8 @@ const ToolBar = ({
 
     const [activeTool, setActiveTool] = useState(null);
     const [showPlacementMenu, setShowPlacementMenu] = useState(false);
-    const [suppressPlacementTooltip, setSuppressPlacementTooltip] = useState(false);
+
+    const [waitingForMouseCycle, setWaitingForMouseCycle] = useState(false);
 
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
@@ -577,16 +578,26 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu || suppressPlacementTooltip}>
-                            <div className="relative">
+                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu || waitingForMouseCycle}>
+                            <div
+                                className="relative"
+                                onMouseLeave={() => {
+                                    // Keep waiting for mouse cycle when mouse leaves
+                                }}
+                                onMouseEnter={() => {
+                                    // Reset waiting state when mouse re-enters
+                                    if (waitingForMouseCycle) {
+                                        setWaitingForMouseCycle(false);
+                                    }
+                                }}
+                            >
                                 <button
                                     className={`relative control-button active:translate-y-[1px] group transition-all ${showPlacementMenu ? 'selected' : ''}`}
                                     onClick={(e) => {
                                         const el = e.target as HTMLElement;
                                         if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
                                             setShowPlacementMenu(false);
-                                            setSuppressPlacementTooltip(true);
-                                            setTimeout(() => setSuppressPlacementTooltip(false), 300);
+                                            setWaitingForMouseCycle(true);
                                         } else {
                                             setShowPlacementMenu(!showPlacementMenu);
                                         }
@@ -614,28 +625,22 @@ const ToolBar = ({
                                                     className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${(opt.isTool && activeTool === opt.value) || (!opt.isTool && placementSize === opt.value) ? 'bg-white/90 text-black' : ''}`}
                                                     style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
                                                     onClick={(e) => {
-                                                        const el = e.target as HTMLElement;
-                                                        if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
-                                                            setShowPlacementMenu(false);
-                                                            setSuppressPlacementTooltip(true);
-                                                            setTimeout(() => setSuppressPlacementTooltip(false), 300);
+                                                        if (opt.isTool) {
+                                                            // Handle tool activation
+                                                            handleToolToggle(opt.value);
+                                                            setPlacementSize("single");
                                                         } else {
-                                                            if (opt.isTool) {
-                                                                // Handle tool activation
-                                                                handleToolToggle(opt.value);
-                                                                setPlacementSize("single");
-                                                            } else {
-                                                                // Handle placement size change
-                                                                if (activeTool) {
-                                                                    try {
-                                                                        terrainBuilderRef.current?.activateTool(null);
-                                                                    } catch (_) { }
-                                                                    setActiveTool(null);
-                                                                }
-                                                                setPlacementSize(opt.value);
+                                                            // Handle placement size change
+                                                            if (activeTool) {
+                                                                try {
+                                                                    terrainBuilderRef.current?.activateTool(null);
+                                                                } catch (_) { }
+                                                                setActiveTool(null);
                                                             }
-                                                            setShowPlacementMenu(false);
+                                                            setPlacementSize(opt.value);
                                                         }
+                                                        setShowPlacementMenu(false);
+                                                        setWaitingForMouseCycle(true);
                                                     }}
                                                 >
                                                     {opt.label}
