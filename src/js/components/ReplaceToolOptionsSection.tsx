@@ -114,6 +114,8 @@ export default function ReplaceToolOptionsSection({ replacementTool, isCompactMo
                 />
             </div>
 
+
+
             {/* Block weights */}
             <div className="flex flex-col gap-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.1s" }}>
                 <label className="text-xs text-[#F1F1F1]/80 text-left">Block Weights (Total {totalWeight.toFixed(1)}%)</label>
