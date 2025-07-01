@@ -346,6 +346,7 @@ export default class ReplaceTool extends BaseTool {
      * This is much simpler and more direct for replacement operations.
      */
     private _applyBlockReplacements(addedBlocks: Record<string, number>, removedBlocks: Record<string, number>) {
+        console.log("ReplaceTool: Applying block replacements");
         const terrainRef = (this.terrainBuilderProps as any).terrainRef;
         const pendingChangesRef = (this.terrainBuilderProps as any).pendingChangesRef;
         const importedUpdateTerrainBlocks = (this.terrainBuilderProps as any).importedUpdateTerrainBlocks;

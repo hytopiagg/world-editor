@@ -2324,13 +2324,31 @@ function TerrainBuilder(
 
     const updateTerrainBlocks = (addedBlocks, removedBlocks, options = {}) => {
         if (!addedBlocks && !removedBlocks) return;
+        // Ensure objects
         addedBlocks = addedBlocks || {};
         removedBlocks = removedBlocks || {};
+
+        // === Replacement-aware filter ===
+        // If a key exists in both addedBlocks and removedBlocks it means the block is being
+        // swapped (replaced) – NOT removed.  In that case we should keep the value from
+        // addedBlocks and ignore the corresponding entry in removedBlocks so that we do not
+        // delete the block we just re-added.
+        const replacementKeys = Object.keys(addedBlocks).filter(
+            (k) => k in removedBlocks
+        );
+        if (replacementKeys.length > 0) {
+            removedBlocks = { ...removedBlocks }; // shallow clone to avoid mutating caller refs
+            replacementKeys.forEach((k) => delete removedBlocks[k]);
+        }
+        // === End replacement-aware filter ===
+
         if (
             Object.keys(addedBlocks).length === 0 &&
             Object.keys(removedBlocks).length === 0
         )
             return;
+
+        // Re-order trackTerrainChanges call so it uses the filtered sets
         trackTerrainChanges(addedBlocks, removedBlocks);
 
         if (options?.syncPendingChanges) {
