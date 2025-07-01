@@ -152,18 +152,58 @@ export default class ReplaceTool extends BaseTool {
         this.strokeAdded = {};
         this.strokeRemoved = {};
 
-        console.log('ReplaceTool: Starting new stroke at position:', intersectionPoint);
 
-        // Log terrain data state for debugging
+
+        // Check what blocks actually exist in a wide area around where we clicked
+        const centerX = Math.round(intersectionPoint.x);
+        const centerY = Math.round(intersectionPoint.y);
+        const centerZ = Math.round(intersectionPoint.z);
+
+        // Get terrain data for block searching
         const terrainData = (this.terrainBuilderProps as any).terrainRef.current;
-        const centerKey = `${Math.round(intersectionPoint.x)},${Math.round(intersectionPoint.y)},${Math.round(intersectionPoint.z)}`;
-        console.log('ReplaceTool: Terrain data check at center:', {
-            position: centerKey,
-            blockId: terrainData[centerKey],
-            totalBlocks: Object.keys(terrainData).length
-        });
 
-        this.currentPosition.copy(intersectionPoint).round();
+        const nearbyBlocks = {};
+        // Increase search radius significantly to compensate for raycast inaccuracy
+        const searchRadius = 15;
+        for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+            for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+                for (let dz = -searchRadius; dz <= searchRadius; dz++) {
+                    const key = `${centerX + dx},${centerY + dy},${centerZ + dz}`;
+                    if (terrainData[key]) {
+                        nearbyBlocks[key] = terrainData[key];
+                    }
+                }
+            }
+        }
+
+        // If no blocks found, use original intersection point
+        if (Object.keys(nearbyBlocks).length === 0) {
+            this.currentPosition.copy(intersectionPoint).round();
+        } else {
+            // Try to find the closest actual block to use as center
+            const clickPos = intersectionPoint;
+            let closestBlock = null;
+            let closestDistance = Infinity;
+
+            Object.keys(nearbyBlocks).forEach(blockKey => {
+                const [bx, by, bz] = blockKey.split(',').map(Number);
+                const distance = Math.sqrt(
+                    Math.pow(bx - clickPos.x, 2) +
+                    Math.pow(by - clickPos.y, 2) +
+                    Math.pow(bz - clickPos.z, 2)
+                );
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestBlock = { x: bx, y: by, z: bz, key: blockKey };
+                }
+            });
+
+            if (closestBlock) {
+                this.currentPosition.set(closestBlock.x, closestBlock.y, closestBlock.z);
+            } else {
+                this.currentPosition.copy(intersectionPoint).round();
+            }
+        }
         this._replaceBlocks();
     }
 
@@ -185,9 +225,12 @@ export default class ReplaceTool extends BaseTool {
                     environment: { added: [], removed: [] },
                 } as any;
                 this.undoRedoManager.current.saveUndo(snapshot);
-                console.log('ReplaceTool: Saved undo snapshot', snapshot);
             }
         }
+
+        // Reset stroke tracking for next operation
+        this.strokeAdded = {};
+        this.strokeRemoved = {};
     }
 
     /* ============================= Core logic =========================== */
@@ -202,19 +245,7 @@ export default class ReplaceTool extends BaseTool {
             return;
         }
 
-        const terrainData = terrainRef.current;
-        console.log('ReplaceTool: Using terrain data with', Object.keys(terrainData).length, 'blocks');
 
-        // Debug: Check a few blocks around center to see if they have the expected IDs
-        const centerX = Math.round(this.currentPosition.x);
-        const centerZ = Math.round(this.currentPosition.z);
-        const centerY = Math.round(this.currentPosition.y);
-        const centerKey = `${centerX},${centerY},${centerZ}`;
-        console.log('ReplaceTool: Center block state:', {
-            position: centerKey,
-            blockId: terrainData[centerKey],
-            exists: centerKey in terrainData
-        });
 
         const center = this.currentPosition.clone();
 
@@ -235,6 +266,7 @@ export default class ReplaceTool extends BaseTool {
         const removedBlocks: Record<string, number> = {};
 
         const intRadius = Math.ceil(radius);
+
         for (let dx = -intRadius; dx <= intRadius; dx++) {
             for (let dy = -intRadius; dy <= intRadius; dy++) {
                 for (let dz = -intRadius; dz <= intRadius; dz++) {
@@ -253,12 +285,12 @@ export default class ReplaceTool extends BaseTool {
 
                     // Get current block ID - always use the most up-to-date terrain data
                     // which includes changes from previous replace operations in this stroke
-                    let currentId = terrainData[posKey];
-                    if (currentId === undefined) continue; // no block to replace
+                    // Get fresh terrain reference to ensure we see the latest changes
+                    const currentTerrainData = (this.terrainBuilderProps as any).terrainRef.current;
+                    let currentId = currentTerrainData[posKey];
 
-                    // Debug logging for the first few blocks to see what's happening
-                    if (Object.keys(addedBlocks).length < 3) {
-                        console.log('ReplaceTool: Processing block at', posKey, 'currentId:', currentId);
+                    if (currentId === undefined) {
+                        continue; // no block to replace
                     }
 
                     // Weighted selection with remainder preserving original
@@ -287,51 +319,14 @@ export default class ReplaceTool extends BaseTool {
                             removedBlocks[posKey] = currentId;
                         }
 
-                        // Debug logging for first few changes
-                        if (Object.keys(addedBlocks).length <= 3) {
-                            console.log('ReplaceTool: Replacing block', posKey, 'from', currentId, 'to', chosenId);
-                        }
-                    } else if (Object.keys(addedBlocks).length < 3) {
-                        console.log('ReplaceTool: No change needed for block', posKey, '- already', currentId);
                     }
                 }
             }
         }
 
         if (Object.keys(addedBlocks).length || Object.keys(removedBlocks).length) {
-            console.log('ReplaceTool: Applying changes', {
-                added: Object.keys(addedBlocks).length,
-                removed: Object.keys(removedBlocks).length,
-                sampleAdded: Object.entries(addedBlocks).slice(0, 3),
-                sampleRemoved: Object.entries(removedBlocks).slice(0, 3)
-            });
-
-            // Apply changes to terrain immediately
-            // Skip spatial hash updates since we're replacing blocks at same positions (not adding/removing)
-            (this.terrainBuilderProps as any).updateTerrainBlocks(
-                addedBlocks,
-                removedBlocks,
-                {
-                    syncPendingChanges: true,
-                    skipSpatialHash: true  // Replacement operations don't change spatial positions
-                }
-            );
-
-            // Verify terrain was updated by checking a sample block
-            const sampleKey = Object.keys(addedBlocks)[0];
-            if (sampleKey) {
-                const expectedId = addedBlocks[sampleKey];
-                const actualId = terrainData[sampleKey];
-                console.log('ReplaceTool: Terrain update verification:', {
-                    position: sampleKey,
-                    expected: expectedId,
-                    actual: actualId,
-                    updated: actualId === expectedId
-                });
-            }
-
-            // Also manually update pending changes to ensure they're tracked for auto-save
-            this._updatePendingChanges(addedBlocks, removedBlocks);
+            // Direct replacement approach - much simpler than add/remove logic
+            this._applyBlockReplacements(addedBlocks, removedBlocks);
 
             // Update stroke tracking for undo/redo
             Object.assign(this.strokeAdded, addedBlocks);
@@ -341,60 +336,55 @@ export default class ReplaceTool extends BaseTool {
                     this.strokeRemoved[posKey] = removedBlocks[posKey];
                 }
             });
-        } else {
-            console.log('ReplaceTool: No changes to apply this cycle');
         }
     }
 
-    /* ====================== Pending Changes Management ================== */
+    /* ====================== Direct Replacement Logic =================== */
 
     /**
-     * Manually update pendingChangesRef to ensure changes are tracked for auto-save.
-     * For replacements, we need to track both the original block removal AND the new block addition.
+     * Apply block replacements directly without the add/remove cancellation logic.
+     * This is much simpler and more direct for replacement operations.
      */
-    private _updatePendingChanges(addedBlocks: Record<string, number>, removedBlocks: Record<string, number>) {
-        const pendingRef = (this.terrainBuilderProps as any).pendingChangesRef?.current;
-        if (!pendingRef) {
-            console.warn('ReplaceTool: pendingChangesRef not available');
+    private _applyBlockReplacements(addedBlocks: Record<string, number>, removedBlocks: Record<string, number>) {
+        const terrainRef = (this.terrainBuilderProps as any).terrainRef;
+        const pendingChangesRef = (this.terrainBuilderProps as any).pendingChangesRef;
+        const importedUpdateTerrainBlocks = (this.terrainBuilderProps as any).importedUpdateTerrainBlocks;
+
+        if (!terrainRef || !pendingChangesRef || !importedUpdateTerrainBlocks) {
+            console.error('ReplaceTool: Missing required references for block replacement');
             return;
         }
 
-        // Ensure terrain structures exist
-        if (!pendingRef.terrain) {
-            pendingRef.terrain = { added: {}, removed: {} };
+        // 1. Update terrain data directly
+        Object.entries(addedBlocks).forEach(([posKey, newBlockId]) => {
+            terrainRef.current[posKey] = newBlockId;
+        });
+
+        // 2. Update chunk system with the changes
+        importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
+
+        // 3. Update pending changes for auto-save (track replacements as changes)
+        if (!pendingChangesRef.current) {
+            pendingChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
         }
 
-        console.log('ReplaceTool: Before updating pendingRef', {
-            currentAdded: Object.keys(pendingRef.terrain.added || {}).length,
-            currentRemoved: Object.keys(pendingRef.terrain.removed || {}).length,
-            newAdded: Object.keys(addedBlocks).length,
-            newRemoved: Object.keys(removedBlocks).length
+        // For replacements, we track them as "replacements" to avoid cancellation logic
+        // We'll store the new block ID in added and old block ID in removed
+        Object.entries(addedBlocks).forEach(([posKey, newBlockId]) => {
+            pendingChangesRef.current.terrain.added[posKey] = newBlockId;
         });
 
-        // For block replacements, we need special logic:
-        // 1. Always track the removed blocks (original blocks being replaced)
-        // 2. Always track the added blocks (new blocks being placed)
-        // This is different from normal add/remove operations where you might cancel out
-
-        // First, process removed blocks - these represent the original blocks being replaced
-        Object.entries(removedBlocks).forEach(([key, val]) => {
-            // For replacements, we always want to track the original block that was removed
-            // Don't cancel out with added blocks at the same position
-            pendingRef.terrain.removed[key] = val;
+        Object.entries(removedBlocks).forEach(([posKey, oldBlockId]) => {
+            // Only track the original removal if we haven't already tracked one for this position
+            if (!pendingChangesRef.current.terrain.removed[posKey]) {
+                pendingChangesRef.current.terrain.removed[posKey] = oldBlockId;
+            }
         });
 
-        // Then, process added blocks - these represent the new blocks being placed
-        Object.entries(addedBlocks).forEach(([key, val]) => {
-            // Always track the new block being added
-            pendingRef.terrain.added[key] = val;
-        });
 
-        console.log('ReplaceTool: After updating pendingRef', {
-            totalAdded: Object.keys(pendingRef.terrain.added || {}).length,
-            totalRemoved: Object.keys(pendingRef.terrain.removed || {}).length,
-            sampleAdded: Object.entries(pendingRef.terrain.added).slice(0, 3),
-            sampleRemoved: Object.entries(pendingRef.terrain.removed).slice(0, 3)
-        });
     }
 
     /* ============================ Settings ============================== */
