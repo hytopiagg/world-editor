@@ -119,31 +119,52 @@ const processCustomBlocksFromZip = async (zip, importData) => {
                             for (const ext of ["png", "jpg", "jpeg"]) {
                                 const textureFile = blockFolder.file(`${faceKey}.${ext}`);
                                 if (textureFile) {
-                                    const blob = await textureFile.async("blob");
+                                    let blob = await textureFile.async("blob");
+                                    // Ensure correct MIME type as JSZip might default to octet-stream
+                                    if (blob.type === 'application/octet-stream' || !blob.type) {
+                                        const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+                                        blob = new Blob([blob], { type: mimeType });
+                                    }
                                     const dataUrl = await blobToDataUrl(blob);
                                     sideTextures[faceKey] = dataUrl;
-                                    break;
+                                    break; // Found one, move to next face
                                 }
                             }
                         }
 
                         // Update the block type with the extracted textures
                         blockType.sideTextures = sideTextures;
-                        blockType.textureUri = sideTextures["+y"] || Object.values(sideTextures)[0];
+                        // For multi-texture, ensure textureUri is a valid data URI from one of the sides.
+                        // The registry needs a data URI for the main texture, even if it's just one of the faces.
+                        blockType.textureUri = sideTextures["+y"] || Object.values(sideTextures)[0] || null;
+
+                        if (!blockType.textureUri) {
+                            console.warn(`Could not find any textures for multi-texture block: ${blockType.name}`);
+                        }
                     }
                 } else {
                     // Single texture block
                     const sanitizedBlockName = blockType.name.replace(/\s+/g, "_").toLowerCase();
                     let textureFile = null;
+                    let fileExt = '';
 
                     // Try different extensions
                     for (const ext of ["png", "jpg", "jpeg"]) {
-                        textureFile = blocksFolder.file(`${sanitizedBlockName}.${ext}`);
-                        if (textureFile) break;
+                        const potentialFile = blocksFolder.file(`${sanitizedBlockName}.${ext}`);
+                        if (potentialFile) {
+                            textureFile = potentialFile;
+                            fileExt = ext;
+                            break;
+                        }
                     }
 
                     if (textureFile) {
-                        const blob = await textureFile.async("blob");
+                        let blob = await textureFile.async("blob");
+                        // Ensure correct MIME type as JSZip might default to octet-stream
+                        if (blob.type === 'application/octet-stream' || !blob.type) {
+                            const mimeType = `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+                            blob = new Blob([blob], { type: mimeType });
+                        }
                         const dataUrl = await blobToDataUrl(blob);
                         blockType.textureUri = dataUrl;
                     }
@@ -249,6 +270,9 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 
         if (importData.blocks) {
 
+            // Initialize block ID mapping early for remapping during import
+            const blockIdMapping = {};
+
             if (
                 importData.blockTypes &&
                 importData.blockTypes.length > 0
@@ -264,8 +288,23 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                 const existingBlockNames = new Set(existingBlocks.map(b => b.name.toLowerCase()));
                 const existingBlockIds = new Set(existingBlocks.map(b => b.id));
 
+                // Create a mapping from block name to ID for existing blocks
+                const existingBlockNameToId = {};
+                existingBlocks.forEach(block => {
+                    existingBlockNameToId[block.name.toLowerCase()] = block.id;
+                });
+
+                // Find the next available ID for new custom blocks
+                const getNextAvailableId = () => {
+                    let nextId = 100; // Start at 100 for custom blocks
+                    while (existingBlockIds.has(nextId)) {
+                        nextId++;
+                    }
+                    return nextId;
+                };
+
                 let processedCount = 0;
-                let skippedCount = 0;
+                let remappedCount = 0;
 
                 for (const blockType of importData.blockTypes) {
 
@@ -273,15 +312,22 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         blockType.isCustom ||
                         (blockType.id >= 100 && blockType.id < 200)
                     ) {
-                        // Check if block already exists by name or ID
+                        // Check if block already exists by name only
                         const blockNameLower = blockType.name.toLowerCase();
-                        const blockId = blockType.id;
+                        const importedBlockId = blockType.id;
 
-                        if (existingBlockNames.has(blockNameLower) || existingBlockIds.has(blockId)) {
-                            console.log(`Skipping existing block: ${blockType.name} (ID: ${blockId})`);
-                            skippedCount++;
+                        if (existingBlockNames.has(blockNameLower)) {
+                            // Block name exists, remap to existing block's ID
+                            const existingBlockId = existingBlockNameToId[blockNameLower];
+                            blockIdMapping[importedBlockId] = existingBlockId;
+                            console.log(`Remapping block "${blockType.name}" from imported ID ${importedBlockId} to existing ID ${existingBlockId}`);
+                            remappedCount++;
                             continue;
                         }
+
+                        // This is a new block - assign it a new available ID
+                        const newBlockId = getNextAvailableId();
+                        blockIdMapping[importedBlockId] = newBlockId;
 
                         const likelyIsMultiTexture =
                             blockType.isMultiTexture !== undefined
@@ -302,7 +348,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                                 );
 
                         const processedBlock = {
-                            id: blockType.id,
+                            id: newBlockId, // Use the new ID instead of imported ID
                             name: blockType.name,
                             textureUri: blockType.textureUri, // Pass the URI from the file (could be path or data)
                             isCustom: true,
@@ -315,13 +361,16 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         await processCustomBlock(processedBlock);
                         processedCount++;
 
-                        // Update our tracking sets
+                        // Update our tracking sets with the new block
                         existingBlockNames.add(blockNameLower);
-                        existingBlockIds.add(blockId);
+                        existingBlockIds.add(newBlockId);
+                        existingBlockNameToId[blockNameLower] = newBlockId;
+
+                        console.log(`Added new custom block "${blockType.name}" with ID ${newBlockId} (imported as ID ${importedBlockId})`);
                     }
                 }
 
-                console.log(`Block processing complete: ${processedCount} added, ${skippedCount} skipped as duplicates`);
+                console.log(`Block processing complete: ${processedCount} new blocks added, ${remappedCount} blocks remapped to existing IDs`);
 
                 // Save custom blocks to database for persistence
                 try {
@@ -354,33 +403,35 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
             );
 
 
-            const blockIdMapping = {};
-
-
             const currentBlockTypes = getBlockTypes();
 
-
-            const currentBlockNameToId = {};
-            currentBlockTypes.forEach(blockType => {
-                currentBlockNameToId[blockType.name.toLowerCase()] = blockType.id;
-            });
-
-
+            // Handle remaining block mappings (for blocks that aren't custom blocks)
+            // Don't overwrite mappings already created during custom block processing
             if (importData.blockTypes && importData.blockTypes.length > 0) {
                 importData.blockTypes.forEach(importedBlockType => {
-                    const blockName = importedBlockType.name.toLowerCase();
                     const importedId = importedBlockType.id;
 
+                    // Only create mapping if it doesn't already exist (wasn't processed as custom block)
+                    if (!blockIdMapping.hasOwnProperty(importedId)) {
+                        const blockName = importedBlockType.name.toLowerCase();
+                        const existingBlock = currentBlockTypes.find(block =>
+                            block.name.toLowerCase() === blockName
+                        );
 
-                    if (currentBlockNameToId.hasOwnProperty(blockName)) {
-                        blockIdMapping[importedId] = currentBlockNameToId[blockName];
-                    } else {
-                        blockIdMapping[importedId] = importedId;
+                        if (existingBlock) {
+                            blockIdMapping[importedId] = existingBlock.id;
+                        } else {
+                            // Block doesn't exist in current system, keep original ID
+                            blockIdMapping[importedId] = importedId;
+                        }
                     }
                 });
             } else {
+                // No block types in import, create identity mapping for current blocks
                 currentBlockTypes.forEach(blockType => {
-                    blockIdMapping[blockType.id] = blockType.id;
+                    if (!blockIdMapping.hasOwnProperty(blockType.id)) {
+                        blockIdMapping[blockType.id] = blockType.id;
+                    }
                 });
             }
 

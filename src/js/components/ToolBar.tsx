@@ -1,9 +1,9 @@
-import { generatePerlinNoise } from "perlin-noise";
 import { useEffect, useState } from "react";
 import {
     FaCloud,
     FaCubes,
     FaDrawPolygon,
+    FaExchangeAlt,
     FaMinus,
     FaMountain,
     FaMousePointer,
@@ -23,6 +23,7 @@ import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
 import Tooltip from "./Tooltip";
+
 const ToolBar = ({
     terrainBuilderRef,
     mode,
@@ -38,6 +39,7 @@ const ToolBar = ({
     onOpenTextureModal,
     toggleAIComponents,
     isAIComponentsActive,
+    activeTab,
 }) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     const [showImportExportMenu, setShowImportExportMenu] = useState(false);
@@ -55,6 +57,7 @@ const ToolBar = ({
     const [showTerrainModal, setShowTerrainModal] = useState(false);
     const [showAISubmenu, setShowAISubmenu] = useState(false);
     const [showUtilsSubmenu, setShowUtilsSubmenu] = useState(false);
+    const [showSwapSubmenu, setShowSwapSubmenu] = useState(false);
     const [terrainSettings, setTerrainSettings] = useState({
         width: 32,
         length: 32,
@@ -69,6 +72,8 @@ const ToolBar = ({
 
     const [activeTool, setActiveTool] = useState(null);
     const [showPlacementMenu, setShowPlacementMenu] = useState(false);
+
+    const [waitingForMouseCycle, setWaitingForMouseCycle] = useState(false);
 
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
@@ -199,7 +204,26 @@ const ToolBar = ({
             terrainBuilderRef.current?.clearMap();
         }
     };
-    const generateTerrain = () => {
+    const generatePerlinNoiseAsync = (width, length, options) => {
+        return new Promise((resolve, reject) => {
+            try {
+                const worker = new Worker(new URL("../workers/perlinNoiseWorker.js", import.meta.url), { type: "module" });
+                worker.onmessage = (e) => {
+                    resolve(e.data);
+                    worker.terminate();
+                };
+                worker.onerror = (err) => {
+                    reject(err);
+                    worker.terminate();
+                };
+                worker.postMessage({ width, length, options });
+            } catch (err) {
+                reject(err);
+            }
+        });
+    };
+
+    const generateTerrain = async () => {
         if (currentBlockType.id > 199) {
             alert(
                 "Not Compatible with Environment Objects... \n\nPlease select a block and try again!"
@@ -207,17 +231,32 @@ const ToolBar = ({
             return;
         }
 
+        setShowTerrainModal(false); // close modal early to avoid blocking
+
         let terrainData = terrainSettings.clearMap
             ? {}
             : terrainBuilderRef.current.getCurrentTerrainData();
         const { width, length, height, roughness } = terrainSettings;
 
-        const baseNoiseMap = generatePerlinNoise(width, length, {
-            octaveCount: 4,
-            amplitude: 1,
-            persistence: 0.5,
-            scale: 0.1, // Base scale for all terrain types
-        });
+        let baseNoiseMap;
+        try {
+            baseNoiseMap = await generatePerlinNoiseAsync(width, length, {
+                octaveCount: 4,
+                amplitude: 1,
+                persistence: 0.5,
+                scale: 0.1,
+            });
+        } catch (err) {
+            console.error("Perlin worker failed, falling back to sync", err);
+            // fallback sync import to prevent crash
+            const { generatePerlinNoise } = await import("perlin-noise");
+            baseNoiseMap = generatePerlinNoise(width, length, {
+                octaveCount: 4,
+                amplitude: 1,
+                persistence: 0.5,
+                scale: 0.1,
+            });
+        }
 
         const startX = -Math.floor(width / 2);
         const startZ = -Math.floor(length / 2);
@@ -286,7 +325,6 @@ const ToolBar = ({
         if (terrainBuilderRef.current) {
             terrainBuilderRef.current.updateTerrainFromToolBar(terrainData);
         }
-        setShowTerrainModal(false);
     };
     const handleExportMap = () => {
         try {
@@ -458,6 +496,7 @@ const ToolBar = ({
         const handleTabChangeReset = () => {
             setActiveTool(null);
             setShowPlacementMenu(false);
+            setShowSwapSubmenu(false);
         };
         window.addEventListener("blockToolsTabChanged", handleTabChangeReset);
         window.addEventListener("pointerLockModeChanged", handleTabChangeReset);
@@ -539,47 +578,109 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu}>
-                            <div className="relative">
+                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu || waitingForMouseCycle}>
+                            <div
+                                className="relative"
+                                onMouseLeave={() => {
+                                    // Keep waiting for mouse cycle when mouse leaves
+                                }}
+                                onMouseEnter={() => {
+                                    // Reset waiting state when mouse re-enters
+                                    if (waitingForMouseCycle) {
+                                        setWaitingForMouseCycle(false);
+                                    }
+                                }}
+                            >
                                 <button
                                     className={`relative control-button active:translate-y-[1px] group transition-all ${showPlacementMenu ? 'selected' : ''}`}
-                                    onClick={() => setShowPlacementMenu(!showPlacementMenu)}
+                                    onClick={(e) => {
+                                        const el = e.target as HTMLElement;
+                                        if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
+                                            setShowPlacementMenu(false);
+                                            setWaitingForMouseCycle(true);
+                                        } else {
+                                            setShowPlacementMenu(!showPlacementMenu);
+                                        }
+                                    }}
                                 >
                                     <FaThLarge className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
 
                                 {showPlacementMenu && (
                                     <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
-                                        {[
-                                            { label: '1×1', value: 'single' },
-                                            { label: '3×3', value: '3x3' },
-                                            { label: '5×5', value: '5x5' },
-                                            { label: '◇3', value: '3x3diamond' },
-                                            { label: '◇5', value: '5x5diamond' },
-                                        ].map((opt, idx) => (
-                                            <button
-                                                key={idx}
-                                                className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${placementSize === opt.value ? 'bg-white/90 text-black' : ''}`}
-                                                style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
-                                                onClick={() => {
-                                                    if (activeTool) {
-                                                        try {
-                                                            terrainBuilderRef.current?.activateTool(null);
-                                                        } catch (_) { }
-                                                        setActiveTool(null);
-                                                    }
-
-                                                    setPlacementSize(opt.value);
-                                                    setShowPlacementMenu(false);
-                                                }}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
+                                        {(activeTab === 'blocks'
+                                            ? [
+                                                { label: '1×1', value: 'single' },
+                                                { label: '3×3', value: '3x3' },
+                                                { label: '5×5', value: '5x5' },
+                                                { label: '◇3', value: '3x3diamond' },
+                                                { label: '◇5', value: '5x5diamond' },
+                                                { label: '🏔️', value: 'terrain', isTool: true },
+                                            ]
+                                            : [
+                                                { label: '1×1', value: 'single' },
+                                            ]).map((opt, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${(opt.isTool && activeTool === opt.value) || (!opt.isTool && placementSize === opt.value) ? 'bg-white/90 text-black' : ''}`}
+                                                    style={{ animationDelay: `${0.05 * (idx + 1)}s` }}
+                                                    onClick={(e) => {
+                                                        if (opt.isTool) {
+                                                            // Handle tool activation
+                                                            handleToolToggle(opt.value);
+                                                            setPlacementSize("single");
+                                                        } else {
+                                                            // Handle placement size change
+                                                            if (activeTool) {
+                                                                try {
+                                                                    terrainBuilderRef.current?.activateTool(null);
+                                                                } catch (_) { }
+                                                                setActiveTool(null);
+                                                            }
+                                                            setPlacementSize(opt.value);
+                                                        }
+                                                        setShowPlacementMenu(false);
+                                                        setWaitingForMouseCycle(true);
+                                                    }}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
                                     </div>
                                 )}
                             </div>
                         </Tooltip>
+                        <div className="control-divider-vertical"></div>
+                        <div className="relative">
+                            <Tooltip text="Swapping Tools" hideTooltip={showSwapSubmenu}>
+                                <button
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showSwapSubmenu ? 'selected' : ''}`}
+                                    onClick={() => setShowSwapSubmenu(!showSwapSubmenu)}
+                                >
+                                    <FaExchangeAlt className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+
+                            {showSwapSubmenu && (
+                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                    <Tooltip text="Paint Terrain">
+                                        <button
+                                            className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${activeTool === 'replace' ? 'bg-white/90 text-black' : ''}`}
+                                            style={{ animationDelay: '0.05s' }}
+                                            onClick={() => {
+                                                handleToolToggle('replace');
+                                                setPlacementSize("single");
+                                                setShowSwapSubmenu(false);
+                                            }}
+                                        >
+                                            <svg width="20" height="22" viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M4.19196 12.3389C3.21046 13.2979 3.26696 14.5764 4.31696 15.6149L6.55446 17.8749C5.39046 18.6169 3.14196 19.5299 2.06896 20.6034C0.390963 22.2814 0.402463 24.5414 2.11396 26.2649C3.83796 27.9769 6.09796 27.9999 7.77596 26.3219C8.86046 25.2374 9.76196 22.9889 10.504 21.8359L12.787 24.0849C13.826 25.1119 15.093 25.1689 16.063 24.1989L17.2845 22.9434C18.0605 22.1444 18.186 21.1624 17.627 20.2609C18.129 20.1354 18.597 19.8499 18.962 19.4734L24.27 14.1424C25.537 12.8874 25.503 11.3919 24.19 10.0789L15.002 0.890446C14.1795 0.0799465 13.0615 -5.3525e-05 12.2965 0.764946C11.954 1.10695 11.6915 1.59795 11.5545 2.25995C10.938 5.09095 9.69346 7.72745 8.23246 9.58845C7.98146 9.91945 7.81046 10.2384 7.73046 10.5699C6.94296 10.2499 6.12046 10.4214 5.43596 11.0949L4.19196 12.3389ZM17.3645 18.5259C16.8845 18.9939 16.4395 18.9594 15.9605 18.4689H15.949L9.80796 12.3274L9.81946 12.3164C9.37446 11.8824 9.16846 11.4029 9.80796 10.4784C11.132 8.57245 12.4445 5.95845 13.221 3.04745C13.2665 2.91095 13.3235 2.79645 13.426 2.69395C13.609 2.49995 13.86 2.44245 14.111 2.70495L19.6585 8.24145C19.362 10.1474 17.8435 12.0424 16.6795 13.2064C16.5655 13.3209 16.417 13.4804 16.5995 13.6634C17.1705 14.2339 20.5945 11.7799 21.9875 10.5814L22.7975 11.3804C23.3455 11.9284 23.357 12.5219 22.866 13.0124L17.3645 18.5259ZM5.73296 13.4234L6.52046 12.6474C6.87446 12.3049 7.34246 12.2934 7.70746 12.6699L15.721 20.6949C16.075 21.0714 16.086 21.5049 15.7325 21.8589L14.979 22.6464C14.614 23.0114 14.1575 23.0004 13.792 22.6239L10.9155 19.7589C10.516 19.3479 10.0595 19.5074 9.64846 20.0439C8.81546 21.2309 7.41146 24.2219 6.57846 25.0439C5.59646 26.0024 4.29496 26.0249 3.32496 25.0549C2.35496 24.0849 2.36596 22.7719 3.33646 21.8019C4.15796 20.9799 7.14846 19.5644 8.34746 18.7314C8.87246 18.3204 9.04346 17.8639 8.62096 17.4644L5.75596 14.6104C5.39096 14.2569 5.37946 13.7774 5.73346 13.4234M4.08946 24.3014C4.46646 24.6664 5.01446 24.6664 5.37946 24.3014C5.74446 23.9134 5.73346 23.3769 5.37946 23.0114C5.00296 22.6464 4.44346 22.6349 4.08946 23.0114C3.74746 23.3999 3.72446 23.9249 4.08946 24.3014Z" fill="currentColor" />
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
+                                </div>
+                            )}
+                        </div>
                         <div className="control-divider-vertical"></div>
                         <Tooltip text="Selection Tool - Click to start selection, click again to confirm. Click and drag to move selection. Press Escape to cancel.">
                             <button
@@ -593,30 +694,34 @@ const ToolBar = ({
                                 <FaMousePointer className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("ground");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "ground" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaSquare className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
-                            </button>
-                        </Tooltip>
-                        <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
-                            <button
-                                onClick={() => {
-                                    handleToolToggle("wall");
-                                    setPlacementSize("single");
-                                }}
-                                className={`control-button ${activeTool === "wall" ? "selected" : ""
-                                    }`}
-                            >
-                                <FaDrawPolygon className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
-                            </button>
-                        </Tooltip>
+                        {activeTab === 'blocks' && (
+                            <Tooltip text="Ground Tool - Click to start, click again to place a flat ground area. Use 1 | 2 to adjust height. Use 5 | 6 to change number of sides (4-8). Hold Ctrl to erase. Press Escape to cancel.">
+                                <button
+                                    onClick={() => {
+                                        handleToolToggle("ground");
+                                        setPlacementSize("single");
+                                    }}
+                                    className={`control-button ${activeTool === "ground" ? "selected" : ""
+                                        }`}
+                                >
+                                    <FaSquare className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+                        )}
+                        {activeTab === 'blocks' && (
+                            <Tooltip text="Wall Tool - Click to place wall start, click again to place. Hold Ctrl to erase. Press 1 and 2 to adjust height. Escape cancels">
+                                <button
+                                    onClick={() => {
+                                        handleToolToggle("wall");
+                                        setPlacementSize("single");
+                                    }}
+                                    className={`control-button ${activeTool === "wall" ? "selected" : ""
+                                        }`}
+                                >
+                                    <FaDrawPolygon className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+                        )}
                     </div>
                 </div>
 
@@ -717,7 +822,7 @@ const ToolBar = ({
                         <Tooltip text="Save terrain (Ctrl+S)">
                             <button
                                 onClick={async () => {
-                                    setIsSaving(true);
+                                    setIsSaving('saving');
                                     try {
                                         if (terrainBuilderRef.current) {
                                             await terrainBuilderRef.current.saveTerrainManually();
@@ -727,7 +832,8 @@ const ToolBar = ({
                                             await environmentBuilderRef.current.updateLocalStorage();
                                         }
                                     } finally {
-                                        setIsSaving(false);
+                                        setIsSaving('complete');
+                                        setTimeout(() => setIsSaving('idle'), 2000);
                                     }
                                 }}
                                 className="control-button"
@@ -1075,8 +1181,8 @@ const ToolBar = ({
                         <div className="modal-buttons">
                             <button
                                 className="menu-button"
-                                onClick={() => {
-                                    generateTerrain();
+                                onClick={async () => {
+                                    await generateTerrain();
                                 }}
                             >
                                 Generate

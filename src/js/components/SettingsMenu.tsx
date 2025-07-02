@@ -16,15 +16,17 @@ interface SettingsMenuProps {
 }
 
 export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar, isCompactMode, onToggleCompactMode }: SettingsMenuProps) {
+    const maxMoveSpeed = 5;
     const [loadedDefaults, setLoadedDefaults] = useState(false);
     const [viewDistance, setViewDistance] = useState(128);
-    const [selectionDistance, setSelectionDistance] = useState(128);
+
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
     const [showSidebar, setShowSidebar] = useState(true);
     const [showOptions, setShowOptions] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
     const [cameraSensitivity, setCameraSensitivity] = useState(5);
     const [moveSpeed, setMoveSpeed] = useState(0.2);
+    const [lowResDrag, setLowResDrag] = useState(false);
     const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(!cameraManager.isPointerUnlockedMode);
 
     // Load saved sensitivity on mount
@@ -75,18 +77,20 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     console.error("Error loading view distance:", error);
                 }
 
-                // >>> Load saved selection distance
+                // Load low-res sculpt flag
                 try {
-                    const savedSelectionDistance = await DatabaseManager.getData(STORES.SETTINGS, "selectionDistance");
-                    if (typeof savedSelectionDistance === "number") {
-                        setSelectionDistance(savedSelectionDistance);
-                        if (terrainBuilderRef?.current?.setSelectionDistance) {
-                            terrainBuilderRef.current.setSelectionDistance(savedSelectionDistance);
+                    const savedLowRes = await DatabaseManager.getData(STORES.SETTINGS, "lowResDrag");
+                    if (typeof savedLowRes === "boolean") {
+                        setLowResDrag(savedLowRes);
+                        // Expose globally for runtime checks
+                        if (typeof window !== "undefined") {
+                            (window as any).lowResDragEnabled = savedLowRes;
                         }
                     }
-                } catch (error) {
-                    console.error("Error loading selection distance:", error);
+                } catch (err) {
+                    console.error("Error loading lowResDrag", err);
                 }
+
             } catch (error) {
                 console.error("Error loading camera sensitivity:", error);
             }
@@ -94,12 +98,11 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     }, []);
 
     useEffect(() => {
-        if (terrainBuilderRef?.current?.setSelectionDistance && terrainBuilderRef?.current?.setViewDistance && !loadedDefaults) {
+        if (terrainBuilderRef?.current?.setViewDistance && !loadedDefaults) {
             setLoadedDefaults(true);
-            terrainBuilderRef.current.setSelectionDistance(selectionDistance);
             terrainBuilderRef.current.setViewDistance(viewDistance);
         }
-    }, [terrainBuilderRef?.current, selectionDistance, viewDistance]);
+    }, [terrainBuilderRef?.current, viewDistance]);
 
     // Sync state if user toggles camera mode via keyboard ('0')
     useEffect(() => {
@@ -123,13 +126,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         await DatabaseManager.saveData(STORES.SETTINGS, "viewDistance", value);
     };
 
-    const handleSelectionDistanceChange = async (value: number) => {
-        setSelectionDistance(value);
-        if (terrainBuilderRef?.current?.setSelectionDistance) {
-            terrainBuilderRef.current.setSelectionDistance(value);
-        }
-        await DatabaseManager.saveData(STORES.SETTINGS, "selectionDistance", value);
-    };
+
 
     const handleAutoSaveToggle = (checked: boolean) => {
         setAutoSaveEnabled(checked);
@@ -189,6 +186,16 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         } catch (error) {
             console.error("Error saving camera move speed:", error);
         }
+    };
+
+    const handleLowResToggle = async (checked: boolean) => {
+        setLowResDrag(checked);
+        if (typeof window !== "undefined") {
+            (window as any).lowResDragEnabled = checked;
+        }
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "lowResDrag", checked);
+        } catch (err) { console.error("saving lowResDrag", err); }
     };
 
     return (
@@ -262,6 +269,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                         />
                     </label>
+                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                        animationDelay: "0.11s"
+                    }}>
+                        <span>Low-Res Sculpt</span>
+                        <input
+                            type="checkbox"
+                            checked={lowResDrag}
+                            onChange={(e) => handleLowResToggle(e.target.checked)}
+                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                        />
+                    </label>
                     <div className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
                         animationDelay: "0.1s"
                     }}>
@@ -316,44 +334,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
 
                         </div>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{
-                            animationDelay: "0.15s"
-                        }}>
-                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Pointer Range</label>
-                            <input
-                                type="number"
-                                value={selectionDistance}
-                                onChange={(e) => handleSelectionDistanceChange(Number(e.target.value))}
-                                onBlur={(e) => handleSelectionDistanceChange(Math.max(16, Math.min(256, Number(e.target.value))))}
-                                onKeyDown={(e: any) => {
-                                    e.stopPropagation();
-                                    if (e.key === 'Enter') {
-                                        handleSelectionDistanceChange(Math.max(16, Math.min(256, Number(e.target.value))));
-                                        e.target.blur();
-                                    }
-                                }}
-                                min={16}
-                                max={256}
-                                step={16}
-                                className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                            <input
-                                type="range"
-                                min="32"
-                                max="256"
-                                step="16"
-                                value={selectionDistance}
-                                onChange={(e) => handleSelectionDistanceChange(Number(e.target.value))}
-                                className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
-                                style={{
-                                    transition: "all 0.3s ease-in-out",
-                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(selectionDistance - 32) / (256 - 32) * 100}%, rgba(255, 255, 255, 0.1) ${(selectionDistance - 32) / (256 - 32) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
-                                }}
-                            />
 
-                        </div>
-                    </div>
                     {/* Camera sensitivity visible only when pointer-lock capable (Glide mode) */}
                     {!isPointerUnlockedMode && (
                         <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.17s" }}>
@@ -389,30 +370,30 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 type="number"
                                 value={moveSpeed.toFixed(2)}
                                 onChange={(e) => handleMoveSpeedChange(Number(e.target.value))}
-                                onBlur={(e) => handleMoveSpeedChange(Math.max(0.05, Math.min(5, Number(e.target.value))))}
+                                onBlur={(e) => handleMoveSpeedChange(Math.max(0.05, Math.min(maxMoveSpeed, Number(e.target.value))))}
                                 onKeyDown={(e: any) => {
                                     e.stopPropagation();
                                     if (e.key === 'Enter') {
-                                        handleMoveSpeedChange(Math.max(0.05, Math.min(5, Number(e.target.value))));
+                                        handleMoveSpeedChange(Math.max(0.05, Math.min(maxMoveSpeed, Number(e.target.value))));
                                         e.target.blur();
                                     }
                                 }}
                                 min={0.05}
-                                max={2.5}
+                                max={maxMoveSpeed}
                                 step={0.05}
                                 className="w-[50px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin_button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"
                                 min={0.05}
-                                max={2.5}
+                                max={maxMoveSpeed}
                                 step={0.05}
                                 value={moveSpeed}
                                 onChange={(e) => handleMoveSpeedChange(Number(e.target.value))}
                                 className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
                                 style={{
                                     transition: "all 0.3s ease-in-out",
-                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(moveSpeed - 0.05) / (5 - 0.05) * 100}%, rgba(255, 255, 255, 0.1) ${(moveSpeed - 0.05) / (5 - 0.05) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
+                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(moveSpeed - 0.05) / (maxMoveSpeed - 0.05) * 100}%, rgba(255, 255, 255, 0.1) ${(moveSpeed - 0.05) / (maxMoveSpeed - 0.05) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
                                 }}
                             />
                         </div>

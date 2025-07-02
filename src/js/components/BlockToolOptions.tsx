@@ -11,6 +11,8 @@ import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
 import WallToolOptionsSection from "./WallToolOptionsSection";
 import SelectionToolOptionsSection from "./SelectionToolOptionsSection";
+import TerrainToolOptionsSection from "./TerrainToolOptionsSection";
+import ReplaceToolOptionsSection from "./ReplaceToolOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -208,6 +210,22 @@ export function BlockToolOptions({
                     <CollapsibleSection title="Selection Tool" animationDelay="0.09s">
                         <SelectionToolOptionsSection
                             selectionTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTool === "terrain" && (
+                    <CollapsibleSection title="Terrain Tool" animationDelay="0.09s">
+                        <TerrainToolOptionsSection
+                            terrainTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["terrain"]}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTool === "replace" && (
+                    <CollapsibleSection title="Replace Tool" animationDelay="0.09s">
+                        <ReplaceToolOptionsSection
+                            replacementTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["replace"]}
                             isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>

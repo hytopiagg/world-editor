@@ -27,7 +27,6 @@ import { meshesNeedsRefresh } from "./constants/performance";
 import {
     CHUNK_SIZE,
     getViewDistance,
-    MAX_SELECTION_DISTANCE,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
 import { processCustomBlock } from "./managers/BlockTypesManager";
@@ -46,6 +45,8 @@ import {
     GroundTool,
     SchematicPlacementTool,
     SelectionTool,
+    TerrainTool,
+    ReplaceTool,
     ToolManager,
     WallTool,
 } from "./tools";
@@ -122,6 +123,7 @@ function TerrainBuilder(
     const gridSizeRef = useRef(gridSize); // Add a ref to maintain grid size state
     const placementSizeRef = useRef(placementSize);
     const snapToGridRef = useRef(snapToGrid !== false);
+    const originalPixelRatioRef = useRef(null);
 
     useEffect(() => {
         snapToGridRef.current = snapToGrid !== false;
@@ -476,7 +478,7 @@ function TerrainBuilder(
     const previewPositionRef = useRef(new THREE.Vector3());
     const rawPlacementAnchorRef = useRef(new THREE.Vector3());
     const lockedAxisRef = useRef(null);
-    const selectionDistanceRef = useRef(MAX_SELECTION_DISTANCE / 2);
+    const selectionDistanceRef = useRef(256);
     const axisLockEnabledRef = useRef(axisLockEnabled);
     const currentBlockTypeRef = useRef(currentBlockType);
     const isFirstBlockRef = useRef(true);
@@ -718,6 +720,23 @@ function TerrainBuilder(
                     modeRef.current = "add";
                 } else if (e.button === 2) {
                     modeRef.current = "remove";
+                }
+            }
+
+            // Low-res sculpting: temporarily drop pixel ratio
+            if (
+                !isPlacingRef.current &&
+                gl &&
+                typeof gl.getPixelRatio === "function"
+            ) {
+                const lowResEnabled = window.lowResDragEnabled === true;
+                if (lowResEnabled) {
+                    try {
+                        originalPixelRatioRef.current = gl.getPixelRatio();
+                        gl.setPixelRatio(
+                            Math.max(0.3, originalPixelRatioRef.current * 0.5)
+                        );
+                    } catch (_) {}
                 }
             }
 
@@ -1197,6 +1216,19 @@ function TerrainBuilder(
                 ref,
                 getRaycastIntersection
             );
+
+            // Restore pixel ratio after drag if it was lowered
+            if (
+                !isPlacingRef.current &&
+                originalPixelRatioRef.current &&
+                gl &&
+                typeof gl.setPixelRatio === "function"
+            ) {
+                try {
+                    gl.setPixelRatio(originalPixelRatioRef.current);
+                    originalPixelRatioRef.current = null;
+                } catch (_) {}
+            }
         },
         [getRaycastIntersection, undoRedoManager, ref]
     );
@@ -1665,6 +1697,7 @@ function TerrainBuilder(
             importedUpdateTerrainBlocks, // Direct access to optimized terrain update function
             updateSpatialHashForBlocks, // Direct access to spatial hash update function
             updateTerrainForUndoRedo, // <<< Add this function explicitly
+            updateTerrainBlocks, // Add the updateTerrainBlocks function for terrain modifications
             totalBlocksRef, // Provide access to the total block count ref
             activateTool: (toolName, activationData) =>
                 toolManagerRef.current?.activateTool(toolName, activationData),
@@ -1684,6 +1717,14 @@ function TerrainBuilder(
         );
         const selectionTool = new SelectionTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("selection", selectionTool);
+
+        const terrainTool = new TerrainTool(terrainBuilderProps);
+        toolManagerRef.current.registerTool("terrain", terrainTool);
+
+        // Register replace tool
+        const replaceTool = new ReplaceTool(terrainBuilderProps);
+        toolManagerRef.current.registerTool("replace", replaceTool);
+
         initialize();
         window.addEventListener("keydown", (event) => {
             if (!event.key) return;
@@ -1832,6 +1873,12 @@ function TerrainBuilder(
         }
     }, [scene, onSceneReady]);
     const saveTerrainManually = () => {
+        // Ensure any buffered edits are flushed before saving
+        try {
+            if (toolManagerRef.current?.tools?.["terrain"]?.flushPending) {
+                toolManagerRef.current.tools["terrain"].flushPending();
+            }
+        } catch (_) {}
         return efficientTerrainSave();
     };
     const setAutoSaveEnabled = (enabled) => {
@@ -1920,12 +1967,7 @@ function TerrainBuilder(
             forceRefreshAllChunks();
             return true;
         },
-        setSelectionDistance: (distance) => {
-            const { setSelectionDistance } = require("./constants/terrain");
-            setSelectionDistance(distance);
-            selectionDistanceRef.current = distance;
-            return true;
-        },
+
         getSelectionDistance: () => {
             return selectionDistanceRef.current;
         },
@@ -2282,13 +2324,31 @@ function TerrainBuilder(
 
     const updateTerrainBlocks = (addedBlocks, removedBlocks, options = {}) => {
         if (!addedBlocks && !removedBlocks) return;
+        // Ensure objects
         addedBlocks = addedBlocks || {};
         removedBlocks = removedBlocks || {};
+
+        // === Replacement-aware filter ===
+        // If a key exists in both addedBlocks and removedBlocks it means the block is being
+        // swapped (replaced) – NOT removed.  In that case we should keep the value from
+        // addedBlocks and ignore the corresponding entry in removedBlocks so that we do not
+        // delete the block we just re-added.
+        const replacementKeys = Object.keys(addedBlocks).filter(
+            (k) => k in removedBlocks
+        );
+        if (replacementKeys.length > 0) {
+            removedBlocks = { ...removedBlocks }; // shallow clone to avoid mutating caller refs
+            replacementKeys.forEach((k) => delete removedBlocks[k]);
+        }
+        // === End replacement-aware filter ===
+
         if (
             Object.keys(addedBlocks).length === 0 &&
             Object.keys(removedBlocks).length === 0
         )
             return;
+
+        // Re-order trackTerrainChanges call so it uses the filtered sets
         trackTerrainChanges(addedBlocks, removedBlocks);
 
         if (options?.syncPendingChanges) {

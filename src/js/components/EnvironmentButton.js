@@ -371,4 +371,4 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
         </Tooltip>
     );
 };
-export default EnvironmentButton;
+export default React.memo(EnvironmentButton);

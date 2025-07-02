@@ -131,6 +131,10 @@ function handleTerrainMouseDown(
     console.log("handleTerrainMouseDown");
     if (isToolActive) {
         console.log("isToolActive");
+        if ((isToolActive.name === "terrain" || isToolActive.name === "replace") && e.button !== 0) {
+            console.log("Terrain tool ignoring non-left click");
+            return;
+        }
         const intersection = getRaycastIntersection();
         if (intersection) {
             const mouseEvent = {
@@ -146,6 +150,19 @@ function handleTerrainMouseDown(
         }
     }
     // TODO: Handle pointer lock mode
+    // If Terrain tool is active, ignore mouse buttons other than left (0) and right (2)
+    const activeTool = toolManagerRef.current?.getActiveTool?.();
+    if (activeTool?.name === "terrain") {
+        // In unlocked mode we only care about left click; in locked mode keep original behaviour
+        const isLocked = !cameraManager.isPointerUnlockedMode && cameraManager.isPointerLocked;
+        if (!isLocked && e.button !== 0) return;
+    }
+
+    // For the general placement system we proceed only on left-click (button 0) unless pointer-lock remove mode
+    if (e.button !== 0 && !(!cameraManager.isPointerUnlockedMode && cameraManager.isPointerLocked && e.button === 2)) {
+        return;
+    }
+
     if (e.button === 0 || (!cameraManager.isPointerUnlockedMode && cameraManager.isPointerLocked && e.button === 2)) {
         if (!isToolActive) {
             console.log("isPlacingRef.current = true");

@@ -12,14 +12,8 @@ export const MAX_IMPORT_SIZE_Z = 500;
 export const DEFAULT_IMPORT_SIZE = 500;
 export const CENTER_IMPORTS_AT_ORIGIN = true;
 
-let selectionDistance = 128; // Store the current value
+const selectionDistance = 256; // Permanently set to maximum value
 export const getSelectionDistance = () => selectionDistance;
-export const setSelectionDistance = (distance) => {
-    const newDistance = Math.max(16, Math.min(256, distance)); // Clamp between 16 and 256
-    selectionDistance = newDistance;
-    console.log(`Selection distance set to ${newDistance} blocks`);
-    return newDistance;
-};
 
 let viewDistance = FRUSTUM_CULLING_DISTANCE; // Store the current value
 export const getViewDistance = () => viewDistance;

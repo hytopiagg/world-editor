@@ -78,6 +78,7 @@ const BlockToolsSidebar = ({
     setCurrentBlockType,
     environmentBuilder,
     onPlacementSettingsChange,
+    setPlacementSize,
     onOpenTextureModal,
     onLoadSchematicFromHistory,
     isCompactMode,
@@ -490,7 +491,15 @@ const BlockToolsSidebar = ({
     };
 
     const handleTabChange = (newTab) => {
-        terrainBuilderRef?.current?.activateTool(null);
+        // Always deactivate any active tool (including Terrain) when switching tabs
+        try {
+            terrainBuilderRef?.current?.activateTool(null);
+        } catch (_) {}
+
+        // Ensure placement returns to 1×1 on tab change
+        if (typeof setPlacementSize === "function") {
+            setPlacementSize("single");
+        }
         setSearchQuery("");
         setSelectedModelCategory("All");
         setCategoryScrollIndex(0);
@@ -525,7 +534,17 @@ const BlockToolsSidebar = ({
 
     const handleEnvironmentSelect = (envType) => {
         console.log("Environment selected:", envType);
-        terrainBuilderRef?.current?.activateTool(null);
+        // Keep Terrain tool active while changing blocks; deactivate others
+        try {
+            const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
+            const activeToolInstance = manager?.getActiveTool?.();
+            const activeToolName = activeToolInstance?.name;
+            if (activeToolName && activeToolName !== "terrain") {
+                terrainBuilderRef?.current?.activateTool(null);
+            }
+        } catch (_) {
+            terrainBuilderRef?.current?.activateTool(null);
+        }
         setCurrentBlockType({
             ...envType,
             isEnvironment: true,
@@ -535,7 +554,17 @@ const BlockToolsSidebar = ({
 
     const handleBlockSelect = (blockType) => {
         console.log("Block selected:", blockType);
-        terrainBuilderRef?.current?.activateTool(null);
+        // Keep Terrain tool active while changing blocks; deactivate others
+        try {
+            const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
+            const activeToolInstance = manager?.getActiveTool?.();
+            const activeToolName = activeToolInstance?.name;
+            if (activeToolName && activeToolName !== "terrain") {
+                terrainBuilderRef?.current?.activateTool(null);
+            }
+        } catch (_) {
+            terrainBuilderRef?.current?.activateTool(null);
+        }
         setCurrentBlockType({
             ...blockType,
             isEnvironment: false,
