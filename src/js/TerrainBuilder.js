@@ -1928,6 +1928,21 @@ function TerrainBuilder(
         forceChunkUpdate, // Direct chunk updating for tools
         forceRefreshAllChunks, // Force refresh of all chunks
         updateGridSize, // Expose for updating grid size when importing maps
+        changeSkybox: (skyboxName) => {
+            if (scene) {
+                const loader = new THREE.CubeTextureLoader();
+                loader.setPath(`./assets/skyboxes/${skyboxName}/`);
+                const textureCube = loader.load([
+                    "+x.png",
+                    "-x.png",
+                    "+y.png",
+                    "-y.png",
+                    "+z.png",
+                    "-z.png",
+                ]);
+                scene.background = textureCube;
+            }
+        },
         activateTool: (toolName, activationData) => {
             if (!toolManagerRef.current) {
                 console.error(

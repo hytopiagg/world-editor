@@ -13,6 +13,7 @@ import WallToolOptionsSection from "./WallToolOptionsSection";
 import SelectionToolOptionsSection from "./SelectionToolOptionsSection";
 import TerrainToolOptionsSection from "./TerrainToolOptionsSection";
 import ReplaceToolOptionsSection from "./ReplaceToolOptionsSection";
+import SkyboxOptionsSection from "./SkyboxOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -178,6 +179,12 @@ export function BlockToolOptions({
                         />
                     </CollapsibleSection>
                 )}
+
+                <CollapsibleSection title="Skybox">
+                    <SkyboxOptionsSection
+                        terrainBuilderRef={terrainBuilderRef}
+                    />
+                </CollapsibleSection>
 
                 {showAIComponents && (
                     <CollapsibleSection title="AI Assistant">

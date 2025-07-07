@@ -126,8 +126,6 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         await DatabaseManager.saveData(STORES.SETTINGS, "viewDistance", value);
     };
 
-
-
     const handleAutoSaveToggle = (checked: boolean) => {
         setAutoSaveEnabled(checked);
         if (terrainBuilderRef?.current?.toggleAutoSave) {
