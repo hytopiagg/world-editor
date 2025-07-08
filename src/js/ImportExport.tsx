@@ -89,6 +89,36 @@ const importFromZip = async (file, terrainBuilderRef, environmentBuilderRef) => 
         // Now process the import data as normal
         await processImportData(importData, terrainBuilderRef, environmentBuilderRef);
 
+        // After processing map data, let's handle the skybox
+        const skyboxesFolder = zip.folder("skyboxes");
+        if (skyboxesFolder) {
+            let skyboxName: string | null = null;
+            // Find the first directory inside 'skyboxes/'
+            skyboxesFolder.forEach((relativePath, file) => {
+                if (file.dir && !skyboxName) { // take the first one
+                    skyboxName = relativePath.replace(/\/$/, "");
+                }
+            });
+
+            if (skyboxName) {
+                console.log(`Found skybox in import: ${skyboxName}`);
+                // Save to DB so it persists
+                await DatabaseManager.saveData(STORES.SETTINGS, "selectedSkybox", skyboxName);
+
+                // Apply to current scene
+                if (terrainBuilderRef.current?.changeSkybox) {
+                    // Add a delay to ensure scene is ready, similar to App.tsx
+                    setTimeout(() => {
+                        console.log(`Applying imported skybox: ${skyboxName}`);
+                        terrainBuilderRef.current.changeSkybox(skyboxName);
+                    }, 1000);
+                }
+
+                // Dispatch event to notify UI components of the change
+                window.dispatchEvent(new CustomEvent('skybox-changed', { detail: { skyboxName } }));
+            }
+        }
+
     } catch (error) {
         loadingManager.hideLoading();
         console.error("Error importing ZIP:", error);
@@ -744,7 +774,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
             }
         });
 
-        // --- End Collect Asset URIs ---
+        // Collect asset URIs
+        const selectedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
 
 
         loadingManager.updateLoading("Building export data structure...", 70);
@@ -963,6 +994,31 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 }
             }
         });
+
+        if (typeof selectedSkybox === 'string' && selectedSkybox) {
+            const skyboxesRootFolder = zip.folder("skyboxes");
+            if (skyboxesRootFolder) {
+                const skyboxFolder = skyboxesRootFolder.folder(selectedSkybox);
+                const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
+                faceKeys.forEach(faceKey => {
+                    const uri = `assets/skyboxes/${selectedSkybox}/${faceKey}.png`;
+                    if (!fetchedAssetUrls.has(uri)) {
+                        fetchedAssetUrls.add(uri);
+                        fetchPromises.push(
+                            fetch(uri)
+                                .then(response => {
+                                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${uri}`);
+                                    return response.blob();
+                                })
+                                .then(blob => {
+                                    skyboxFolder.file(`${faceKey}.png`, blob);
+                                })
+                                .catch(error => console.error(`Failed to fetch/add skybox texture ${uri}:`, error))
+                        );
+                    }
+                });
+            }
+        }
 
 
         await Promise.all(fetchPromises);

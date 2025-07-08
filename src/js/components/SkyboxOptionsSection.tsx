@@ -40,6 +40,23 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
         loadSavedSkybox();
     }, []);
 
+    // Listen for external skybox changes (e.g., from import)
+    useEffect(() => {
+        const handleExternalSkyboxChange = (event: CustomEvent) => {
+            const { skyboxName } = event.detail;
+            if (skyboxName && typeof skyboxName === 'string' && availableSkyboxes.includes(skyboxName)) {
+                console.log("SkyboxOptionsSection: Received external skybox change:", skyboxName);
+                setSelectedSkybox(skyboxName);
+            }
+        };
+
+        window.addEventListener('skybox-changed', handleExternalSkyboxChange as EventListener);
+
+        return () => {
+            window.removeEventListener('skybox-changed', handleExternalSkyboxChange as EventListener);
+        };
+    }, [availableSkyboxes]); // Rerun if availableSkyboxes changes
+
     // Apply skybox to terrain builder when selectedSkybox changes (but not during initialization)
     useEffect(() => {
         // Only apply if we've finished initializing and this isn't the first load
