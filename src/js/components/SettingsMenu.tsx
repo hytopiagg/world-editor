@@ -27,6 +27,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [cameraSensitivity, setCameraSensitivity] = useState(5);
     const [moveSpeed, setMoveSpeed] = useState(0.2);
     const [lowResDrag, setLowResDrag] = useState(false);
+    const [showGrid, setShowGrid] = useState(true);
     const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(!cameraManager.isPointerUnlockedMode);
 
     // Load saved sensitivity on mount
@@ -89,6 +90,11 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     }
                 } catch (err) {
                     console.error("Error loading lowResDrag", err);
+                }
+
+                // Floor grid now always defaults to visible; no DB persistence.
+                if (terrainBuilderRef?.current?.setGridVisible) {
+                    terrainBuilderRef.current.setGridVisible(true);
                 }
 
             } catch (error) {
@@ -196,6 +202,13 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         } catch (err) { console.error("saving lowResDrag", err); }
     };
 
+    const handleGridToggle = (checked: boolean) => {
+        setShowGrid(checked);
+        if (terrainBuilderRef?.current?.setGridVisible) {
+            terrainBuilderRef.current.setGridVisible(checked);
+        }
+    };
+
     return (
         <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-1">
@@ -275,6 +288,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             type="checkbox"
                             checked={lowResDrag}
                             onChange={(e) => handleLowResToggle(e.target.checked)}
+                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                        animationDelay: "0.115s"
+                    }}>
+                        <span>Floor Grid</span>
+                        <input
+                            type="checkbox"
+                            checked={showGrid}
+                            onChange={(e) => handleGridToggle(e.target.checked)}
                             className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                         />
                     </label>

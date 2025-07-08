@@ -2281,6 +2281,7 @@ function TerrainBuilder(
                 return Promise.reject(err);
             }
         },
+        setGridVisible,
     })); // This is the correct syntax with just one closing parenthesis
 
     useEffect(() => {
@@ -2623,6 +2624,12 @@ function TerrainBuilder(
             cancelAnimationFrame(frameId);
         };
     }, [gl]);
+
+    function setGridVisible(visible) {
+        if (gridRef.current) {
+            gridRef.current.visible = visible;
+        }
+    }
 
     return (
         <>
