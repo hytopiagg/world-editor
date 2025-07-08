@@ -4,7 +4,6 @@ import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./css/App.css";
-import "./css/output.css";
 import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
@@ -733,7 +732,7 @@ function App() {
                     </div>
                 )}
 
-                {/* <button
+                                {/* <button
                     className="toolbar-button"
                     onClick={async () => await DatabaseManager.clearDatabase()}
                     title="Clear Database"
