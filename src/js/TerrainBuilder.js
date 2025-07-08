@@ -1929,18 +1929,73 @@ function TerrainBuilder(
         forceRefreshAllChunks, // Force refresh of all chunks
         updateGridSize, // Expose for updating grid size when importing maps
         changeSkybox: (skyboxName) => {
-            if (scene) {
+            if (scene && gl) {
+                const FADE_DURATION = 300; // 300ms fade duration
+                const originalBackground = scene.background;
+                let fadeStartTime = Date.now();
+                let newSkyboxLoaded = false;
+                let newTextureCube = null;
+
+                // Preload the new skybox
                 const loader = new THREE.CubeTextureLoader();
                 loader.setPath(`./assets/skyboxes/${skyboxName}/`);
-                const textureCube = loader.load([
-                    "+x.png",
-                    "-x.png",
-                    "+y.png",
-                    "-y.png",
-                    "+z.png",
-                    "-z.png",
-                ]);
-                scene.background = textureCube;
+
+                const fadeOverlay = new THREE.Mesh(
+                    new THREE.SphereGeometry(500, 32, 16),
+                    new THREE.MeshBasicMaterial({
+                        color: 0x000000,
+                        transparent: true,
+                        opacity: 0,
+                        side: THREE.BackSide,
+                    })
+                );
+                scene.add(fadeOverlay);
+
+                // Load new skybox
+                newTextureCube = loader.load(
+                    [
+                        "+x.png",
+                        "-x.png",
+                        "+y.png",
+                        "-y.png",
+                        "+z.png",
+                        "-z.png",
+                    ],
+                    () => {
+                        newSkyboxLoaded = true;
+                    }
+                );
+
+                // Fade animation
+                const fadeAnimation = () => {
+                    const elapsed = Date.now() - fadeStartTime;
+                    const progress = Math.min(elapsed / FADE_DURATION, 1);
+
+                    if (progress < 0.5) {
+                        // Fade out phase (first half)
+                        const fadeOutProgress = progress * 2; // 0 to 1
+                        fadeOverlay.material.opacity = fadeOutProgress * 0.8;
+                    } else if (newSkyboxLoaded) {
+                        // Fade in phase (second half) - only start if new skybox is loaded
+                        if (scene.background !== newTextureCube) {
+                            scene.background = newTextureCube;
+                        }
+                        const fadeInProgress = (progress - 0.5) * 2; // 0 to 1
+                        fadeOverlay.material.opacity =
+                            0.8 * (1 - fadeInProgress);
+                    }
+
+                    if (progress < 1 || !newSkyboxLoaded) {
+                        requestAnimationFrame(fadeAnimation);
+                    } else {
+                        // Animation complete, cleanup
+                        scene.remove(fadeOverlay);
+                        fadeOverlay.geometry.dispose();
+                        fadeOverlay.material.dispose();
+                    }
+                };
+
+                fadeAnimation();
             }
         },
         activateTool: (toolName, activationData) => {

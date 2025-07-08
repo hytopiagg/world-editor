@@ -72,6 +72,30 @@ function App() {
         }
     }, [gridSize, terrainBuilderRef.current?.updateGridSize]);
 
+    // Load and apply saved skybox when page is loaded (one time only)
+    useEffect(() => {
+        if (!pageIsLoaded) return;
+
+        const loadSavedSkybox = async () => {
+            // Add a small delay to ensure terrain builder is ready
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            if (terrainBuilderRef.current?.changeSkybox) {
+                try {
+                    const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
+                    if (typeof savedSkybox === 'string') {
+                        console.log("Applying saved skybox on app startup:", savedSkybox);
+                        terrainBuilderRef.current.changeSkybox(savedSkybox);
+                    }
+                } catch (error) {
+                    console.error("Error loading saved skybox:", error);
+                }
+            }
+        };
+
+        loadSavedSkybox();
+    }, [pageIsLoaded]); // Only depend on pageIsLoaded, not terrainBuilderRef.current
+
     useEffect(() => {
         const loadAppSettings = async () => {
             try {

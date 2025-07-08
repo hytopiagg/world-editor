@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSkyboxPreview } from "../utils/SkyboxPreviewRenderer";
 
@@ -9,30 +9,55 @@ interface SkyboxOptionsSectionProps {
 export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOptionsSectionProps) {
     const [skyboxPreviews, setSkyboxPreviews] = useState<{ [key: string]: string | null }>({});
     const [selectedSkybox, setSelectedSkybox] = useState("partly-cloudy");
-    const [loadingSkybox, setLoadingSkybox] = useState<string | null>(null);
     const [generatingPreviews, setGeneratingPreviews] = useState(true);
     const [isChangingSkybox, setIsChangingSkybox] = useState(false);
+    const [hasInitialized, setHasInitialized] = useState(false);
+
+    // Track what skybox is currently applied to prevent unnecessary re-applications
+    const lastAppliedSkyboxRef = useRef<string | null>(null);
 
     // Hardcoding for now, could be dynamic later
     const availableSkyboxes = ["partly-cloudy", "night"];
 
-    // Load saved skybox and generate previews on mount
+    // Load saved skybox preference and set initial state
     useEffect(() => {
-        const loadAndGeneratePreviews = async () => {
-            // 1. Load saved skybox preference
+        const loadSavedSkybox = async () => {
             try {
                 const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
                 if (typeof savedSkybox === 'string' && availableSkyboxes.includes(savedSkybox)) {
                     setSelectedSkybox(savedSkybox);
-                    if (terrainBuilderRef?.current?.changeSkybox) {
-                        terrainBuilderRef.current.changeSkybox(savedSkybox);
-                    }
+                    // Track this as the "current" skybox without applying it (it should already be active)
+                    lastAppliedSkyboxRef.current = savedSkybox;
                 }
             } catch (error) {
                 console.error("Error loading selected skybox:", error);
+            } finally {
+                // Mark as initialized regardless of success/failure
+                setHasInitialized(true);
             }
+        };
 
-            // 2. Load cached previews and generate missing ones
+        loadSavedSkybox();
+    }, []);
+
+    // Apply skybox to terrain builder when selectedSkybox changes (but not during initialization)
+    useEffect(() => {
+        // Only apply if we've finished initializing and this isn't the first load
+        if (hasInitialized && terrainBuilderRef?.current?.changeSkybox && selectedSkybox) {
+            // Check if this skybox is different from the last one we applied
+            if (lastAppliedSkyboxRef.current !== selectedSkybox) {
+                console.log("SkyboxOptionsSection: Applying new skybox:", selectedSkybox);
+                terrainBuilderRef.current.changeSkybox(selectedSkybox);
+                lastAppliedSkyboxRef.current = selectedSkybox;
+            } else {
+                console.log("SkyboxOptionsSection: Skybox", selectedSkybox, "already applied, skipping");
+            }
+        }
+    }, [selectedSkybox, hasInitialized]);
+
+    // Load cached previews and generate missing ones
+    useEffect(() => {
+        const loadAndGeneratePreviews = async () => {
             const previews: { [key: string]: string | null } = {};
             const previewsToGenerate: string[] = [];
 
@@ -54,7 +79,7 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
             setSkyboxPreviews(previews);
             setGeneratingPreviews(false); // Initial previews loaded/checked
 
-            // 3. Generate any missing previews in the background
+            // Generate any missing previews in the background
             if (previewsToGenerate.length > 0) {
                 for (const skyboxName of previewsToGenerate) {
                     try {
@@ -71,20 +96,33 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
         };
 
         loadAndGeneratePreviews();
-    }, [terrainBuilderRef]);
+    }, []);
 
     const handleSkyboxChange = async (skyboxName: string) => {
-        if (terrainBuilderRef?.current?.changeSkybox) {
-            setLoadingSkybox(skyboxName);
+        // Don't re-render if the same skybox is already selected or if a change is in progress
+        if (selectedSkybox === skyboxName) {
+            console.log(`Skybox "${skyboxName}" is already active, skipping change`);
+            return;
+        }
+
+        if (isChangingSkybox) {
+            console.log("Skybox change already in progress, skipping");
+            return;
+        }
+
+        try {
             setIsChangingSkybox(true);
-            try {
-                // The function in TerrainBuilder handles the actual texture loading
-                terrainBuilderRef.current.changeSkybox(skyboxName);
-                setSelectedSkybox(skyboxName);
-                await DatabaseManager.saveData(STORES.SETTINGS, "selectedSkybox", skyboxName);
-            } catch (error) {
-                console.error("Error changing skybox:", error);
-            }
+            // Update state first - the useEffect will handle applying the skybox
+            setSelectedSkybox(skyboxName);
+            await DatabaseManager.saveData(STORES.SETTINGS, "selectedSkybox", skyboxName);
+
+            // Wait for transition to complete (300ms transition + small buffer)
+            setTimeout(() => {
+                setIsChangingSkybox(false);
+            }, 400);
+        } catch (error) {
+            console.error("Error changing skybox:", error);
+            setIsChangingSkybox(false);
         }
     };
 
@@ -95,8 +133,8 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
                     <button
                         onClick={() => handleSkyboxChange(skybox)}
                         className={`relative aspect-square border-2 rounded-lg overflow-hidden transition-all duration-200 hover:border-blue-400 ${selectedSkybox === skybox ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-600'
-                            }`}
-                        disabled={loadingSkybox === skybox}
+                            } ${isChangingSkybox ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={isChangingSkybox}
                     >
                         {skyboxPreviews[skybox] ? (
                             <>
@@ -105,10 +143,10 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
                                     alt={skybox}
                                     className="w-full h-full object-cover"
                                 />
-                                {/* Loading spinner for skybox changes - show for the skybox being loaded */}
-                                {loadingSkybox === skybox && (
-                                    <div style={{ inset: 0, position: 'absolute', backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                                        <div style={{ width: '20px', height: '20px', border: '2px solid rgba(255, 255, 255, 0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                {/* Show transition indicator when changing skyboxes */}
+                                {isChangingSkybox && selectedSkybox === skybox && (
+                                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                     </div>
                                 )}
                             </>
