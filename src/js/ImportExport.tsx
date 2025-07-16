@@ -468,6 +468,11 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 
             terrainData = Object.entries(importData.blocks as { [key: string]: number }).reduce(
                 (acc, [key, importedBlockId]) => {
+                    // Validate that importedBlockId is a valid number
+                    if (typeof importedBlockId !== 'number' || !Number.isInteger(importedBlockId) || importedBlockId < 0) {
+                        console.warn(`Skipping corrupted block entry at ${key}: invalid block ID "${importedBlockId}"`);
+                        return acc; // Skip this entry
+                    }
 
                     const mappedId = blockIdMapping[importedBlockId] !== undefined
                         ? blockIdMapping[importedBlockId]
