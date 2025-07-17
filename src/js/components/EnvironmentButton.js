@@ -317,7 +317,13 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                     {showCanvas ? (
                         <Canvas
                             camera={{ fov: 20, position: [0, 0, 8] }}
-                            gl={{ preserveDrawingBuffer: true }}
+                            gl={{
+                                powerPreference: "high-performance",
+                                preserveDrawingBuffer: true,
+                                antialias: true,
+                                alpha: false,
+                                stencil: false,
+                            }}
                         >
                             <ambientLight intensity={1} />
                             <directionalLight

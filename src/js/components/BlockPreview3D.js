@@ -31,7 +31,11 @@ const PreviewCube = ({ textureObjects }) => {
 PreviewCube.propTypes = {
     textureObjects: PropTypes.object.isRequired,
 };
-const BlockPreview3D = ({ textureObjects, target = [0, 0, 0], showControls = true }) => {
+const BlockPreview3D = ({
+    textureObjects,
+    target = [0, 0, 0],
+    showControls = true,
+}) => {
     const [isRotating, setIsRotating] = useState(true);
 
     const previewKey = useMemo(
@@ -55,6 +59,13 @@ const BlockPreview3D = ({ textureObjects, target = [0, 0, 0], showControls = tru
                 key={previewKey}
                 shadows
                 camera={{ position: [1, 1, 1], fov: 80 }}
+                gl={{
+                    powerPreference: "high-performance",
+                    antialias: true,
+                    alpha: false,
+                    preserveDrawingBuffer: false,
+                    stencil: false,
+                }}
             >
                 <ambientLight intensity={1} />
                 <directionalLight
@@ -100,15 +111,21 @@ const BlockPreview3D = ({ textureObjects, target = [0, 0, 0], showControls = tru
                 />
             </Canvas>
 
-            {showControls && <div className="block-preview-controls">
-                <button
-                    className="rotation-control-button"
-                    onClick={toggleRotation}
-                    title={isRotating ? "Pause rotation" : "Start rotation"}
-                >
-                    {isRotating ? <FaPause size={16} /> : <FaPlay size={16} />}
-                </button>
-            </div>}
+            {showControls && (
+                <div className="block-preview-controls">
+                    <button
+                        className="rotation-control-button"
+                        onClick={toggleRotation}
+                        title={isRotating ? "Pause rotation" : "Start rotation"}
+                    >
+                        {isRotating ? (
+                            <FaPause size={16} />
+                        ) : (
+                            <FaPlay size={16} />
+                        )}
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

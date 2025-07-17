@@ -642,7 +642,21 @@ function App() {
                     </div>
                 )}
 
-                <Canvas shadows className="canvas-container">
+                <Canvas
+                    shadows
+                    className="canvas-container"
+                    gl={{
+                        powerPreference: "high-performance",
+                        antialias: true,
+                        alpha: false,
+                        depth: true,
+                        stencil: false,
+                        preserveDrawingBuffer: false,
+                        premultipliedAlpha: true,
+                        failIfMajorPerformanceCaveat: false
+                    }}
+                    camera={{ fov: 75, near: 0.1, far: 1000 }}
+                >
                     <TerrainBuilder
                         isInputDisabled={isTextureModalOpen}
                         ref={terrainBuilderRef}
@@ -735,7 +749,7 @@ function App() {
                     </div>
                 )}
 
-                                {/* <button
+                {/* <button
                     className="toolbar-button"
                     onClick={async () => await DatabaseManager.clearDatabase()}
                     title="Clear Database"

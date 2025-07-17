@@ -57,6 +57,11 @@ import {
     setDeferredChunkMeshing,
 } from "./utils/ChunkUtils"; // <<< Add this import
 import {
+    detectGPU,
+    applyGPUOptimizedSettings,
+    logGPUInfo,
+} from "./utils/GPUDetection";
+import {
     handleTerrainMouseDown,
     handleTerrainMouseUp,
 } from "./utils/TerrainMouseUtils";
@@ -64,15 +69,36 @@ import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
 function optimizeRenderer(gl) {
     if (gl) {
+        // Detect GPU and apply optimized settings automatically
+        const gpuInfo = detectGPU();
+        const settings = applyGPUOptimizedSettings(gl, gpuInfo);
+
+        // Log GPU info for debugging
+        logGPUInfo();
+
+        // Shadow map optimizations
         gl.shadowMap.autoUpdate = false;
         gl.shadowMap.needsUpdate = true;
+
+        // Enable object sorting for better transparency rendering
         gl.sortObjects = true;
-        if (gl.getContextAttributes) {
-            const contextAttributes = gl.getContextAttributes();
-            if (contextAttributes) {
-                contextAttributes.powerPreference = "high-performance";
+
+        // Apply GPU-specific shadow map size to directional lights
+        // This will be picked up by lights that check renderer settings
+        gl.userData = gl.userData || {};
+        gl.userData.recommendedShadowMapSize = settings.shadowMapSize;
+
+        // Note: powerPreference must be set at context creation time, not here
+        // It's now properly configured in the Canvas component gl prop
+
+        console.log(
+            `Renderer optimized for ${gpuInfo.estimatedPerformanceClass} performance GPU`,
+            {
+                gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
+                isIntegrated: gpuInfo.isIntegratedGPU,
+                appliedSettings: settings,
             }
-        }
+        );
     }
 }
 function TerrainBuilder(
@@ -125,6 +151,9 @@ function TerrainBuilder(
     const placementSizeRef = useRef(placementSize);
     const snapToGridRef = useRef(snapToGrid !== false);
     const originalPixelRatioRef = useRef(null);
+
+    // GPU-optimized settings state
+    const [shadowMapSize, setShadowMapSize] = useState(2048);
 
     useEffect(() => {
         snapToGridRef.current = snapToGrid !== false;
@@ -2637,6 +2666,46 @@ function TerrainBuilder(
         }
     }
 
+    // Initialize GPU-optimized settings on mount
+    useEffect(() => {
+        const gpuInfo = detectGPU();
+        const settings = {
+            shadowMapSize: 2048,
+            shadowMapType: "PCFShadowMap",
+            viewDistance: 8,
+            pixelRatio: Math.min(window.devicePixelRatio, 2),
+            antialias: true,
+            enablePostProcessing: false,
+            maxEnvironmentObjects: 1000,
+        };
+
+        // Apply GPU-specific optimizations
+        switch (gpuInfo.estimatedPerformanceClass) {
+            case "low":
+                settings.shadowMapSize = 1024;
+                settings.viewDistance = 4;
+                settings.pixelRatio = Math.min(window.devicePixelRatio, 1.5);
+                settings.antialias = false;
+                settings.maxEnvironmentObjects = 500;
+                break;
+            case "high":
+                settings.shadowMapSize = 4096;
+                settings.viewDistance = 12;
+                settings.maxEnvironmentObjects = 2000;
+                break;
+        }
+
+        setShadowMapSize(settings.shadowMapSize);
+
+        console.log(
+            `GPU-optimized settings initialized for ${gpuInfo.estimatedPerformanceClass} performance GPU:`,
+            {
+                gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
+                settings,
+            }
+        );
+    }, []);
+
     return (
         <>
             <OrbitControls
@@ -2658,8 +2727,8 @@ function TerrainBuilder(
                 intensity={2}
                 color={0xffffff}
                 castShadow={true}
-                shadow-mapSize-width={2048}
-                shadow-mapSize-height={2048}
+                shadow-mapSize-width={shadowMapSize}
+                shadow-mapSize-height={shadowMapSize}
                 shadow-camera-far={1000}
                 shadow-camera-near={10}
                 shadow-camera-left={-100}

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import '../../css/ModelPreview.css'; // We'll create this CSS file later
+import React, { useEffect, useRef, useCallback } from "react";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import "../../css/ModelPreview.css";
+import { detectGPU, applyGPUOptimizedSettings } from "../utils/GPUDetection";
 
 const disposeObject = (object) => {
   if (!object) return;
@@ -37,8 +38,6 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
   const directionalLightRef = useRef(null);
   const gridHelperRef = useRef(null);
 
-
-
   const cleanupModel = useCallback(() => {
     if (modelRef.current && sceneRef.current) {
       console.log("Cleanup function called for model:", modelRef.current.uuid);
@@ -70,12 +69,23 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
     const camera = cameraRef.current;
     camera.position.set(1.5, 2, 2.5); // Restore initial camera position
 
-    rendererRef.current = new THREE.WebGLRenderer({ antialias: true });
+    rendererRef.current = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance",
+      alpha: false,
+      depth: true,
+      stencil: false,
+      preserveDrawingBuffer: false,
+      premultipliedAlpha: true
+    });
     const renderer = rendererRef.current;
+
+    // Apply GPU-optimized settings automatically
+    const gpuInfo = detectGPU();
+    applyGPUOptimizedSettings(renderer, gpuInfo);
+
     renderer.setSize(width, height);
-    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     currentMount.appendChild(renderer.domElement);
 
     ambientLightRef.current = new THREE.AmbientLight(0xffffff, 1.2);
