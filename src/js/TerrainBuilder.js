@@ -60,6 +60,7 @@ import {
     detectGPU,
     applyGPUOptimizedSettings,
     logGPUInfo,
+    getRecommendedSettings,
 } from "./utils/GPUDetection";
 import {
     handleTerrainMouseDown,
@@ -2669,15 +2670,7 @@ function TerrainBuilder(
     // Initialize GPU-optimized settings on mount
     useEffect(() => {
         const gpuInfo = detectGPU();
-        const settings = {
-            shadowMapSize: 2048,
-            shadowMapType: "PCFShadowMap",
-            viewDistance: 8,
-            pixelRatio: Math.min(window.devicePixelRatio, 2),
-            antialias: true,
-            enablePostProcessing: false,
-            maxEnvironmentObjects: 1000,
-        };
+        const settings = getRecommendedSettings(gpuInfo);
 
         // Apply GPU-specific optimizations
         switch (gpuInfo.estimatedPerformanceClass) {
@@ -2701,9 +2694,33 @@ function TerrainBuilder(
             `GPU-optimized settings initialized for ${gpuInfo.estimatedPerformanceClass} performance GPU:`,
             {
                 gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
+                webgl2: gpuInfo.supportsWebGL2,
+                contextType: gpuInfo.contextType,
+                maxTextureSize: gpuInfo.maxTextureSize,
+                maxAnisotropy: gpuInfo.maxAnisotropy,
                 settings,
             }
         );
+
+        // Set view distance based on GPU capability
+        if (settings.viewDistance) {
+            try {
+                const { setViewDistance } = require("./constants/terrain");
+                setViewDistance(settings.viewDistance * 8); // Convert chunks to blocks
+            } catch (error) {
+                console.warn("Could not set view distance:", error);
+            }
+        }
+
+        // Log WebGL2 capabilities if available
+        if (gpuInfo.supportsWebGL2) {
+            console.log("✅ WebGL2 features available:", {
+                logarithmicDepthBuffer: settings.logarithmicDepthBuffer,
+                maxTextureSize: gpuInfo.maxTextureSize,
+                anisotropicFiltering: settings.enableAnisotropicFiltering,
+                maxAnisotropy: settings.maxAnisotropy,
+            });
+        }
     }, []);
 
     return (

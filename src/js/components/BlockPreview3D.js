@@ -5,8 +5,14 @@ import { OrbitControls, Box } from "@react-three/drei";
 import { FaPlay } from "react-icons/fa";
 import { FaPause } from "react-icons/fa";
 import * as THREE from "three";
+import {
+    detectGPU,
+    getOptimalContextAttributes,
+    getRecommendedSettings,
+} from "../utils/GPUDetection";
 
 const FACE_ORDER = ["right", "left", "top", "bottom", "front", "back"];
+
 const PreviewCube = ({ textureObjects }) => {
     const meshRef = useRef();
 
@@ -28,9 +34,11 @@ const PreviewCube = ({ textureObjects }) => {
     }, [textureObjects]);
     return <Box ref={meshRef} args={[1, 1, 1]} material={materials} />;
 };
+
 PreviewCube.propTypes = {
     textureObjects: PropTypes.object.isRequired,
 };
+
 const BlockPreview3D = ({
     textureObjects,
     target = [0, 0, 0],
@@ -50,6 +58,11 @@ const BlockPreview3D = ({
         setIsRotating(!isRotating);
     };
 
+    // Get GPU-optimized settings for this preview
+    const gpuInfo = detectGPU();
+    const contextAttributes = getOptimalContextAttributes(gpuInfo);
+    const settings = getRecommendedSettings(gpuInfo);
+
     return (
         <div className="block-preview-3d-container">
             <div className="block-preview-label-container">
@@ -59,42 +72,36 @@ const BlockPreview3D = ({
                 key={previewKey}
                 shadows
                 camera={{ position: [1, 1, 1], fov: 80 }}
-                gl={{
-                    powerPreference: "high-performance",
-                    antialias: true,
-                    alpha: false,
-                    preserveDrawingBuffer: false,
-                    stencil: false,
-                }}
+                gl={contextAttributes}
             >
                 <ambientLight intensity={1} />
                 <directionalLight
                     position={[5, 5, 5]}
                     intensity={2}
                     castShadow
-                    shadow-mapSize-width={1024}
-                    shadow-mapSize-height={1024}
+                    shadow-mapSize-width={settings.shadowMapSize}
+                    shadow-mapSize-height={settings.shadowMapSize}
                 />
                 <directionalLight
                     position={[0, 5, 0]}
                     intensity={1}
                     castShadow
-                    shadow-mapSize-width={1024}
-                    shadow-mapSize-height={1024}
+                    shadow-mapSize-width={settings.shadowMapSize}
+                    shadow-mapSize-height={settings.shadowMapSize}
                 />
                 <directionalLight
                     position={[5, 5, 0]}
                     intensity={1}
                     castShadow
-                    shadow-mapSize-width={1024}
-                    shadow-mapSize-height={1024}
+                    shadow-mapSize-width={settings.shadowMapSize}
+                    shadow-mapSize-height={settings.shadowMapSize}
                 />
                 <directionalLight
                     position={[-5, 5, 0]}
                     intensity={1}
                     castShadow
-                    shadow-mapSize-width={1024}
-                    shadow-mapSize-height={1024}
+                    shadow-mapSize-width={settings.shadowMapSize}
+                    shadow-mapSize-height={settings.shadowMapSize}
                 />
                 <PreviewCube textureObjects={textureObjects} />
                 <OrbitControls

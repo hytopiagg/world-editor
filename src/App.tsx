@@ -28,6 +28,7 @@ import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -65,6 +66,10 @@ function App() {
     const [cameraPosition, setCameraPosition] = useState(null);
     const cameraAngle = 0;
     const gridSize = 5000;
+
+    // Initialize GPU detection and optimized context attributes
+    const gpuInfo = detectGPU();
+    const contextAttributes = getOptimalContextAttributes(gpuInfo);
 
     useEffect(() => {
         if (terrainBuilderRef.current) {
@@ -645,16 +650,7 @@ function App() {
                 <Canvas
                     shadows
                     className="canvas-container"
-                    gl={{
-                        powerPreference: "high-performance",
-                        antialias: true,
-                        alpha: false,
-                        depth: true,
-                        stencil: false,
-                        preserveDrawingBuffer: false,
-                        premultipliedAlpha: true,
-                        failIfMajorPerformanceCaveat: false
-                    }}
+                    gl={contextAttributes}
                     camera={{ fov: 75, near: 0.1, far: 1000 }}
                 >
                     <TerrainBuilder

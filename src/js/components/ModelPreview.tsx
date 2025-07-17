@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import "../../css/ModelPreview.css";
-import { detectGPU, applyGPUOptimizedSettings } from "../utils/GPUDetection";
+import { detectGPU, applyGPUOptimizedSettings, getOptimalContextAttributes, getRecommendedSettings } from "../utils/GPUDetection";
 
 const disposeObject = (object) => {
   if (!object) return;
@@ -69,19 +69,14 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
     const camera = cameraRef.current;
     camera.position.set(1.5, 2, 2.5); // Restore initial camera position
 
-    rendererRef.current = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: "high-performance",
-      alpha: false,
-      depth: true,
-      stencil: false,
-      preserveDrawingBuffer: false,
-      premultipliedAlpha: true
-    });
+    const gpuInfo = detectGPU();
+    const contextAttributes = getOptimalContextAttributes(gpuInfo);
+    const settings = getRecommendedSettings(gpuInfo);
+
+    rendererRef.current = new THREE.WebGLRenderer(contextAttributes);
     const renderer = rendererRef.current;
 
     // Apply GPU-optimized settings automatically
-    const gpuInfo = detectGPU();
     applyGPUOptimizedSettings(renderer, gpuInfo);
 
     renderer.setSize(width, height);
@@ -94,8 +89,8 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
     const directionalLight = directionalLightRef.current;
     directionalLight.position.set(5, 10, 7.5);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
+    directionalLight.shadow.mapSize.width = settings.shadowMapSize;
+    directionalLight.shadow.mapSize.height = settings.shadowMapSize;
     directionalLight.shadow.camera.near = 0.5;
     directionalLight.shadow.camera.far = 50;
     scene.add(directionalLight);
