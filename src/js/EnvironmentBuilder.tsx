@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils";
+import BlockMaterial from "./blocks/BlockMaterial";
 import {
     useEffect,
     useRef,
@@ -523,11 +524,21 @@ const EnvironmentBuilder = (
                     ? object.material
                     : [object.material];
                 materials.forEach((material, materialIndex) => {
-                    const newMaterial = material.clone();
-                    newMaterial.depthWrite = true;
-                    newMaterial.depthTest = true;
-                    newMaterial.transparent = true;
-                    newMaterial.alphaTest = 0.5;
+                    // Use optimized material from BlockMaterial manager
+                    const hasTexture = material.map !== null;
+                    const newMaterial = BlockMaterial.instance.getEnvironmentMaterial({
+                        map: hasTexture ? material.map : null,
+                        transparent: true,
+                        alphaTest: 0.5,
+                        depthWrite: true,
+                        depthTest: true,
+                    });
+
+                    // Copy important properties from original material
+                    if (material.color) {
+                        (newMaterial as any).color = material.color.clone();
+                    }
+
                     const key = newMaterial.uuid;
                     if (!geometriesByMaterial.has(key)) {
                         geometriesByMaterial.set(key, {
@@ -618,21 +629,29 @@ const EnvironmentBuilder = (
             const previewModel = gltf.scene.clone(true);
             previewModel.traverse((child) => {
                 if (child.isMesh) {
-                    child.material = Array.isArray(child.material)
-                        ? child.material.map((m) => m.clone())
-                        : child.material.clone();
+                    // Use optimized preview materials
                     if (Array.isArray(child.material)) {
-                        child.material.forEach((material) => {
-                            material.transparent = true;
-                            material.opacity = 0.5;
-                            material.depthWrite = false;
-                            material.depthTest = true;
+                        child.material = child.material.map((originalMaterial) => {
+                            const previewMaterial = BlockMaterial.instance.getPreviewMaterial({
+                                map: originalMaterial.map,
+                                color: originalMaterial.color,
+                                opacity: 0.5,
+                                transparent: true,
+                                depthWrite: false,
+                                depthTest: true,
+                            });
+                            return previewMaterial;
                         });
                     } else {
-                        child.material.transparent = true;
-                        child.material.opacity = 0.5;
-                        child.material.depthWrite = false;
-                        child.material.depthTest = true;
+                        const previewMaterial = BlockMaterial.instance.getPreviewMaterial({
+                            map: child.material.map,
+                            color: child.material.color,
+                            opacity: 0.5,
+                            transparent: true,
+                            depthWrite: false,
+                            depthTest: true,
+                        });
+                        child.material = previewMaterial;
                     }
                     child.castShadow = true;
                     child.receiveShadow = true;

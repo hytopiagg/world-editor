@@ -2616,8 +2616,7 @@ function TerrainBuilder(
         const animate = (time) => {
             frameId = requestAnimationFrame(animate);
             if (BlockMaterial.instance.liquidMaterial) {
-                BlockMaterial.instance.liquidMaterial.uniforms.time.value =
-                    (time / 1000) * 0.5;
+                BlockMaterial.instance.updateLiquidTime((time / 1000) * 0.5);
             }
             if (isPlacingRef.current && frameCount % 30 === 0) {
                 if (!window.mouseButtons || !(window.mouseButtons & 1)) {

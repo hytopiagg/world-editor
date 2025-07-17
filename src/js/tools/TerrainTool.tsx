@@ -2,6 +2,7 @@ import * as THREE from "three";
 // Import from the same place as ToolBar.tsx
 import { generatePerlinNoise } from "perlin-noise";
 import BaseTool from "./BaseTool";
+import BlockMaterial from "../blocks/BlockMaterial";
 
 export class TerrainTool extends BaseTool {
     isPlacing: boolean;
@@ -89,15 +90,14 @@ export class TerrainTool extends BaseTool {
             true // Open ended
         );
 
-        const cylinderMaterial = new THREE.MeshBasicMaterial({
+        const cylinderMaterial = BlockMaterial.instance.getTransparentMaterial({
             color: 0x00ff00,
             transparent: true,
-            opacity: 0.2, // Slightly increased for better visibility
+            opacity: 0.2,
             side: THREE.DoubleSide,
-            wireframe: false,
             depthTest: true,
-            depthWrite: false, // Don't write to depth buffer to avoid z-fighting
-            alphaTest: 0.01, // Helps with transparency sorting
+            depthWrite: false,
+            alphaTest: 0.01,
         });
 
         this.previewCylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
@@ -112,14 +112,14 @@ export class TerrainTool extends BaseTool {
             1,
             true
         );
-        const wireframeMaterial = new THREE.MeshBasicMaterial({
+        const wireframeMaterial = BlockMaterial.instance.getTransparentMaterial({
             color: 0x00aa00,
-            wireframe: true,
             transparent: true,
             opacity: 0.6,
             depthTest: true,
-            depthWrite: false, // Don't write to depth buffer
+            depthWrite: false,
         });
+        (wireframeMaterial as any).wireframe = true;
 
         const wireframe = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
         this.previewGroup.add(wireframe);
@@ -606,15 +606,14 @@ export class TerrainTool extends BaseTool {
                 true
             );
 
-            const cylinderMaterial = new THREE.MeshBasicMaterial({
+            const cylinderMaterial = BlockMaterial.instance.getTransparentMaterial({
                 color: 0x00ff00,
                 transparent: true,
-                opacity: 0.2, // Slightly increased for better visibility
+                opacity: 0.2,
                 side: THREE.DoubleSide,
-                wireframe: false,
                 depthTest: true,
-                depthWrite: false, // Don't write to depth buffer to avoid z-fighting
-                alphaTest: 0.01, // Helps with transparency sorting
+                depthWrite: false,
+                alphaTest: 0.01,
             });
 
             this.previewCylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
