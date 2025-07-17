@@ -11,6 +11,7 @@ import {
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 import { CustomModel } from "./types/DatabaseTypes";
+import { getViewDistance } from "./constants/terrain";
 export const environmentModels = (() => {
     try {
         const fetchModelList = () => {
@@ -70,6 +71,7 @@ const EnvironmentBuilder = (
         placementSettings,
         undoRedoManager,
         terrainBuilderRef,
+        cameraPosition,
     },
     ref
 ) => {
@@ -87,6 +89,86 @@ const EnvironmentBuilder = (
     const isUndoRedoOperation = useRef(false);
 
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
+    const lastCullingUpdate = useRef(0);
+    const CULLING_UPDATE_INTERVAL = 100; // Update every 100ms
+
+    const updateDistanceCulling = (cameraPos: THREE.Vector3) => {
+        if (!cameraPos) return;
+
+        const viewDistance = getViewDistance();
+        const viewDistanceSquared = viewDistance * viewDistance;
+
+        let totalVisible = 0;
+        let totalHidden = 0;
+
+        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            if (!instancedData.meshes || !instancedData.addedToScene) continue;
+
+            let hasChanges = false;
+            const instances = Array.from(instancedData.instances.entries());
+
+            instances.forEach(([instanceId, data]) => {
+                const distance = cameraPos.distanceToSquared(data.position);
+                const isVisible = distance <= viewDistanceSquared;
+
+                // Check if visibility state has changed
+                const wasVisible = data.isVisible !== false; // Default to true for backward compatibility
+
+                if (isVisible !== wasVisible) {
+                    hasChanges = true;
+                    data.isVisible = isVisible;
+
+                    if (isVisible) {
+                        // Instance is now visible, restore proper matrix
+                        instancedData.meshes.forEach((mesh) => {
+                            if (instanceId < mesh.instanceMatrix.count) {
+                                mesh.setMatrixAt(instanceId, data.matrix);
+                            }
+                        });
+                    } else {
+                        // Instance is now too far, hide it by setting zero-scale matrix
+                        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+                        instancedData.meshes.forEach((mesh) => {
+                            if (instanceId < mesh.instanceMatrix.count) {
+                                mesh.setMatrixAt(instanceId, zeroMatrix);
+                            }
+                        });
+                    }
+                }
+
+                if (isVisible) {
+                    totalVisible++;
+                } else {
+                    totalHidden++;
+                }
+            });
+
+            // Only update if there were changes
+            if (hasChanges) {
+                instancedData.meshes.forEach((mesh) => {
+                    mesh.instanceMatrix.needsUpdate = true;
+                });
+            }
+        }
+
+        // Debug logging (can be removed in production)
+        if (totalVisible + totalHidden > 0) {
+            console.log(`Environment objects: ${totalVisible} visible, ${totalHidden} hidden (view distance: ${viewDistance})`);
+        }
+    };
+
+    const throttledUpdateDistanceCulling = (cameraPos: THREE.Vector3) => {
+        const now = Date.now();
+        if (now - lastCullingUpdate.current > CULLING_UPDATE_INTERVAL) {
+            updateDistanceCulling(cameraPos);
+            lastCullingUpdate.current = now;
+        }
+    };
+
+    const forceUpdateDistanceCulling = (cameraPos: THREE.Vector3) => {
+        updateDistanceCulling(cameraPos);
+        lastCullingUpdate.current = Date.now();
+    };
 
     const ensureInstancedMeshesAdded = (modelUrl: string) => {
         const data = instancedMeshes.current.get(modelUrl);
@@ -222,7 +304,8 @@ const EnvironmentBuilder = (
                         position,
                         rotation,
                         scale,
-                        matrix
+                        matrix,
+                        isVisible: true
                     });
 
                     const yOffsetAdd = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -450,7 +533,7 @@ const EnvironmentBuilder = (
                     material,
                     initialCapacity
                 );
-                instancedMesh.frustumCulled = false;
+                instancedMesh.frustumCulled = true;
                 instancedMesh.renderOrder = 1;
                 instancedMesh.count = 0;
                 mergedGeometry.computeBoundingBox();
@@ -760,6 +843,7 @@ const EnvironmentBuilder = (
             rotation,
             scale,
             matrix,
+            isVisible: true,
         });
         const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
         terrainBuilderRef.current.updateSpatialHashForBlocks([{
@@ -1040,6 +1124,7 @@ const EnvironmentBuilder = (
                     rotation: transform.rotation.clone(),
                     scale: transform.scale.clone(),
                     matrix: matrix.clone(),
+                    isVisible: true,
                 });
 
                 const newObject = {
@@ -1394,6 +1479,12 @@ const EnvironmentBuilder = (
         }
     }, [currentBlockType?.id, currentBlockType?.yShift]);
 
+    useEffect(() => {
+        if (cameraPosition) {
+            throttledUpdateDistanceCulling(cameraPosition);
+        }
+    }, [cameraPosition]);
+
     const beginUndoRedoOperation = () => {
         isUndoRedoOperation.current = true;
     };
@@ -1438,6 +1529,9 @@ const EnvironmentBuilder = (
             hasInstanceAtPosition,
             forceRebuildSpatialHash,
             getAllAvailableModels,
+            updateDistanceCulling,
+            throttledUpdateDistanceCulling,
+            forceUpdateDistanceCulling,
             setModelYShift: (modelId, newShift) => {
                 const model = environmentModels.find((m) => m.id === modelId);
                 if (model) {

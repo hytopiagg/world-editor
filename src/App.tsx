@@ -62,6 +62,7 @@ function App() {
     const [showToolbar, setShowToolbar] = useState(true);
     const [isCompactMode, setIsCompactMode] = useState(true);
     const [showCrosshair, setShowCrosshair] = useState(cameraManager.isPointerLocked);
+    const [cameraPosition, setCameraPosition] = useState(null);
     const cameraAngle = 0;
     const gridSize = 5000;
 
@@ -659,6 +660,7 @@ function App() {
                         undoRedoManager={undoRedoManagerRef}
                         customBlocks={getCustomBlocks()}
                         snapToGrid={placementSettings.snapToGrid}
+                        onCameraPositionChange={setCameraPosition}
                     />
                     <EnvironmentBuilder
                         ref={environmentBuilderRef}
@@ -670,6 +672,7 @@ function App() {
                         placementSettings={placementSettings}
                         undoRedoManager={undoRedoManagerRef}
                         terrainBuilderRef={terrainBuilderRef}
+                        cameraPosition={cameraPosition}
                     />
                 </Canvas>
 

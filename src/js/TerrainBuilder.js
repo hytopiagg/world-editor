@@ -92,6 +92,7 @@ function TerrainBuilder(
         environmentBuilderRef,
         isInputDisabled,
         snapToGrid,
+        onCameraPositionChange,
     },
     ref
 ) {
@@ -2617,6 +2618,11 @@ function TerrainBuilder(
                     forceUpdateChunkVisibility,
                 } = require("./chunks/TerrainBuilderIntegration");
                 forceUpdateChunkVisibility();
+            }
+
+            // Update camera position for environment culling
+            if (frameCount % 10 === 0 && onCameraPositionChange) {
+                onCameraPositionChange(threeCamera.position.clone());
             }
         };
         frameId = requestAnimationFrame(animate);
