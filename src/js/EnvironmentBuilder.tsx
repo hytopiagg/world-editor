@@ -100,12 +100,14 @@ const EnvironmentBuilder = (
 
         let totalVisible = 0;
         let totalHidden = 0;
+        let hasAnyChanges = false;
 
+        // First pass: check for visibility changes
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
             if (!instancedData.meshes || !instancedData.addedToScene) continue;
 
-            let hasChanges = false;
             const instances = Array.from(instancedData.instances.entries());
+            let hasChanges = false;
 
             instances.forEach(([instanceId, data]) => {
                 const distance = cameraPos.distanceToSquared(data.position);
@@ -116,24 +118,8 @@ const EnvironmentBuilder = (
 
                 if (isVisible !== wasVisible) {
                     hasChanges = true;
+                    hasAnyChanges = true;
                     data.isVisible = isVisible;
-
-                    if (isVisible) {
-                        // Instance is now visible, restore proper matrix
-                        instancedData.meshes.forEach((mesh) => {
-                            if (instanceId < mesh.instanceMatrix.count) {
-                                mesh.setMatrixAt(instanceId, data.matrix);
-                            }
-                        });
-                    } else {
-                        // Instance is now too far, hide it by setting zero-scale matrix
-                        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-                        instancedData.meshes.forEach((mesh) => {
-                            if (instanceId < mesh.instanceMatrix.count) {
-                                mesh.setMatrixAt(instanceId, zeroMatrix);
-                            }
-                        });
-                    }
                 }
 
                 if (isVisible) {
@@ -143,16 +129,14 @@ const EnvironmentBuilder = (
                 }
             });
 
-            // Only update if there were changes
+            // Rebuild visible instances if there were changes for this model
             if (hasChanges) {
-                instancedData.meshes.forEach((mesh) => {
-                    mesh.instanceMatrix.needsUpdate = true;
-                });
+                rebuildVisibleInstances(modelUrl, cameraPos);
             }
         }
 
         // Debug logging (can be removed in production)
-        if (totalVisible + totalHidden > 0) {
+        if (hasAnyChanges && totalVisible + totalHidden > 0) {
             console.log(`Environment objects: ${totalVisible} visible, ${totalHidden} hidden (view distance: ${viewDistance})`);
         }
     };
@@ -168,6 +152,56 @@ const EnvironmentBuilder = (
     const forceUpdateDistanceCulling = (cameraPos: THREE.Vector3) => {
         updateDistanceCulling(cameraPos);
         lastCullingUpdate.current = Date.now();
+    };
+
+    const rebuildVisibleInstances = (modelUrl: string, cameraPos?: THREE.Vector3) => {
+        const instancedData = instancedMeshes.current.get(modelUrl);
+        if (!instancedData || !instancedData.meshes || !instancedData.addedToScene) return;
+
+        const instances = Array.from(instancedData.instances.entries());
+        const visibleInstances = [];
+
+        // If camera position is provided, use distance culling
+        if (cameraPos) {
+            const viewDistance = getViewDistance();
+            const viewDistanceSquared = viewDistance * viewDistance;
+
+            instances.forEach(([instanceId, data]) => {
+                const distance = cameraPos.distanceToSquared(data.position);
+                const isVisible = distance <= viewDistanceSquared;
+                data.isVisible = isVisible;
+
+                if (isVisible) {
+                    visibleInstances.push({ instanceId, data });
+                }
+            });
+        } else {
+            // If no camera position, show all instances
+            instances.forEach(([instanceId, data]) => {
+                data.isVisible = true;
+                visibleInstances.push({ instanceId, data });
+            });
+        }
+
+        // PERFORMANCE OPTIMIZATION: Only render visible instances by setting mesh.count
+        // This reduces GPU workload by actually processing fewer instances instead of just hiding them
+        instancedData.meshes.forEach((mesh) => {
+            mesh.count = visibleInstances.length;
+
+            visibleInstances.forEach(({ instanceId, data }, index) => {
+                mesh.setMatrixAt(index, data.matrix);
+            });
+
+            mesh.instanceMatrix.needsUpdate = true;
+        });
+    };
+
+    const rebuildAllVisibleInstances = (cameraPos?: THREE.Vector3) => {
+        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            if (instancedData.instances.size > 0) {
+                rebuildVisibleInstances(modelUrl, cameraPos);
+            }
+        }
     };
 
     const ensureInstancedMeshesAdded = (modelUrl: string) => {
@@ -294,11 +328,8 @@ const EnvironmentBuilder = (
                         scale
                     );
 
-                    instancedData.meshes.forEach((mesh) => {
-                        mesh.count = Math.max(mesh.count, instance.instanceId + 1);
-                        mesh.setMatrixAt(instance.instanceId, matrix);
-                        mesh.instanceMatrix.needsUpdate = true;
-                    });
+                    // Don't set matrices directly - rebuild visible instances instead
+                    rebuildVisibleInstances(instance.modelUrl, cameraPosition);
 
                     instancedData.instances.set(instance.instanceId, {
                         position,
@@ -748,6 +779,9 @@ const EnvironmentBuilder = (
             }
 
             setTotalEnvironmentObjects(targetObjects.size);
+
+            // Rebuild all visible instances after updating environment
+            rebuildAllVisibleInstances(cameraPosition);
         } catch (error) {
             console.error("Error updating environment:", error);
         } finally {
@@ -826,18 +860,14 @@ const EnvironmentBuilder = (
         const validMeshes = instancedData.meshes.filter(
             (mesh) => mesh !== undefined && mesh !== null
         );
-        validMeshes.forEach((mesh) => {
-            const currentCapacity = mesh.instanceMatrix.count;
-            if (instanceId >= currentCapacity - 1) {
-                alert(
-                    "Maximum Environment Objects Exceeded! Please clear the environment and try again."
-                );
-                return;
-            }
-            mesh.count = Math.max(mesh.count, instanceId + 1);
-            mesh.setMatrixAt(instanceId, matrix);
-            mesh.instanceMatrix.needsUpdate = true;
-        });
+        // Check capacity but don't set matrices directly
+        const currentCapacity = validMeshes[0]?.instanceMatrix.count || 0;
+        if (instanceId >= currentCapacity - 1) {
+            alert(
+                "Maximum Environment Objects Exceeded! Please clear the environment and try again."
+            );
+            return null;
+        }
         instancedData.instances.set(instanceId, {
             position,
             rotation,
@@ -858,6 +888,9 @@ const EnvironmentBuilder = (
         // Lazily attach InstancedMesh group to scene on first use
         ensureInstancedMeshesAdded(modelUrl);
 
+        // Rebuild visible instances to include this new instance
+        rebuildVisibleInstances(modelUrl, cameraPosition);
+
         return {
             modelUrl,
             instanceId,
@@ -868,13 +901,12 @@ const EnvironmentBuilder = (
     };
 
     const clearEnvironments = () => {
-        for (const instancedData of instancedMeshes.current.values()) {
+        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            instancedData.instances.clear();
             instancedData.meshes.forEach((mesh) => {
                 mesh.count = 0;
                 mesh.instanceMatrix.needsUpdate = true;
             });
-
-            instancedData.instances.clear();
         }
         updateLocalStorage();
     };
@@ -977,20 +1009,8 @@ const EnvironmentBuilder = (
 
                     instancedData.instances.delete(instance.instanceId);
 
-                    instancedData.meshes.forEach((mesh) => {
-                        // Set to zero-scale matrix so the ghost mesh is not rendered at origin
-                        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-                        mesh.setMatrixAt(instance.instanceId, zeroMatrix);
-
-                        mesh.count =
-                            Math.max(
-                                ...Array.from(
-                                    instancedData.instances.keys()
-                                ) as number[],
-                                -1
-                            ) + 1;
-                        mesh.instanceMatrix.needsUpdate = true;
-                    });
+                    // Don't set matrices directly - rebuild visible instances instead
+                    rebuildVisibleInstances(instance.modelUrl, cameraPosition);
 
                     removedObjects.push(removedObject);
                     const yOffsetRemove = getModelYShift(removedObject.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -1097,26 +1117,13 @@ const EnvironmentBuilder = (
             );
 
             let placementSuccessful = true;
-            instancedData.meshes.forEach((mesh) => {
-                if (!placementSuccessful) return;
-
-                if (!mesh) {
-                    console.error("Invalid mesh encountered");
-                    placementSuccessful = false;
-                    return;
-                }
-                const capacity = mesh.instanceMatrix.count;
-                if (instanceId >= capacity) {
-                    console.error(`Cannot place object: Instance ID ${instanceId} exceeds mesh capacity ${capacity} for model ${modelUrl}.`);
-                    alert(`Maximum instances reached for model type ${modelData.name}.`);
-                    placementSuccessful = false;
-                    return;
-                }
-
-                mesh.setMatrixAt(instanceId, matrix);
-                mesh.count = Math.max(mesh.count, instanceId + 1);
-                mesh.instanceMatrix.needsUpdate = true;
-            });
+            // Check capacity
+            const capacity = instancedData.meshes[0]?.instanceMatrix.count || 0;
+            if (instanceId >= capacity) {
+                console.error(`Cannot place object: Instance ID ${instanceId} exceeds mesh capacity ${capacity} for model ${modelUrl}.`);
+                alert(`Maximum instances reached for model type ${modelData.name}.`);
+                placementSuccessful = false;
+            }
 
             if (placementSuccessful) {
                 instancedData.instances.set(instanceId, {
@@ -1156,6 +1163,11 @@ const EnvironmentBuilder = (
                 console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);
             }
         });
+
+        // Rebuild visible instances if any objects were added
+        if (addedObjects.length > 0) {
+            rebuildVisibleInstances(modelUrl, cameraPosition);
+        }
 
         if (addedObjects.length > 0) {
             if (!isUndoRedoOperation.current && saveUndo) {
@@ -1312,15 +1324,8 @@ const EnvironmentBuilder = (
 
         instancedData.instances.delete(instanceId);
 
-        instancedData.meshes.forEach((mesh) => {
-            // Set to zero-scale matrix so the ghost mesh is not rendered at origin
-            const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-            mesh.setMatrixAt(instanceId, zeroMatrix);
-
-            mesh.count =
-                Math.max(...Array.from(instancedData.instances.keys()) as number[], -1) + 1;
-            mesh.instanceMatrix.needsUpdate = true;
-        });
+        // Rebuild visible instances to exclude this removed instance
+        rebuildVisibleInstances(modelUrl, cameraPosition);
 
         const removedObject = {
             modelUrl,
@@ -1383,6 +1388,8 @@ const EnvironmentBuilder = (
                 );
 
                 updateEnvironmentToMatch(Object.values(savedEnv));
+                // Rebuild all visible instances after loading from database
+                rebuildAllVisibleInstances(cameraPosition);
             } else {
                 console.log("No environment objects found in database");
                 clearEnvironments();
@@ -1532,6 +1539,8 @@ const EnvironmentBuilder = (
             updateDistanceCulling,
             throttledUpdateDistanceCulling,
             forceUpdateDistanceCulling,
+            rebuildVisibleInstances,
+            rebuildAllVisibleInstances,
             setModelYShift: (modelId, newShift) => {
                 const model = environmentModels.find((m) => m.id === modelId);
                 if (model) {
