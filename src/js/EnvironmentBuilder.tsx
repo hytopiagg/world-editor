@@ -13,6 +13,7 @@ import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 import { CustomModel } from "./types/DatabaseTypes";
 import { getViewDistance } from "./constants/terrain";
+import { getVector3, releaseVector3, getMatrix4, releaseMatrix4, getEuler, releaseEuler, getQuaternion, releaseQuaternion, ObjectPoolManager } from "./utils/ObjectPool";
 export const environmentModels = (() => {
     try {
         const fetchModelList = () => {
@@ -667,9 +668,9 @@ const EnvironmentBuilder = (
             previewModel.rotation.copy(lastPreviewTransform.current.rotation);
 
             if (position) {
-                previewModel.position
-                    .copy(position)
-                    .add(positionOffset.current);
+                const offsetPosition = getVector3().copy(position).add(positionOffset.current);
+                previewModel.position.copy(offsetPosition);
+                releaseVector3(offsetPosition);
             }
 
             if (placeholderMeshRef.current) {
@@ -694,18 +695,18 @@ const EnvironmentBuilder = (
         if (!placeholderMeshRef.current || placeholderMeshRef.current.userData.modelId !== currentBlockType.id) {
             await setupPreview(position);
         } else if (position) {
-            const currentRotation = placeholderMeshRef.current.rotation.clone();
-            const currentScale = placeholderMeshRef.current.scale.clone();
+            const currentRotation = getEuler().copy(placeholderMeshRef.current.rotation);
+            const currentScale = getVector3().copy(placeholderMeshRef.current.scale);
 
-            placeholderMeshRef.current.position.copy(
-                position.clone().add(positionOffset.current)
-            );
-            placeholderMeshRef.current.scale.copy(
-                currentScale
-            );
-            placeholderMeshRef.current.rotation.copy(
-                currentRotation
-            );
+            const offsetPosition = getVector3().copy(position).add(positionOffset.current);
+            placeholderMeshRef.current.position.copy(offsetPosition);
+            placeholderMeshRef.current.scale.copy(currentScale);
+            placeholderMeshRef.current.rotation.copy(currentRotation);
+
+            // Release temporary objects
+            releaseVector3(offsetPosition);
+            releaseVector3(currentScale);
+            releaseEuler(currentRotation);
         }
     };
 
@@ -738,7 +739,7 @@ const EnvironmentBuilder = (
                         model.modelUrl === obj.modelUrl
                 );
                 if (modelType) {
-                    const eulerRotation = new THREE.Euler(
+                    const eulerRotation = getEuler().set(
                         obj.rotation?.x || 0,
                         obj.rotation?.y || 0,
                         obj.rotation?.z || 0
@@ -748,13 +749,13 @@ const EnvironmentBuilder = (
                     targetObjects.set(compositeKey, {
                         ...obj,
                         modelUrl: modelType.modelUrl, // Use the current modelUrl from environmentModels
-                        position: new THREE.Vector3(
+                        position: getVector3().set(
                             obj.position.x,
                             obj.position.y,
                             obj.position.z
                         ),
                         rotation: eulerRotation,
-                        scale: new THREE.Vector3(
+                        scale: getVector3().set(
                             obj.scale.x,
                             obj.scale.y,
                             obj.scale.z
@@ -855,15 +856,13 @@ const EnvironmentBuilder = (
         }
 
         mesh.updateWorldMatrix(true, true);
-        const position = mesh.position.clone();
-        const rotation = mesh.rotation.clone();
-        const scale = mesh.scale.clone();
-        const matrix = new THREE.Matrix4();
-        matrix.compose(
-            position,
-            new THREE.Quaternion().setFromEuler(rotation),
-            scale
-        );
+        const position = getVector3().copy(mesh.position);
+        const rotation = getEuler().copy(mesh.rotation);
+        const scale = getVector3().copy(mesh.scale);
+        const matrix = getMatrix4();
+        const quaternion = getQuaternion();
+        quaternion.setFromEuler(rotation);
+        matrix.compose(position, quaternion, scale);
 
         let instanceId;
         if (savedInstanceId !== null) {
@@ -894,6 +893,9 @@ const EnvironmentBuilder = (
             matrix,
             isVisible: true,
         });
+
+        // Release the temporary quaternion since it's not stored
+        releaseQuaternion(quaternion);
         const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
         terrainBuilderRef.current.updateSpatialHashForBlocks([{
             x: position.x,
@@ -921,6 +923,14 @@ const EnvironmentBuilder = (
 
     const clearEnvironments = () => {
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            // Release all pooled objects before clearing
+            instancedData.instances.forEach((data) => {
+                releaseVector3(data.position);
+                releaseEuler(data.rotation);
+                releaseVector3(data.scale);
+                releaseMatrix4(data.matrix);
+            });
+
             instancedData.instances.clear();
             instancedData.meshes.forEach((mesh) => {
                 mesh.count = 0;
@@ -938,8 +948,8 @@ const EnvironmentBuilder = (
         if (!settings) {
             console.warn("No placement settings provided");
             return {
-                scale: new THREE.Vector3(1, 1, 1),
-                rotation: new THREE.Euler(0, 0, 0),
+                scale: getVector3().set(1, 1, 1),
+                rotation: getEuler().set(0, 0, 0),
             };
         }
         const scaleValue = settings.randomScale
@@ -950,8 +960,8 @@ const EnvironmentBuilder = (
             : settings.rotation;
 
         return {
-            scale: new THREE.Vector3(scaleValue, scaleValue, scaleValue),
-            rotation: new THREE.Euler(0, (rotationDegrees * Math.PI) / 180, 0),
+            scale: getVector3().set(scaleValue, scaleValue, scaleValue),
+            rotation: getEuler().set(0, (rotationDegrees * Math.PI) / 180, 0),
         };
     };
 
@@ -1123,17 +1133,15 @@ const EnvironmentBuilder = (
             }
 
             const transform = getPlacementTransform();
-            const position = new THREE.Vector3(
+            const position = getVector3().set(
                 placementPosition.x,
                 placementPosition.y,
                 placementPosition.z
             );
-            const matrix = new THREE.Matrix4();
-            matrix.compose(
-                position,
-                new THREE.Quaternion().setFromEuler(transform.rotation),
-                transform.scale
-            );
+            const matrix = getMatrix4();
+            const quaternion = getQuaternion();
+            quaternion.setFromEuler(transform.rotation);
+            matrix.compose(position, quaternion, transform.scale);
 
             let placementSuccessful = true;
             // Check capacity
@@ -1146,10 +1154,10 @@ const EnvironmentBuilder = (
 
             if (placementSuccessful) {
                 instancedData.instances.set(instanceId, {
-                    position: position.clone(),
-                    rotation: transform.rotation.clone(),
-                    scale: transform.scale.clone(),
-                    matrix: matrix.clone(),
+                    position: getVector3().copy(position),
+                    rotation: getEuler().copy(transform.rotation),
+                    scale: getVector3().copy(transform.scale),
+                    matrix: getMatrix4().copy(matrix),
                     isVisible: true,
                 });
 
@@ -1178,8 +1186,21 @@ const EnvironmentBuilder = (
                     force: true,
                 });
                 addedObjects.push(newObject);
+
+                // Release temporary objects after they're copied
+                releaseQuaternion(quaternion);
+                releaseVector3(position);
+                releaseMatrix4(matrix);
+                releaseVector3(transform.scale);
+                releaseEuler(transform.rotation);
             } else {
                 console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);
+                // Release temporary objects if placement failed
+                releaseQuaternion(quaternion);
+                releaseVector3(position);
+                releaseMatrix4(matrix);
+                releaseVector3(transform.scale);
+                releaseEuler(transform.rotation);
             }
         });
 
@@ -1341,11 +1362,7 @@ const EnvironmentBuilder = (
 
         const objectData = instancedData.instances.get(instanceId);
 
-        instancedData.instances.delete(instanceId);
-
-        // Rebuild visible instances to exclude this removed instance
-        rebuildVisibleInstances(modelUrl, cameraPosition);
-
+        // Create removal object before deleting instance
         const removedObject = {
             modelUrl,
             instanceId, // Include the instanceId in removed object
@@ -1365,6 +1382,17 @@ const EnvironmentBuilder = (
                 z: objectData.scale.z,
             },
         };
+
+        // Release pooled objects back to the pool
+        releaseVector3(objectData.position);
+        releaseEuler(objectData.rotation);
+        releaseVector3(objectData.scale);
+        releaseMatrix4(objectData.matrix);
+
+        instancedData.instances.delete(instanceId);
+
+        // Rebuild visible instances to exclude this removed instance
+        rebuildVisibleInstances(modelUrl, cameraPosition);
 
         if (updateUndoRedo) {
             const changes = {
@@ -1419,9 +1447,9 @@ const EnvironmentBuilder = (
     };
     const updatePreviewPosition = (position) => {
         if (placeholderMeshRef.current && position) {
-            placeholderMeshRef.current.position.copy(
-                position.clone().add(positionOffset.current)
-            );
+            const offsetPosition = getVector3().copy(position).add(positionOffset.current);
+            placeholderMeshRef.current.position.copy(offsetPosition);
+            releaseVector3(offsetPosition);
         }
     };
     const removePreview = () => {
@@ -1511,6 +1539,23 @@ const EnvironmentBuilder = (
         }
     }, [cameraPosition]);
 
+    // Debug function to monitor object pool statistics
+    useEffect(() => {
+        if (process.env.NODE_ENV === 'development') {
+            const logPoolStats = () => {
+                const stats = ObjectPoolManager.getInstance().getAllStats();
+                console.log('Object Pool Statistics:', stats);
+            };
+
+            // Add global debug function
+            (window as any).debugObjectPools = logPoolStats;
+
+            return () => {
+                delete (window as any).debugObjectPools;
+            };
+        }
+    }, []);
+
     const beginUndoRedoOperation = () => {
         isUndoRedoOperation.current = true;
     };
@@ -1568,11 +1613,13 @@ const EnvironmentBuilder = (
                 if (currentBlockType && currentBlockType.id === modelId) {
                     positionOffset.current.set(0, ENVIRONMENT_OBJECT_Y_OFFSET + newShift, 0);
                     if (placeholderMeshRef.current) {
-                        const basePos = placeholderMeshRef.current.position.clone().sub(positionOffset.current);
+                        const basePos = getVector3().copy(placeholderMeshRef.current.position).sub(positionOffset.current);
                         placeholderMeshRef.current.position.copy(basePos.add(positionOffset.current));
+                        releaseVector3(basePos);
                     }
                 }
-            }
+            },
+            getObjectPoolStats: () => ObjectPoolManager.getInstance().getAllStats()
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );
