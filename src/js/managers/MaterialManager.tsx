@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { detectGPU } from "../utils/GPUDetection";
 import { PerformanceMonitor } from "../utils/PerformanceMonitor";
+import { TextureCompression } from "../utils/TextureCompression";
 
 /**
  * Material pool configuration for different material types
@@ -388,35 +389,44 @@ export class MaterialManager {
     }
 
     /**
-     * Optimize texture with proper filtering and mipmapping
+     * Optimize texture with proper filtering, mipmapping, and compression
      */
     optimizeTexture(texture: THREE.Texture): THREE.Texture {
         const settings = this.optimizationSettings;
 
+        // Apply texture compression if available
+        let optimizedTexture = texture;
+        try {
+            optimizedTexture = TextureCompression.instance.compressTexture(texture);
+        } catch (error) {
+            console.warn('Texture compression failed, using original texture:', error);
+            optimizedTexture = texture;
+        }
+
         // Set filtering based on GPU capabilities
         if (settings.enableAnisotropicFiltering) {
-            texture.anisotropy = settings.maxAnisotropy;
+            optimizedTexture.anisotropy = settings.maxAnisotropy;
         } else {
-            texture.anisotropy = 1;
+            optimizedTexture.anisotropy = 1;
         }
 
         // Configure mipmapping
         if (settings.enableMipmapping) {
-            texture.generateMipmaps = true;
-            texture.minFilter = THREE.LinearMipmapLinearFilter;
-            texture.magFilter = THREE.LinearFilter;
+            optimizedTexture.generateMipmaps = true;
+            optimizedTexture.minFilter = THREE.LinearMipmapLinearFilter;
+            optimizedTexture.magFilter = THREE.LinearFilter;
         } else {
-            texture.generateMipmaps = false;
-            texture.minFilter = THREE.NearestFilter;
-            texture.magFilter = THREE.NearestFilter;
+            optimizedTexture.generateMipmaps = false;
+            optimizedTexture.minFilter = THREE.NearestFilter;
+            optimizedTexture.magFilter = THREE.NearestFilter;
         }
 
         // Set wrapping mode
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
+        optimizedTexture.wrapS = THREE.ClampToEdgeWrapping;
+        optimizedTexture.wrapT = THREE.ClampToEdgeWrapping;
 
-        texture.needsUpdate = true;
-        return texture;
+        optimizedTexture.needsUpdate = true;
+        return optimizedTexture;
     }
 
     /**
