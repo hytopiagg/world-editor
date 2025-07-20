@@ -17,7 +17,7 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
     const lastAppliedSkyboxRef = useRef<string | null>(null);
 
     // Hardcoding for now, could be dynamic later
-    const availableSkyboxes = ["partly-cloudy", "night"];
+    const availableSkyboxes = ["partly-cloudy", "sunset", "night"];
 
     // Load saved skybox preference and set initial state
     useEffect(() => {
@@ -146,7 +146,7 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
     return (
         <div className="flex flex-wrap -mx-1">
             {availableSkyboxes.map((skybox) => (
-                <div key={skybox} className="relative w-1/2 px-1 mb-2">
+                <div key={skybox} className="relative px-1 mb-2 w-1/2">
                     <button
                         onClick={() => handleSkyboxChange(skybox)}
                         className={`relative aspect-square border-2 rounded-lg overflow-hidden transition-all duration-200 hover:border-blue-400 ${selectedSkybox === skybox ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-600'
@@ -158,21 +158,21 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
                                 <img
                                     src={skyboxPreviews[skybox]}
                                     alt={skybox}
-                                    className="w-full h-full object-cover"
+                                    className="object-cover w-full h-full"
                                 />
                                 {/* Show transition indicator when changing skyboxes */}
                                 {isChangingSkybox && selectedSkybox === skybox && (
-                                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    <div className="flex absolute inset-0 justify-center items-center bg-black bg-opacity-50">
+                                        <div className="w-6 h-6 rounded-full border-2 animate-spin border-white/30 border-t-white"></div>
                                     </div>
                                 )}
                             </>
                         ) : (
-                            <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                                <div className="w-8 h-8 border-4 border-white/30 border-t-white/80 rounded-full animate-spin"></div>
+                            <div className="flex justify-center items-center w-full h-full bg-gray-700">
+                                <div className="w-8 h-8 rounded-full border-4 animate-spin border-white/30 border-t-white/80"></div>
                             </div>
                         )}
-                        <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white text-xs p-1 text-center z-5">
+                        <div className="absolute right-0 bottom-0 left-0 p-1 text-xs text-center text-white bg-black bg-opacity-75 z-5">
                             {skybox.replace('-', ' ')}
                         </div>
                     </button>
