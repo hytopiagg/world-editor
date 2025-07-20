@@ -1076,7 +1076,8 @@ const EnvironmentBuilder = (
                     matrix: data.matrix,
                 }));
 
-            const matchingInstances = instances.filter(instance => {
+            // First, try exact position matching with original tolerance
+            const exactMatches = instances.filter(instance => {
                 return (
                     Math.abs(instance.position.x - position.x) < tolerance &&
                     Math.abs(instance.position.y - position.y) < tolerance &&
@@ -1084,7 +1085,32 @@ const EnvironmentBuilder = (
                 );
             });
 
-            collidingInstances.push(...matchingInstances);
+            if (exactMatches.length > 0) {
+                collidingInstances.push(...exactMatches);
+            } else {
+                // If no exact matches, look for closest vertical match within 1 block
+                const verticalCandidates = instances.filter(instance => {
+                    const horizontalDistance = Math.sqrt(
+                        Math.pow(instance.position.x - position.x, 2) +
+                        Math.pow(instance.position.z - position.z, 2)
+                    );
+                    const verticalDistance = Math.abs(instance.position.y - position.y);
+
+                    return horizontalDistance < tolerance && verticalDistance <= 4.0;
+                });
+
+                if (verticalCandidates.length > 0) {
+                    // Find the closest one vertically
+                    const closest = verticalCandidates.reduce((closest, candidate) => {
+                        const closestVerticalDist = Math.abs(closest.position.y - position.y);
+                        const candidateVerticalDist = Math.abs(candidate.position.y - position.y);
+                        return candidateVerticalDist < closestVerticalDist ? candidate : closest;
+                    });
+
+                    console.log(`[VerticalSnap] Found instance at Y:${closest.position.y.toFixed(1)} when looking for Y:${position.y.toFixed(1)} (offset: ${(closest.position.y - position.y).toFixed(1)})`);
+                    collidingInstances.push(closest);
+                }
+            }
         }
 
         return collidingInstances;
