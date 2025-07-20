@@ -89,10 +89,11 @@ const EnvironmentBuilder = (
     });
     const placementSettingsRef = useRef(placementSettings);
     const isUndoRedoOperation = useRef(false);
+    const recentlyPlacedInstances = useRef(new Set()); // Track recently placed instances to bypass throttling
 
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
     const lastCullingUpdate = useRef(0);
-    const CULLING_UPDATE_INTERVAL = 100; // Update every 100ms
+    const CULLING_UPDATE_INTERVAL = 100; // Restored to 100ms for better performance
 
     const updateDistanceCulling = (cameraPos: THREE.Vector3) => {
         if (!cameraPos) return;
@@ -105,11 +106,12 @@ const EnvironmentBuilder = (
         let hasAnyChanges = false;
 
         // First pass: check for visibility changes
-        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+        for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
             if (!instancedData.meshes || !instancedData.addedToScene) continue;
 
             const instances = Array.from(instancedData.instances.entries());
             let hasChanges = false;
+            let visibilityChangeCount = 0;
 
             instances.forEach(([instanceId, data]) => {
                 const distance = cameraPos.distanceToSquared(data.position);
@@ -121,6 +123,7 @@ const EnvironmentBuilder = (
                 if (isVisible !== wasVisible) {
                     hasChanges = true;
                     hasAnyChanges = true;
+                    visibilityChangeCount++;
                     data.isVisible = isVisible;
                 }
 
@@ -131,15 +134,20 @@ const EnvironmentBuilder = (
                 }
             });
 
-            // Rebuild visible instances if there were changes for this model
-            if (hasChanges) {
+            // Check if this model has recently placed instances
+            const hasRecentlyPlacedInstances = Array.from(recentlyPlacedInstances.current).some((key: string) => key.startsWith(`${modelUrl}:`));
+
+            // Rebuild visible instances if there were changes for this model OR if there are recently placed instances
+            if (hasChanges || hasRecentlyPlacedInstances) {
+                const reason = hasChanges ? `${visibilityChangeCount} visibility changes` : 'recently placed instances';
+                console.log(`[DistanceCulling] Rebuilding ${instances.length} instances for ${modelUrl.split('/').pop()} (${reason})`);
                 rebuildVisibleInstances(modelUrl, cameraPos);
             }
         }
 
-        // Debug logging (can be removed in production)
-        if (hasAnyChanges && totalVisible + totalHidden > 0) {
-            console.log(`Environment objects: ${totalVisible} visible, ${totalHidden} hidden (view distance: ${viewDistance})`);
+        // Only log summary if there were significant changes
+        if (hasAnyChanges && (totalVisible + totalHidden) > 0) {
+            console.log(`[DistanceCulling] Updated visibility: ${totalVisible} visible, ${totalHidden} hidden (view distance: ${viewDistance})`);
         }
     };
 
@@ -161,21 +169,56 @@ const EnvironmentBuilder = (
         if (!instancedData || !instancedData.meshes || !instancedData.addedToScene) return;
 
         const instances = Array.from(instancedData.instances.entries());
+        let recentlyPlacedVisible = 0;
         const visibleInstances = [];
 
-        // If camera position is provided, use distance culling
+        // If camera position is provided, use distance + frustum culling
         if (cameraPos) {
             const viewDistance = getViewDistance();
             const viewDistanceSquared = viewDistance * viewDistance;
 
+            // Get camera frustum for view-based culling
+            const camera = (scene as any)?.camera;
+            let frustum = null;
+            if (camera) {
+                camera.updateMatrixWorld();
+                camera.updateProjectionMatrix();
+                const projScreenMatrix = new THREE.Matrix4();
+                projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+                frustum = new THREE.Frustum();
+                frustum.setFromProjectionMatrix(projScreenMatrix);
+            }
+
             instances.forEach(([instanceId, data]) => {
                 const distance = cameraPos.distanceToSquared(data.position);
-                const isVisible = distance <= viewDistanceSquared;
+                const instanceKey = `${modelUrl}:${instanceId}`;
+                const isRecentlyPlaced = recentlyPlacedInstances.current.has(instanceKey);
+
+                // Recently placed instances bypass all culling and are always visible
+                let isVisible = isRecentlyPlaced;
+
+                if (!isVisible) {
+                    // Apply distance culling
+                    const withinDistance = distance <= viewDistanceSquared;
+
+                    // Apply frustum culling (per-instance)
+                    let withinFrustum = true;
+                    if (frustum && withinDistance) {
+                        // Create a small sphere around the instance position for frustum testing
+                        const sphere = new THREE.Sphere(data.position, 2); // 2-unit radius for model bounds
+                        withinFrustum = frustum.intersectsSphere(sphere);
+                    }
+
+                    isVisible = withinDistance && withinFrustum;
+                }
+
                 data.isVisible = isVisible;
 
                 if (isVisible) {
                     visibleInstances.push({ instanceId, data });
                 }
+
+                if (isRecentlyPlaced) recentlyPlacedVisible++;
             });
         } else {
             // If no camera position, show all instances
@@ -185,22 +228,43 @@ const EnvironmentBuilder = (
             });
         }
 
-        // PERFORMANCE OPTIMIZATION: Only render visible instances by setting mesh.count
-        // This reduces GPU workload by actually processing fewer instances instead of just hiding them
-        instancedData.meshes.forEach((mesh) => {
-            mesh.count = visibleInstances.length;
+        // Instead of compacting matrices, we scale invisible instances to zero
+        // This maintains the instanceId -> matrix index mapping and prevents newly placed
+        // instances from being incorrectly culled when old instances go out of view
+        instancedData.meshes.forEach((mesh, meshIndex) => {
+            // Ensure mesh.count covers all instance IDs that exist
+            const maxInstanceId = instances.length > 0 ? Math.max(...instances.map(([id]) => id)) : 0;
+            const requiredCount = maxInstanceId + 1;
 
-            visibleInstances.forEach(({ instanceId, data }, index) => {
-                mesh.setMatrixAt(index, data.matrix);
+            // Only increase the count if needed, never decrease it during culling
+            if (mesh.count < requiredCount) {
+                mesh.count = requiredCount;
+            }
+
+            instances.forEach(([instanceId, data]) => {
+                if (data.isVisible) {
+                    // Set the normal matrix for visible instances
+                    mesh.setMatrixAt(instanceId, data.matrix);
+                } else {
+                    // Hide invisible instances by scaling them to zero
+                    const hiddenMatrix = getMatrix4().makeScale(0, 0, 0);
+                    mesh.setMatrixAt(instanceId, hiddenMatrix);
+                    releaseMatrix4(hiddenMatrix);
+                }
             });
 
             mesh.instanceMatrix.needsUpdate = true;
         });
+
+        // Only log if there are recently placed instances
+        if (recentlyPlacedVisible > 0) {
+            console.log(`[FIX] Recently placed instances protected + hybrid culling active: ${recentlyPlacedVisible} (${modelUrl.split('/').pop()})`);
+        }
     };
 
     const rebuildAllVisibleInstances = (cameraPos?: THREE.Vector3) => {
-        for (const [modelUrl, instancedData] of instancedMeshes.current) {
-            if (instancedData.instances.size > 0) {
+        for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+            if (instancedData.instances && instancedData.instances.size > 0) {
                 rebuildVisibleInstances(modelUrl, cameraPos);
             }
         }
@@ -209,15 +273,21 @@ const EnvironmentBuilder = (
     const ensureInstancedMeshesAdded = (modelUrl: string) => {
         const data = instancedMeshes.current.get(modelUrl);
         if (!scene || !data || data.addedToScene) return;
-        data.meshes.forEach((mesh: THREE.InstancedMesh) => scene.add(mesh));
+        data.meshes.forEach((mesh: THREE.InstancedMesh) => {
+            // Ensure frustum culling is disabled - we handle our own distance culling
+            mesh.frustumCulled = false;
+            scene.add(mesh);
+        });
         data.addedToScene = true;
     };
 
+
+
     const getAllEnvironmentObjects = () => {
         const instances = [];
-        for (const [modelUrl, instancedData] of instancedMeshes.current) {
-            const name = modelUrl.split("/").pop().split(".")[0];
-            const instanceData = [...instancedData.instances];
+        for (const [modelUrl, instancedData] of (instancedMeshes.current as Map<string, any>).entries()) {
+            const name = modelUrl.split("/").pop()?.split(".")[0];
+            const instanceData = [...(instancedData.instances as Map<number, any>).entries()];
             instanceData.forEach((instance) => {
                 console.log("instance", instance);
 
@@ -576,7 +646,7 @@ const EnvironmentBuilder = (
                     material,
                     initialCapacity
                 );
-                instancedMesh.frustumCulled = true;
+                instancedMesh.frustumCulled = false; // Disable Three.js frustum culling - we handle our own distance culling
                 instancedMesh.renderOrder = 1;
                 instancedMesh.count = 0;
                 mergedGeometry.computeBoundingBox();
@@ -822,12 +892,6 @@ const EnvironmentBuilder = (
         mesh,
         savedInstanceId = null
     ) => {
-        console.log(
-            "placeEnvironmentModelWithoutSaving",
-            modelType,
-            mesh,
-            savedInstanceId
-        );
         if (!modelType || !mesh) {
             console.warn(`modelType and mesh null`);
             return null;
@@ -894,6 +958,10 @@ const EnvironmentBuilder = (
             isVisible: true,
         });
 
+        // Track this as a recently placed instance
+        const instanceKey = `${modelUrl}:${instanceId}`;
+        recentlyPlacedInstances.current.add(instanceKey);
+
         // Release the temporary quaternion since it's not stored
         releaseQuaternion(quaternion);
         const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -911,6 +979,17 @@ const EnvironmentBuilder = (
 
         // Rebuild visible instances to include this new instance
         rebuildVisibleInstances(modelUrl, cameraPosition);
+
+        // Force immediate distance culling update to ensure the new instance is properly evaluated
+        if (cameraPosition) {
+            forceUpdateDistanceCulling(cameraPosition);
+        }
+
+        // Clean up recently placed instance tracking after a delay
+        setTimeout(() => {
+            const instanceKey = `${modelUrl}:${instanceId}`;
+            recentlyPlacedInstances.current.delete(instanceKey);
+        }, 1000); // Clean up after 1 second
 
         return {
             modelUrl,
@@ -1161,6 +1240,12 @@ const EnvironmentBuilder = (
                     isVisible: true,
                 });
 
+                // Track this as a recently placed instance
+                const instanceKey = `${modelUrl}:${instanceId}`;
+                recentlyPlacedInstances.current.add(instanceKey);
+
+                console.log(`[PlaceEnvironment] Created instance ${instanceId} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
+
                 const newObject = {
                     modelUrl,
                     instanceId,
@@ -1207,6 +1292,19 @@ const EnvironmentBuilder = (
         // Rebuild visible instances if any objects were added
         if (addedObjects.length > 0) {
             rebuildVisibleInstances(modelUrl, cameraPosition);
+
+            // Force immediate distance culling update for all models to ensure new instances are properly evaluated
+            if (cameraPosition) {
+                forceUpdateDistanceCulling(cameraPosition);
+            }
+
+            // Clean up recently placed instances tracking after a delay
+            setTimeout(() => {
+                addedObjects.forEach(obj => {
+                    const instanceKey = `${obj.modelUrl}:${obj.instanceId}`;
+                    recentlyPlacedInstances.current.delete(instanceKey);
+                });
+            }, 1000); // Clean up after 1 second
         }
 
         if (addedObjects.length > 0) {
