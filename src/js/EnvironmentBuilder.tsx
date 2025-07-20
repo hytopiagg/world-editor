@@ -109,7 +109,7 @@ const EnvironmentBuilder = (
         for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
             if (!instancedData.meshes || !instancedData.addedToScene) continue;
 
-            const instances = Array.from(instancedData.instances.entries());
+            const instances: [number, any][] = Array.from(instancedData.instances.entries());
             let hasChanges = false;
             let visibilityChangeCount = 0;
 
@@ -168,7 +168,7 @@ const EnvironmentBuilder = (
         const instancedData = instancedMeshes.current.get(modelUrl);
         if (!instancedData || !instancedData.meshes || !instancedData.addedToScene) return;
 
-        const instances = Array.from(instancedData.instances.entries());
+        const instances: [number, any][] = Array.from(instancedData.instances.entries());
         let recentlyPlacedVisible = 0;
         const visibleInstances = [];
 
@@ -241,15 +241,33 @@ const EnvironmentBuilder = (
                 mesh.count = requiredCount;
             }
 
+            let visibleCount = 0;
+            let hiddenCount = 0;
+
+            // First, create a set of all active instance IDs for comparison
+            const activeInstanceIds = new Set(instances.map(([id]) => id));
+
+            // For any matrix indices that don't have active instances, we should hide them
+            for (let i = 0; i < mesh.count; i++) {
+                if (!activeInstanceIds.has(i)) {
+                    const hiddenMatrix = getMatrix4().makeScale(0, 0, 0);
+                    mesh.setMatrixAt(i, hiddenMatrix);
+                    releaseMatrix4(hiddenMatrix);
+                    hiddenCount++;
+                }
+            }
+
             instances.forEach(([instanceId, data]) => {
                 if (data.isVisible) {
                     // Set the normal matrix for visible instances
                     mesh.setMatrixAt(instanceId, data.matrix);
+                    visibleCount++;
                 } else {
                     // Hide invisible instances by scaling them to zero
                     const hiddenMatrix = getMatrix4().makeScale(0, 0, 0);
                     mesh.setMatrixAt(instanceId, hiddenMatrix);
                     releaseMatrix4(hiddenMatrix);
+                    hiddenCount++;
                 }
             });
 
@@ -1137,7 +1155,7 @@ const EnvironmentBuilder = (
                 setTotalEnvironmentObjects(prev => prev - removedObjects.length);
 
                 console.log(
-                    `Removed ${removedObjects.length} environment objects`
+                    `[DELETION] Removed ${removedObjects.length} environment objects:`, removedObjects
                 );
 
                 if (!isUndoRedoOperation.current && saveUndo) {
@@ -1454,7 +1472,7 @@ const EnvironmentBuilder = (
     const removeInstance = (modelUrl, instanceId, updateUndoRedo = true) => {
         const instancedData = instancedMeshes.current.get(modelUrl);
         if (!instancedData || !instancedData.instances.has(instanceId)) {
-            console.warn(`Instance ${instanceId} not found for removal`);
+            console.warn(`[REMOVE_INSTANCE] Instance ${instanceId} not found for removal in model ${modelUrl}`);
             return;
         }
 
