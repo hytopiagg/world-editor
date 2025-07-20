@@ -24,6 +24,16 @@ import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
 import Tooltip from "./Tooltip";
 
+// Enum to track which submenu is currently open
+enum SubMenuType {
+    NONE = 'none',
+    PLACEMENT = 'placement',
+    SWAP = 'swap',
+    AI = 'ai',
+    UTILS = 'utils',
+    IMPORT_EXPORT = 'import_export'
+}
+
 const ToolBar = ({
     terrainBuilderRef,
     mode,
@@ -42,7 +52,8 @@ const ToolBar = ({
     activeTab,
 }) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
-    const [showImportExportMenu, setShowImportExportMenu] = useState(false);
+    // Replace individual submenu state variables with a single enum-based state
+    const [activeSubmenu, setActiveSubmenu] = useState<SubMenuType>(SubMenuType.NONE);
     const [dimensions, setDimensions] = useState({
         width: 1,
         length: 1,
@@ -55,9 +66,6 @@ const ToolBar = ({
         height: 1,
     });
     const [showTerrainModal, setShowTerrainModal] = useState(false);
-    const [showAISubmenu, setShowAISubmenu] = useState(false);
-    const [showUtilsSubmenu, setShowUtilsSubmenu] = useState(false);
-    const [showSwapSubmenu, setShowSwapSubmenu] = useState(false);
     const [terrainSettings, setTerrainSettings] = useState({
         width: 32,
         length: 32,
@@ -71,7 +79,6 @@ const ToolBar = ({
     const [canRedo, setCanRedo] = useState(false);
 
     const [activeTool, setActiveTool] = useState(null);
-    const [showPlacementMenu, setShowPlacementMenu] = useState(false);
 
     const [waitingForMouseCycle, setWaitingForMouseCycle] = useState(false);
 
@@ -81,6 +88,15 @@ const ToolBar = ({
         x: 0,
         y: 0,
         z: 0,
+    };
+
+    // Helper function to toggle submenus - closes current if same, opens new one if different
+    const toggleSubmenu = (submenuType: SubMenuType) => {
+        if (activeSubmenu === submenuType) {
+            setActiveSubmenu(SubMenuType.NONE);
+        } else {
+            setActiveSubmenu(submenuType);
+        }
     };
 
     const handleGenerateBlocks = () => {
@@ -495,8 +511,7 @@ const ToolBar = ({
     useEffect(() => {
         const handleTabChangeReset = () => {
             setActiveTool(null);
-            setShowPlacementMenu(false);
-            setShowSwapSubmenu(false);
+            setActiveSubmenu(SubMenuType.NONE); // Reset submenu on tab change
         };
         window.addEventListener("blockToolsTabChanged", handleTabChangeReset);
         window.addEventListener("pointerLockModeChanged", handleTabChangeReset);
@@ -578,7 +593,7 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
-                        <Tooltip text="Placement Size / Shape" hideTooltip={showPlacementMenu || waitingForMouseCycle}>
+                        <Tooltip text="Placement Size / Shape" hideTooltip={activeSubmenu === SubMenuType.PLACEMENT || waitingForMouseCycle}>
                             <div
                                 className="relative"
                                 onMouseLeave={() => {
@@ -592,21 +607,21 @@ const ToolBar = ({
                                 }}
                             >
                                 <button
-                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showPlacementMenu ? 'selected' : ''}`}
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${activeSubmenu === SubMenuType.PLACEMENT ? 'selected' : ''}`}
                                     onClick={(e) => {
                                         const el = e.target as HTMLElement;
-                                        if (el && el.className && el.className.toString().includes("control-button") && showPlacementMenu) {
-                                            setShowPlacementMenu(false);
+                                        if (el && el.className && el.className.toString().includes("control-button") && activeSubmenu === SubMenuType.PLACEMENT) {
+                                            setActiveSubmenu(SubMenuType.NONE);
                                             setWaitingForMouseCycle(true);
                                         } else {
-                                            setShowPlacementMenu(!showPlacementMenu);
+                                            toggleSubmenu(SubMenuType.PLACEMENT);
                                         }
                                     }}
                                 >
                                     <FaThLarge className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
 
-                                {showPlacementMenu && (
+                                {activeSubmenu === SubMenuType.PLACEMENT && (
                                     <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
                                         {(activeTab === 'blocks'
                                             ? [
@@ -639,7 +654,7 @@ const ToolBar = ({
                                                             }
                                                             setPlacementSize(opt.value);
                                                         }
-                                                        setShowPlacementMenu(false);
+                                                        setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
                                                         setWaitingForMouseCycle(true);
                                                     }}
                                                 >
@@ -652,16 +667,16 @@ const ToolBar = ({
                         </Tooltip>
                         <div className="control-divider-vertical"></div>
                         <div className="relative">
-                            <Tooltip text="Swapping Tools" hideTooltip={showSwapSubmenu}>
+                            <Tooltip text="Swapping Tools" hideTooltip={activeSubmenu === SubMenuType.SWAP}>
                                 <button
-                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showSwapSubmenu ? 'selected' : ''}`}
-                                    onClick={() => setShowSwapSubmenu(!showSwapSubmenu)}
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${activeSubmenu === SubMenuType.SWAP ? 'selected' : ''}`}
+                                    onClick={() => toggleSubmenu(SubMenuType.SWAP)}
                                 >
                                     <FaExchangeAlt className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
                             </Tooltip>
 
-                            {showSwapSubmenu && (
+                            {activeSubmenu === SubMenuType.SWAP && (
                                 <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
                                     <Tooltip text="Paint Terrain">
                                         <button
@@ -670,7 +685,7 @@ const ToolBar = ({
                                             onClick={() => {
                                                 handleToolToggle('replace');
                                                 setPlacementSize("single");
-                                                setShowSwapSubmenu(false);
+                                                setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
                                             }}
                                         >
                                             <svg width="20" height="22" viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -746,23 +761,23 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="relative">
-                            <Tooltip text="AI Tools" hideTooltip={showAISubmenu}>
+                            <Tooltip text="AI Tools" hideTooltip={activeSubmenu === SubMenuType.AI || isAIComponentsActive}>
                                 <button
-                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showAISubmenu || isAIComponentsActive ? 'selected' : ''}`}
-                                    onClick={() => setShowAISubmenu(!showAISubmenu)}
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${activeSubmenu === SubMenuType.AI || isAIComponentsActive ? 'selected' : ''}`}
+                                    onClick={() => toggleSubmenu(SubMenuType.AI)}
                                 >
                                     <FaRobot className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
                             </Tooltip>
 
-                            {showAISubmenu && (
+                            {activeSubmenu === SubMenuType.AI && (
                                 <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
                                     <button
                                         className="w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
                                         style={{ animationDelay: '0.05s' }}
                                         onClick={() => {
                                             onOpenTextureModal && onOpenTextureModal();
-                                            setShowAISubmenu(false);
+                                            setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
                                         }}
                                     >
                                         {"Textures"}
@@ -772,7 +787,7 @@ const ToolBar = ({
                                         style={{ animationDelay: '0.1s' }}
                                         onClick={() => {
                                             toggleAIComponents && toggleAIComponents();
-                                            setShowAISubmenu(false);
+                                            setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
                                         }}
                                     >
                                         {"Components"}
@@ -782,23 +797,23 @@ const ToolBar = ({
                         </div>
                         {/* Utils / Tools submenu */}
                         <div className="relative">
-                            <Tooltip text="Tools" hideTooltip={showUtilsSubmenu}>
+                            <Tooltip text="Tools" hideTooltip={activeSubmenu === SubMenuType.UTILS}>
                                 <button
-                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showUtilsSubmenu ? 'selected' : ''}`}
-                                    onClick={() => setShowUtilsSubmenu(!showUtilsSubmenu)}
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${activeSubmenu === SubMenuType.UTILS ? 'selected' : ''}`}
+                                    onClick={() => toggleSubmenu(SubMenuType.UTILS)}
                                 >
                                     <FaWrench className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
                             </Tooltip>
 
-                            {showUtilsSubmenu && (
+                            {activeSubmenu === SubMenuType.UTILS && (
                                 <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
                                     <button
                                         className="w-fit flex items-center whitespace-nowrap justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
                                         style={{ animationDelay: '0.05s' }}
                                         onClick={() => {
                                             handleRemoveHiddenBlocks();
-                                            setShowUtilsSubmenu(false);
+                                            setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
                                         }}
                                     >
                                         {"Remove Hidden Blocks"}
@@ -806,6 +821,7 @@ const ToolBar = ({
                                 </div>
                             )}
                         </div>
+
                     </div>
                     {/* <div className="control-label">Map Tools</div> */}
                 </div>
@@ -842,16 +858,16 @@ const ToolBar = ({
                             </button>
                         </Tooltip>
                         <div className="relative">
-                            <Tooltip text="Import / Export Map" hideTooltip={showImportExportMenu}>
+                            <Tooltip text="Import / Export Map" hideTooltip={activeSubmenu === SubMenuType.IMPORT_EXPORT}>
                                 <button
-                                    className={`relative control-button active:translate-y-[1px] group transition-all ${showImportExportMenu ? 'selected' : ''}`}
-                                    onClick={() => setShowImportExportMenu(!showImportExportMenu)}
+                                    className={`relative control-button active:translate-y-[1px] group transition-all ${activeSubmenu === SubMenuType.IMPORT_EXPORT ? 'selected' : ''}`}
+                                    onClick={() => toggleSubmenu(SubMenuType.IMPORT_EXPORT)}
                                 >
                                     <FaCloud className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                                 </button>
                             </Tooltip>
 
-                            {showImportExportMenu && <div className={`absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2`}>
+                            {activeSubmenu === SubMenuType.IMPORT_EXPORT && <div className={`absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2`}>
                                 <input
                                     id="mapFileInput"
                                     type="file"
@@ -861,14 +877,20 @@ const ToolBar = ({
                                 />
                                 <button
                                     className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
-                                    onClick={() => document.getElementById("mapFileInput").click()}
+                                    onClick={() => {
+                                        document.getElementById("mapFileInput").click();
+                                        setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
+                                    }}
                                     style={{ animationDelay: '0.1s' }}
                                 >
                                     {"Import"}
                                 </button>
                                 <button
                                     className={`w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
-                                    onClick={handleExportMap}
+                                    onClick={() => {
+                                        handleExportMap();
+                                        setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
+                                    }}
                                     style={{ animationDelay: '0.2s' }}
                                 >
                                     {"Export"}
