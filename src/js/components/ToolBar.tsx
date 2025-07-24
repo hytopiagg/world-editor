@@ -435,10 +435,14 @@ const ToolBar = ({
                 .then(() => {
                     event.target.value = "";
                     console.log("Reset file input after successful import");
+                    // Close the submenu now that the import flow is complete
+                    setActiveSubmenu(SubMenuType.NONE);
                 })
                 .catch((error) => {
                     event.target.value = "";
                     console.error("Error during import:", error);
+                    // Ensure submenu is closed even if the import fails
+                    setActiveSubmenu(SubMenuType.NONE);
                 });
         }
     };
@@ -879,7 +883,6 @@ const ToolBar = ({
                                     className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
                                     onClick={() => {
                                         document.getElementById("mapFileInput").click();
-                                        setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
                                     }}
                                     style={{ animationDelay: '0.1s' }}
                                 >
@@ -889,7 +892,7 @@ const ToolBar = ({
                                     className={`w-fit flex items-center justify-center bg-black/50 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up`}
                                     onClick={() => {
                                         handleExportMap();
-                                        setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
+                                        setActiveSubmenu(SubMenuType.NONE); // Close submenu after export
                                     }}
                                     style={{ animationDelay: '0.2s' }}
                                 >
