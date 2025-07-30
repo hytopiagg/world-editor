@@ -51,12 +51,27 @@ class CameraManager {
         this._eventsInitialized = true;
         this.camera = camera;
         this.controls = controls;
-        // Preserve any moveSpeed previously configured (e.g. loaded from persisted settings)
-        // If none has been set yet, fall back to default 0.2
-        if (typeof this.moveSpeed !== "number" || isNaN(this.moveSpeed)) {
-            this.moveSpeed = 0.2;
+        
+        // Fix 1: Ensure moveSpeed is properly validated and initialized
+        const savedMoveSpeed = localStorage.getItem('cameraMoveSpeed');
+        if (savedMoveSpeed && !isNaN(parseFloat(savedMoveSpeed))) {
+            this.moveSpeed = Math.max(0.05, Math.min(2.5, parseFloat(savedMoveSpeed)));
+        } else {
+            this.moveSpeed = 0.2; // Default value
         }
+        
+        // Fix 2: Ensure rotateSpeed is properly initialized
         this.rotateSpeed = 0.02;
+        
+        // Fix 3: Ensure camera rotation order is set immediately
+        if (this.camera) {
+            this.camera.rotation.order = "YXZ"; // yaw first, then pitch
+            this.camera.rotation.set(0, 0, 0); // Reset rotation to prevent drift
+        }
+        
+        // Fix 4: Initialize FPS normalization correctly
+        this.normalizedFps = 60; // Changed from 120 to 60 for more consistent movement
+        this.lastFrameTime = performance.now();
         this.keys = new Set();
         this.isSliderDragging = false;
         this.lastPosition = null;
@@ -216,9 +231,12 @@ class CameraManager {
         if (!this.controls || !this.camera || this._isInputDisabled) return;
         let moved = false;
 
-        // Apply deltaTime to make movement frame-rate independent
-        const frameAdjustedMoveSpeed = this.moveSpeed * deltaTime;
-        const frameAdjustedRotateSpeed = this.rotateSpeed * deltaTime;
+        // Fix 5: Ensure deltaTime is properly clamped to prevent extreme values
+        const clampedDeltaTime = Math.max(0.1, Math.min(5, deltaTime));
+        
+        // Fix 6: Apply proper frame-rate independent movement
+        const frameAdjustedMoveSpeed = this.moveSpeed * (clampedDeltaTime / 60);
+        const frameAdjustedRotateSpeed = this.rotateSpeed * (clampedDeltaTime / 60);
 
         if (
             this.keys.has("w") ||
@@ -426,12 +444,17 @@ class CameraManager {
             this.keys.clear();
         }
     }
+    // Fix 7: Improve pointer sensitivity calculation
     setPointerSensitivity(level: number) {
-        // level expected 1-10
+        // level expected 1-10, ensure proper scaling
         this.pointerSensitivity = THREE.MathUtils.clamp(level, 1, 10);
+        localStorage.setItem('cameraSensitivity', this.pointerSensitivity.toString());
     }
+    // Fix 8: Ensure moveSpeed is properly saved and loaded
     setMoveSpeed(speed: number) {
-        this.moveSpeed = THREE.MathUtils.clamp(speed, 0.05, 2.5);
+        const clampedSpeed = THREE.MathUtils.clamp(speed, 0.05, 2.5);
+        this.moveSpeed = clampedSpeed;
+        localStorage.setItem('cameraMoveSpeed', clampedSpeed.toString());
     }
 }
 export const cameraManager = new CameraManager();
