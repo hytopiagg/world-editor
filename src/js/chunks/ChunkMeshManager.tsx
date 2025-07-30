@@ -203,7 +203,7 @@ class ChunkMeshManager {
             BlockTextureAtlas.instance.textureAtlas &&
             (!material.uniforms.textureAtlas.value ||
                 material.uniforms.textureAtlas.value.image !==
-                    BlockTextureAtlas.instance.textureAtlas.image)
+                BlockTextureAtlas.instance.textureAtlas.image)
         ) {
             console.log("Setting texture atlas for liquid material");
             BlockMaterial.instance.setTextureAtlas(
@@ -235,9 +235,9 @@ class ChunkMeshManager {
 
         if (
             BlockTextureAtlas.instance.textureAtlas &&
-            (!material.map ||
-                material.map.image !==
-                    BlockTextureAtlas.instance.textureAtlas.image)
+            (!(material as any).map ||
+                (material as any).map.image !==
+                BlockTextureAtlas.instance.textureAtlas.image)
         ) {
             console.log("Setting texture atlas for solid material");
             BlockMaterial.instance.setTextureAtlas(

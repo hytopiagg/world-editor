@@ -4,7 +4,6 @@ import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./css/App.css";
-import "./css/output.css";
 import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
@@ -29,6 +28,7 @@ import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -63,14 +63,43 @@ function App() {
     const [showToolbar, setShowToolbar] = useState(true);
     const [isCompactMode, setIsCompactMode] = useState(true);
     const [showCrosshair, setShowCrosshair] = useState(cameraManager.isPointerLocked);
+    const [cameraPosition, setCameraPosition] = useState(null);
     const cameraAngle = 0;
     const gridSize = 5000;
+
+    // Initialize GPU detection and optimized context attributes
+    const gpuInfo = detectGPU();
+    const contextAttributes = getOptimalContextAttributes(gpuInfo);
 
     useEffect(() => {
         if (terrainBuilderRef.current) {
             terrainBuilderRef.current.updateGridSize(gridSize);
         }
     }, [gridSize, terrainBuilderRef.current?.updateGridSize]);
+
+    // Load and apply saved skybox when page is loaded (one time only)
+    useEffect(() => {
+        if (!pageIsLoaded) return;
+
+        const loadSavedSkybox = async () => {
+            // Add a small delay to ensure terrain builder is ready
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            if (terrainBuilderRef.current?.changeSkybox) {
+                try {
+                    const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
+                    if (typeof savedSkybox === 'string') {
+                        console.log("Applying saved skybox on app startup:", savedSkybox);
+                        terrainBuilderRef.current.changeSkybox(savedSkybox);
+                    }
+                } catch (error) {
+                    console.error("Error loading saved skybox:", error);
+                }
+            }
+        };
+
+        loadSavedSkybox();
+    }, [pageIsLoaded]); // Only depend on pageIsLoaded, not terrainBuilderRef.current
 
     useEffect(() => {
         const loadAppSettings = async () => {
@@ -618,7 +647,12 @@ function App() {
                     </div>
                 )}
 
-                <Canvas shadows className="canvas-container">
+                <Canvas
+                    shadows
+                    className="canvas-container"
+                    gl={contextAttributes}
+                    camera={{ fov: 75, near: 0.1, far: 1000 }}
+                >
                     <TerrainBuilder
                         isInputDisabled={isTextureModalOpen}
                         ref={terrainBuilderRef}
@@ -636,6 +670,7 @@ function App() {
                         undoRedoManager={undoRedoManagerRef}
                         customBlocks={getCustomBlocks()}
                         snapToGrid={placementSettings.snapToGrid}
+                        onCameraPositionChange={setCameraPosition}
                     />
                     <EnvironmentBuilder
                         ref={environmentBuilderRef}
@@ -647,6 +682,7 @@ function App() {
                         placementSettings={placementSettings}
                         undoRedoManager={undoRedoManagerRef}
                         terrainBuilderRef={terrainBuilderRef}
+                        cameraPosition={cameraPosition}
                     />
                 </Canvas>
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import Tooltip from "./Tooltip";
 import { playUIClick } from "../Sound";
 import { Canvas } from "@react-three/fiber";
@@ -6,6 +6,11 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { FaTrash } from "react-icons/fa";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import {
+    detectGPU,
+    getOptimalContextAttributes,
+    getRecommendedSettings,
+} from "../utils/GPUDetection";
 import "../../css/BlockToolsSidebar.css";
 
 const ModelPreview = ({ modelUrl, onRenderComplete }) => {
@@ -82,16 +87,26 @@ const startNextRender = () => {
         }
     }, 100); // 200ms delay between renders
 };
-const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
-    const [imageUrl, setImageUrl] = React.useState(null);
-    const [showCanvas, setShowCanvas] = React.useState(false);
-    const [isQueued, setIsQueued] = React.useState(false);
-    const [isLoading, setIsLoading] = React.useState(true);
-    const [hasError, setHasError] = React.useState(false);
-    const [retryCount, setRetryCount] = React.useState(0);
+const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [imageUrl, setImageUrl] = useState(null);
+    const [showCanvas, setShowCanvas] = useState(false);
+    const [hasError, setHasError] = useState(false);
+    const [isQueued, setIsQueued] = useState(false);
+    const [retryCount, setRetryCount] = useState(0);
 
-    // Keep a persistent mounted flag for async safety
-    const mountedRef = React.useRef(false);
+    const mountedRef = useRef(true);
+
+    // Get GPU-optimized settings for this environment preview
+    const gpuInfo = detectGPU();
+    const contextAttributes = getOptimalContextAttributes(gpuInfo);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
 
     const getCacheKey = useCallback(() => {
         if (envType.modelUrl.startsWith("blob:")) {
@@ -317,7 +332,10 @@ const EnvironmentButton = ({ envType, isSelected, onSelect }) => {
                     {showCanvas ? (
                         <Canvas
                             camera={{ fov: 20, position: [0, 0, 8] }}
-                            gl={{ preserveDrawingBuffer: true }}
+                            gl={{
+                                ...contextAttributes,
+                                preserveDrawingBuffer: true, // Override for image capture
+                            }}
                         >
                             <ambientLight intensity={1} />
                             <directionalLight

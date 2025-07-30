@@ -7,7 +7,6 @@
         "@hcaptcha/react-hcaptcha": "^1.12.0",
         "@react-three/drei": "^9.121.4",
         "@react-three/fiber": "^8.17.14",
-        "@tailwindcss/cli": "^4.1.6",
         "@types/jszip": "^3.4.0",
         "@types/react": "^19.1.2",
         "@types/react-dom": "^19.1.2",
@@ -54,6 +53,8 @@
     "devDependencies": {
         "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
         "@types/three": "^0.176.0",
-        "tailwindcss": "^4.1.6"
+        "autoprefixer": "^10.4.21",
+        "postcss": "^8.5.6",
+        "tailwindcss": "^3.4.17"
     }
 }

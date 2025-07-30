@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils";
+import BlockMaterial from "./blocks/BlockMaterial";
 import {
     useEffect,
     useRef,
@@ -11,6 +12,8 @@ import {
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 import { CustomModel } from "./types/DatabaseTypes";
+import { getViewDistance } from "./constants/terrain";
+import { getVector3, releaseVector3, getMatrix4, releaseMatrix4, getEuler, releaseEuler, getQuaternion, releaseQuaternion, ObjectPoolManager } from "./utils/ObjectPool";
 export const environmentModels = (() => {
     try {
         const fetchModelList = () => {
@@ -70,6 +73,7 @@ const EnvironmentBuilder = (
         placementSettings,
         undoRedoManager,
         terrainBuilderRef,
+        cameraPosition,
     },
     ref
 ) => {
@@ -85,21 +89,223 @@ const EnvironmentBuilder = (
     });
     const placementSettingsRef = useRef(placementSettings);
     const isUndoRedoOperation = useRef(false);
+    const recentlyPlacedInstances = useRef(new Set()); // Track recently placed instances to bypass throttling
 
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
+    const lastCullingUpdate = useRef(0);
+    const CULLING_UPDATE_INTERVAL = 100; // Restored to 100ms for better performance
+
+    const updateDistanceCulling = (cameraPos: THREE.Vector3) => {
+        if (!cameraPos) return;
+
+        const viewDistance = getViewDistance();
+        const viewDistanceSquared = viewDistance * viewDistance;
+
+        let totalVisible = 0;
+        let totalHidden = 0;
+        let hasAnyChanges = false;
+
+        // First pass: check for visibility changes
+        for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+            if (!instancedData.meshes || !instancedData.addedToScene) continue;
+
+            const instances: [number, any][] = Array.from(instancedData.instances.entries());
+            let hasChanges = false;
+            let visibilityChangeCount = 0;
+
+            instances.forEach(([instanceId, data]) => {
+                const distance = cameraPos.distanceToSquared(data.position);
+                const isVisible = distance <= viewDistanceSquared;
+
+                // Check if visibility state has changed
+                const wasVisible = data.isVisible !== false; // Default to true for backward compatibility
+
+                if (isVisible !== wasVisible) {
+                    hasChanges = true;
+                    hasAnyChanges = true;
+                    visibilityChangeCount++;
+                    data.isVisible = isVisible;
+                }
+
+                if (isVisible) {
+                    totalVisible++;
+                } else {
+                    totalHidden++;
+                }
+            });
+
+            // Check if this model has recently placed instances
+            const hasRecentlyPlacedInstances = Array.from(recentlyPlacedInstances.current).some((key: string) => key.startsWith(`${modelUrl}:`));
+
+            // Rebuild visible instances if there were changes for this model OR if there are recently placed instances
+            if (hasChanges || hasRecentlyPlacedInstances) {
+                const reason = hasChanges ? `${visibilityChangeCount} visibility changes` : 'recently placed instances';
+                console.log(`[DistanceCulling] Rebuilding ${instances.length} instances for ${modelUrl.split('/').pop()} (${reason})`);
+                rebuildVisibleInstances(modelUrl, cameraPos);
+            }
+        }
+
+        // Only log summary if there were significant changes
+        if (hasAnyChanges && (totalVisible + totalHidden) > 0) {
+            console.log(`[DistanceCulling] Updated visibility: ${totalVisible} visible, ${totalHidden} hidden (view distance: ${viewDistance})`);
+        }
+    };
+
+    const throttledUpdateDistanceCulling = (cameraPos: THREE.Vector3) => {
+        const now = Date.now();
+        if (now - lastCullingUpdate.current > CULLING_UPDATE_INTERVAL) {
+            updateDistanceCulling(cameraPos);
+            lastCullingUpdate.current = now;
+        }
+    };
+
+    const forceUpdateDistanceCulling = (cameraPos: THREE.Vector3) => {
+        updateDistanceCulling(cameraPos);
+        lastCullingUpdate.current = Date.now();
+    };
+
+    const rebuildVisibleInstances = (modelUrl: string, cameraPos?: THREE.Vector3) => {
+        const instancedData = instancedMeshes.current.get(modelUrl);
+        if (!instancedData || !instancedData.meshes || !instancedData.addedToScene) return;
+
+        const instances: [number, any][] = Array.from(instancedData.instances.entries());
+        let recentlyPlacedVisible = 0;
+        const visibleInstances = [];
+
+        // If camera position is provided, use distance + frustum culling
+        if (cameraPos) {
+            const viewDistance = getViewDistance();
+            const viewDistanceSquared = viewDistance * viewDistance;
+
+            // Get camera frustum for view-based culling
+            const camera = (scene as any)?.camera;
+            let frustum = null;
+            if (camera) {
+                camera.updateMatrixWorld();
+                camera.updateProjectionMatrix();
+                const projScreenMatrix = new THREE.Matrix4();
+                projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+                frustum = new THREE.Frustum();
+                frustum.setFromProjectionMatrix(projScreenMatrix);
+            }
+
+            instances.forEach(([instanceId, data]) => {
+                const distance = cameraPos.distanceToSquared(data.position);
+                const instanceKey = `${modelUrl}:${instanceId}`;
+                const isRecentlyPlaced = recentlyPlacedInstances.current.has(instanceKey);
+
+                // Recently placed instances bypass all culling and are always visible
+                let isVisible = isRecentlyPlaced;
+
+                if (!isVisible) {
+                    // Apply distance culling
+                    const withinDistance = distance <= viewDistanceSquared;
+
+                    // Apply frustum culling (per-instance)
+                    let withinFrustum = true;
+                    if (frustum && withinDistance) {
+                        // Create a small sphere around the instance position for frustum testing
+                        const sphere = new THREE.Sphere(data.position, 2); // 2-unit radius for model bounds
+                        withinFrustum = frustum.intersectsSphere(sphere);
+                    }
+
+                    isVisible = withinDistance && withinFrustum;
+                }
+
+                data.isVisible = isVisible;
+
+                if (isVisible) {
+                    visibleInstances.push({ instanceId, data });
+                }
+
+                if (isRecentlyPlaced) recentlyPlacedVisible++;
+            });
+        } else {
+            // If no camera position, show all instances
+            instances.forEach(([instanceId, data]) => {
+                data.isVisible = true;
+                visibleInstances.push({ instanceId, data });
+            });
+        }
+
+        // Instead of compacting matrices, we scale invisible instances to zero
+        // This maintains the instanceId -> matrix index mapping and prevents newly placed
+        // instances from being incorrectly culled when old instances go out of view
+        instancedData.meshes.forEach((mesh, meshIndex) => {
+            // Ensure mesh.count covers all instance IDs that exist
+            const maxInstanceId = instances.length > 0 ? Math.max(...instances.map(([id]) => id)) : 0;
+            const requiredCount = maxInstanceId + 1;
+
+            // Only increase the count if needed, never decrease it during culling
+            if (mesh.count < requiredCount) {
+                mesh.count = requiredCount;
+            }
+
+            let visibleCount = 0;
+            let hiddenCount = 0;
+
+            // First, create a set of all active instance IDs for comparison
+            const activeInstanceIds = new Set(instances.map(([id]) => id));
+
+            // For any matrix indices that don't have active instances, we should hide them
+            for (let i = 0; i < mesh.count; i++) {
+                if (!activeInstanceIds.has(i)) {
+                    const hiddenMatrix = getMatrix4().makeScale(0, 0, 0);
+                    mesh.setMatrixAt(i, hiddenMatrix);
+                    releaseMatrix4(hiddenMatrix);
+                    hiddenCount++;
+                }
+            }
+
+            instances.forEach(([instanceId, data]) => {
+                if (data.isVisible) {
+                    // Set the normal matrix for visible instances
+                    mesh.setMatrixAt(instanceId, data.matrix);
+                    visibleCount++;
+                } else {
+                    // Hide invisible instances by scaling them to zero
+                    const hiddenMatrix = getMatrix4().makeScale(0, 0, 0);
+                    mesh.setMatrixAt(instanceId, hiddenMatrix);
+                    releaseMatrix4(hiddenMatrix);
+                    hiddenCount++;
+                }
+            });
+
+            mesh.instanceMatrix.needsUpdate = true;
+        });
+
+        // Only log if there are recently placed instances
+        if (recentlyPlacedVisible > 0) {
+            console.log(`[FIX] Recently placed instances protected + hybrid culling active: ${recentlyPlacedVisible} (${modelUrl.split('/').pop()})`);
+        }
+    };
+
+    const rebuildAllVisibleInstances = (cameraPos?: THREE.Vector3) => {
+        for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+            if (instancedData.instances && instancedData.instances.size > 0) {
+                rebuildVisibleInstances(modelUrl, cameraPos);
+            }
+        }
+    };
 
     const ensureInstancedMeshesAdded = (modelUrl: string) => {
         const data = instancedMeshes.current.get(modelUrl);
         if (!scene || !data || data.addedToScene) return;
-        data.meshes.forEach((mesh: THREE.InstancedMesh) => scene.add(mesh));
+        data.meshes.forEach((mesh: THREE.InstancedMesh) => {
+            // Ensure frustum culling is disabled - we handle our own distance culling
+            mesh.frustumCulled = false;
+            scene.add(mesh);
+        });
         data.addedToScene = true;
     };
 
+
+
     const getAllEnvironmentObjects = () => {
         const instances = [];
-        for (const [modelUrl, instancedData] of instancedMeshes.current) {
-            const name = modelUrl.split("/").pop().split(".")[0];
-            const instanceData = [...instancedData.instances];
+        for (const [modelUrl, instancedData] of (instancedMeshes.current as Map<string, any>).entries()) {
+            const name = modelUrl.split("/").pop()?.split(".")[0];
+            const instanceData = [...(instancedData.instances as Map<number, any>).entries()];
             instanceData.forEach((instance) => {
                 console.log("instance", instance);
 
@@ -212,17 +418,15 @@ const EnvironmentBuilder = (
                         scale
                     );
 
-                    instancedData.meshes.forEach((mesh) => {
-                        mesh.count = Math.max(mesh.count, instance.instanceId + 1);
-                        mesh.setMatrixAt(instance.instanceId, matrix);
-                        mesh.instanceMatrix.needsUpdate = true;
-                    });
+                    // Don't set matrices directly - rebuild visible instances instead
+                    rebuildVisibleInstances(instance.modelUrl, cameraPosition);
 
                     instancedData.instances.set(instance.instanceId, {
                         position,
                         rotation,
                         scale,
-                        matrix
+                        matrix,
+                        isVisible: true
                     });
 
                     const yOffsetAdd = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -409,11 +613,21 @@ const EnvironmentBuilder = (
                     ? object.material
                     : [object.material];
                 materials.forEach((material, materialIndex) => {
-                    const newMaterial = material.clone();
-                    newMaterial.depthWrite = true;
-                    newMaterial.depthTest = true;
-                    newMaterial.transparent = true;
-                    newMaterial.alphaTest = 0.5;
+                    // Use optimized material from BlockMaterial manager
+                    const hasTexture = material.map !== null;
+                    const newMaterial = BlockMaterial.instance.getEnvironmentMaterial({
+                        map: hasTexture ? material.map : null,
+                        transparent: true,
+                        alphaTest: 0.5,
+                        depthWrite: true,
+                        depthTest: true,
+                    });
+
+                    // Copy important properties from original material
+                    if (material.color) {
+                        (newMaterial as any).color = material.color.clone();
+                    }
+
                     const key = newMaterial.uuid;
                     if (!geometriesByMaterial.has(key)) {
                         geometriesByMaterial.set(key, {
@@ -450,7 +664,7 @@ const EnvironmentBuilder = (
                     material,
                     initialCapacity
                 );
-                instancedMesh.frustumCulled = false;
+                instancedMesh.frustumCulled = false; // Disable Three.js frustum culling - we handle our own distance culling
                 instancedMesh.renderOrder = 1;
                 instancedMesh.count = 0;
                 mergedGeometry.computeBoundingBox();
@@ -504,21 +718,29 @@ const EnvironmentBuilder = (
             const previewModel = gltf.scene.clone(true);
             previewModel.traverse((child) => {
                 if (child.isMesh) {
-                    child.material = Array.isArray(child.material)
-                        ? child.material.map((m) => m.clone())
-                        : child.material.clone();
+                    // Use optimized preview materials
                     if (Array.isArray(child.material)) {
-                        child.material.forEach((material) => {
-                            material.transparent = true;
-                            material.opacity = 0.5;
-                            material.depthWrite = false;
-                            material.depthTest = true;
+                        child.material = child.material.map((originalMaterial) => {
+                            const previewMaterial = BlockMaterial.instance.getPreviewMaterial({
+                                map: originalMaterial.map,
+                                color: originalMaterial.color,
+                                opacity: 0.5,
+                                transparent: true,
+                                depthWrite: false,
+                                depthTest: true,
+                            });
+                            return previewMaterial;
                         });
                     } else {
-                        child.material.transparent = true;
-                        child.material.opacity = 0.5;
-                        child.material.depthWrite = false;
-                        child.material.depthTest = true;
+                        const previewMaterial = BlockMaterial.instance.getPreviewMaterial({
+                            map: child.material.map,
+                            color: child.material.color,
+                            opacity: 0.5,
+                            transparent: true,
+                            depthWrite: false,
+                            depthTest: true,
+                        });
+                        child.material = previewMaterial;
                     }
                     child.castShadow = true;
                     child.receiveShadow = true;
@@ -534,9 +756,9 @@ const EnvironmentBuilder = (
             previewModel.rotation.copy(lastPreviewTransform.current.rotation);
 
             if (position) {
-                previewModel.position
-                    .copy(position)
-                    .add(positionOffset.current);
+                const offsetPosition = getVector3().copy(position).add(positionOffset.current);
+                previewModel.position.copy(offsetPosition);
+                releaseVector3(offsetPosition);
             }
 
             if (placeholderMeshRef.current) {
@@ -561,18 +783,18 @@ const EnvironmentBuilder = (
         if (!placeholderMeshRef.current || placeholderMeshRef.current.userData.modelId !== currentBlockType.id) {
             await setupPreview(position);
         } else if (position) {
-            const currentRotation = placeholderMeshRef.current.rotation.clone();
-            const currentScale = placeholderMeshRef.current.scale.clone();
+            const currentRotation = getEuler().copy(placeholderMeshRef.current.rotation);
+            const currentScale = getVector3().copy(placeholderMeshRef.current.scale);
 
-            placeholderMeshRef.current.position.copy(
-                position.clone().add(positionOffset.current)
-            );
-            placeholderMeshRef.current.scale.copy(
-                currentScale
-            );
-            placeholderMeshRef.current.rotation.copy(
-                currentRotation
-            );
+            const offsetPosition = getVector3().copy(position).add(positionOffset.current);
+            placeholderMeshRef.current.position.copy(offsetPosition);
+            placeholderMeshRef.current.scale.copy(currentScale);
+            placeholderMeshRef.current.rotation.copy(currentRotation);
+
+            // Release temporary objects
+            releaseVector3(offsetPosition);
+            releaseVector3(currentScale);
+            releaseEuler(currentRotation);
         }
     };
 
@@ -605,7 +827,7 @@ const EnvironmentBuilder = (
                         model.modelUrl === obj.modelUrl
                 );
                 if (modelType) {
-                    const eulerRotation = new THREE.Euler(
+                    const eulerRotation = getEuler().set(
                         obj.rotation?.x || 0,
                         obj.rotation?.y || 0,
                         obj.rotation?.z || 0
@@ -615,13 +837,13 @@ const EnvironmentBuilder = (
                     targetObjects.set(compositeKey, {
                         ...obj,
                         modelUrl: modelType.modelUrl, // Use the current modelUrl from environmentModels
-                        position: new THREE.Vector3(
+                        position: getVector3().set(
                             obj.position.x,
                             obj.position.y,
                             obj.position.z
                         ),
                         rotation: eulerRotation,
-                        scale: new THREE.Vector3(
+                        scale: getVector3().set(
                             obj.scale.x,
                             obj.scale.y,
                             obj.scale.z
@@ -665,6 +887,9 @@ const EnvironmentBuilder = (
             }
 
             setTotalEnvironmentObjects(targetObjects.size);
+
+            // Rebuild all visible instances after updating environment
+            rebuildAllVisibleInstances(cameraPosition);
         } catch (error) {
             console.error("Error updating environment:", error);
         } finally {
@@ -685,12 +910,6 @@ const EnvironmentBuilder = (
         mesh,
         savedInstanceId = null
     ) => {
-        console.log(
-            "placeEnvironmentModelWithoutSaving",
-            modelType,
-            mesh,
-            savedInstanceId
-        );
         if (!modelType || !mesh) {
             console.warn(`modelType and mesh null`);
             return null;
@@ -719,15 +938,13 @@ const EnvironmentBuilder = (
         }
 
         mesh.updateWorldMatrix(true, true);
-        const position = mesh.position.clone();
-        const rotation = mesh.rotation.clone();
-        const scale = mesh.scale.clone();
-        const matrix = new THREE.Matrix4();
-        matrix.compose(
-            position,
-            new THREE.Quaternion().setFromEuler(rotation),
-            scale
-        );
+        const position = getVector3().copy(mesh.position);
+        const rotation = getEuler().copy(mesh.rotation);
+        const scale = getVector3().copy(mesh.scale);
+        const matrix = getMatrix4();
+        const quaternion = getQuaternion();
+        quaternion.setFromEuler(rotation);
+        matrix.compose(position, quaternion, scale);
 
         let instanceId;
         if (savedInstanceId !== null) {
@@ -743,24 +960,28 @@ const EnvironmentBuilder = (
         const validMeshes = instancedData.meshes.filter(
             (mesh) => mesh !== undefined && mesh !== null
         );
-        validMeshes.forEach((mesh) => {
-            const currentCapacity = mesh.instanceMatrix.count;
-            if (instanceId >= currentCapacity - 1) {
-                alert(
-                    "Maximum Environment Objects Exceeded! Please clear the environment and try again."
-                );
-                return;
-            }
-            mesh.count = Math.max(mesh.count, instanceId + 1);
-            mesh.setMatrixAt(instanceId, matrix);
-            mesh.instanceMatrix.needsUpdate = true;
-        });
+        // Check capacity but don't set matrices directly
+        const currentCapacity = validMeshes[0]?.instanceMatrix.count || 0;
+        if (instanceId >= currentCapacity - 1) {
+            alert(
+                "Maximum Environment Objects Exceeded! Please clear the environment and try again."
+            );
+            return null;
+        }
         instancedData.instances.set(instanceId, {
             position,
             rotation,
             scale,
             matrix,
+            isVisible: true,
         });
+
+        // Track this as a recently placed instance
+        const instanceKey = `${modelUrl}:${instanceId}`;
+        recentlyPlacedInstances.current.add(instanceKey);
+
+        // Release the temporary quaternion since it's not stored
+        releaseQuaternion(quaternion);
         const yOffsetForAdd = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
         terrainBuilderRef.current.updateSpatialHashForBlocks([{
             x: position.x,
@@ -774,6 +995,20 @@ const EnvironmentBuilder = (
         // Lazily attach InstancedMesh group to scene on first use
         ensureInstancedMeshesAdded(modelUrl);
 
+        // Rebuild visible instances to include this new instance
+        rebuildVisibleInstances(modelUrl, cameraPosition);
+
+        // Force immediate distance culling update to ensure the new instance is properly evaluated
+        if (cameraPosition) {
+            forceUpdateDistanceCulling(cameraPosition);
+        }
+
+        // Clean up recently placed instance tracking after a delay
+        setTimeout(() => {
+            const instanceKey = `${modelUrl}:${instanceId}`;
+            recentlyPlacedInstances.current.delete(instanceKey);
+        }, 1000); // Clean up after 1 second
+
         return {
             modelUrl,
             instanceId,
@@ -784,13 +1019,20 @@ const EnvironmentBuilder = (
     };
 
     const clearEnvironments = () => {
-        for (const instancedData of instancedMeshes.current.values()) {
+        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            // Release all pooled objects before clearing
+            instancedData.instances.forEach((data) => {
+                releaseVector3(data.position);
+                releaseEuler(data.rotation);
+                releaseVector3(data.scale);
+                releaseMatrix4(data.matrix);
+            });
+
+            instancedData.instances.clear();
             instancedData.meshes.forEach((mesh) => {
                 mesh.count = 0;
                 mesh.instanceMatrix.needsUpdate = true;
             });
-
-            instancedData.instances.clear();
         }
         updateLocalStorage();
     };
@@ -803,8 +1045,8 @@ const EnvironmentBuilder = (
         if (!settings) {
             console.warn("No placement settings provided");
             return {
-                scale: new THREE.Vector3(1, 1, 1),
-                rotation: new THREE.Euler(0, 0, 0),
+                scale: getVector3().set(1, 1, 1),
+                rotation: getEuler().set(0, 0, 0),
             };
         }
         const scaleValue = settings.randomScale
@@ -815,8 +1057,8 @@ const EnvironmentBuilder = (
             : settings.rotation;
 
         return {
-            scale: new THREE.Vector3(scaleValue, scaleValue, scaleValue),
-            rotation: new THREE.Euler(0, (rotationDegrees * Math.PI) / 180, 0),
+            scale: getVector3().set(scaleValue, scaleValue, scaleValue),
+            rotation: getEuler().set(0, (rotationDegrees * Math.PI) / 180, 0),
         };
     };
 
@@ -834,7 +1076,8 @@ const EnvironmentBuilder = (
                     matrix: data.matrix,
                 }));
 
-            const matchingInstances = instances.filter(instance => {
+            // First, try exact position matching with original tolerance
+            const exactMatches = instances.filter(instance => {
                 return (
                     Math.abs(instance.position.x - position.x) < tolerance &&
                     Math.abs(instance.position.y - position.y) < tolerance &&
@@ -842,7 +1085,32 @@ const EnvironmentBuilder = (
                 );
             });
 
-            collidingInstances.push(...matchingInstances);
+            if (exactMatches.length > 0) {
+                collidingInstances.push(...exactMatches);
+            } else {
+                // If no exact matches, look for closest vertical match within 1 block
+                const verticalCandidates = instances.filter(instance => {
+                    const horizontalDistance = Math.sqrt(
+                        Math.pow(instance.position.x - position.x, 2) +
+                        Math.pow(instance.position.z - position.z, 2)
+                    );
+                    const verticalDistance = Math.abs(instance.position.y - position.y);
+
+                    return horizontalDistance < tolerance && verticalDistance <= 4.0;
+                });
+
+                if (verticalCandidates.length > 0) {
+                    // Find the closest one vertically
+                    const closest = verticalCandidates.reduce((closest, candidate) => {
+                        const closestVerticalDist = Math.abs(closest.position.y - position.y);
+                        const candidateVerticalDist = Math.abs(candidate.position.y - position.y);
+                        return candidateVerticalDist < closestVerticalDist ? candidate : closest;
+                    });
+
+                    console.log(`[VerticalSnap] Found instance at Y:${closest.position.y.toFixed(1)} when looking for Y:${position.y.toFixed(1)} (offset: ${(closest.position.y - position.y).toFixed(1)})`);
+                    collidingInstances.push(closest);
+                }
+            }
         }
 
         return collidingInstances;
@@ -893,20 +1161,8 @@ const EnvironmentBuilder = (
 
                     instancedData.instances.delete(instance.instanceId);
 
-                    instancedData.meshes.forEach((mesh) => {
-                        // Set to zero-scale matrix so the ghost mesh is not rendered at origin
-                        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-                        mesh.setMatrixAt(instance.instanceId, zeroMatrix);
-
-                        mesh.count =
-                            Math.max(
-                                ...Array.from(
-                                    instancedData.instances.keys()
-                                ) as number[],
-                                -1
-                            ) + 1;
-                        mesh.instanceMatrix.needsUpdate = true;
-                    });
+                    // Don't set matrices directly - rebuild visible instances instead
+                    rebuildVisibleInstances(instance.modelUrl, cameraPosition);
 
                     removedObjects.push(removedObject);
                     const yOffsetRemove = getModelYShift(removedObject.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -925,7 +1181,7 @@ const EnvironmentBuilder = (
                 setTotalEnvironmentObjects(prev => prev - removedObjects.length);
 
                 console.log(
-                    `Removed ${removedObjects.length} environment objects`
+                    `[DELETION] Removed ${removedObjects.length} environment objects:`, removedObjects
                 );
 
                 if (!isUndoRedoOperation.current && saveUndo) {
@@ -1000,47 +1256,39 @@ const EnvironmentBuilder = (
             }
 
             const transform = getPlacementTransform();
-            const position = new THREE.Vector3(
+            const position = getVector3().set(
                 placementPosition.x,
                 placementPosition.y,
                 placementPosition.z
             );
-            const matrix = new THREE.Matrix4();
-            matrix.compose(
-                position,
-                new THREE.Quaternion().setFromEuler(transform.rotation),
-                transform.scale
-            );
+            const matrix = getMatrix4();
+            const quaternion = getQuaternion();
+            quaternion.setFromEuler(transform.rotation);
+            matrix.compose(position, quaternion, transform.scale);
 
             let placementSuccessful = true;
-            instancedData.meshes.forEach((mesh) => {
-                if (!placementSuccessful) return;
-
-                if (!mesh) {
-                    console.error("Invalid mesh encountered");
-                    placementSuccessful = false;
-                    return;
-                }
-                const capacity = mesh.instanceMatrix.count;
-                if (instanceId >= capacity) {
-                    console.error(`Cannot place object: Instance ID ${instanceId} exceeds mesh capacity ${capacity} for model ${modelUrl}.`);
-                    alert(`Maximum instances reached for model type ${modelData.name}.`);
-                    placementSuccessful = false;
-                    return;
-                }
-
-                mesh.setMatrixAt(instanceId, matrix);
-                mesh.count = Math.max(mesh.count, instanceId + 1);
-                mesh.instanceMatrix.needsUpdate = true;
-            });
+            // Check capacity
+            const capacity = instancedData.meshes[0]?.instanceMatrix.count || 0;
+            if (instanceId >= capacity) {
+                console.error(`Cannot place object: Instance ID ${instanceId} exceeds mesh capacity ${capacity} for model ${modelUrl}.`);
+                alert(`Maximum instances reached for model type ${modelData.name}.`);
+                placementSuccessful = false;
+            }
 
             if (placementSuccessful) {
                 instancedData.instances.set(instanceId, {
-                    position: position.clone(),
-                    rotation: transform.rotation.clone(),
-                    scale: transform.scale.clone(),
-                    matrix: matrix.clone(),
+                    position: getVector3().copy(position),
+                    rotation: getEuler().copy(transform.rotation),
+                    scale: getVector3().copy(transform.scale),
+                    matrix: getMatrix4().copy(matrix),
+                    isVisible: true,
                 });
+
+                // Track this as a recently placed instance
+                const instanceKey = `${modelUrl}:${instanceId}`;
+                recentlyPlacedInstances.current.add(instanceKey);
+
+                console.log(`[PlaceEnvironment] Created instance ${instanceId} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
 
                 const newObject = {
                     modelUrl,
@@ -1067,10 +1315,41 @@ const EnvironmentBuilder = (
                     force: true,
                 });
                 addedObjects.push(newObject);
+
+                // Release temporary objects after they're copied
+                releaseQuaternion(quaternion);
+                releaseVector3(position);
+                releaseMatrix4(matrix);
+                releaseVector3(transform.scale);
+                releaseEuler(transform.rotation);
             } else {
                 console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);
+                // Release temporary objects if placement failed
+                releaseQuaternion(quaternion);
+                releaseVector3(position);
+                releaseMatrix4(matrix);
+                releaseVector3(transform.scale);
+                releaseEuler(transform.rotation);
             }
         });
+
+        // Rebuild visible instances if any objects were added
+        if (addedObjects.length > 0) {
+            rebuildVisibleInstances(modelUrl, cameraPosition);
+
+            // Force immediate distance culling update for all models to ensure new instances are properly evaluated
+            if (cameraPosition) {
+                forceUpdateDistanceCulling(cameraPosition);
+            }
+
+            // Clean up recently placed instances tracking after a delay
+            setTimeout(() => {
+                addedObjects.forEach(obj => {
+                    const instanceKey = `${obj.modelUrl}:${obj.instanceId}`;
+                    recentlyPlacedInstances.current.delete(instanceKey);
+                });
+            }, 1000); // Clean up after 1 second
+        }
 
         if (addedObjects.length > 0) {
             if (!isUndoRedoOperation.current && saveUndo) {
@@ -1219,24 +1498,13 @@ const EnvironmentBuilder = (
     const removeInstance = (modelUrl, instanceId, updateUndoRedo = true) => {
         const instancedData = instancedMeshes.current.get(modelUrl);
         if (!instancedData || !instancedData.instances.has(instanceId)) {
-            console.warn(`Instance ${instanceId} not found for removal`);
+            console.warn(`[REMOVE_INSTANCE] Instance ${instanceId} not found for removal in model ${modelUrl}`);
             return;
         }
 
         const objectData = instancedData.instances.get(instanceId);
 
-        instancedData.instances.delete(instanceId);
-
-        instancedData.meshes.forEach((mesh) => {
-            // Set to zero-scale matrix so the ghost mesh is not rendered at origin
-            const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-            mesh.setMatrixAt(instanceId, zeroMatrix);
-
-            mesh.count =
-                Math.max(...Array.from(instancedData.instances.keys()) as number[], -1) + 1;
-            mesh.instanceMatrix.needsUpdate = true;
-        });
-
+        // Create removal object before deleting instance
         const removedObject = {
             modelUrl,
             instanceId, // Include the instanceId in removed object
@@ -1256,6 +1524,17 @@ const EnvironmentBuilder = (
                 z: objectData.scale.z,
             },
         };
+
+        // Release pooled objects back to the pool
+        releaseVector3(objectData.position);
+        releaseEuler(objectData.rotation);
+        releaseVector3(objectData.scale);
+        releaseMatrix4(objectData.matrix);
+
+        instancedData.instances.delete(instanceId);
+
+        // Rebuild visible instances to exclude this removed instance
+        rebuildVisibleInstances(modelUrl, cameraPosition);
 
         if (updateUndoRedo) {
             const changes = {
@@ -1298,6 +1577,8 @@ const EnvironmentBuilder = (
                 );
 
                 updateEnvironmentToMatch(Object.values(savedEnv));
+                // Rebuild all visible instances after loading from database
+                rebuildAllVisibleInstances(cameraPosition);
             } else {
                 console.log("No environment objects found in database");
                 clearEnvironments();
@@ -1308,9 +1589,9 @@ const EnvironmentBuilder = (
     };
     const updatePreviewPosition = (position) => {
         if (placeholderMeshRef.current && position) {
-            placeholderMeshRef.current.position.copy(
-                position.clone().add(positionOffset.current)
-            );
+            const offsetPosition = getVector3().copy(position).add(positionOffset.current);
+            placeholderMeshRef.current.position.copy(offsetPosition);
+            releaseVector3(offsetPosition);
         }
     };
     const removePreview = () => {
@@ -1394,6 +1675,29 @@ const EnvironmentBuilder = (
         }
     }, [currentBlockType?.id, currentBlockType?.yShift]);
 
+    useEffect(() => {
+        if (cameraPosition) {
+            throttledUpdateDistanceCulling(cameraPosition);
+        }
+    }, [cameraPosition]);
+
+    // Debug function to monitor object pool statistics
+    useEffect(() => {
+        if (process.env.NODE_ENV === 'development') {
+            const logPoolStats = () => {
+                const stats = ObjectPoolManager.getInstance().getAllStats();
+                console.log('Object Pool Statistics:', stats);
+            };
+
+            // Add global debug function
+            (window as any).debugObjectPools = logPoolStats;
+
+            return () => {
+                delete (window as any).debugObjectPools;
+            };
+        }
+    }, []);
+
     const beginUndoRedoOperation = () => {
         isUndoRedoOperation.current = true;
     };
@@ -1438,6 +1742,11 @@ const EnvironmentBuilder = (
             hasInstanceAtPosition,
             forceRebuildSpatialHash,
             getAllAvailableModels,
+            updateDistanceCulling,
+            throttledUpdateDistanceCulling,
+            forceUpdateDistanceCulling,
+            rebuildVisibleInstances,
+            rebuildAllVisibleInstances,
             setModelYShift: (modelId, newShift) => {
                 const model = environmentModels.find((m) => m.id === modelId);
                 if (model) {
@@ -1446,11 +1755,13 @@ const EnvironmentBuilder = (
                 if (currentBlockType && currentBlockType.id === modelId) {
                     positionOffset.current.set(0, ENVIRONMENT_OBJECT_Y_OFFSET + newShift, 0);
                     if (placeholderMeshRef.current) {
-                        const basePos = placeholderMeshRef.current.position.clone().sub(positionOffset.current);
+                        const basePos = getVector3().copy(placeholderMeshRef.current.position).sub(positionOffset.current);
                         placeholderMeshRef.current.position.copy(basePos.add(positionOffset.current));
+                        releaseVector3(basePos);
                     }
                 }
-            }
+            },
+            getObjectPoolStats: () => ObjectPoolManager.getInstance().getAllStats()
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

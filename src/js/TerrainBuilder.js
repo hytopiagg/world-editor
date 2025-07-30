@@ -57,6 +57,12 @@ import {
     setDeferredChunkMeshing,
 } from "./utils/ChunkUtils"; // <<< Add this import
 import {
+    detectGPU,
+    applyGPUOptimizedSettings,
+    logGPUInfo,
+    getRecommendedSettings,
+} from "./utils/GPUDetection";
+import {
     handleTerrainMouseDown,
     handleTerrainMouseUp,
 } from "./utils/TerrainMouseUtils";
@@ -64,15 +70,36 @@ import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
 function optimizeRenderer(gl) {
     if (gl) {
+        // Detect GPU and apply optimized settings automatically
+        const gpuInfo = detectGPU();
+        const settings = applyGPUOptimizedSettings(gl, gpuInfo);
+
+        // Log GPU info for debugging
+        logGPUInfo();
+
+        // Shadow map optimizations
         gl.shadowMap.autoUpdate = false;
         gl.shadowMap.needsUpdate = true;
+
+        // Enable object sorting for better transparency rendering
         gl.sortObjects = true;
-        if (gl.getContextAttributes) {
-            const contextAttributes = gl.getContextAttributes();
-            if (contextAttributes) {
-                contextAttributes.powerPreference = "high-performance";
+
+        // Apply GPU-specific shadow map size to directional lights
+        // This will be picked up by lights that check renderer settings
+        gl.userData = gl.userData || {};
+        gl.userData.recommendedShadowMapSize = settings.shadowMapSize;
+
+        // Note: powerPreference must be set at context creation time, not here
+        // It's now properly configured in the Canvas component gl prop
+
+        console.log(
+            `Renderer optimized for ${gpuInfo.estimatedPerformanceClass} performance GPU`,
+            {
+                gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
+                isIntegrated: gpuInfo.isIntegratedGPU,
+                appliedSettings: settings,
             }
-        }
+        );
     }
 }
 function TerrainBuilder(
@@ -92,6 +119,7 @@ function TerrainBuilder(
         environmentBuilderRef,
         isInputDisabled,
         snapToGrid,
+        onCameraPositionChange,
     },
     ref
 ) {
@@ -124,6 +152,9 @@ function TerrainBuilder(
     const placementSizeRef = useRef(placementSize);
     const snapToGridRef = useRef(snapToGrid !== false);
     const originalPixelRatioRef = useRef(null);
+
+    // GPU-optimized settings state
+    const [shadowMapSize, setShadowMapSize] = useState(2048);
 
     useEffect(() => {
         snapToGridRef.current = snapToGrid !== false;
@@ -1928,6 +1959,76 @@ function TerrainBuilder(
         forceChunkUpdate, // Direct chunk updating for tools
         forceRefreshAllChunks, // Force refresh of all chunks
         updateGridSize, // Expose for updating grid size when importing maps
+        changeSkybox: (skyboxName) => {
+            if (scene && gl) {
+                const FADE_DURATION = 300; // 300ms fade duration
+                const originalBackground = scene.background;
+                let fadeStartTime = Date.now();
+                let newSkyboxLoaded = false;
+                let newTextureCube = null;
+
+                // Preload the new skybox
+                const loader = new THREE.CubeTextureLoader();
+                loader.setPath(`./assets/skyboxes/${skyboxName}/`);
+
+                const fadeOverlay = new THREE.Mesh(
+                    new THREE.SphereGeometry(500, 32, 16),
+                    new THREE.MeshBasicMaterial({
+                        color: 0x000000,
+                        transparent: true,
+                        opacity: 0,
+                        side: THREE.BackSide,
+                    })
+                );
+                scene.add(fadeOverlay);
+
+                // Load new skybox
+                newTextureCube = loader.load(
+                    [
+                        "+x.png",
+                        "-x.png",
+                        "+y.png",
+                        "-y.png",
+                        "+z.png",
+                        "-z.png",
+                    ],
+                    () => {
+                        newSkyboxLoaded = true;
+                    }
+                );
+
+                // Fade animation
+                const fadeAnimation = () => {
+                    const elapsed = Date.now() - fadeStartTime;
+                    const progress = Math.min(elapsed / FADE_DURATION, 1);
+
+                    if (progress < 0.5) {
+                        // Fade out phase (first half)
+                        const fadeOutProgress = progress * 2; // 0 to 1
+                        fadeOverlay.material.opacity = fadeOutProgress * 0.8;
+                    } else if (newSkyboxLoaded) {
+                        // Fade in phase (second half) - only start if new skybox is loaded
+                        if (scene.background !== newTextureCube) {
+                            scene.background = newTextureCube;
+                        }
+                        const fadeInProgress = (progress - 0.5) * 2; // 0 to 1
+                        fadeOverlay.material.opacity =
+                            0.8 * (1 - fadeInProgress);
+                    }
+
+                    if (progress < 1 || !newSkyboxLoaded) {
+                        requestAnimationFrame(fadeAnimation);
+                    } else {
+                        // Animation complete, cleanup
+                        scene.remove(fadeOverlay);
+                        fadeOverlay.geometry.dispose();
+                        fadeOverlay.material.dispose();
+                    }
+                };
+
+                fadeAnimation();
+            }
+        },
         activateTool: (toolName, activationData) => {
             if (!toolManagerRef.current) {
                 console.error(
@@ -2211,6 +2312,7 @@ function TerrainBuilder(
                 return Promise.reject(err);
             }
         },
+        setGridVisible,
     })); // This is the correct syntax with just one closing parenthesis
 
     useEffect(() => {
@@ -2514,8 +2616,7 @@ function TerrainBuilder(
         const animate = (time) => {
             frameId = requestAnimationFrame(animate);
             if (BlockMaterial.instance.liquidMaterial) {
-                BlockMaterial.instance.liquidMaterial.uniforms.time.value =
-                    (time / 1000) * 0.5;
+                BlockMaterial.instance.updateLiquidTime((time / 1000) * 0.5);
             }
             if (isPlacingRef.current && frameCount % 30 === 0) {
                 if (!window.mouseButtons || !(window.mouseButtons & 1)) {
@@ -2547,12 +2648,79 @@ function TerrainBuilder(
                 } = require("./chunks/TerrainBuilderIntegration");
                 forceUpdateChunkVisibility();
             }
+
+            // Update camera position for environment culling
+            if (frameCount % 10 === 0 && onCameraPositionChange) {
+                onCameraPositionChange(threeCamera.position.clone());
+            }
         };
         frameId = requestAnimationFrame(animate);
         return () => {
             cancelAnimationFrame(frameId);
         };
     }, [gl]);
+
+    function setGridVisible(visible) {
+        if (gridRef.current) {
+            gridRef.current.visible = visible;
+        }
+    }
+
+    // Initialize GPU-optimized settings on mount
+    useEffect(() => {
+        const gpuInfo = detectGPU();
+        const settings = getRecommendedSettings(gpuInfo);
+
+        // Apply GPU-specific optimizations
+        switch (gpuInfo.estimatedPerformanceClass) {
+            case "low":
+                settings.shadowMapSize = 1024;
+                settings.viewDistance = 4;
+                settings.pixelRatio = Math.min(window.devicePixelRatio, 1.5);
+                settings.antialias = false;
+                settings.maxEnvironmentObjects = 500;
+                break;
+            case "high":
+                settings.shadowMapSize = 4096;
+                settings.viewDistance = 12;
+                settings.maxEnvironmentObjects = 2000;
+                break;
+        }
+
+        setShadowMapSize(settings.shadowMapSize);
+
+        console.log(
+            `GPU-optimized settings initialized for ${gpuInfo.estimatedPerformanceClass} performance GPU:`,
+            {
+                gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
+                webgl2: gpuInfo.supportsWebGL2,
+                contextType: gpuInfo.contextType,
+                maxTextureSize: gpuInfo.maxTextureSize,
+                maxAnisotropy: gpuInfo.maxAnisotropy,
+                settings,
+            }
+        );
+
+        // Set view distance based on GPU capability
+        if (settings.viewDistance) {
+            try {
+                const { setViewDistance } = require("./constants/terrain");
+                setViewDistance(settings.viewDistance * 8); // Convert chunks to blocks
+            } catch (error) {
+                console.warn("Could not set view distance:", error);
+            }
+        }
+
+        // Log WebGL2 capabilities if available
+        if (gpuInfo.supportsWebGL2) {
+            console.log("✅ WebGL2 features available:", {
+                logarithmicDepthBuffer: settings.logarithmicDepthBuffer,
+                maxTextureSize: gpuInfo.maxTextureSize,
+                anisotropicFiltering: settings.enableAnisotropicFiltering,
+                maxAnisotropy: settings.maxAnisotropy,
+            });
+        }
+    }, []);
 
     return (
         <>
@@ -2575,8 +2743,8 @@ function TerrainBuilder(
                 intensity={2}
                 color={0xffffff}
                 castShadow={true}
-                shadow-mapSize-width={2048}
-                shadow-mapSize-height={2048}
+                shadow-mapSize-width={shadowMapSize}
+                shadow-mapSize-height={shadowMapSize}
                 shadow-camera-far={1000}
                 shadow-camera-near={10}
                 shadow-camera-left={-100}

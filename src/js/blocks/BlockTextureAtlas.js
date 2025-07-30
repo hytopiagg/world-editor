@@ -31,8 +31,8 @@ class BlockTextureAtlas {
         this._textureAtlasContext = this._textureAtlasCanvas.getContext("2d");
 
         this._textureAtlas = new THREE.CanvasTexture(this._textureAtlasCanvas);
-        this._textureAtlas.minFilter = THREE.NearestFilter;
-        this._textureAtlas.magFilter = THREE.NearestFilter;
+        // Use optimized texture settings from BlockMaterial
+        this._textureAtlas = BlockMaterial.instance.optimizeTexture(this._textureAtlas);
         this._textureAtlas.colorSpace = THREE.SRGBColorSpace;
 
         this._textureAtlasMetadata = new Map();
