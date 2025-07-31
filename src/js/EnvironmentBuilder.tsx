@@ -1769,3 +1769,9 @@ const EnvironmentBuilder = (
     return null;
 };
 export default forwardRef(EnvironmentBuilder);
+
+// Expose internal helper for tests
+if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test') {
+    // eslint-disable-next-line no-undef
+    module.exports.getPlacementPositions = getPlacementPositions;
+}

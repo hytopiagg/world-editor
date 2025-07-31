@@ -68,6 +68,52 @@ import {
 } from "./utils/TerrainMouseUtils";
 import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
+function getPlacementPositions(centerPos, placementSize) {
+    const positions = [];
+    const addPos = (dx, dz) => {
+        positions.push({
+            x: centerPos.x + dx,
+            y: centerPos.y,
+            z: centerPos.z + dz,
+        });
+    };
+    const square = (radius) => {
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                addPos(dx, dz);
+            }
+        }
+    };
+    const diamond = (radius) => {
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                if (Math.abs(dx) + Math.abs(dz) <= radius) {
+                    addPos(dx, dz);
+                }
+            }
+        }
+    };
+    switch (placementSize) {
+        case "3x3":
+            square(1);
+            break;
+        case "5x5":
+            square(2);
+            break;
+        case "3x3diamond":
+            diamond(1);
+            break;
+        case "5x5diamond":
+            diamond(2);
+            break;
+        case "single":
+        default:
+            addPos(0, 0);
+            break;
+    }
+    return positions;
+}
+
 function optimizeRenderer(gl) {
     if (gl) {
         // Detect GPU and apply optimized settings automatically
@@ -1263,56 +1309,7 @@ function TerrainBuilder(
         },
         [getRaycastIntersection, undoRedoManager, ref]
     );
-    const getPlacementPositions = (centerPos, placementSize) => {
-        const positions = [];
 
-        const addPos = (dx, dz) => {
-            positions.push({
-                x: centerPos.x + dx,
-                y: centerPos.y,
-                z: centerPos.z + dz,
-            });
-        };
-
-        const square = (radius) => {
-            for (let dx = -radius; dx <= radius; dx++) {
-                for (let dz = -radius; dz <= radius; dz++) {
-                    addPos(dx, dz);
-                }
-            }
-        };
-
-        const diamond = (radius) => {
-            for (let dx = -radius; dx <= radius; dx++) {
-                for (let dz = -radius; dz <= radius; dz++) {
-                    if (Math.abs(dx) + Math.abs(dz) <= radius) {
-                        addPos(dx, dz);
-                    }
-                }
-            }
-        };
-
-        switch (placementSize) {
-            case "3x3":
-                square(1);
-                break;
-            case "5x5":
-                square(2);
-                break;
-            case "3x3diamond":
-                diamond(1);
-                break;
-            case "5x5diamond":
-                diamond(2);
-                break;
-            case "single":
-            default:
-                addPos(0, 0);
-                break;
-        }
-
-        return positions;
-    };
     const getCurrentTerrainData = () => {
         return terrainRef.current;
     };
@@ -2817,6 +2814,16 @@ function TerrainBuilder(
     );
 }
 export default forwardRef(TerrainBuilder);
+// Expose internal helper for tests
+if (
+    typeof process !== "undefined" &&
+    process.env &&
+    process.env.NODE_ENV === "test"
+) {
+    // eslint-disable-next-line no-undef
+    module.exports.getPlacementPositions = getPlacementPositions;
+}
+
 export {
     blockTypes,
     getBlockTypes,

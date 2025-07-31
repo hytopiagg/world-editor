@@ -43,7 +43,7 @@ interface CollapsibleSectionProps {
     animationDelay?: string;
 }
 
-function CollapsibleSection({ title, children, animationDelay = "0s" }: CollapsibleSectionProps) {
+export function CollapsibleSection({ title, children, animationDelay = "0s" }: CollapsibleSectionProps) {
     const [isOpen, setIsOpen] = useState(true);
 
     return (
