@@ -27,7 +27,15 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
         async function gen() {
             if (!selectedComponent?.schematic) return;
             try {
-                const url = await generateSchematicPreview(selectedComponent.schematic, { width: 128, height: 128, background: "transparent" });
+                const blocksForPreview =
+                    selectedComponent.schematic && (selectedComponent.schematic as any).blocks
+                        ? (selectedComponent.schematic as any).blocks
+                        : selectedComponent.schematic;
+                const url = await generateSchematicPreview(blocksForPreview, {
+                    width: 128,
+                    height: 128,
+                    background: "transparent",
+                });
                 if (isMounted) setPreviewUrl(url);
             } catch (err) {
                 console.error("Failed to generate schematic preview", err);

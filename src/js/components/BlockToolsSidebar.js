@@ -345,8 +345,12 @@ const BlockToolsSidebar = ({
                                 currentPreviewIndex.current
                             }): ${entry.prompt.substring(0, 30)}...`
                         );
+                        const blocksForPreview =
+                            entry.schematic && entry.schematic.blocks
+                                ? entry.schematic.blocks
+                                : entry.schematic;
                         newPreviewDataUrl = await generateSchematicPreview(
-                            entry.schematic,
+                            blocksForPreview,
                             {
                                 width: 48,
                                 height: 48,
