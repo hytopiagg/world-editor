@@ -56,6 +56,12 @@ function createMockRefs() {
                 environment: { added: [], removed: [] },
             },
         },
+        pendingChangesRef: {
+            current: {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            },
+        },
         currentPlacingYRef: { current: 64 },
         previewPositionRef: { current: { x: 0, y: 64, z: 0, copy: jest.fn() } },
         rawPlacementAnchorRef: { current: { copy: jest.fn() } },
@@ -85,13 +91,20 @@ describe("Single-block placement", () => {
         jest.clearAllMocks();
     });
 
-    it("enters placing mode and invokes handleBlockPlacement exactly once on left mouse down", () => {
+    it("enters placing mode, updates pendingChangesRef and invokes handleBlockPlacement exactly once on left mouse down", () => {
         const refs = createMockRefs();
         const threeRaycaster = createMockRaycaster();
 
-        // We supply our own implementation of handleBlockPlacement that simply
-        // records that it was invoked.
-        const handleBlockPlacement = jest.fn();
+        // We supply our own implementation of handleBlockPlacement that records
+        // its invocation *and* simulates the internal logic that adds an entry
+        // to `placementChangesRef.current.terrain.added` so that we can assert
+        // the helper correctly maintains this ref for later persistence.
+        const handleBlockPlacement = jest.fn(() => {
+            // Simulate adding a single block at the preview position (0,64,0)
+            const posKey = `${refs.previewPositionRef.current.x},${refs.previewPositionRef.current.y},${refs.previewPositionRef.current.z}`;
+            refs.placementChangesRef.current.terrain.added[posKey] = 1; // block id 1
+            refs.pendingChangesRef.current.terrain.added[posKey] = 1;
+        });
 
         const mouseEvent = { button: 0, type: "mousedown" };
 
@@ -122,5 +135,69 @@ describe("Single-block placement", () => {
         expect(handleBlockPlacement).toHaveBeenCalledTimes(1);
         // It should also have played the placement sound once.
         expect(playPlaceSound).toHaveBeenCalledTimes(1);
+
+        // And our simulated placement logic should have updated both
+        // placementChangesRef *and* pendingChangesRef with the expected key.
+        const expectedKeys = ["0,64,0"];
+        expect(
+            Object.keys(refs.placementChangesRef.current.terrain.added)
+        ).toEqual(expectedKeys);
+        expect(
+            Object.keys(refs.pendingChangesRef.current.terrain.added)
+        ).toEqual(expectedKeys);
+        expect(refs.pendingChangesRef.current.terrain.added["0,64,0"]).toBe(1);
+    });
+
+    it("continually places blocks while dragging (mouse-move simulation)", () => {
+        const refs = createMockRefs();
+        const threeRaycaster = createMockRaycaster();
+
+        // Stub that simulates placing a unique block per invocation
+        const handleBlockPlacement = jest.fn(() => {
+            const callIndex = handleBlockPlacement.mock.calls.length - 1; // zero-based index
+            refs.previewPositionRef.current.x = callIndex;
+            const posKey = `${callIndex},64,0`;
+            refs.placementChangesRef.current.terrain.added[posKey] = 1;
+            refs.pendingChangesRef.current.terrain.added[posKey] = 1;
+        });
+
+        // updatePreviewPosition will be called on every mousemove; mimic that effect
+        const updatePreviewPositionStub = jest.fn(() => {
+            handleBlockPlacement();
+        });
+
+        // Initial mouse-down triggers first placement and sets placing mode
+        handleTerrainMouseDown(
+            { button: 0, type: "mousedown" },
+            refs.toolManagerRef,
+            refs.isPlacingRef,
+            refs.placedBlockCountRef,
+            refs.placedEnvironmentCountRef,
+            refs.recentlyPlacedBlocksRef,
+            refs.placementChangesRef,
+            () => null, // getRaycastIntersection stub
+            refs.currentPlacingYRef,
+            refs.previewPositionRef,
+            refs.rawPlacementAnchorRef,
+            refs.isFirstBlockRef,
+            updatePreviewPositionStub,
+            handleBlockPlacement,
+            playPlaceSound,
+            threeRaycaster,
+            cameraManager,
+            { current: { id: 1, isEnvironment: false } }
+        );
+
+        // Simulate 4 mouse-move events while holding the button
+        for (let i = 0; i < 4; i++) {
+            updatePreviewPositionStub();
+        }
+
+        // Expect 2 placements during initial mouse-down (down + its own updatePreview call) plus 4 moves = 6
+        expect(handleBlockPlacement).toHaveBeenCalledTimes(6);
+        expect(updatePreviewPositionStub).toHaveBeenCalledTimes(5);
+        expect(
+            Object.keys(refs.pendingChangesRef.current.terrain.added)
+        ).toHaveLength(6);
     });
 });
