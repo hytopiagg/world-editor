@@ -89,5 +89,22 @@ describe("Placement helpers", () => {
             expect(positions).toContainEqual({ x: 2, y: 64, z: 0 });
             expect(positions).toContainEqual({ x: -2, y: 64, z: 0 });
         });
+
+        it("generates a 3×3 diamond (5 positions)", () => {
+            const positions = tb_getPlacementPositions(center, "3x3diamond");
+            expect(positions).toHaveLength(5);
+            expect(positions).toContainEqual({ x: 0, y: 64, z: 0 }); // center
+            expect(positions).toContainEqual({ x: 1, y: 64, z: 0 }); // east
+            expect(positions).toContainEqual({ x: -1, y: 64, z: 0 }); // west
+            expect(positions).toContainEqual({ x: 0, y: 64, z: 1 }); // south
+            expect(positions).toContainEqual({ x: 0, y: 64, z: -1 }); // north
+        });
+
+        it("generates a 5×5 square (25 positions)", () => {
+            const positions = tb_getPlacementPositions(center, "5x5");
+            expect(positions).toHaveLength(25);
+            expect(positions).toContainEqual({ x: 2, y: 64, z: 2 }); // corner
+            expect(positions).toContainEqual({ x: -2, y: 64, z: -2 }); // opposite corner
+        });
     });
 });
