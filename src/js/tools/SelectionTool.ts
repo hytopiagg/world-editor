@@ -689,16 +689,22 @@ class SelectionTool extends BaseTool {
         return new THREE.Vector3(newX, pos.y, newZ);
     }
 
-    areSchematicsIdentical(s1: SchematicData, s2: SchematicData): boolean {
-        const keys1 = Object.keys(s1);
-        const keys2 = Object.keys(s2);
+    // Compare two schematics for equality. Works for both the new wrapper format
+    // ( { blocks: {...}, entities?: [...] } ) as well as the legacy plain-object
+    // format where the object itself was the blocks mapping.
+    areSchematicsIdentical(s1: any, s2: any): boolean {
+        const blocks1 = s1 && s1.blocks ? s1.blocks : s1;
+        const blocks2 = s2 && s2.blocks ? s2.blocks : s2;
+
+        const keys1 = Object.keys(blocks1);
+        const keys2 = Object.keys(blocks2);
 
         if (keys1.length !== keys2.length) {
             return false;
         }
 
         for (const key of keys1) {
-            if (s1[key] !== s2[key]) {
+            if (blocks1[key] !== blocks2[key]) {
                 return false;
             }
         }
@@ -726,25 +732,65 @@ class SelectionTool extends BaseTool {
             return;
         }
 
-        const schematicDataToSave: SchematicData = {};
+        const blocksData: SchematicData = {};
+        const entitiesData: any[] = [];
         let minX = Infinity,
             minY = Infinity,
             minZ = Infinity;
 
+        // Determine bounding box across selected blocks and environment objects (if any)
         for (const posKey of this.selectedBlocks.keys()) {
             const [x, y, z] = posKey.split(",").map(Number);
             minX = Math.min(minX, x);
             minY = Math.min(minY, y);
             minZ = Math.min(minZ, z);
         }
+        if (this.selectedEnvironments && this.selectedEnvironments.size > 0) {
+            for (const [, envObj] of this.selectedEnvironments) {
+                const { x, y, z } = envObj.position;
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                minZ = Math.min(minZ, z);
+            }
+        }
 
+        // Populate blocks mapping
         for (const [posKey, blockId] of this.selectedBlocks) {
             const [x, y, z] = posKey.split(",").map(Number);
             const relX = x - minX;
             const relY = y - minY;
             const relZ = z - minZ;
-            schematicDataToSave[`${relX},${relY},${relZ}`] = blockId;
+            blocksData[`${relX},${relY},${relZ}`] = blockId;
         }
+
+        // Populate entities list (relative positions)
+        if (this.selectedEnvironments && this.selectedEnvironments.size > 0) {
+            for (const [, envObj] of this.selectedEnvironments) {
+                const relX = envObj.position.x - minX;
+                const relY = envObj.position.y - minY;
+                const relZ = envObj.position.z - minZ;
+                entitiesData.push({
+                    entityName: envObj.name,
+                    modelUrl: envObj.modelUrl,
+                    position: [relX, relY, relZ],
+                    rotation: [
+                        envObj.rotation?.x || 0,
+                        envObj.rotation?.y || 0,
+                        envObj.rotation?.z || 0,
+                    ],
+                    scale: [
+                        envObj.scale?.x || 1,
+                        envObj.scale?.y || 1,
+                        envObj.scale?.z || 1,
+                    ],
+                });
+            }
+        }
+
+        const schematicWrapper = {
+            blocks: blocksData,
+            ...(entitiesData.length > 0 ? { entities: entitiesData } : {}),
+        };
 
         try {
             const db = await DatabaseManager.getDBConnection();
@@ -773,7 +819,7 @@ class SelectionTool extends BaseTool {
                         if (
                             existing.schematic &&
                             this.areSchematicsIdentical(
-                                schematicDataToSave,
+                                schematicWrapper,
                                 existing.schematic
                             )
                         ) {
@@ -796,7 +842,7 @@ class SelectionTool extends BaseTool {
                 // If no duplicate found, proceed to save
                 const newSchematicEntry = {
                     prompt: schematicName,
-                    schematic: schematicDataToSave,
+                    schematic: schematicWrapper,
                     timestamp: Date.now(),
                 };
 
