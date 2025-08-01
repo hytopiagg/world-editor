@@ -3,7 +3,10 @@
     "allow": [
       "Bash(bun install:*)",
       "Bash(bun run:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(bun test:*)",
+      "Bash(npm test)",
+      "Bash(npm test:*)"
     ],
     "deny": []
   }
