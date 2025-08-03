@@ -38,13 +38,20 @@ class ChunkSystem {
         if (this._initialized) {
             return;
         }
+        
+        // Initialize BlockTypeRegistry if not already done
         await BlockTypeRegistry.instance.initialize();
-        await BlockTypeRegistry.instance.preload();
+        
+        // Configure chunk manager (non-blocking)
         this._chunkManager.setViewDistance(this._options.viewDistance);
         this._chunkManager.setViewDistanceEnabled(
             this._options.viewDistanceEnabled
         );
+        
         this._initialized = true;
+        
+        // Note: We don't call preload() here as it's handled separately in TerrainBuilder
+        // for better performance control and progress reporting
     }
 
     processRenderQueue() {

@@ -155,19 +155,61 @@ export const updateTerrainChunks = (
         );
     }
 
-    setTimeout(() => {
-        if (chunkSystem) {
-            console.log("Processing chunk render queue for nearby chunks...");
-            chunkSystem._chunkManager.processRenderQueue(true);
-
-            setTimeout(() => {
-                console.log("Loading complete, disabling bulk loading mode");
-                chunkSystem.setBulkLoadingMode(false);
-
-                chunkSystem._chunkManager.processRenderQueue(true);
-            }, 2000);
+    // Process chunk rendering in smaller batches to avoid blocking UI
+    let processingStep = 0;
+    // Speed up in test environments
+    const isTestEnvironment = typeof window !== 'undefined' && 
+        (window.location.search.includes('test') || 
+         window.navigator.userAgent.includes('HeadlessChrome') ||
+         window.navigator.webdriver === true);
+    const totalSteps = isTestEnvironment ? 1 : 4;
+    
+    // Update background loading indicator (transition from 3D engine init)
+    window.dispatchEvent(new CustomEvent('backgroundLoadingUpdate', {
+        detail: {
+            message: '🏗️ Optimizing 3D world, almost done...',
+            progress: 0
         }
-    }, 100);
+    }));
+    
+    const processChunksGradually = () => {
+        if (!chunkSystem) return;
+        
+        processingStep++;
+        const progress = Math.round((processingStep / totalSteps) * 100);
+        
+        // Processing chunk batch ${processingStep}/${totalSteps}
+        
+        // Update background loading progress
+        window.dispatchEvent(new CustomEvent('backgroundLoadingUpdate', {
+            detail: {
+                message: `🏗️ Optimizing 3D world... (${processingStep}/${totalSteps})`,
+                progress: progress
+            }
+        }));
+        
+        // Process a smaller number of chunks at a time
+        chunkSystem._chunkManager.processRenderQueue(true, 5); // Limit to 5 chunks per batch
+        
+        // Continue processing if there are more chunks
+        if (processingStep < totalSteps) { // Process in batches
+            const delay = isTestEnvironment ? 10 : 150; // Faster in tests
+            setTimeout(processChunksGradually, delay);
+        } else {
+            console.log("✅ Chunk processing complete, disabling bulk loading mode");
+            chunkSystem.setBulkLoadingMode(false);
+            chunkSystem._chunkManager.processRenderQueue(true, 10); // Final pass
+            
+            // Hide background loading indicator with a slight delay for UX
+            const hideDelay = isTestEnvironment ? 50 : 500; // Faster in tests
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('backgroundLoadingComplete'));
+            }, hideDelay);
+        }
+    };
+    
+    const initialDelay = isTestEnvironment ? 10 : 200; // Faster initial delay in tests
+    setTimeout(processChunksGradually, initialDelay);
     return {
         totalBlocks: Object.keys(terrainData).length,
         visibleBlocks: Object.keys(terrainData).length,

@@ -197,6 +197,90 @@ class BlockTypeRegistry {
         );
         console.timeEnd("BlockTypeRegistry.preload");
     }
+
+    /**
+     * Preload only essential textures for faster initial rendering
+     * @returns {Promise<void>}
+     */
+    async preloadEssential() {
+        console.time("BlockTypeRegistry.preloadEssential");
+        console.log("🚀 Preloading essential textures...");
+
+        const allBlockTypes = Object.values(this._blockTypes);
+        const essentialBlockTypes = allBlockTypes.filter(
+            (blockType) => this._essentialBlockTypes.has(blockType.id) && 
+                          (blockType.needsTexturePreload?.() ?? true)
+        );
+
+        if (essentialBlockTypes.length === 0) {
+            console.log("No essential block types need texture preloading");
+            console.timeEnd("BlockTypeRegistry.preloadEssential");
+            return;
+        }
+
+        console.log(`Preloading textures for ${essentialBlockTypes.length} essential block types...`);
+        await Promise.all(
+            essentialBlockTypes.map((blockType) => blockType.preloadTextures())
+        );
+        
+        console.timeEnd("BlockTypeRegistry.preloadEssential");
+    }
+
+    /**
+     * Preload remaining non-essential textures in background
+     * @returns {Promise<void>}
+     */
+    async preloadRemaining() {
+        console.time("BlockTypeRegistry.preloadRemaining");
+        // Preloading remaining textures
+
+        const allBlockTypes = Object.values(this._blockTypes);
+        const remainingBlockTypes = allBlockTypes.filter(
+            (blockType) => !this._essentialBlockTypes.has(blockType.id) && 
+                          (blockType.needsTexturePreload?.() ?? true)
+        );
+
+        if (remainingBlockTypes.length === 0) {
+            console.log("No remaining block types need texture preloading");
+            console.timeEnd("BlockTypeRegistry.preloadRemaining");
+            return;
+        }
+
+        console.log(`Preloading textures for ${remainingBlockTypes.length} remaining block types...`);
+        
+        // Load in smaller batches with longer delays to keep UI responsive
+        const batchSize = 3; // Smaller batches
+        for (let i = 0; i < remainingBlockTypes.length; i += batchSize) {
+            const batch = remainingBlockTypes.slice(i, i + batchSize);
+            const batchNumber = Math.floor(i / batchSize) + 1;
+            const totalBatches = Math.ceil(remainingBlockTypes.length / batchSize);
+            
+            // Loading texture batch ${batchNumber}/${totalBatches}
+            
+            // Use requestIdleCallback for better performance
+            await new Promise(resolve => {
+                const loadBatch = () => {
+                    Promise.all(
+                        batch.map((blockType) => blockType.preloadTextures())
+                    ).then(() => resolve()).catch(() => resolve());
+                };
+                
+                if (window.requestIdleCallback) {
+                    window.requestIdleCallback(loadBatch, { timeout: 1000 });
+                } else {
+                    setTimeout(loadBatch, 50);
+                }
+            });
+            
+            // Longer delay between batches to keep UI responsive
+            if (i + batchSize < remainingBlockTypes.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        
+        console.timeEnd("BlockTypeRegistry.preloadRemaining");
+    }
+
     /**
      * Add a block type ID to the essential block types set
      * @param {number} id - The block type ID to mark as essential

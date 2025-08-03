@@ -26,3 +26,6 @@ yarn-error.log*
 bun.lockb
 bun.lock
 public/assets/models/environment/mattifest.json
+test-results/
+playwright-report/
+

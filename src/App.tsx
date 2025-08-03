@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./css/App.css";
 import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
-import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
+import EnvironmentBuilder, { environmentModels, getEnvironmentModels } from "./js/EnvironmentBuilder";
 import TerrainBuilder from "./js/TerrainBuilder";
 import { BlockToolOptions } from "./js/components/BlockToolOptions";
 import BlockToolsSidebar, {
     refreshBlockTools,
 } from "./js/components/BlockToolsSidebar";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
+import BackgroundLoadingIndicator from "./js/components/BackgroundLoadingIndicator";
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import ToolBar from "./js/components/ToolBar";
 import UnderConstruction from "./js/components/UnderConstruction";
@@ -82,19 +83,30 @@ function App() {
         if (!pageIsLoaded) return;
 
         const loadSavedSkybox = async () => {
-            // Add a small delay to ensure terrain builder is ready
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait for terrain builder to be ready without blocking page load
+            const checkTerrainBuilderReady = () => {
+                return new Promise((resolve) => {
+                    const checkReady = () => {
+                        if (terrainBuilderRef.current?.changeSkybox) {
+                            resolve(true);
+                        } else {
+                            setTimeout(checkReady, 50);
+                        }
+                    };
+                    checkReady();
+                });
+            };
 
-            if (terrainBuilderRef.current?.changeSkybox) {
-                try {
-                    const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
-                    if (typeof savedSkybox === 'string') {
-                        console.log("Applying saved skybox on app startup:", savedSkybox);
-                        terrainBuilderRef.current.changeSkybox(savedSkybox);
-                    }
-                } catch (error) {
-                    console.error("Error loading saved skybox:", error);
+            await checkTerrainBuilderReady();
+
+            try {
+                const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
+                if (typeof savedSkybox === 'string') {
+                    console.log("Applying saved skybox on app startup:", savedSkybox);
+                    terrainBuilderRef.current.changeSkybox(savedSkybox);
                 }
+            } catch (error) {
+                console.error("Error loading saved skybox:", error);
             }
         };
 
@@ -104,17 +116,21 @@ function App() {
     useEffect(() => {
         const loadAppSettings = async () => {
             try {
-                const savedCompactMode = await DatabaseManager.getData(STORES.SETTINGS, "compactMode");
+                // Load all settings in parallel for better performance
+                const [savedCompactMode, savedPointerLockMode, savedSensitivity] = await Promise.all([
+                    DatabaseManager.getData(STORES.SETTINGS, "compactMode"),
+                    DatabaseManager.getData(STORES.SETTINGS, "pointerLockMode"),
+                    DatabaseManager.getData(STORES.SETTINGS, "cameraSensitivity")
+                ]);
+
                 if (savedCompactMode === false) {
                     setIsCompactMode(false);
                 }
 
-                const savedPointerLockMode = await DatabaseManager.getData(STORES.SETTINGS, "pointerLockMode");
                 if (typeof savedPointerLockMode === "boolean") {
                     cameraManager.isPointerUnlockedMode = savedPointerLockMode;
                 }
 
-                const savedSensitivity = await DatabaseManager.getData(STORES.SETTINGS, "cameraSensitivity");
                 if (typeof savedSensitivity === "number") {
                     cameraManager.setPointerSensitivity(savedSensitivity);
                 }
@@ -134,18 +150,23 @@ function App() {
                         setActiveTab("blocks");
                     }
                 } else {
-                    if (environmentModels && environmentModels.length > 0) {
-                        const envModel = environmentModels.find(
-                            (m) => m.id === blockId
-                        );
-                        if (envModel) {
-                            setCurrentBlockType({
-                                ...envModel,
-                                isEnvironment: true,
-                            });
-                            setActiveTab("models");
+                    // Load environment models asynchronously and then set block type
+                    getEnvironmentModels().then((models) => {
+                        if (models && models.length > 0) {
+                            const envModel = models.find(
+                                (m) => m.id === blockId
+                            );
+                            if (envModel) {
+                                setCurrentBlockType({
+                                    ...envModel,
+                                    isEnvironment: true,
+                                });
+                                setActiveTab("models");
+                            }
                         }
-                    }
+                    }).catch((error) => {
+                        console.error("Error loading environment models for saved block:", error);
+                    });
                 }
             }
         };
@@ -536,6 +557,7 @@ function App() {
                 {!pageIsLoaded && <LoadingScreen />}
 
                 <GlobalLoadingScreen />
+                <BackgroundLoadingIndicator />
 
                 {/* QuickTips removed per UX update */}
 

@@ -68,8 +68,7 @@ const createPlaceholderBlob = () => {
     }
     return Promise.resolve(null); // Fallback
 };
-const firstDefaultModel = environmentModels.find((m) => !m.isCustom);
-const initialPreviewUrl = firstDefaultModel?.modelUrl ?? null;
+// Environment models load asynchronously
 
 const BlockToolsSidebar = ({
     activeTab,
@@ -89,6 +88,7 @@ const BlockToolsSidebar = ({
     const [categoryScrollIndex, setCategoryScrollIndex] = useState(0);
     const [hasNavigatedCategories, setHasNavigatedCategories] = useState(false);
     const [netNavigationCount, setNetNavigationCount] = useState(0);
+    const [environmentModelsLoaded, setEnvironmentModelsLoaded] = useState(false);
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -213,32 +213,36 @@ const BlockToolsSidebar = ({
         };
     }, [activeTab, loadSchematicsFromDB]);
 
+    // Auto-select first model when models load and user is on models tab
     useEffect(() => {
-        if (activeTab === "environment" && initialPreviewUrl) {
-            const model = environmentModels.find(
-                (m) => m.modelUrl === initialPreviewUrl
-            );
-            if (model) {
-                selectedBlockID = model.id;
+        if (environmentModelsLoaded && activeTab === "models" && selectedBlockID === 0) {
+            const defaultEnvModel = environmentModels.find((m) => !m.isCustom);
+            if (defaultEnvModel) {
+                console.log("Auto-selecting first model after load:", defaultEnvModel.name);
                 setCurrentBlockType({
-                    ...model,
+                    ...defaultEnvModel,
                     isEnvironment: true,
                 });
-                console.log(
-                    "Initial environment model auto-selected:",
-                    model.name
-                );
+                selectedBlockID = defaultEnvModel.id;
+                localStorage.setItem("selectedBlock", defaultEnvModel.id.toString());
             }
         }
-    }, []);
+    }, [environmentModelsLoaded, activeTab]);
 
     useEffect(() => {
-        const handleRefresh = () => {
-            console.log("Handling refresh event in BlockToolsSidebar");
+        const handleRefresh = async (event) => {
+            console.log("Handling refresh event in BlockToolsSidebar", event?.type);
             try {
                 const customBlocksData = getCustomBlocks();
                 console.log("Custom blocks loaded:", customBlocksData);
                 setCustomBlocks(customBlocksData);
+                
+                // If this is the environment models loaded event, update state to trigger re-render
+                if (event?.type === 'environmentModelsLoaded') {
+                    console.log("🎯 Environment models loaded event received in sidebar, refreshing UI");
+                    console.log("Environment models length:", environmentModels.length);
+                    setEnvironmentModelsLoaded(true);
+                }
             } catch (error) {
                 console.error("Error refreshing custom blocks:", error);
             }
@@ -261,6 +265,7 @@ const BlockToolsSidebar = ({
             handleCustomBlocksUpdated
         );
         window.addEventListener("textureAtlasUpdated", handleRefresh);
+        window.addEventListener("environmentModelsLoaded", handleRefresh);
         return () => {
             window.removeEventListener("refreshBlockTools", handleRefresh);
             window.removeEventListener("custom-blocks-loaded", handleRefresh);
@@ -269,6 +274,7 @@ const BlockToolsSidebar = ({
                 handleCustomBlocksUpdated
             );
             window.removeEventListener("textureAtlasUpdated", handleRefresh);
+            window.removeEventListener("environmentModelsLoaded", handleRefresh);
         };
     }, []);
 
@@ -517,7 +523,7 @@ const BlockToolsSidebar = ({
             selectedBlockID = defaultBlock.id;
         } else if (newTab === "models") {
             const defaultEnvModel = environmentModels.find((m) => !m.isCustom);
-            console.log("defaultEnvModel", defaultEnvModel);
+            console.log("defaultEnvModel", defaultEnvModel, "models loaded:", environmentModels.length);
             if (defaultEnvModel) {
                 setCurrentBlockType({
                     ...defaultEnvModel,
@@ -525,6 +531,7 @@ const BlockToolsSidebar = ({
                 });
                 selectedBlockID = defaultEnvModel.id;
             } else {
+                // If no models are loaded yet, set to null and wait for models to load
                 setCurrentBlockType(null);
                 selectedBlockID = 0;
             }

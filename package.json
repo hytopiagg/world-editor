@@ -28,6 +28,10 @@
         "start": "react-scripts start",
         "build": "react-scripts build",
         "test": "react-scripts test --watchAll=false",
+        "test:e2e": "playwright test",
+        "test:e2e:ui": "playwright test --ui",
+        "test:e2e:headed": "playwright test --headed",
+        "test:all": "npm run test && npm run test:e2e",
         "eject": "react-scripts eject",
         "prebuild": "node scripts/generate-model-manifest.js",
         "prestart": "node scripts/generate-model-manifest.js"
@@ -52,6 +56,7 @@
     },
     "devDependencies": {
         "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+        "@playwright/test": "^1.54.2",
         "@testing-library/jest-dom": "^6.4.2",
         "@testing-library/react": "^14.0.0",
         "@types/jest": "^29.5.5",

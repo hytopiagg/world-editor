@@ -3,6 +3,7 @@ const path = require("path");
 
 function generateManifest() {
     if (process.env.NODE_ENV === "production") {
+        console.log("Skipping manifest generation in production");
         return;
     }
     const modelsDir = path.join(

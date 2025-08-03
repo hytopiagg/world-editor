@@ -14,23 +14,30 @@ import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constant
 import { CustomModel } from "./types/DatabaseTypes";
 import { getViewDistance } from "./constants/terrain";
 import { getVector3, releaseVector3, getMatrix4, releaseMatrix4, getEuler, releaseEuler, getQuaternion, releaseQuaternion, ObjectPoolManager } from "./utils/ObjectPool";
-export const environmentModels = (() => {
+// State-based environment models management
+let environmentModelsCache = [];
+let isEnvironmentModelsLoading = false;
+let environmentModelsPromise = null;
+
+const fetchEnvironmentModels = async () => {
+    if (isEnvironmentModelsLoading) {
+        return environmentModelsPromise;
+    }
+    
+    isEnvironmentModelsLoading = true;
+    
     try {
-        const fetchModelList = () => {
-            const manifestUrl = `${process.env.PUBLIC_URL}/assets/models/environment/mattifest.json`;
-            const xhr = new XMLHttpRequest();
-            xhr.open("GET", manifestUrl, false); // false makes it synchronous
-            xhr.send();
-            if (xhr.status !== 200) {
-                throw new Error("Failed to load model mattifest");
-            }
-            return JSON.parse(xhr.responseText);
-        };
+        const manifestUrl = `${process.env.PUBLIC_URL}/assets/models/environment/mattifest.json`;
+        const response = await fetch(manifestUrl);
+        if (!response.ok) {
+            throw new Error("Failed to load model manifest");
+        }
+        const modelList = await response.json();
+        
         let idCounter = 200; // Default models occupy 200-299 range
         const models = new Map();
         const result = [];
 
-        const modelList = fetchModelList();
         modelList.forEach((fileName) => {
             // Derive category (first folder) and base filename for display name
             const parts = fileName.split("/");
@@ -49,12 +56,39 @@ export const environmentModels = (() => {
             models.set(baseName, model);
             result.push(model);
         });
+        
+        environmentModelsCache = result;
+        
+        // Update the exported array directly
+        environmentModels.length = 0;
+        environmentModels.push(...result);
+        
+        // Notify components that models are now available
+        console.log(`🎯 Environment models loaded: ${result.length} models available`);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('environmentModelsLoaded', { detail: result }));
+        }
+        
         return result;
     } catch (error) {
         console.error("Error loading environment models:", error);
         return [];
+    } finally {
+        isEnvironmentModelsLoading = false;
     }
-})();
+};
+
+// Create a real array that will be mutated when models load
+export const environmentModels = [];
+
+// Start loading models immediately but don't block
+environmentModelsPromise = fetchEnvironmentModels();
+
+// Export promise for components that need to wait for models
+export const getEnvironmentModels = () => environmentModelsPromise;
+
+// Export function to check if models are loaded
+export const areEnvironmentModelsLoaded = () => environmentModelsCache.length > 0;
 
 // Helper: returns stored vertical y-shift (in units) for the given model URL, defaulting to 0
 const getModelYShift = (modelUrl?: string) => {

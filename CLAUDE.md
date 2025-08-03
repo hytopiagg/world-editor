@@ -10,7 +10,11 @@ This is the HYTOPIA World Editor, a 3D voxel building tool similar to Minecraft'
 
 ### Development and Testing
 - `bun start` or `bun dev` - Start development server (runs prebuild script first)
-- `bun test` - Run tests without watch mode
+- `bun test` - Run unit tests without watch mode (Jest/React Testing Library)
+- `bun run test:e2e` - Run end-to-end tests with Playwright
+- `bun run test:e2e:ui` - Run E2E tests with Playwright UI mode
+- `bun run test:e2e:headed` - Run E2E tests in headed mode (visible browser)
+- `bun run test:all` - Run both unit and E2E tests
 - `bun run build` - Build for production (runs prebuild script first)
 - `node scripts/generate-model-manifest.js` - Generate model manifest (runs automatically before start/build)
 
@@ -65,10 +69,17 @@ The project uses **Bun** as the package manager (not npm/yarn). Always use `bun 
 - **AI Features**: Texture generation and structure building assistance
 - **Performance Optimization**: Object pooling, chunk-based rendering, GPU detection
 
-### Testing
-- Tests are located in `src/__tests__/`
-- Uses React Testing Library and Jest
-- Test utilities include placement logic, collision detection, and UI components
+### Testing Architecture
+- **Unit Tests**: Located in `src/__tests__/` using Jest and React Testing Library
+  - Core functionality tests: `CoreFunctionality.test.js`, `WorldEditorIntegration.test.js`
+  - Component tests: `CollapsibleSection.test.tsx`, `UndoRedoManager.test.tsx`
+  - Utility tests: `placementUtils.test.js`, `TerrainMouseUtils.test.js`, `blobUtils.test.ts`
+  - Block placement and collision detection: `BlockPlacement.test.js`
+- **E2E Tests**: Located in `e2e/` using Playwright
+  - Tests run against real browser instances with full 3D rendering
+  - Configured for Chrome, Firefox, and Safari testing
+  - Includes tests for basic functionality, block placement, and selection
+  - Extended timeouts (60s) for 3D app initialization
 
 ### File Organization
 - **src/js/** - Main TypeScript/JavaScript logic
@@ -95,4 +106,26 @@ The system can import Minecraft worlds through NBT parsing and block mapping. Co
 - Structure building assistance
 - Block and entity recommendations
 
-When working with this codebase, prefer editing existing components over creating new ones, and ensure any database operations use the DatabaseManager for consistency.
+## Development Guidelines
+
+### Component Development
+- Prefer editing existing components over creating new ones
+- Follow existing patterns for Three.js integration via React Three Fiber
+- Use existing UI components from the Adobe React Spectrum library when available
+
+### Database Operations
+- All database operations must use the DatabaseManager for consistency
+- IndexedDB stores: TERRAIN, CUSTOM_BLOCKS, SETTINGS, UNDO, REDO
+- Custom blocks include texture data as data URLs
+
+### Testing Requirements
+- Run unit tests (`bun test`) for logic and component changes
+- Run E2E tests (`bun run test:e2e`) for UI and interaction changes
+- E2E tests require the dev server to be running (handled automatically)
+- Use extended timeouts for 3D rendering operations
+
+### Performance Guidelines
+- Leverage existing object pooling for frequently created objects
+- Use chunk-based rendering patterns for world data
+- Implement spatial hash grids for efficient collision detection
+- Consider GPU detection for rendering optimizations

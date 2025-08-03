@@ -13,6 +13,8 @@ import BlockMaterial from "./blocks/BlockMaterial"; // Add this import
 import BlockTextureAtlas from "./blocks/BlockTextureAtlas";
 import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
 import { cameraManager } from "./Camera";
+import PerformanceProfiler from "./utils/PerformanceProfiler";
+import backgroundLoadingManager from "./managers/BackgroundLoadingManager";
 import {
     clearChunks,
     getChunkSystem,
@@ -739,7 +741,12 @@ function TerrainBuilder(
     };
     const handleMouseDown = useCallback(
         (e) => {
-            console.log("handleMouseDown");
+            // Block terrain interaction during background loading
+            if (backgroundLoadingManager.isTerrainInteractionBlocked()) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
 
             // Pointer-lock handling: first click should engage lock rather than place
             if (
@@ -1279,6 +1286,13 @@ function TerrainBuilder(
     };
     const handleMouseUp = useCallback(
         (e) => {
+            // Block terrain interaction during background loading
+            if (backgroundLoadingManager.isTerrainInteractionBlocked()) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
             handleTerrainMouseUp(
                 e,
                 toolManagerRef,
@@ -1594,30 +1608,73 @@ function TerrainBuilder(
                     handleCameraMove();
                 });
             }
-            const loader = new THREE.CubeTextureLoader();
-            loader.setPath("./assets/skyboxes/partly-cloudy/");
-            const textureCube = loader.load([
-                "+x.png",
-                "-x.png",
-                "+y.png",
-                "-y.png",
-                "+z.png",
-                "-z.png",
-            ]);
+            // Load skybox asynchronously to avoid blocking
+            setTimeout(() => {
+                const loader = new THREE.CubeTextureLoader();
+                loader.setPath("./assets/skyboxes/partly-cloudy/");
+                const textureCube = loader.load([
+                    "+x.png",
+                    "-x.png",
+                    "+y.png",
+                    "-y.png",
+                    "+z.png",
+                    "-z.png",
+                ]);
+                if (scene) {
+                    scene.background = textureCube;
+                }
+            }, 50);
+            // Initialize chunk system progressively with status updates
             if (scene) {
-                scene.background = textureCube;
-            }
-            if (scene) {
-                initChunkSystem(scene, {
-                    viewDistance: getViewDistance(),
-                    viewDistanceEnabled: true,
-                }).catch((error) => {
-                    console.error("Error initializing chunk system:", error);
-                });
+                setTimeout(async () => {
+                    try {
+                        // Initializing 3D rendering system
+                        
+                        // Show background loading for chunk system init
+                        window.dispatchEvent(new CustomEvent('backgroundLoadingStart', {
+                            detail: {
+                                message: '⚙️ Initializing 3D engine...',
+                                progress: null
+                            }
+                        }));
+                        
+                        // Profile chunk system initialization
+                        PerformanceProfiler.start('chunk-system-init');
+                        
+                        await initChunkSystem(scene, {
+                            viewDistance: getViewDistance(),
+                            viewDistanceEnabled: true,
+                        });
+                        
+                        PerformanceProfiler.end('chunk-system-init');
+                        
+                        // Note: Don't hide background loading here - let chunk processing take over
+                        
+                    } catch (error) {
+                        console.error("Error initializing chunk system:", error);
+                    };
+                }, 100);
             }
             meshesInitializedRef.current = true;
-            DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
-                .then((customBlocksData) => {
+            
+            // Show page immediately - don't wait for database operations
+            loadingManager.hideLoading();
+            setPageIsLoaded(true);
+            
+            // Load everything in background without blocking page load
+            const loadDataInBackground = async () => {
+                try {
+                    // Loading custom blocks and terrain in background
+                    
+                    // Load custom blocks in parallel with terrain
+                    const [customBlocksData, savedTerrain] = await Promise.all([
+                        DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks").catch(() => null),
+                        DatabaseManager.getData(STORES.TERRAIN, "current").catch(() => null)
+                    ]);
+                    
+                    if (!mounted) return;
+                    
+                    // Process custom blocks if any
                     if (customBlocksData && customBlocksData.length > 0) {
                         for (const block of customBlocksData) {
                             processCustomBlock(block);
@@ -1628,86 +1685,142 @@ function TerrainBuilder(
                             })
                         );
                     }
-                    console.log("Loading terrain...");
-                    return DatabaseManager.getData(STORES.TERRAIN, "current");
-                })
-                .then((savedTerrain) => {
-                    if (!mounted) return;
+                    
+                    // Handle terrain data
                     if (savedTerrain) {
                         terrainRef.current = savedTerrain;
-                        totalBlocksRef.current = Object.keys(
-                            terrainRef.current
-                        ).length;
+                        totalBlocksRef.current = Object.keys(terrainRef.current).length;
                         pendingChangesRef.current = {
                             terrain: { added: {}, removed: {} },
                             environment: { added: [], removed: [] },
                         };
-                        loadingManager.showLoading(
-                            "Preloading textures for all blocks..."
-                        );
+                        
+                        console.log(`Loaded terrain with ${totalBlocksRef.current} blocks`);
+                        
+                        // Load and render terrain progressively with performance monitoring
                         setTimeout(async () => {
                             try {
+                                const blockCount = Object.keys(terrainRef.current).length;
+                                // Loading world with blocks
+                                
+                                if (blockCount > 0) {
+                                    loadingManager.showLoading(`Loading world (${blockCount} blocks)...`);
+                                }
+                                
+                                PerformanceProfiler.start('world-loading-total');
+                                
+                                // Step 1: Analyze used blocks (fast)
                                 const usedBlockIds = new Set();
                                 Object.values(terrainRef.current).forEach(
                                     (blockId) => {
                                         usedBlockIds.add(parseInt(blockId));
                                     }
                                 );
+                                
+                                // Step 2: Mark essential blocks (fast)
                                 usedBlockIds.forEach((blockId) => {
-                                    if (
-                                        BlockTypeRegistry &&
-                                        BlockTypeRegistry.instance
-                                    ) {
-                                        BlockTypeRegistry.instance.markBlockTypeAsEssential(
-                                            blockId
-                                        );
+                                    if (BlockTypeRegistry?.instance) {
+                                        BlockTypeRegistry.instance.markBlockTypeAsEssential(blockId);
                                     }
                                 });
-                                if (
-                                    BlockTypeRegistry &&
-                                    BlockTypeRegistry.instance
-                                ) {
-                                    await BlockTypeRegistry.instance.preload();
+                                
+                                // Step 3: Load essential textures with progress
+                                if (BlockTypeRegistry?.instance && usedBlockIds.size > 0) {
+                                    loadingManager.showLoading(`Loading textures (${usedBlockIds.size} types)...`);
+                                    PerformanceProfiler.start('texture-loading');
+                                    await BlockTypeRegistry.instance.preloadEssential();
+                                    PerformanceProfiler.end('texture-loading');
                                 }
+                                
+                                // Step 4: Build texture atlas with progress
+                                loadingManager.showLoading("Building texture atlas...");
+                                PerformanceProfiler.start('texture-atlas-build');
                                 await rebuildTextureAtlas();
-                                updateTerrainChunks(
-                                    terrainRef.current,
-                                    true,
-                                    environmentBuilderRef
-                                );
-                                processChunkRenderQueue();
+                                PerformanceProfiler.end('texture-atlas-build');
+                                
+                                // Step 5: Generate 3D meshes in chunks to avoid blocking
+                                loadingManager.showLoading("Generating 3D world...");
+                                PerformanceProfiler.start('3d-mesh-generation');
+                                
+                                // Use requestAnimationFrame to prevent blocking
+                                await new Promise(resolve => {
+                                    requestAnimationFrame(() => {
+                                        updateTerrainChunks(terrainRef.current, true, environmentBuilderRef);
+                                        processChunkRenderQueue();
+                                        resolve();
+                                    });
+                                });
+                                
+                                PerformanceProfiler.end('3d-mesh-generation');
+                                
                                 window.fullTerrainDataRef = terrainRef.current;
+                                
+                                PerformanceProfiler.end('world-loading-total');
+                                console.log(`✅ World loaded successfully`);
+                                
+                                // Show performance report for debugging
+                                setTimeout(() => {
+                                    if (window.location.search.includes('debug=true')) {
+                                        PerformanceProfiler.report();
+                                    }
+                                }, 100);
+                                
                                 loadingManager.hideLoading();
-                                setPageIsLoaded(true);
+                                
+                                // Step 6: Load remaining textures in background (non-blocking)
+                                if (BlockTypeRegistry?.instance) {
+                                    setTimeout(() => {
+                                        // Loading remaining textures in background
+                                        
+                                        // Show background indicator for texture loading (after a delay to let chunk processing complete)
+                                        setTimeout(() => {
+                                            window.dispatchEvent(new CustomEvent('backgroundLoadingStart', {
+                                                detail: {
+                                                    message: '🎨 Loading high-quality textures...',
+                                                    progress: null // No specific progress for texture loading
+                                                }
+                                            }));
+                                        }, 1000);
+                                        
+                                        BlockTypeRegistry.instance.preloadRemaining().then(() => {
+                                            return rebuildTextureAtlas();
+                                        }).then(() => {
+                                            console.log("🎨 All textures loaded and atlas updated");
+                                            window.dispatchEvent(new CustomEvent('backgroundLoadingComplete'));
+                                        }).catch(error => {
+                                            console.warn("Background texture loading failed:", error);
+                                            window.dispatchEvent(new CustomEvent('backgroundLoadingComplete'));
+                                        });
+                                    }, 500); // Give UI time to be responsive
+                                }
+                                
                             } catch (error) {
-                                console.error(
-                                    "Error preloading textures:",
-                                    error
-                                );
-                                console.warn(
-                                    "[Load] Error during texture preload, proceeding with terrain update."
-                                ); // <<< Add log
+                                console.error("Error loading world:", error);
                                 updateTerrainChunks(terrainRef.current);
                                 loadingManager.hideLoading();
-                                setPageIsLoaded(true);
                             }
                         }, 100);
                     } else {
+                        // Empty terrain
                         terrainRef.current = {};
                         totalBlocksRef.current = 0;
+                        pendingChangesRef.current = {
+                            terrain: { added: {}, removed: {} },
+                            environment: { added: [], removed: [] },
+                        };
+                        console.log("No saved terrain - starting with empty world");
                     }
-                    loadingManager.hideLoading();
-                    setPageIsLoaded(true);
-                })
-                .catch((error) => {
-                    console.error(
-                        "Error loading terrain or custom blocks:",
-                        error
-                    );
-                    meshesInitializedRef.current = true;
-                    loadingManager.hideLoading();
-                    setPageIsLoaded(true);
-                });
+                    
+                } catch (error) {
+                    console.error("Error loading background data:", error);
+                    // Ensure we have fallback empty terrain
+                    terrainRef.current = {};
+                    totalBlocksRef.current = 0;
+                }
+            };
+            
+            // Start background loading
+            loadDataInBackground();
         }
 
         const terrainBuilderProps = {
@@ -2605,6 +2718,36 @@ function TerrainBuilder(
             canvas.removeEventListener("contextmenu", handleContextMenu);
         };
     }, [gl, handleMouseDown, handleMouseUp, cameraManager]); // Add dependencies
+    // Handle terrain interaction blocking visual feedback
+    useEffect(() => {
+        const handleTerrainInteractionStateChange = (event) => {
+            const { blocked } = event.detail;
+            const canvas = gl?.domElement;
+            
+            if (canvas) {
+                if (blocked) {
+                    canvas.classList.add('terrain-interaction-blocked');
+                    document.body.classList.add('terrain-interaction-blocked');
+                } else {
+                    canvas.classList.remove('terrain-interaction-blocked');
+                    document.body.classList.remove('terrain-interaction-blocked');
+                }
+            }
+        };
+
+        window.addEventListener('terrainInteractionStateChanged', handleTerrainInteractionStateChange);
+        
+        return () => {
+            window.removeEventListener('terrainInteractionStateChanged', handleTerrainInteractionStateChange);
+            // Clean up classes on unmount
+            const canvas = gl?.domElement;
+            if (canvas) {
+                canvas.classList.remove('terrain-interaction-blocked');
+            }
+            document.body.classList.remove('terrain-interaction-blocked');
+        };
+    }, [gl]);
+
     useEffect(() => {
         optimizeRenderer(gl);
         cameraManager.initialize(threeCamera, orbitControlsRef.current);

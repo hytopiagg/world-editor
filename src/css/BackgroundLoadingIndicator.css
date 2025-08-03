@@ -1,0 +1,129 @@
+/* Background loading indicator - matches ToolBar styling */
+.background-loading-indicator {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: rgba(13, 13, 13, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 12px;
+    padding: 8px 16px;
+    color: #F1F1F1;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    animation: slideInFromTop 0.3s ease-out;
+    max-width: 400px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease-out;
+}
+
+.background-loading-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.background-loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(241, 241, 241, 0.3);
+    border-radius: 50%;
+    border-top-color: #4caf50;
+    animation: spin 1s linear infinite;
+    flex-shrink: 0;
+}
+
+.background-loading-message {
+    flex: 1;
+    font-weight: 500;
+    line-height: 1.2;
+    color: #F1F1F1;
+    transition: opacity 0.2s ease-out;
+}
+
+.background-loading-progress {
+    width: 60px;
+    height: 4px;
+    background: rgba(241, 241, 241, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: all 0.3s ease-out;
+}
+
+.background-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50, #66bb6a);
+    border-radius: 2px;
+    transition: width 0.3s ease-out;
+    min-width: 4px;
+}
+
+/* Animations */
+@keyframes slideInFromTop {
+    from {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Hover effect for better UX */
+.background-loading-indicator:hover {
+    background: rgba(13, 13, 13, 0.85);
+    transform: translateX(-50%) scale(1.02);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .background-loading-indicator {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        transform: none;
+        max-width: none;
+        font-size: 13px;
+    }
+    
+    .background-loading-content {
+        gap: 10px;
+    }
+    
+    .background-loading-progress {
+        width: 50px;
+    }
+    
+    .background-loading-indicator:hover {
+        transform: scale(1.02);
+    }
+}
+
+/* Terrain interaction blocked state */
+.terrain-interaction-blocked {
+    cursor: not-allowed !important;
+}
+
+.terrain-interaction-blocked * {
+    cursor: not-allowed !important;
+}
+
+/* Override any other cursor styles when blocked */
+canvas.terrain-interaction-blocked {
+    cursor: not-allowed !important;
+    pointer-events: auto; /* Keep pointer events to show not-allowed cursor */
+}
