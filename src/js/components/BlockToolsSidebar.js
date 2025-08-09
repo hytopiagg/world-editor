@@ -642,6 +642,152 @@ const BlockToolsSidebar = ({
         e.currentTarget.classList.remove("drag-over");
         const files = Array.from(e.dataTransfer.files);
         if (activeTab === "blocks") {
+            // Helper: convert Blob to data URL
+            const blobToDataUrl = (blob) =>
+                new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+
+            // First, handle ZIP files that may contain multi-texture blocks
+            const zipFiles = files.filter(
+                (file) =>
+                    file.name.toLowerCase().endsWith(".zip") ||
+                    file.type === "application/zip" ||
+                    file.type === "application/x-zip-compressed"
+            );
+
+            if (zipFiles.length > 0) {
+                try {
+                    const allBlocksFromZips = [];
+                    for (const zipFile of zipFiles) {
+                        try {
+                            const zip = await JSZip.loadAsync(zipFile);
+                            // Group face files by their immediate parent directory
+                            /** @type {Map<string, Record<string, import('jszip').JSZipObject>>} */
+                            const dirToFacesMap = new Map();
+                            const faceRegex = /(^|\/)\s*([+\-][xyz])\.png$/i;
+                            zip.forEach((relativePath, zipEntry) => {
+                                if (zipEntry.dir) return;
+                                const match = relativePath.match(faceRegex);
+                                if (!match) return;
+                                const faceKey = match[2].toLowerCase(); // +x, -y, etc
+                                // Determine the directory containing the face file
+                                const lastSlash = relativePath.lastIndexOf("/");
+                                const dirPath =
+                                    lastSlash >= 0
+                                        ? relativePath.substring(0, lastSlash)
+                                        : "";
+                                if (!dirToFacesMap.has(dirPath))
+                                    dirToFacesMap.set(dirPath, {});
+                                dirToFacesMap.get(dirPath)[faceKey] = zipEntry;
+                            });
+
+                            // Build blocks for any directory that contains all six faces
+                            const requiredFaces = [
+                                "+x",
+                                "-x",
+                                "+y",
+                                "-y",
+                                "+z",
+                                "-z",
+                            ];
+                            for (const [
+                                dirPath,
+                                faces,
+                            ] of dirToFacesMap.entries()) {
+                                const hasAllFaces = requiredFaces.every(
+                                    (f) => !!faces[f]
+                                );
+                                if (!hasAllFaces) continue;
+
+                                // Derive block name from the final folder name
+                                const parts = dirPath
+                                    .split("/")
+                                    .filter(Boolean);
+                                const folderName =
+                                    parts.length > 0
+                                        ? parts[parts.length - 1]
+                                        : "Untitled";
+
+                                // Read each face as data URL
+                                const sideTextures = {};
+                                for (const faceKey of requiredFaces) {
+                                    try {
+                                        let blob = await faces[faceKey].async(
+                                            "blob"
+                                        );
+                                        if (
+                                            !blob.type ||
+                                            blob.type ===
+                                                "application/octet-stream"
+                                        ) {
+                                            blob = new Blob([blob], {
+                                                type: "image/png",
+                                            });
+                                        }
+                                        sideTextures[faceKey] =
+                                            await blobToDataUrl(blob);
+                                    } catch (err) {
+                                        console.warn(
+                                            `Failed to read face ${faceKey} for ${folderName}`,
+                                            err
+                                        );
+                                    }
+                                }
+
+                                // Use +y as the primary texture (fallback to any available)
+                                const textureUri =
+                                    sideTextures["+y"] ||
+                                    sideTextures["-y"] ||
+                                    sideTextures["+x"] ||
+                                    sideTextures["-x"] ||
+                                    sideTextures["+z"] ||
+                                    sideTextures["-z"] ||
+                                    null;
+
+                                allBlocksFromZips.push({
+                                    // ID omitted so BlockTypesManager assigns next available (>=100)
+                                    name: folderName,
+                                    textureUri,
+                                    sideTextures,
+                                    isCustom: true,
+                                    isMultiTexture: true,
+                                });
+                            }
+                        } catch (zipErr) {
+                            console.error(
+                                "Error processing ZIP for multi-texture blocks:",
+                                zipErr
+                            );
+                        }
+                    }
+
+                    if (allBlocksFromZips.length > 0) {
+                        try {
+                            await batchProcessCustomBlocks(allBlocksFromZips);
+                            const updatedCustomBlocksFromZip =
+                                getCustomBlocks();
+                            await DatabaseManager.saveData(
+                                STORES.CUSTOM_BLOCKS,
+                                "blocks",
+                                updatedCustomBlocksFromZip
+                            );
+                            refreshBlockTools();
+                        } catch (saveZipErr) {
+                            console.error(
+                                "Error saving custom blocks from ZIP:",
+                                saveZipErr
+                            );
+                        }
+                    }
+                } catch (outerZipErr) {
+                    console.error("ZIP handling error:", outerZipErr);
+                }
+            }
+
             const imageFiles = files.filter((file) =>
                 file.type.startsWith("image/")
             );
@@ -1268,7 +1414,7 @@ const BlockToolsSidebar = ({
                             multiple
                             accept={
                                 activeTab === "blocks"
-                                    ? "image/*"
+                                    ? "image/*,.zip,application/zip,application/x-zip-compressed"
                                     : activeTab === "models"
                                     ? ".gltf,.glb"
                                     : ""
@@ -1295,7 +1441,7 @@ const BlockToolsSidebar = ({
                                 </div>
                                 <div className="drop-zone-text">
                                     {activeTab === "blocks"
-                                        ? "Click or drag images to upload new blocks"
+                                        ? "Click or drag images or .zip to upload new blocks (supports multi-texture +x/-x/+y/-y/+z/-z)"
                                         : activeTab === "models"
                                         ? "Click or drag .gltf files to add custom models"
                                         : ""}
