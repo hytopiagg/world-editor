@@ -470,7 +470,7 @@ function App() {
                     hasError = true; continue;
                 }
             }
-            const fileName = `${key.replace('+', 'positive_').replace('-', 'negative_')}.png`;
+            const fileName = `${key}.png`;
             zip.file(fileName, blob);
         }
         if (hasError) alert("Warning: Some textures missing/invalid; placeholders used or skipped. Check console.");
