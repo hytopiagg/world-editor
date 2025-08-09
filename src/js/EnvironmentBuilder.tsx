@@ -139,15 +139,8 @@ const EnvironmentBuilder = (
 
             // Rebuild visible instances if there were changes for this model OR if there are recently placed instances
             if (hasChanges || hasRecentlyPlacedInstances) {
-                const reason = hasChanges ? `${visibilityChangeCount} visibility changes` : 'recently placed instances';
-                console.log(`[DistanceCulling] Rebuilding ${instances.length} instances for ${modelUrl.split('/').pop()} (${reason})`);
                 rebuildVisibleInstances(modelUrl, cameraPos);
             }
-        }
-
-        // Only log summary if there were significant changes
-        if (hasAnyChanges && (totalVisible + totalHidden) > 0) {
-            console.log(`[DistanceCulling] Updated visibility: ${totalVisible} visible, ${totalHidden} hidden (view distance: ${viewDistance})`);
         }
     };
 
