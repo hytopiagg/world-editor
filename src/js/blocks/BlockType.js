@@ -593,10 +593,6 @@ class BlockType {
             return false;
         }
         try {
-            console.log(
-                `Applying custom texture data URI for block ID ${this._id}`
-            );
-
             const faces = ["top", "bottom", "left", "right", "front", "back"];
             faces.forEach((face) => {
                 this._textureUris[face] = dataUri;
