@@ -71,6 +71,7 @@ const EnvironmentBuilder = (
         onTotalObjectsChange,
         placementSize = "single",
         placementSettings,
+        onPlacementSettingsChange,
         undoRedoManager,
         terrainBuilderRef,
         cameraPosition,
@@ -90,6 +91,8 @@ const EnvironmentBuilder = (
     const placementSettingsRef = useRef(placementSettings);
     const isUndoRedoOperation = useRef(false);
     const recentlyPlacedInstances = useRef(new Set()); // Track recently placed instances to bypass throttling
+    // Manual rotation steps applied via keyboard (R). Each step is 90 degrees (PI/2 radians)
+    const manualRotationStepsRef = useRef(0);
 
     const [totalEnvironmentObjects, setTotalEnvironmentObjects] = useState(0);
     const lastCullingUpdate = useRef(0);
@@ -746,7 +749,14 @@ const EnvironmentBuilder = (
             lastPreviewTransform.current.rotation.copy(transform.rotation);
 
             previewModel.scale.copy(lastPreviewTransform.current.scale);
-            previewModel.rotation.copy(lastPreviewTransform.current.rotation);
+            // Use placementSettings rotation as the authoritative yaw (in degrees)
+            const effectiveYawDeg = (placementSettingsRef.current?.rotation ?? 0) % 360;
+            const effectiveYawRad = (effectiveYawDeg * Math.PI) / 180;
+            previewModel.rotation.set(
+                lastPreviewTransform.current.rotation.x,
+                effectiveYawRad,
+                lastPreviewTransform.current.rotation.z
+            );
 
             if (position) {
                 const offsetPosition = getVector3().copy(position).add(positionOffset.current);
@@ -1045,6 +1055,7 @@ const EnvironmentBuilder = (
         const scaleValue = settings.randomScale
             ? getRandomValue(settings.minScale, settings.maxScale)
             : settings.scale;
+        // Base rotation in degrees from settings; R-key adds 90° steps on top elsewhere
         const rotationDegrees = settings.randomRotation
             ? getRandomValue(settings.minRotation, settings.maxRotation)
             : settings.rotation;
@@ -1259,7 +1270,12 @@ const EnvironmentBuilder = (
             );
             const matrix = getMatrix4();
             const quaternion = getQuaternion();
-            quaternion.setFromEuler(transform.rotation);
+            // Apply manual 90° steps on top of current placement settings
+            const rotationWithOffset = getEuler().copy(transform.rotation);
+            // Authoritative yaw from placementSettings.rotation
+            const yawDegForPlacement = (placementSettingsRef.current?.rotation ?? 0) % 360;
+            rotationWithOffset.y = (yawDegForPlacement * Math.PI) / 180;
+            quaternion.setFromEuler(rotationWithOffset);
             matrix.compose(position, quaternion, transform.scale);
 
             let placementSuccessful = true;
@@ -1274,7 +1290,7 @@ const EnvironmentBuilder = (
             if (placementSuccessful) {
                 instancedData.instances.set(instanceId, {
                     position: getVector3().copy(position),
-                    rotation: getEuler().copy(transform.rotation),
+                    rotation: getEuler().copy(rotationWithOffset),
                     scale: getVector3().copy(transform.scale),
                     matrix: getMatrix4().copy(matrix),
                     isVisible: true,
@@ -1291,9 +1307,9 @@ const EnvironmentBuilder = (
                     instanceId,
                     position: { x: position.x, y: position.y, z: position.z },
                     rotation: {
-                        x: transform.rotation.x,
-                        y: transform.rotation.y,
-                        z: transform.rotation.z,
+                        x: rotationWithOffset.x,
+                        y: rotationWithOffset.y,
+                        z: rotationWithOffset.z,
                     },
                     scale: {
                         x: transform.scale.x,
@@ -1318,6 +1334,7 @@ const EnvironmentBuilder = (
                 releaseMatrix4(matrix);
                 releaseVector3(transform.scale);
                 releaseEuler(transform.rotation);
+                releaseEuler(rotationWithOffset);
             } else {
                 console.warn(`Placement failed for instanceId ${instanceId} at position ${JSON.stringify(placementPosition)} (likely due to capacity limit)`);
                 // Release temporary objects if placement failed
@@ -1326,6 +1343,7 @@ const EnvironmentBuilder = (
                 releaseMatrix4(matrix);
                 releaseVector3(transform.scale);
                 releaseEuler(transform.rotation);
+                releaseEuler(rotationWithOffset);
             }
         });
 
@@ -1648,7 +1666,12 @@ const EnvironmentBuilder = (
             const transform = getPlacementTransform();
 
             placeholderMeshRef.current.scale.copy(transform.scale);
-            placeholderMeshRef.current.rotation.copy(transform.rotation);
+            const yawDeg = (placementSettingsRef.current?.rotation ?? 0) % 360;
+            placeholderMeshRef.current.rotation.set(
+                transform.rotation.x,
+                (yawDeg * Math.PI) / 180,
+                transform.rotation.z
+            );
         }
     }, [placementSettings]);
 
@@ -1671,11 +1694,53 @@ const EnvironmentBuilder = (
         }
     }, [currentBlockType?.id, currentBlockType?.yShift]);
 
+    // Reset manual rotation when switching models
+    useEffect(() => {
+        manualRotationStepsRef.current = 0;
+    }, [currentBlockType?.id]);
+
     useEffect(() => {
         if (cameraPosition) {
             throttledUpdateDistanceCulling(cameraPosition);
         }
     }, [cameraPosition]);
+
+    // Keyboard handler for rotating environment preview (R key)
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            // Ignore when typing in inputs or contenteditable
+            const target = event.target as HTMLElement | null;
+            if (target) {
+                const tag = target.tagName?.toLowerCase();
+                const isTyping = tag === 'input' || tag === 'textarea' || (target as any).isContentEditable;
+                if (isTyping) return;
+            }
+
+            if (!currentBlockType?.isEnvironment) return;
+            if (!placeholderMeshRef.current) return;
+
+            if (event.key && event.key.toLowerCase() === 'r') {
+                const baseSettings = placementSettingsRef.current || ({} as any);
+                const baseRotation = baseSettings.rotation || 0;
+                const newRotation = (baseRotation + 90) % 360;
+                // Propagate to UI so ModelOptions reflects the change
+                if (typeof onPlacementSettingsChange === 'function') {
+                    onPlacementSettingsChange({ ...baseSettings, rotation: newRotation });
+                }
+                // Reset manual steps to avoid double counting
+                manualRotationStepsRef.current = 0;
+                // Update preview orientation immediately
+                try {
+                    // Only yaw changes
+                    const radians = (newRotation * Math.PI) / 180;
+                    placeholderMeshRef.current.rotation.y = radians;
+                    placeholderMeshRef.current.updateMatrixWorld(true);
+                } catch (_) { }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [currentBlockType?.isEnvironment, placeholderMeshRef.current, onPlacementSettingsChange]);
 
     // Debug function to monitor object pool statistics
     useEffect(() => {
