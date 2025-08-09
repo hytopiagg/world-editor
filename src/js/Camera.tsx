@@ -16,6 +16,7 @@ class CameraManager {
     onCameraAngleChange: ((angle: number) => void) | null;
     _eventsInitialized: boolean;
     _isInputDisabled: boolean;
+    modifierKeysActive: boolean;
     isPointerUnlockedMode: boolean;
     isPointerLocked: boolean;
     lastFrameTime: number;
@@ -35,6 +36,7 @@ class CameraManager {
         this.onCameraAngleChange = null;
         this._eventsInitialized = false;
         this._isInputDisabled = false;
+        this.modifierKeysActive = false;
         this.lastFrameTime = performance.now();
         this.normalizedFps = 120; // Default to 60 FPS
         this.isPointerUnlockedMode = false;
@@ -65,6 +67,7 @@ class CameraManager {
         this.onCameraAngleChange = null;
         this.isPointerUnlockedMode = true;
         this.isPointerLocked = false;
+        this.modifierKeysActive = false;
         this.lastFrameTime = performance.now();
         this.controls.enableZoom = false;
         this.controls.panSpeed = 10;
@@ -214,6 +217,7 @@ class CameraManager {
     }
     updateCameraMovement(deltaTime = 1) {
         if (!this.controls || !this.camera || this._isInputDisabled) return;
+        if (this.modifierKeysActive) return;
         let moved = false;
 
         // Apply deltaTime to make movement frame-rate independent
@@ -368,6 +372,18 @@ class CameraManager {
             "arrowleft",
             "arrowright",
         ];
+        // If a modifier key is pressed, mark state and suppress movement handling
+        if (event.key === "Meta" || event.key === "Control") {
+            this.modifierKeysActive = true;
+            return;
+        }
+        // When modifiers are held, ignore movement keys entirely
+        if ((event.metaKey || event.ctrlKey) && event.key) {
+            const keyLower = event.key.toLowerCase();
+            if (movementKeys.includes(keyLower)) {
+                return;
+            }
+        }
         if (
             isInput &&
             event.key &&
@@ -403,6 +419,9 @@ class CameraManager {
     };
     handleKeyUp = (event) => {
         if (!event.key) return;
+        if (event.key === "Meta" || event.key === "Control") {
+            this.modifierKeysActive = false;
+        }
         this.keys.delete(event.key.toLowerCase());
     };
     cleanup() {
