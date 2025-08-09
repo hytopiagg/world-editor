@@ -17,7 +17,7 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
     const lastAppliedSkyboxRef = useRef<string | null>(null);
 
     // Hardcoding for now, could be dynamic later
-    const availableSkyboxes = ["partly-cloudy", "sunset", "night"];
+    const availableSkyboxes = ["partly-cloudy", "partly-cloudy-alt", "sunset", "night"];
 
     // Load saved skybox preference and set initial state
     useEffect(() => {
