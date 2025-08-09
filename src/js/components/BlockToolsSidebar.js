@@ -956,9 +956,9 @@ const BlockToolsSidebar = ({
                     width: isCompactMode ? "205px" : "295px",
                 }}
             >
-                <div className="tab-button-outer-wrapper w-full flex">
+                <div className="flex w-full tab-button-outer-wrapper">
                     <div
-                        className="tab-button-inner-wrapper flex w-full"
+                        className="flex w-full tab-button-inner-wrapper"
                         style={{ width: "100%" }}
                     >
                         {["blocks", "models", "components"].map(
@@ -1020,7 +1020,7 @@ const BlockToolsSidebar = ({
                         value={searchQuery}
                         onKeyDown={(e) => e.stopPropagation()}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full px-3 py-2 text-xs rounded-md bg-black/30 border border-white/20 text-white focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
+                        className="px-3 py-2 w-full text-xs text-white rounded-md border bg-black/30 border-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
                     />
                 </div>
                 {activeTab === "models" && (
@@ -1032,7 +1032,7 @@ const BlockToolsSidebar = ({
                                         onClick={() =>
                                             navigateCategories("left")
                                         }
-                                        className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all mr-2 cursor-pointer"
+                                        className="flex flex-shrink-0 justify-center items-center mr-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
                                         title="Previous categories"
                                     >
                                         <FaChevronLeft className="w-3 h-3" />
@@ -1089,7 +1089,7 @@ const BlockToolsSidebar = ({
                                             onClick={() =>
                                                 navigateCategories("right")
                                             }
-                                            className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all ml-2 cursor-pointer"
+                                            className="flex flex-shrink-0 justify-center items-center ml-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
                                             title="Next categories"
                                         >
                                             <FaChevronRight className="w-3 h-3" />
@@ -1123,7 +1123,7 @@ const BlockToolsSidebar = ({
                                     handleDragStart={handleDragStart}
                                 />
                             ))}
-                            <div className="block-tools-section-label custom-label-with-icon mt-2">
+                            <div className="mt-2 block-tools-section-label custom-label-with-icon">
                                 Custom Blocks (ID: 100-199)
                                 <button
                                     className="download-all-icon-button"
@@ -1176,7 +1176,7 @@ const BlockToolsSidebar = ({
                                         }}
                                     />
                                 ))}
-                                <div className="block-tools-section-label mt-2">
+                                <div className="mt-2 block-tools-section-label">
                                     Custom Models (ID: 300+)
                                 </div>
                                 {visibleCustomModels.map((envType) => (
@@ -1211,7 +1211,7 @@ const BlockToolsSidebar = ({
                             {visibleSchematics.map((entry) => (
                                 <div
                                     key={entry.id}
-                                    className="schematic-button bg-white/10 border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white"
+                                    className="border transition-all duration-150 schematic-button bg-white/10 border-white/0 hover:border-white/20 active:border-white"
                                     style={{
                                         width: isCompactMode
                                             ? "calc(50% - 6px)"
@@ -1261,7 +1261,7 @@ const BlockToolsSidebar = ({
                     ) : null}
                 </div>
                 {(activeTab === "blocks" || activeTab === "models") && (
-                    <div className="flex w-full px-3 mb-3">
+                    <div className="flex px-3 mb-3 w-full">
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -1305,9 +1305,9 @@ const BlockToolsSidebar = ({
                     </div>
                 )}
                 {activeTab === "blocks" && (
-                    <div className="flex px-3 w-full mb-3">
+                    <div className="flex px-3 mb-3 w-full">
                         <button
-                            className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"
+                            className="flex justify-center items-center p-2 w-full font-medium text-center text-black bg-white rounded-md border transition-all cursor-pointer hover:border-2 hover:border-black"
                             onClick={onOpenTextureModal}
                         >
                             Create Texture
