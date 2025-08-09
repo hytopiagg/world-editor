@@ -326,53 +326,62 @@ class Chunk {
 
                             let texCoords;
                             const isCustomBlock = blockType.id >= 100;
-                            if (isCustomBlock) {
+
+                            // For custom blocks, check if it's multi-texture
+                            if (isCustomBlock && blockType.isMultiSided) {
+                                // Multi-texture custom block - use the face-specific texture directly
+                                texCoords =
+                                    BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        actualTextureUri,
+                                        uv
+                                    );
+                            } else if (isCustomBlock) {
+                                // Single-texture custom block
+                                texCoords =
+                                    BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        actualTextureUri,
+                                        uv
+                                    );
+                            } else {
+                                // Non-custom block - use the block name for multi-sided lookup
+                                texCoords =
+                                    BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                        blockType.name,
+                                        blockFace,
+                                        uv
+                                    );
                             }
 
-                            if (!texCoords) {
-                                if (isCustomBlock) {
-                                    texCoords =
-                                        BlockTextureAtlas.instance.getMultiSidedTextureUV(
-                                            actualTextureUri, // Pass ID as string first
-                                            blockFace,
-                                            uv
-                                        );
-                                } else {
-                                    texCoords =
-                                        BlockTextureAtlas.instance.getMultiSidedTextureUV(
-                                            blockType.name, // Pass ID as string first
-                                            blockFace,
-                                            uv
-                                        );
-                                }
-                                if (!texCoords && actualTextureUri) {
-                                    texCoords =
-                                        BlockTextureAtlas.instance.getTextureUVCoordinateSync(
-                                            actualTextureUri,
-                                            uv
-                                        );
-                                }
-                                if (!texCoords) {
-                                    texCoords =
-                                        BlockTextureAtlas.instance.getTextureUVCoordinateSync(
-                                            "./assets/blocks/error.png",
-                                            uv
-                                        );
-                                    if (!texCoords) {
-                                        texCoords = [0, 0, 1, 1];
-                                    }
-                                }
-
-                                if (
-                                    texCoords[0] === 0 &&
-                                    texCoords[1] === 0 &&
-                                    actualTextureUri !==
-                                        "./assets/blocks/error.png"
-                                ) {
-                                    BlockTextureAtlas.instance.queueTextureForLoading(
-                                        actualTextureUri
+                            // Fallback to direct texture lookup if multi-sided failed
+                            if (!texCoords && actualTextureUri) {
+                                texCoords =
+                                    BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        actualTextureUri,
+                                        uv
                                     );
+                            }
+
+                            // Final fallback to error texture
+                            if (!texCoords) {
+                                texCoords =
+                                    BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        "./assets/blocks/error.png",
+                                        uv
+                                    );
+                                if (!texCoords) {
+                                    texCoords = [0, 0, 1, 1];
                                 }
+                            }
+
+                            // Queue for loading if we got default coordinates
+                            if (
+                                texCoords[0] === 0 &&
+                                texCoords[1] === 0 &&
+                                actualTextureUri !== "./assets/blocks/error.png"
+                            ) {
+                                BlockTextureAtlas.instance.queueTextureForLoading(
+                                    actualTextureUri
+                                );
                             }
 
                             meshUvs.push(texCoords[0], texCoords[1]);

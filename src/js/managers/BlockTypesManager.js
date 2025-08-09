@@ -141,21 +141,19 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         blockTypesArray.push(processedBlock);
     }
 
-    if (needsRegistryUpdate && finalTextureUri) {
+    if (needsRegistryUpdate) {
         try {
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
                 const registry = window.BlockTypeRegistry.instance;
-                if (registry.registerCustomTextureForBlockId) {
+
+                // Check if this is a multi-texture block
+                if (
+                    processedBlock.isMultiTexture &&
+                    processedBlock.sideTextures
+                ) {
+                    // For multi-texture blocks, we need to update the block type with all face textures
                     registry
-                        .registerCustomTextureForBlockId(
-                            processedBlock.id,
-                            finalTextureUri, // Use the final URI (could be data or error path)
-                            {
-                                name: processedBlock.name,
-                                updateMeshes: true,
-                                rebuildAtlas: !deferAtlasRebuild,
-                            }
-                        )
+                        .updateBlockType(processedBlock)
                         .then(() => {
                             const event = new CustomEvent(
                                 "custom-block-registered",
@@ -163,6 +161,7 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
                                     detail: {
                                         blockId: processedBlock.id,
                                         name: processedBlock.name,
+                                        isMultiTexture: true,
                                     },
                                 }
                             );
@@ -170,10 +169,42 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
                         })
                         .catch((error) => {
                             console.error(
-                                `Error registering custom block ${processedBlock.id} in BlockTypeRegistry:`,
+                                `Error registering multi-texture custom block ${processedBlock.id} in BlockTypeRegistry:`,
                                 error
                             );
                         });
+                } else if (finalTextureUri) {
+                    // For single-texture blocks, use the existing method
+                    if (registry.registerCustomTextureForBlockId) {
+                        registry
+                            .registerCustomTextureForBlockId(
+                                processedBlock.id,
+                                finalTextureUri, // Use the final URI (could be data or error path)
+                                {
+                                    name: processedBlock.name,
+                                    updateMeshes: true,
+                                    rebuildAtlas: !deferAtlasRebuild,
+                                }
+                            )
+                            .then(() => {
+                                const event = new CustomEvent(
+                                    "custom-block-registered",
+                                    {
+                                        detail: {
+                                            blockId: processedBlock.id,
+                                            name: processedBlock.name,
+                                        },
+                                    }
+                                );
+                                window.dispatchEvent(event);
+                            })
+                            .catch((error) => {
+                                console.error(
+                                    `Error registering custom block ${processedBlock.id} in BlockTypeRegistry:`,
+                                    error
+                                );
+                            });
+                    }
                 }
             }
         } catch (error) {
