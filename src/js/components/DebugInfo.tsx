@@ -40,9 +40,9 @@ const DebugInfo = ({
     };
 
     return (
-        <div className="w-full h-fit text-xs font-normal gap-y-1 flex flex-col"
+        <div className="w-full h-fit text-xs font-normal gap-y-1 flex flex-col text-[#F1F1F1]"
         >
-            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+            <div className="flex justify-between w-full text-right opacity-0 duration-150 fade-down"
                 style={{
                     animationDelay: "0.03s"
                 }}
@@ -62,7 +62,7 @@ const DebugInfo = ({
                     </b>
                 </span>
             </div>
-            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+            <div className="flex justify-between w-full text-right opacity-0 duration-150 fade-down"
                 style={{
                     animationDelay: "0.06s"
                 }}
@@ -72,7 +72,7 @@ const DebugInfo = ({
                     {`${Math.round(terrainBuilderRef?.current?.previewPositionRef?.x * 10) / 10}, ${Math.round(terrainBuilderRef?.current?.previewPositionRef?.y * 100) / 100}, ${Math.round(terrainBuilderRef?.current?.previewPositionRef?.z * 100) / 100}`}
                 </span>
             </div>
-            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+            <div className="flex justify-between w-full text-right opacity-0 duration-150 fade-down"
                 style={{
                     animationDelay: "0.09s"
                 }}
@@ -82,7 +82,7 @@ const DebugInfo = ({
                     {terrainBuilderRef?.current?.totalBlocksRef || 0}
                 </span>
             </div>
-            <div className="flex justify-between w-full text-right fade-down opacity-0 duration-150"
+            <div className="flex justify-between w-full text-right opacity-0 duration-150 fade-down"
                 style={{
                     animationDelay: "0.12s"
                 }}

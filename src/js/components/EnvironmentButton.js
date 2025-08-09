@@ -319,7 +319,7 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
     return (
         <Tooltip text={envType.name}>
             <button
-                className={`environment-button border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white`}
+                className={`border transition-all duration-150 environment-button border-white/0 hover:border-white/20 active:border-white`}
                 style={{
                     border: isSelected ? "1px solid #ffffff" : "",
                 }}
@@ -362,26 +362,26 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                             />
                             {isLoading && (
                                 <div className="model-loading-spinner">
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white/80 rounded-full animate-spin"></div>
+                                    <div className="w-5 h-5 rounded-full border-2 animate-spin border-white/30 border-t-white/80"></div>
                                 </div>
                             )}
                         </>
                     ) : isLoading ? (
                         <div className="model-loading-spinner">
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white/80 rounded-full animate-spin"></div>
+                            <div className="w-5 h-5 rounded-full border-2 animate-spin border-white/30 border-t-white/80"></div>
                         </div>
                     ) : hasError ? (
-                        <div className="model-loading-failed text-white/60 flex items-center justify-center">
+                        <div className="flex justify-center items-center model-loading-failed text-white/60">
                             <FaTrash title="Preview unavailable" />
                         </div>
                     ) : (
                         <div className="model-loading-spinner">
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white/80 rounded-full animate-spin"></div>
+                            <div className="w-5 h-5 rounded-full border-2 animate-spin border-white/30 border-t-white/80"></div>
                         </div>
                     )}
                 </div>
                 <div className="environment-label-wrapper">
-                    <div className="environment-button-label">
+                    <div className="environment-button-label text-[#F1F1F1]">
                         {envType.name}
                     </div>
                 </div>

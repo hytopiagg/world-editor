@@ -306,7 +306,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                         animationDelay: "0.1s"
                     }}>
                         <span>Reset Camera</span>
-                        <button onClick={onResetCamera} className="flex items-center justify-center cursor-pointer hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-md transition-all">
+                        <button onClick={onResetCamera} className="flex justify-center items-center rounded-md border transition-all cursor-pointer hover:bg-white/15 border-white/10 hover:border-white/20">
                             <FaRedo />
                         </button>
                     </div>
@@ -314,12 +314,12 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                         animationDelay: "0.125s"
                     }}>
                         <span>Toggle Sound</span>
-                        <button onClick={toggleMute} className="flex items-center justify-center cursor-pointer hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-md transition-all">
+                        <button onClick={toggleMute} className="flex justify-center items-center rounded-md border transition-all cursor-pointer hover:bg-white/15 border-white/10 hover:border-white/20">
                             {isMuted ? <FaVolumeMute /> : <FaVolumeUp />}
                         </button>
                     </div>
                     <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{
+                        <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 cursor-pointer fade-down" style={{
                             animationDelay: "0.15s"
                         }}>
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">View Distance</label>
@@ -338,7 +338,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 min={32}
                                 max={256}
                                 step={16}
-                                className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"
@@ -359,7 +359,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
 
                     {/* Camera sensitivity visible only when pointer-lock capable (Glide mode) */}
                     {!isPointerUnlockedMode && (
-                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.17s" }}>
+                        <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 cursor-pointer fade-down" style={{ animationDelay: "0.17s" }}>
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Sensitivity</label>
                             <input
                                 type="number"
@@ -367,7 +367,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 onKeyDown={(e) => e.stopPropagation()}
                                 onChange={(e) => handleSensitivityChange(parseInt(e.target.value))}
                                 onBlur={(e) => handleSensitivityChange(Math.max(1, Math.min(10, parseInt(e.target.value))))}
-                                className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 min={1}
                                 max={10}
                                 step={1}
@@ -386,7 +386,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     )}
                     {/* Camera movement speed */}
                     <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-x-2 w-full cursor-pointer fade-down opacity-0 duration-150" style={{ animationDelay: "0.16s" }}>
+                        <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 cursor-pointer fade-down" style={{ animationDelay: "0.16s" }}>
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Move Speed</label>
                             <input
                                 type="number"
@@ -403,7 +403,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 min={0.05}
                                 max={maxMoveSpeed}
                                 step={0.05}
-                                className="w-[50px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin_button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="w-[50px] px-1 py-0.5 bg-white/10  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin_button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"

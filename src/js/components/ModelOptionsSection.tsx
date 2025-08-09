@@ -379,7 +379,7 @@ export default function ModelOptionsSection({
 
     return (
         <div className="flex flex-col gap-3">
-            <div className={"model-preview-container w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"}
+            <div className={"overflow-hidden relative w-full rounded-md opacity-0 duration-150 model-preview-container bg-black/20 fade-down"}
                 style={{
                     height: isCompactMode ? "10rem" : "12rem",
                     animationDelay: "0.05s"
@@ -389,11 +389,11 @@ export default function ModelOptionsSection({
                 {selectedModel.modelUrl ? (
                     <ModelPreview modelUrl={selectedModel.modelUrl} skybox={null} />
                 ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-white/50">No model preview available</div>
+                    <div className="flex justify-center items-center h-full text-xs text-white/50">No model preview available</div>
                 )}
             </div>
             <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                     <label className="text-xs text-[#F1F1F1]/80 w-10">ID:</label>
                     <input
                         type="text"
@@ -402,7 +402,7 @@ export default function ModelOptionsSection({
                         className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
                     />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                     <label className="text-xs text-[#F1F1F1]/80 w-10">Name:</label>
                     {selectedModel.isCustom && isEditing ? (
                         <input
@@ -438,7 +438,7 @@ export default function ModelOptionsSection({
                                 className="p-1.5 text-xs border border-white/10 hover:bg-white/20 rounded-md disabled:opacity-50"
                                 title="Save Name"
                             >
-                                {isSaving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white/90 rounded-full animate-spin" /> : <FaSave />}
+                                {isSaving ? <div className="w-4 h-4 rounded-full border-2 animate-spin border-white/30 border-t-white/90" /> : <FaSave />}
                             </button>
                         ) : (
                             <button
@@ -453,7 +453,7 @@ export default function ModelOptionsSection({
                 </div>
 
                 <div className="flex flex-col gap-1 mt-3">
-                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.05s" }}>
+                    <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.05s" }}>
                         <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer">
                             <span>Randomize Scale</span>
                             <input
@@ -466,7 +466,7 @@ export default function ModelOptionsSection({
                         </label>
 
                         {settings.randomScale && (
-                            <div className="flex items-center gap-x-2 w-full mt-1">
+                            <div className="flex gap-x-2 items-center mt-1 w-full">
                                 <span className="text-xs text-[#F1F1F1]/80">Range:</span>
                                 <input
                                     type="number"
@@ -482,7 +482,7 @@ export default function ModelOptionsSection({
                                             updateSettings({ minScale: 0.5 });
                                         }
                                     }}
-                                    className="w-16 px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    className="w-16 px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
                                 <span className="text-xs text-[#F1F1F1]/80">-</span>
                                 <input
@@ -499,13 +499,13 @@ export default function ModelOptionsSection({
                                             updateSettings({ maxScale: 1.5 });
                                         }
                                     }}
-                                    className="w-16 px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    className="w-16 px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
                             </div>
                         )}
                     </div>
 
-                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.075s" }}>
+                    <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.075s" }}>
                         <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer">
                             <span>Randomize Rotation</span>
                             <input
@@ -518,7 +518,7 @@ export default function ModelOptionsSection({
                         </label>
 
                         {settings.randomRotation && (
-                            <div className="flex items-center gap-x-2 w-full mt-1">
+                            <div className="flex gap-x-2 items-center mt-1 w-full">
                                 <span className="text-xs text-[#F1F1F1]/80">Range:</span>
                                 <input
                                     type="number"
@@ -534,7 +534,7 @@ export default function ModelOptionsSection({
                                             updateSettings({ minRotation: 0 });
                                         }
                                     }}
-                                    className="w-16 px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    className="w-16 px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
                                 <span className="text-xs text-[#F1F1F1]/80">-</span>
                                 <input
@@ -551,14 +551,14 @@ export default function ModelOptionsSection({
                                             updateSettings({ maxRotation: 360 });
                                         }
                                     }}
-                                    className="w-16 px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    className="w-16 px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
                             </div>
                         )}
                     </div>
 
-                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.1s" }}>
-                        <div className="flex items-center gap-x-2 w-full">
+                    <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.1s" }}>
+                        <div className="flex gap-x-2 items-center w-full">
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Scale</label>
                             <input
                                 type="number"
@@ -575,7 +575,7 @@ export default function ModelOptionsSection({
                                         updateSettings({ scale: 1.0 });
                                     }
                                 }}
-                                className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"
@@ -594,8 +594,8 @@ export default function ModelOptionsSection({
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.125s" }}>
-                        <div className="flex items-center gap-x-2 w-full">
+                    <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.125s" }}>
+                        <div className="flex gap-x-2 items-center w-full">
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Rotation</label>
                             <div className="flex items-center ml-auto">
                                 <input
@@ -613,7 +613,7 @@ export default function ModelOptionsSection({
                                             updateSettings({ rotation: 0 });
                                         }
                                     }}
-                                    className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                    className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
                             </div>
                             <input
@@ -634,7 +634,7 @@ export default function ModelOptionsSection({
                     </div>
 
                     {/* Add Collider Checkbox */}
-                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.15s" }}>
+                    <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.15s" }}>
                         <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer">
                             <span>Add Collider</span>
                             <input
@@ -647,7 +647,7 @@ export default function ModelOptionsSection({
                     </div>
 
                     {/* Snap to Grid Checkbox */}
-                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.175s" }}>
+                    <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.175s" }}>
                         <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer">
                             <span>Snap to Grid</span>
                             <input
@@ -660,8 +660,8 @@ export default function ModelOptionsSection({
                     </div>
 
                     {/* NEW: Vertical Offset Slider */}
-                    <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.2s" }}>
-                        <div className="flex items-center gap-x-2 w-full">
+                    <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.2s" }}>
+                        <div className="flex gap-x-2 items-center w-full">
                             <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Vertical Offset</label>
                             <input
                                 type="text"
@@ -671,7 +671,7 @@ export default function ModelOptionsSection({
                                 onChange={handleVerticalShiftInputChange}
                                 onBlur={handleVerticalShiftInputBlur}
                                 onKeyDown={handleVerticalShiftKeyDown}
-                                className="w-[34.5px] max-w-[34.5px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="w-[34.5px] max-w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"
@@ -690,7 +690,7 @@ export default function ModelOptionsSection({
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 mt-4">
+                <div className="flex gap-2 justify-end items-center mt-4">
                     {selectedModel.modelUrl && (
                         <button
                             onClick={handleDownload}

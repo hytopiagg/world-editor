@@ -73,7 +73,7 @@ export default function GroundToolOptionsSection({ groundTool, isCompactMode }: 
                         className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-red-500 checked:border-red-500"
                     />
                 </div>
-                <div className="flex items-center gap-x-2 w-full">
+                <div className="flex gap-x-2 items-center w-full">
                     <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Height</label>
                     <input
                         type="number"
@@ -81,7 +81,7 @@ export default function GroundToolOptionsSection({ groundTool, isCompactMode }: 
                         value={groundHeight}
                         onKeyDown={(e) => e.stopPropagation()}
                         onChange={e => updateHeight(parseInt(e.target.value))}
-                        className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                     {/* add slider */}
                     <input
@@ -93,7 +93,7 @@ export default function GroundToolOptionsSection({ groundTool, isCompactMode }: 
                         className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
                     />
                 </div>
-                <div className="flex items-center gap-x-2 w-full">
+                <div className="flex gap-x-2 items-center w-full">
                     <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Hollowness</label>
                     <input
                         type="number"
@@ -101,7 +101,7 @@ export default function GroundToolOptionsSection({ groundTool, isCompactMode }: 
                         value={edgeDepth}
                         onKeyDown={(e) => e.stopPropagation()}
                         onChange={e => updateEdge(parseInt(e.target.value))}
-                        className="w-[34.5px] px-1 py-0.5  border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                     <input
                         type="range"
@@ -116,11 +116,11 @@ export default function GroundToolOptionsSection({ groundTool, isCompactMode }: 
             {/* <div className="flex flex-col gap-1 text-[10px] text-[#F1F1F1]/80 mt-1 border-t border-white/10 pt-2"> */}
             <div className="flex flex-col gap-1 text-[10px] text-[#F1F1F1]/80 mt-1 bg-black/10 -mx-3 px-3 py-3 text-left">
                 <p className="text-xs text-[#F1F1F1]/80 font-bold">Keyboard Shortcuts</p>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">1</kbd>/<kbd className="bg-white/20 px-1 rounded">2</kbd> – Decrease/Increase height</div>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">3</kbd>/<kbd className="bg-white/20 px-1 rounded">4</kbd> – Adjust hollowness</div>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">5</kbd> – Toggle square/circle</div>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">Ctrl</kbd> – Toggle delete mode</div>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">Esc</kbd> – Cancel placement</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">1</kbd>/<kbd className="px-1 rounded bg-white/20">2</kbd> – Decrease/Increase height</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">3</kbd>/<kbd className="px-1 rounded bg-white/20">4</kbd> – Adjust hollowness</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">5</kbd> – Toggle square/circle</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">Ctrl</kbd> – Toggle delete mode</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">Esc</kbd> – Cancel placement</div>
             </div>
         </div>
     );

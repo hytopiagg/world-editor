@@ -47,7 +47,7 @@ export default function TerrainToolOptionsSection({
         <div className="flex flex-col gap-3">
             {/* Mode Selection */}
             <div className="flex flex-col gap-2">
-                <div className="flex gap-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.05s" }}>
+                <div className="flex gap-2 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.05s" }}>
                     {[
                         { key: "elevate", label: "Elevate" },
                         { key: "flatten", label: "Flatten" },
@@ -68,7 +68,7 @@ export default function TerrainToolOptionsSection({
             </div>
 
             {/* Radius Control */}
-            <div className="flex items-center gap-x-2 w-full fade-down opacity-0 duration-150" style={{ animationDelay: "0.075s" }}>
+            <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 fade-down" style={{ animationDelay: "0.075s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Radius</label>
                 <input
                     type="number"
@@ -77,7 +77,7 @@ export default function TerrainToolOptionsSection({
                     value={settings.radius}
                     onKeyDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateSetting("radius", parseInt(e.target.value))}
-                    className="w-[40px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-[40px] px-1 py-0.5 border bg-white/10 border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <input
                     type="range"
@@ -91,7 +91,7 @@ export default function TerrainToolOptionsSection({
             </div>
 
             {/* Y-Limit Control */}
-            <div className="flex items-center gap-x-2 w-full fade-down opacity-0 duration-150" style={{ animationDelay: "0.1s" }}>
+            <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 fade-down" style={{ animationDelay: "0.1s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Y-Limit</label>
                 <input
                     type="number"
@@ -100,7 +100,7 @@ export default function TerrainToolOptionsSection({
                     value={settings.yLimit}
                     onKeyDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateSetting("yLimit", parseInt(e.target.value))}
-                    className="w-[34.5px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-[34.5px] px-1 py-0.5 border bg-white/10 border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <input
                     type="range"
@@ -114,7 +114,7 @@ export default function TerrainToolOptionsSection({
             </div>
 
             {/* Elevation Rate Control */}
-            <div className="flex items-center gap-x-2 w-full fade-down opacity-0 duration-150" style={{ animationDelay: "0.125s" }}>
+            <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 fade-down" style={{ animationDelay: "0.125s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Rate</label>
                 <input
                     type="number"
@@ -124,7 +124,7 @@ export default function TerrainToolOptionsSection({
                     value={settings.elevationRate.toFixed(1)}
                     onKeyDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateSetting("elevationRate", parseFloat(e.target.value))}
-                    className="w-[40px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-[40px] px-1 py-0.5 border bg-white/10 border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <input
                     type="range"
@@ -138,7 +138,7 @@ export default function TerrainToolOptionsSection({
             </div>
 
             {/* Smoothing Control */}
-            <div className="flex items-center gap-x-2 w-full fade-down opacity-0 duration-150" style={{ animationDelay: "0.15s" }}>
+            <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 fade-down" style={{ animationDelay: "0.15s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Smooth</label>
                 <input
                     type="number"
@@ -148,7 +148,7 @@ export default function TerrainToolOptionsSection({
                     value={settings.smoothing.toFixed(1)}
                     onKeyDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateSetting("smoothing", parseFloat(e.target.value))}
-                    className="w-[40px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-[40px] px-1 py-0.5 border bg-white/10 border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <input
                     type="range"
@@ -162,7 +162,7 @@ export default function TerrainToolOptionsSection({
             </div>
 
             {/* Noise Scale Control */}
-            <div className="flex items-center gap-x-2 w-full fade-down opacity-0 duration-150" style={{ animationDelay: "0.175s" }}>
+            <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 fade-down" style={{ animationDelay: "0.175s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Noise</label>
                 <input
                     type="number"
@@ -172,7 +172,7 @@ export default function TerrainToolOptionsSection({
                     value={settings.noiseScale.toFixed(2)}
                     onKeyDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateSetting("noiseScale", parseFloat(e.target.value))}
-                    className="w-[45px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-[45px] px-1 py-0.5 border bg-white/10 border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <input
                     type="range"
@@ -186,7 +186,7 @@ export default function TerrainToolOptionsSection({
             </div>
 
             {/* Falloff Curve Selection */}
-            <div className="flex items-center gap-x-2 w-full fade-down opacity-0 duration-150" style={{ animationDelay: "0.2s" }}>
+            <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 fade-down" style={{ animationDelay: "0.2s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Falloff</label>
                 <select
                     value={settings.falloffCurve}
@@ -200,7 +200,7 @@ export default function TerrainToolOptionsSection({
             </div>
 
             {/* Quick Presets */}
-            <div className="flex flex-col gap-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.225s" }}>
+            <div className="flex flex-col gap-2 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.225s" }}>
                 <label className="text-xs text-[#F1F1F1]/80 text-left">Quick Presets</label>
                 <div
                     style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
@@ -230,9 +230,9 @@ export default function TerrainToolOptionsSection({
             {/* Keyboard Shortcuts Info */}
             <div className="flex flex-col gap-1 text-[10px] text-[#F1F1F1]/80 bg-black/10 -mx-3 px-3 py-3 text-left fade-down opacity-0 duration-150" style={{ animationDelay: "0.25s" }}>
                 <p className="text-xs text-[#F1F1F1]/80 font-bold">Keyboard Shortcuts</p>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">1</kbd>/<kbd className="bg-white/20 px-1 rounded">2</kbd> – Decrease/Increase radius</div>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">3</kbd>/<kbd className="bg-white/20 px-1 rounded">4</kbd> – Adjust elevation rate</div>
-                <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">Esc</kbd> – Cancel operation</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">1</kbd>/<kbd className="px-1 rounded bg-white/20">2</kbd> – Decrease/Increase radius</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">3</kbd>/<kbd className="px-1 rounded bg-white/20">4</kbd> – Adjust elevation rate</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">Esc</kbd> – Cancel operation</div>
             </div>
         </div>
     );
