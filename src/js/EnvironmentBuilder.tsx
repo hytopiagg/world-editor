@@ -139,15 +139,8 @@ const EnvironmentBuilder = (
 
             // Rebuild visible instances if there were changes for this model OR if there are recently placed instances
             if (hasChanges || hasRecentlyPlacedInstances) {
-                const reason = hasChanges ? `${visibilityChangeCount} visibility changes` : 'recently placed instances';
-                console.log(`[DistanceCulling] Rebuilding ${instances.length} instances for ${modelUrl.split('/').pop()} (${reason})`);
                 rebuildVisibleInstances(modelUrl, cameraPos);
             }
-        }
-
-        // Only log summary if there were significant changes
-        if (hasAnyChanges && (totalVisible + totalHidden) > 0) {
-            console.log(`[DistanceCulling] Updated visibility: ${totalVisible} visible, ${totalHidden} hidden (view distance: ${viewDistance})`);
         }
     };
 
@@ -1062,7 +1055,8 @@ const EnvironmentBuilder = (
         };
     };
 
-    const findCollidingInstances = (position, tolerance = 0.5) => {
+    const findCollidingInstances = (position, tolerance = 0.5, options: { verticalSnap?: boolean } = {}) => {
+        const { verticalSnap = true } = options;
         const collidingInstances = [];
 
         for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
@@ -1087,8 +1081,9 @@ const EnvironmentBuilder = (
 
             if (exactMatches.length > 0) {
                 collidingInstances.push(...exactMatches);
-            } else {
-                // If no exact matches, look for closest vertical match within 1 block
+            } else if (verticalSnap) {
+                // If no exact matches and vertical snapping is enabled (used for removals),
+                // look for closest vertical match within a small horizontal tolerance
                 const verticalCandidates = instances.filter(instance => {
                     const horizontalDistance = Math.sqrt(
                         Math.pow(instance.position.x - position.x, 2) +
@@ -1232,7 +1227,8 @@ const EnvironmentBuilder = (
 
 
         const validPlacementPositions = placementPositions.filter(placementPosition =>
-            findCollidingInstances(placementPosition).length === 0
+            // For placement, disable vertical snap so stacking above/below is allowed
+            findCollidingInstances(placementPosition, 0.5, { verticalSnap: false }).length === 0
         );
 
         if (validPlacementPositions.length === 0) {
