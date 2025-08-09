@@ -680,6 +680,7 @@ function App() {
                         placementSize={placementSize}
                         previewPositionFromAppJS={currentPreviewPosition}
                         placementSettings={placementSettings}
+                        onPlacementSettingsChange={setPlacementSettings}
                         undoRedoManager={undoRedoManagerRef}
                         terrainBuilderRef={terrainBuilderRef}
                         cameraPosition={cameraPosition}
