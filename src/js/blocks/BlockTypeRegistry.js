@@ -141,31 +141,103 @@ class BlockTypeRegistry {
     async updateBlockType(blockTypeData) {
         const blockType = this._blockTypes[blockTypeData.id];
         if (!blockType) {
-            await this.registerBlockType(
-                new BlockType({
+            // For multi-texture blocks, handle specially to avoid duplicate texture loading
+            if (blockTypeData.isMultiTexture && blockTypeData.sideTextures) {
+                // Pre-load all face textures
+                const textureAtlas = BlockTextureAtlas.instance;
+                for (const [faceKey, dataUri] of Object.entries(
+                    blockTypeData.sideTextures
+                )) {
+                    if (dataUri && dataUri.startsWith("data:image/")) {
+                        await textureAtlas.loadTextureFromDataURI(
+                            dataUri,
+                            dataUri,
+                            false
+                        );
+                    }
+                }
+
+                // Create block type with face textures
+                const newBlockType = new BlockType({
                     id: blockTypeData.id,
                     isLiquid: blockTypeData.isLiquid || false,
                     name: blockTypeData.name || "Unknown",
-                    textureUris: blockTypeData.isMultiTexture
-                        ? convertSideTexturesToFaceNames(
-                              blockTypeData.sideTextures
-                          )
-                        : BlockType.textureUriToTextureUris(
-                              blockTypeData.textureUri
-                          ),
-                })
-            );
+                    textureUris: convertSideTexturesToFaceNames(
+                        blockTypeData.sideTextures
+                    ),
+                });
+
+                // Register directly without triggering additional texture loading
+                this._blockTypes[blockTypeData.id] = newBlockType;
+
+                // Rebuild atlas once after all textures are loaded
+                await textureAtlas.rebuildTextureAtlas();
+
+                // Dispatch event
+                const event = new CustomEvent("blockTypeChanged", {
+                    detail: { blockTypeId: blockTypeData.id },
+                });
+                window.dispatchEvent(event);
+
+                return; // Exit early for multi-texture blocks
+            }
+
+            // Single texture block - use normal flow
+            const newBlockType = new BlockType({
+                id: blockTypeData.id,
+                isLiquid: blockTypeData.isLiquid || false,
+                name: blockTypeData.name || "Unknown",
+                textureUris: BlockType.textureUriToTextureUris(
+                    blockTypeData.textureUri
+                ),
+            });
+            await this.registerBlockType(newBlockType);
         } else {
+            // Updating existing block
             if (blockTypeData.name) {
                 blockType.setName(blockTypeData.name);
             }
+
             if (blockTypeData.textureUri || blockTypeData.sideTextures) {
-                const textureUris = blockTypeData.isMultiTexture
-                    ? convertSideTexturesToFaceNames(blockTypeData.sideTextures)
-                    : BlockType.textureUriToTextureUris(
-                          blockTypeData.textureUri
-                      );
-                await blockType.setTextureUris(textureUris);
+                // For multi-texture blocks, pre-load textures
+                if (
+                    blockTypeData.isMultiTexture &&
+                    blockTypeData.sideTextures
+                ) {
+                    const textureAtlas = BlockTextureAtlas.instance;
+                    for (const [faceKey, dataUri] of Object.entries(
+                        blockTypeData.sideTextures
+                    )) {
+                        if (dataUri && dataUri.startsWith("data:image/")) {
+                            await textureAtlas.loadTextureFromDataURI(
+                                dataUri,
+                                dataUri,
+                                false
+                            );
+                        }
+                    }
+
+                    // Set texture URIs on block type
+                    const textureUris = convertSideTexturesToFaceNames(
+                        blockTypeData.sideTextures
+                    );
+                    blockType._textureUris = textureUris; // Direct assignment to avoid triggering loads
+
+                    // Rebuild atlas once
+                    await textureAtlas.rebuildTextureAtlas();
+
+                    // Dispatch event
+                    const event = new CustomEvent("blockTypeChanged", {
+                        detail: { blockTypeId: blockTypeData.id },
+                    });
+                    window.dispatchEvent(event);
+                } else {
+                    // Single texture block
+                    const textureUris = BlockType.textureUriToTextureUris(
+                        blockTypeData.textureUri
+                    );
+                    await blockType.setTextureUris(textureUris);
+                }
             }
         }
     }

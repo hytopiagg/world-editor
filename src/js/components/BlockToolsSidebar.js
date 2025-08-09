@@ -642,6 +642,152 @@ const BlockToolsSidebar = ({
         e.currentTarget.classList.remove("drag-over");
         const files = Array.from(e.dataTransfer.files);
         if (activeTab === "blocks") {
+            // Helper: convert Blob to data URL
+            const blobToDataUrl = (blob) =>
+                new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+
+            // First, handle ZIP files that may contain multi-texture blocks
+            const zipFiles = files.filter(
+                (file) =>
+                    file.name.toLowerCase().endsWith(".zip") ||
+                    file.type === "application/zip" ||
+                    file.type === "application/x-zip-compressed"
+            );
+
+            if (zipFiles.length > 0) {
+                try {
+                    const allBlocksFromZips = [];
+                    for (const zipFile of zipFiles) {
+                        try {
+                            const zip = await JSZip.loadAsync(zipFile);
+                            // Group face files by their immediate parent directory
+                            /** @type {Map<string, Record<string, import('jszip').JSZipObject>>} */
+                            const dirToFacesMap = new Map();
+                            const faceRegex = /(^|\/)\s*([+\-][xyz])\.png$/i;
+                            zip.forEach((relativePath, zipEntry) => {
+                                if (zipEntry.dir) return;
+                                const match = relativePath.match(faceRegex);
+                                if (!match) return;
+                                const faceKey = match[2].toLowerCase(); // +x, -y, etc
+                                // Determine the directory containing the face file
+                                const lastSlash = relativePath.lastIndexOf("/");
+                                const dirPath =
+                                    lastSlash >= 0
+                                        ? relativePath.substring(0, lastSlash)
+                                        : "";
+                                if (!dirToFacesMap.has(dirPath))
+                                    dirToFacesMap.set(dirPath, {});
+                                dirToFacesMap.get(dirPath)[faceKey] = zipEntry;
+                            });
+
+                            // Build blocks for any directory that contains all six faces
+                            const requiredFaces = [
+                                "+x",
+                                "-x",
+                                "+y",
+                                "-y",
+                                "+z",
+                                "-z",
+                            ];
+                            for (const [
+                                dirPath,
+                                faces,
+                            ] of dirToFacesMap.entries()) {
+                                const hasAllFaces = requiredFaces.every(
+                                    (f) => !!faces[f]
+                                );
+                                if (!hasAllFaces) continue;
+
+                                // Derive block name from the final folder name
+                                const parts = dirPath
+                                    .split("/")
+                                    .filter(Boolean);
+                                const folderName =
+                                    parts.length > 0
+                                        ? parts[parts.length - 1]
+                                        : "Untitled";
+
+                                // Read each face as data URL
+                                const sideTextures = {};
+                                for (const faceKey of requiredFaces) {
+                                    try {
+                                        let blob = await faces[faceKey].async(
+                                            "blob"
+                                        );
+                                        if (
+                                            !blob.type ||
+                                            blob.type ===
+                                                "application/octet-stream"
+                                        ) {
+                                            blob = new Blob([blob], {
+                                                type: "image/png",
+                                            });
+                                        }
+                                        sideTextures[faceKey] =
+                                            await blobToDataUrl(blob);
+                                    } catch (err) {
+                                        console.warn(
+                                            `Failed to read face ${faceKey} for ${folderName}`,
+                                            err
+                                        );
+                                    }
+                                }
+
+                                // Use +y as the primary texture (fallback to any available)
+                                const textureUri =
+                                    sideTextures["+y"] ||
+                                    sideTextures["-y"] ||
+                                    sideTextures["+x"] ||
+                                    sideTextures["-x"] ||
+                                    sideTextures["+z"] ||
+                                    sideTextures["-z"] ||
+                                    null;
+
+                                allBlocksFromZips.push({
+                                    // ID omitted so BlockTypesManager assigns next available (>=100)
+                                    name: folderName,
+                                    textureUri,
+                                    sideTextures,
+                                    isCustom: true,
+                                    isMultiTexture: true,
+                                });
+                            }
+                        } catch (zipErr) {
+                            console.error(
+                                "Error processing ZIP for multi-texture blocks:",
+                                zipErr
+                            );
+                        }
+                    }
+
+                    if (allBlocksFromZips.length > 0) {
+                        try {
+                            await batchProcessCustomBlocks(allBlocksFromZips);
+                            const updatedCustomBlocksFromZip =
+                                getCustomBlocks();
+                            await DatabaseManager.saveData(
+                                STORES.CUSTOM_BLOCKS,
+                                "blocks",
+                                updatedCustomBlocksFromZip
+                            );
+                            refreshBlockTools();
+                        } catch (saveZipErr) {
+                            console.error(
+                                "Error saving custom blocks from ZIP:",
+                                saveZipErr
+                            );
+                        }
+                    }
+                } catch (outerZipErr) {
+                    console.error("ZIP handling error:", outerZipErr);
+                }
+            }
+
             const imageFiles = files.filter((file) =>
                 file.type.startsWith("image/")
             );
@@ -956,9 +1102,9 @@ const BlockToolsSidebar = ({
                     width: isCompactMode ? "205px" : "295px",
                 }}
             >
-                <div className="tab-button-outer-wrapper w-full flex">
+                <div className="flex w-full tab-button-outer-wrapper">
                     <div
-                        className="tab-button-inner-wrapper flex w-full"
+                        className="flex w-full tab-button-inner-wrapper"
                         style={{ width: "100%" }}
                     >
                         {["blocks", "models", "components"].map(
@@ -1020,7 +1166,7 @@ const BlockToolsSidebar = ({
                         value={searchQuery}
                         onKeyDown={(e) => e.stopPropagation()}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full px-3 py-2 text-xs rounded-md bg-black/30 border border-white/20 text-white focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
+                        className="px-3 py-2 w-full text-xs text-white rounded-md border bg-black/30 border-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
                     />
                 </div>
                 {activeTab === "models" && (
@@ -1032,7 +1178,7 @@ const BlockToolsSidebar = ({
                                         onClick={() =>
                                             navigateCategories("left")
                                         }
-                                        className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all mr-2 cursor-pointer"
+                                        className="flex flex-shrink-0 justify-center items-center mr-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
                                         title="Previous categories"
                                     >
                                         <FaChevronLeft className="w-3 h-3" />
@@ -1089,7 +1235,7 @@ const BlockToolsSidebar = ({
                                             onClick={() =>
                                                 navigateCategories("right")
                                             }
-                                            className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-sm border border-white/20 transition-all ml-2 cursor-pointer"
+                                            className="flex flex-shrink-0 justify-center items-center ml-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
                                             title="Next categories"
                                         >
                                             <FaChevronRight className="w-3 h-3" />
@@ -1123,7 +1269,7 @@ const BlockToolsSidebar = ({
                                     handleDragStart={handleDragStart}
                                 />
                             ))}
-                            <div className="block-tools-section-label custom-label-with-icon mt-2">
+                            <div className="mt-2 block-tools-section-label custom-label-with-icon">
                                 Custom Blocks (ID: 100-199)
                                 <button
                                     className="download-all-icon-button"
@@ -1176,7 +1322,7 @@ const BlockToolsSidebar = ({
                                         }}
                                     />
                                 ))}
-                                <div className="block-tools-section-label mt-2">
+                                <div className="mt-2 block-tools-section-label">
                                     Custom Models (ID: 300+)
                                 </div>
                                 {visibleCustomModels.map((envType) => (
@@ -1211,7 +1357,7 @@ const BlockToolsSidebar = ({
                             {visibleSchematics.map((entry) => (
                                 <div
                                     key={entry.id}
-                                    className="schematic-button bg-white/10 border border-white/0 hover:border-white/20 transition-all duration-150 active:border-white"
+                                    className="border transition-all duration-150 schematic-button bg-white/10 border-white/0 hover:border-white/20 active:border-white"
                                     style={{
                                         width: isCompactMode
                                             ? "calc(50% - 6px)"
@@ -1261,14 +1407,14 @@ const BlockToolsSidebar = ({
                     ) : null}
                 </div>
                 {(activeTab === "blocks" || activeTab === "models") && (
-                    <div className="flex w-full px-3 mb-3">
+                    <div className="flex px-3 mb-3 w-full">
                         <input
                             ref={fileInputRef}
                             type="file"
                             multiple
                             accept={
                                 activeTab === "blocks"
-                                    ? "image/*"
+                                    ? "image/*,.zip,application/zip,application/x-zip-compressed"
                                     : activeTab === "models"
                                     ? ".gltf,.glb"
                                     : ""
@@ -1295,7 +1441,7 @@ const BlockToolsSidebar = ({
                                 </div>
                                 <div className="drop-zone-text">
                                     {activeTab === "blocks"
-                                        ? "Click or drag images to upload new blocks"
+                                        ? "Click or drag images or .zip to upload new blocks (supports multi-texture +x/-x/+y/-y/+z/-z)"
                                         : activeTab === "models"
                                         ? "Click or drag .gltf files to add custom models"
                                         : ""}
@@ -1305,9 +1451,9 @@ const BlockToolsSidebar = ({
                     </div>
                 )}
                 {activeTab === "blocks" && (
-                    <div className="flex px-3 w-full mb-3">
+                    <div className="flex px-3 mb-3 w-full">
                         <button
-                            className="flex w-full bg-white text-black rounded-md p-2 text-center font-medium justify-center items-center cursor-pointer hover:border-2 hover:border-black transition-all border"
+                            className="flex justify-center items-center p-2 w-full font-medium text-center text-black bg-white rounded-md border transition-all cursor-pointer hover:border-2 hover:border-black"
                             onClick={onOpenTextureModal}
                         >
                             Create Texture

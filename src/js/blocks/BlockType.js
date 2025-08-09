@@ -1,5 +1,3 @@
-
-
 import BlockTextureAtlas, { FACE_NAME_TO_COORD_MAP } from "./BlockTextureAtlas";
 import {
     BlockFaces,
@@ -38,7 +36,6 @@ class BlockType {
         this._textureUris = data.textureUris || {};
 
         this._isCommonlyUsed = data.id < 10;
-
 
         if (this._isCommonlyUsed) {
             this.preloadTextures();
@@ -112,7 +109,6 @@ class BlockType {
      * @returns {boolean} True if the block has different textures for different faces
      */
     get isMultiSided() {
-
         const uniqueTextureUris = new Set(
             Object.values(this._textureUris).filter(Boolean)
         );
@@ -133,8 +129,6 @@ class BlockType {
      * @returns {boolean} True if the block has multiple textures
      */
     get _isMultiTexture() {
-
-
         return this.isMultiSided;
     }
     /**
@@ -142,9 +136,7 @@ class BlockType {
      * @returns {string|undefined} The base texture URI
      */
     get _textureUri() {
-
         if (this._textureUris) {
-
             const uniqueTextureUris = new Set(
                 Object.values(this._textureUris).filter(Boolean)
             );
@@ -153,7 +145,6 @@ class BlockType {
 
                 const parts = uri.split("/");
                 if (parts.length > 1) {
-
                     return parts.slice(0, -1).join("/");
                 }
 
@@ -169,7 +160,6 @@ class BlockType {
      * @returns {Object} The face texture URIs
      */
     static textureUriToTextureUris(textureUri) {
-
         if (!textureUri) return {};
 
         if (textureUri.startsWith("data:image/")) {
@@ -186,10 +176,8 @@ class BlockType {
         return Object.entries(FACE_NAME_TO_COORD_MAP).reduce(
             (textureUris, [face, coord]) => {
                 if (isSingleTexture) {
-
                     textureUris[face] = baseUri;
                 } else {
-
                     textureUris[face] = `${baseUri}/${coord}.png`;
                 }
                 return textureUris;
@@ -226,7 +214,6 @@ class BlockType {
         if (this._isCommonlyUsed) {
             await this.preloadTextures();
         } else {
-
             this.queueTexturesForLoading();
         }
     }
@@ -240,7 +227,6 @@ class BlockType {
             BlockTextureAtlas.instance.queueTextureForLoading(textureUri);
 
             if (!textureUri.match(/\.(png|jpe?g)$/i)) {
-
                 BlockTextureAtlas.instance.queueTextureForLoading(
                     `${textureUri}.png`
                 );
@@ -263,7 +249,6 @@ class BlockType {
             async ([face, textureUri]) => {
                 if (!textureUri) return;
                 try {
-
                     if (textureUri.startsWith("data:image/")) {
                         await BlockTextureAtlas.instance.loadTexture(
                             textureUri
@@ -272,14 +257,11 @@ class BlockType {
                     }
 
                     if (!textureUri.match(/\.(png|jpe?g)$/i)) {
-
                         try {
                             await BlockTextureAtlas.instance.loadTexture(
                                 `${textureUri}.png`
                             );
-                        } catch (error) {
-
-                        }
+                        } catch (error) {}
 
                         const faceMap = {
                             top: "+y.png",
@@ -295,9 +277,7 @@ class BlockType {
                                 await BlockTextureAtlas.instance.loadTexture(
                                     `${textureUri}/${faceMap[face]}`
                                 );
-                            } catch (error) {
-
-                            }
+                            } catch (error) {}
                         }
                     }
 
@@ -317,7 +297,6 @@ class BlockType {
      * @returns {boolean} True if any textures need to be preloaded
      */
     needsTexturePreload() {
-
         if (!this._textureUris || Object.keys(this._textureUris).length === 0) {
             return false;
         }
@@ -356,7 +335,6 @@ class BlockType {
                     return true; // Needs preloading
                 }
             } else {
-
                 if (!textureAtlas.getTextureMetadata(textureUri)) {
                     return true; // Needs preloading
                 }
@@ -469,13 +447,25 @@ class BlockType {
      * @returns {string} - The texture file path
      */
     getTextureForFace(face) {
-
+        // Check if we have face-specific textures first
         if (this._textureUris && this._textureUris[face]) {
             return this._textureUris[face];
         }
 
-        if (this._textureUri) {
+        // For custom blocks, also check if different faces have different data URIs
+        const isCustomBlock = this._id >= 100;
+        if (isCustomBlock && this._textureUris) {
+            // Check all faces to see if this is a multi-texture block
+            const uniqueTextures = new Set(
+                Object.values(this._textureUris).filter(Boolean)
+            );
+            if (uniqueTextures.size > 1) {
+                // This is a multi-texture custom block, return the face-specific texture
+                return this._textureUris[face] || "./assets/blocks/error.png";
+            }
+        }
 
+        if (this._textureUri) {
             if (this._textureUri.startsWith("data:image/")) {
                 return this._textureUri;
             }
@@ -498,7 +488,28 @@ class BlockType {
             this._name === "Untitled" ||
             this._name === "test_block";
         if (isCustomBlock) {
+            // First check if we have face-specific textures (multi-texture block)
+            if (this._textureUris && this._textureUris[face]) {
+                const texturePath = this._textureUris[face];
+                if (texturePath && texturePath.startsWith("data:image/")) {
+                    return texturePath;
+                }
+            }
 
+            // Check if this is a multi-texture custom block
+            if (this._textureUris) {
+                const uniqueTextures = new Set(
+                    Object.values(this._textureUris).filter(Boolean)
+                );
+                if (uniqueTextures.size > 1) {
+                    // This is a multi-texture block, return face-specific texture
+                    return (
+                        this._textureUris[face] || "./assets/blocks/error.png"
+                    );
+                }
+            }
+
+            // Fallback to localStorage for single-texture custom blocks
             if (typeof window !== "undefined" && window.localStorage) {
                 const storageKeys = [
                     `block-texture-${this._id}`,
@@ -508,21 +519,12 @@ class BlockType {
                 for (const key of storageKeys) {
                     const storedUri = window.localStorage.getItem(key);
                     if (storedUri && storedUri.startsWith("data:image/")) {
-
                         return storedUri;
                     }
                 }
             }
 
-            if (this._textureUris && this._textureUris[face]) {
-                const texturePath = this._textureUris[face];
-
-                if (texturePath && texturePath.startsWith("data:image/")) {
-                    return texturePath;
-                }
-            }
-
-
+            // Return error texture if nothing found
             return "./assets/blocks/error.png";
         }
 
@@ -537,12 +539,10 @@ class BlockType {
         }
 
         if (this.isMultiSided || this._isMultiTexture) {
-
             const baseFolder =
                 this._textureUri ||
                 (this._textureUris && Object.values(this._textureUris)[0]);
             if (baseFolder) {
-
                 if (baseFolder.startsWith("data:image/")) {
                     return baseFolder;
                 }
@@ -593,17 +593,12 @@ class BlockType {
             return false;
         }
         try {
-            console.log(
-                `Applying custom texture data URI for block ID ${this._id}`
-            );
-
             const faces = ["top", "bottom", "left", "right", "front", "back"];
             faces.forEach((face) => {
                 this._textureUris[face] = dataUri;
             });
 
             if (BlockTextureAtlas.instance) {
-
                 let success =
                     await BlockTextureAtlas.instance.applyDataUriToAllFaces(
                         `${this._id}`,
@@ -622,7 +617,6 @@ class BlockType {
                     const metadata =
                         BlockTextureAtlas.instance.getTextureMetadata(dataUri);
                     if (metadata) {
-
                         BlockTextureAtlas.instance._textureAtlasMetadata.set(
                             `${this._id}`,
                             metadata
@@ -687,7 +681,6 @@ class BlockType {
      * @returns {string} - The direction string for the face (e.g., '+y', '-y', etc.)
      */
     getFaceDirection(face) {
-
         return FACE_NAME_TO_COORD_MAP[face] || face;
     }
 }
