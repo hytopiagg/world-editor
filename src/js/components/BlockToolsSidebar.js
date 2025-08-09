@@ -1441,7 +1441,7 @@ const BlockToolsSidebar = ({
                                 </div>
                                 <div className="drop-zone-text">
                                     {activeTab === "blocks"
-                                        ? "Click or drag images or .zip to upload new blocks (supports multi-texture +x/-x/+y/-y/+z/-z)"
+                                        ? "Click or drag images or .zip (multi-texture) to upload new blocks"
                                         : activeTab === "models"
                                         ? "Click or drag .gltf files to add custom models"
                                         : ""}
