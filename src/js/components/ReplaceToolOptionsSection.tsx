@@ -77,7 +77,7 @@ export default function ReplaceToolOptionsSection({ replacementTool, isCompactMo
     return (
         <div className="flex flex-col gap-3">
             {/* Shape selection */}
-            <div className="flex gap-2 items-center fade-down opacity-0 duration-150" style={{ animationDelay: "0.05s" }}>
+            <div className="flex gap-2 items-center opacity-0 duration-150 fade-down" style={{ animationDelay: "0.05s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Shape</label>
                 {(["sphere", "cube"] as const).map((sh) => (
                     <button
@@ -91,7 +91,7 @@ export default function ReplaceToolOptionsSection({ replacementTool, isCompactMo
             </div>
 
             {/* Radius control */}
-            <div className="flex items-center gap-x-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.075s" }}>
+            <div className="flex gap-x-2 items-center opacity-0 duration-150 fade-down" style={{ animationDelay: "0.075s" }}>
                 <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Size</label>
                 <input
                     type="number"
@@ -100,7 +100,7 @@ export default function ReplaceToolOptionsSection({ replacementTool, isCompactMo
                     value={settings.radius}
                     onKeyDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateTool({ radius: parseInt(e.target.value) })}
-                    className="w-[40px] px-1 py-0.5 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-[40px] px-1 py-0.5 border bg-white/10 border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <input
                     type="range"
@@ -117,21 +117,21 @@ export default function ReplaceToolOptionsSection({ replacementTool, isCompactMo
 
 
             {/* Block weights */}
-            <div className="flex flex-col gap-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.1s" }}>
+            <div className="flex flex-col gap-2 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.1s" }}>
                 <label className="text-xs text-[#F1F1F1]/80 text-left">Block Weights (Total {totalWeight.toFixed(1)}%)</label>
                 <div className="flex flex-col gap-1">
                     {settings.blockWeights.map((bw, idx) => {
                         const block = getBlockById(bw.id) || {} as any;
                         return (
                             <div key={idx} className="flex flex-col gap-1">
-                                <div className="flex items-center gap-1">
+                                <div className="flex gap-1 items-center">
                                     <button
-                                        className="w-8 h-8 bg-black/20 border border-white/20 rounded relative flex-shrink-0"
+                                        className="relative flex-shrink-0 w-8 h-8 rounded border bg-black/20 border-white/20"
                                         onClick={() => setOpenSelectorIdx(openSelectorIdx === idx ? null : idx)}
                                         title={`Select block (ID ${bw.id})`}
                                     >
                                         {block.sideTextures["+y"] || block.textureUri ? (
-                                            <img src={block.sideTextures["+y"] || block.textureUri} alt={block.name || bw.id} className="w-full h-full object-cover" />
+                                            <img src={block.sideTextures["+y"] || block.textureUri} alt={block.name || bw.id} className="object-cover w-full h-full" />
                                         ) : (
                                             <span className="text-[8px] text-white">{bw.id}</span>
                                         )}
@@ -144,29 +144,29 @@ export default function ReplaceToolOptionsSection({ replacementTool, isCompactMo
                                         step={0.1}
                                         onKeyDown={(e) => e.stopPropagation()}
                                         onChange={(e) => { e.stopPropagation(); updateBlockWeight(idx, "weight", Math.round(parseFloat(e.target.value) * 10) / 10) }}
-                                        className="w-12 px-1 py-0.5 text-xs bg-white/5 border border-white/10 rounded text-[#F1F1F1] focus:outline-none"
+                                        className="w-12 px-1 py-0.5 text-xs bg-white/10 border border-white/10 rounded text-[#F1F1F1] focus:outline-none"
                                     />
                                     <button
                                         onClick={() => removeBlockWeight(idx)}
-                                        className="text-xs px-1 text-red-400 bg-white/10 rounded-md"
+                                        className="px-1 text-xs text-red-400 rounded-md bg-white/10"
                                         title="Remove"
                                     >
                                         –
                                     </button>
                                 </div>
                                 {openSelectorIdx === idx && (
-                                    <div className="flex flex-wrap gap-1 p-1 bg-black/80 border border-white/20 rounded mt-1 max-h-32 overflow-y-auto">
+                                    <div className="flex overflow-y-auto flex-wrap gap-1 p-1 mt-1 max-h-32 rounded border bg-black/80 border-white/20">
                                         {availableBlocks.map((blk) => (
                                             <button
                                                 key={blk.id}
-                                                className="w-8 h-8 border border-white/10 hover:border-white/40 rounded"
+                                                className="w-8 h-8 rounded border border-white/10 hover:border-white/40"
                                                 title={`${blk.name} (ID ${blk.id})`}
                                                 onClick={() => {
                                                     updateBlockWeight(idx, "id", blk.id);
                                                     setOpenSelectorIdx(null);
                                                 }}
                                             >
-                                                <img src={blk.sideTextures["+y"] || blk.textureUri} alt={blk.name} className="w-full h-full object-cover" />
+                                                <img src={blk.sideTextures["+y"] || blk.textureUri} alt={blk.name} className="object-cover w-full h-full" />
                                             </button>
                                         ))}
                                     </div>
