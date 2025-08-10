@@ -56,32 +56,21 @@ function decodePaletteIndices(longPairs, paletteLen, totalBlocks) {
             ? longPairs
             : longPairs.map(decodeLongPairToBigInt);
 
+    // Mojang's packed array uses floor(64 / b) entries per 64-bit long, without crossing word boundaries
     const bitsPerBlock = Math.max(
         4,
         Math.ceil(Math.log2(Math.max(1, paletteLen)))
     );
+    const valuesPerLong = Math.max(1, Math.floor(64 / bitsPerBlock));
     const mask = (1n << BigInt(bitsPerBlock)) - 1n;
     const out = new Array(totalBlocks);
 
     for (let i = 0; i < totalBlocks; i++) {
-        const bitIndex = BigInt(i * bitsPerBlock);
-        const longIndex = Number(bitIndex / 64n);
-        const startBit = Number(bitIndex % 64n);
-        let value;
-
-        if (startBit + bitsPerBlock <= 64) {
-            value = Number((longs[longIndex] >> BigInt(startBit)) & mask);
-        } else {
-            const lowBits = 64 - startBit;
-            const low =
-                (longs[longIndex] >> BigInt(startBit)) &
-                ((1n << BigInt(lowBits)) - 1n);
-            const high =
-                longs[longIndex + 1] &
-                ((1n << BigInt(bitsPerBlock - lowBits)) - 1n);
-            value = Number(low | (high << BigInt(lowBits)));
-        }
-        out[i] = value;
+        const longIndex = Math.floor(i / valuesPerLong);
+        const indexWithinLong = i % valuesPerLong;
+        const startBit = BigInt(indexWithinLong * bitsPerBlock);
+        const word = longs[longIndex] ?? 0n;
+        out[i] = Number((word >> startBit) & mask);
     }
     return out;
 }

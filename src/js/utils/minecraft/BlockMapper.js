@@ -60,6 +60,10 @@ const BLOCK_IDS = {
     SAND: findBlockIdByName("sand"),
 };
 export const DEFAULT_BLOCK_MAPPINGS = {
+    // Always ignore structure voids – they denote empty space/placeholders in blueprints
+    "minecraft:structure_void": {
+        action: "skip",
+    },
     "minecraft:stone": {
         id: BLOCK_IDS.STONE || 1,
         name: "Stone",

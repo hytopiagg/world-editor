@@ -1099,34 +1099,29 @@ const BlockToolsSidebar = ({
     };
 
     const decodePaletteIndices = (longPairs, paletteLen, totalBlocks) => {
+        // Normalize to array of 64-bit BigInts
         const longs =
-            longPairs.length > 0 && typeof longPairs[0] === "bigint"
+            longPairs &&
+            longPairs.length > 0 &&
+            typeof longPairs[0] === "bigint"
                 ? longPairs
-                : longPairs.map(decodeLongPairToBigInt);
+                : (longPairs || []).map(decodeLongPairToBigInt);
+
+        // Mojang encoding packs floor(64 / b) values per 64-bit word. Values do not cross 64-bit boundaries
         const bitsPerBlock = Math.max(
             4,
             Math.ceil(Math.log2(Math.max(1, paletteLen)))
         );
+        const valuesPerLong = Math.max(1, Math.floor(64 / bitsPerBlock));
         const mask = (1n << BigInt(bitsPerBlock)) - 1n;
+
         const out = new Array(totalBlocks);
         for (let i = 0; i < totalBlocks; i++) {
-            const bitIndex = BigInt(i * bitsPerBlock);
-            const longIndex = Number(bitIndex / 64n);
-            const startBit = Number(bitIndex % 64n);
-            let value;
-            if (startBit + bitsPerBlock <= 64) {
-                value = Number((longs[longIndex] >> BigInt(startBit)) & mask);
-            } else {
-                const lowBits = 64 - startBit;
-                const low =
-                    (longs[longIndex] >> BigInt(startBit)) &
-                    ((1n << BigInt(lowBits)) - 1n);
-                const high =
-                    longs[longIndex + 1] &
-                    ((1n << BigInt(bitsPerBlock - lowBits)) - 1n);
-                value = Number(low | (high << BigInt(lowBits)));
-            }
-            out[i] = value;
+            const longIndex = Math.floor(i / valuesPerLong);
+            const indexWithinLong = i % valuesPerLong;
+            const startBit = BigInt(indexWithinLong * bitsPerBlock);
+            const word = longs[longIndex] ?? 0n;
+            out[i] = Number((word >> startBit) & mask);
         }
         return out;
     };
@@ -1230,6 +1225,7 @@ const BlockToolsSidebar = ({
             console.groupEnd();
         }
         const terrain = {};
+        const entities = [];
         for (let idx = 0; idx < regions.length; idx++) {
             const region = regions[idx];
             const baseX = getVal(region.X) * 16;
@@ -1280,6 +1276,22 @@ const BlockToolsSidebar = ({
                 const mapping =
                     customMappings[mcName] || suggestMapping(mcName);
                 if (!mapping || mapping.action === "skip") continue;
+
+                // Support environment entity placement mapping
+                if (mapping.action === "entity") {
+                    const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
+                    const x = baseX + lx;
+                    const y = baseY + ly;
+                    const z = baseZ + lz;
+                    const entityName = mapping.entityName;
+                    entities.push({
+                        entityName,
+                        position: [x, y, z],
+                        rotation: [0, 0, 0],
+                    });
+                    continue;
+                }
+
                 const blockId = parseInt(
                     mapping.id || mapping.targetBlockId || mapping?.id,
                     10
@@ -1319,7 +1331,7 @@ const BlockToolsSidebar = ({
             console.log("bbox:", bbox(terrain));
             console.groupEnd();
         }
-        return terrain;
+        return { terrain, entities };
     };
 
     const terrainToRelativeSchematic = (terrainMap) => {
@@ -1342,7 +1354,11 @@ const BlockToolsSidebar = ({
             const rz = z - minZ;
             relBlocks[`${rx},${ry},${rz}`] = id;
         }
-        return { blocks: relBlocks, entities: [] };
+        return {
+            blocks: relBlocks,
+            entities: [],
+            min: { x: minX, y: minY, z: minZ },
+        };
     };
 
     const extractUnmappedBlocks = (structure) => {
@@ -1409,11 +1425,22 @@ const BlockToolsSidebar = ({
         if (!pendingBpImport) return;
 
         const { metadata, structure, file } = pendingBpImport;
-        const terrainMap = convertStructureToTerrainMap(
+        const { terrain, entities } = convertStructureToTerrainMap(
             structure,
             customMappings
         );
-        const schematic = terrainToRelativeSchematic(terrainMap);
+        const schematic = terrainToRelativeSchematic(terrain);
+        if (entities && entities.length) {
+            schematic.entities = entities.map((e) => ({
+                entityName: e.entityName,
+                position: [
+                    e.position[0] - schematic.min.x,
+                    e.position[1] - schematic.min.y,
+                    e.position[2] - schematic.min.z,
+                ],
+                rotation: e.rotation,
+            }));
+        }
 
         if (DEBUG_BP_IMPORT) {
             console.groupCollapsed("[BP] Import with custom mappings");
@@ -1494,8 +1521,20 @@ const BlockToolsSidebar = ({
             }
 
             // If no unmapped blocks, proceed with import
-            const terrainMap = convertStructureToTerrainMap(structure);
-            const schematic = terrainToRelativeSchematic(terrainMap);
+            const { terrain, entities } =
+                convertStructureToTerrainMap(structure);
+            const schematic = terrainToRelativeSchematic(terrain);
+            if (entities && entities.length) {
+                schematic.entities = entities.map((e) => ({
+                    entityName: e.entityName,
+                    position: [
+                        e.position[0] - schematic.min.x,
+                        e.position[1] - schematic.min.y,
+                        e.position[2] - schematic.min.z,
+                    ],
+                    rotation: e.rotation,
+                }));
+            }
             if (DEBUG_BP_IMPORT) {
                 console.groupCollapsed("[BP] Schematic summary");
                 const b = Object.keys(schematic.blocks || {});
@@ -1592,8 +1631,20 @@ const BlockToolsSidebar = ({
             }
 
             // If no unmapped blocks, proceed with import
-            const terrainMap = convertStructureToTerrainMap(structure);
-            const schematic = terrainToRelativeSchematic(terrainMap);
+            const { terrain, entities } =
+                convertStructureToTerrainMap(structure);
+            const schematic = terrainToRelativeSchematic(terrain);
+            if (entities && entities.length) {
+                schematic.entities = entities.map((e) => ({
+                    entityName: e.entityName,
+                    position: [
+                        e.position[0] - schematic.min.x,
+                        e.position[1] - schematic.min.y,
+                        e.position[2] - schematic.min.z,
+                    ],
+                    rotation: e.rotation,
+                }));
+            }
             if (DEBUG_BP_IMPORT) {
                 console.groupCollapsed("[BP] Schematic summary (drop)");
                 const b = Object.keys(schematic.blocks || {});

@@ -4,6 +4,7 @@ import {
     DEFAULT_BLOCK_MAPPINGS,
     suggestMapping,
 } from "../utils/minecraft/BlockMapper";
+import { environmentModels } from "../EnvironmentBuilder";
 import "../../css/AxiomBlockRemapper.css";
 
 export const AxiomBlockRemapper = ({
@@ -15,6 +16,7 @@ export const AxiomBlockRemapper = ({
     const [mappings, setMappings] = useState({});
     const [searchTerms, setSearchTerms] = useState({});
     const availableBlocks = useMemo(() => getBlockTypes() || [], []);
+    const availableEntities = useMemo(() => environmentModels || [], []);
 
     useEffect(() => {
         // Initialize mappings with suggestions
@@ -32,6 +34,8 @@ export const AxiomBlockRemapper = ({
                     action: "skip",
                     targetBlockId: null,
                     targetBlockName: null,
+                    targetEntityName: null,
+                    targetEntityModelUrl: null,
                 };
             }
         });
@@ -45,15 +49,25 @@ export const AxiomBlockRemapper = ({
                 ...prev[blockName],
                 action,
                 targetBlockId:
-                    action === "skip"
+                    action === "skip" || action === "entity"
                         ? null
                         : prev[blockName]?.targetBlockId ||
                           availableBlocks[0]?.id,
                 targetBlockName:
-                    action === "skip"
+                    action === "skip" || action === "entity"
                         ? null
                         : prev[blockName]?.targetBlockName ||
                           availableBlocks[0]?.name,
+                targetEntityName:
+                    action === "entity"
+                        ? prev[blockName]?.targetEntityName ||
+                          availableEntities[0]?.name
+                        : null,
+                targetEntityModelUrl:
+                    action === "entity"
+                        ? prev[blockName]?.targetEntityModelUrl ||
+                          availableEntities[0]?.modelUrl
+                        : null,
             },
         }));
     };
@@ -65,6 +79,21 @@ export const AxiomBlockRemapper = ({
                 action: "map",
                 targetBlockId: targetBlock.id,
                 targetBlockName: targetBlock.name,
+                targetEntityName: null,
+                targetEntityModelUrl: null,
+            },
+        }));
+    };
+
+    const handleEntitySelection = (blockName, targetEntity) => {
+        setMappings((prev) => ({
+            ...prev,
+            [blockName]: {
+                action: "entity",
+                targetBlockId: null,
+                targetBlockName: null,
+                targetEntityName: targetEntity.name,
+                targetEntityModelUrl: targetEntity.modelUrl,
             },
         }));
     };
@@ -86,6 +115,15 @@ export const AxiomBlockRemapper = ({
         );
     };
 
+    const getFilteredEntities = (blockName) => {
+        const searchTerm = searchTerms[blockName] || "";
+        if (!searchTerm) return availableEntities;
+        const lowerSearch = searchTerm.toLowerCase();
+        return availableEntities.filter((e) =>
+            e.name.toLowerCase().includes(lowerSearch)
+        );
+    };
+
     const handleConfirm = () => {
         // Convert to the format expected by the parser
         const finalMappings = {};
@@ -96,6 +134,15 @@ export const AxiomBlockRemapper = ({
                     name: mapping.targetBlockName,
                     action: "map",
                 };
+            } else if (
+                mapping.action === "entity" &&
+                mapping.targetEntityName
+            ) {
+                finalMappings[blockName] = {
+                    action: "entity",
+                    entityName: mapping.targetEntityName,
+                    modelUrl: mapping.targetEntityModelUrl || null,
+                };
             } else {
                 finalMappings[blockName] = { action: "skip" };
             }
@@ -104,7 +151,7 @@ export const AxiomBlockRemapper = ({
     };
 
     const mappedCount = Object.values(mappings).filter(
-        (m) => m.action === "map"
+        (m) => m.action === "map" || m.action === "entity"
     ).length;
     const totalCount = unmappedBlocks.length;
 
@@ -171,7 +218,23 @@ export const AxiomBlockRemapper = ({
                                                     )
                                                 }
                                             />
-                                            Map to
+                                            Map to block
+                                        </label>
+                                        <label>
+                                            <input
+                                                type="radio"
+                                                name={`action-${blockName}`}
+                                                checked={
+                                                    mapping.action === "entity"
+                                                }
+                                                onChange={() =>
+                                                    handleActionChange(
+                                                        blockName,
+                                                        "entity"
+                                                    )
+                                                }
+                                            />
+                                            Place entity
                                         </label>
                                         <label>
                                             <input
@@ -246,6 +309,57 @@ export const AxiomBlockRemapper = ({
                                             {filteredBlocks.length > 5 && (
                                                 <div className="more-options">
                                                     +{filteredBlocks.length - 5}{" "}
+                                                    more options
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                {mapping.action === "entity" && (
+                                    <div className="remapper-item-content">
+                                        <input
+                                            type="text"
+                                            className="block-search"
+                                            placeholder="Search models..."
+                                            value={searchTerms[blockName] || ""}
+                                            onChange={(e) =>
+                                                handleSearchChange(
+                                                    blockName,
+                                                    e.target.value
+                                                )
+                                            }
+                                        />
+                                        <div className="block-options">
+                                            {getFilteredEntities(blockName)
+                                                .slice(0, 5)
+                                                .map((model) => (
+                                                    <button
+                                                        key={model.id}
+                                                        className={`block-option ${
+                                                            mapping.targetEntityName ===
+                                                            model.name
+                                                                ? "selected"
+                                                                : ""
+                                                        }`}
+                                                        onClick={() =>
+                                                            handleEntitySelection(
+                                                                blockName,
+                                                                model
+                                                            )
+                                                        }
+                                                    >
+                                                        <span>
+                                                            {model.name}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            {getFilteredEntities(blockName)
+                                                .length > 5 && (
+                                                <div className="more-options">
+                                                    +
+                                                    {getFilteredEntities(
+                                                        blockName
+                                                    ).length - 5}{" "}
                                                     more options
                                                 </div>
                                             )}
