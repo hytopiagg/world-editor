@@ -26,8 +26,12 @@ import EnvironmentButton from "./EnvironmentButton";
 import { BlockIcon } from "./icons/BlockIcon";
 import { PalmTreeIcon } from "./icons/PalmTreeIcon";
 import { BlocksIcon } from "./icons/BlocksIcon";
-import { suggestMapping } from "../utils/minecraft/BlockMapper";
+import {
+    suggestMapping,
+    DEFAULT_BLOCK_MAPPINGS,
+} from "../utils/minecraft/BlockMapper";
 import { NBTParser } from "../utils/minecraft/NBTParser";
+import { AxiomBlockRemapper } from "./AxiomBlockRemapper";
 
 let selectedBlockID = 0;
 const DEBUG_BP_IMPORT = true;
@@ -98,6 +102,12 @@ const BlockToolsSidebar = ({
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
     const schematicPreviewsRef = useRef(schematicPreviews);
+
+    // Block remapper state
+    const [showBlockRemapper, setShowBlockRemapper] = useState(false);
+    const [pendingBpImport, setPendingBpImport] = useState(null);
+    const [unmappedBlocks, setUnmappedBlocks] = useState([]);
+    const [blockCounts, setBlockCounts] = useState({});
     const schematicListStateRef = useRef(schematicList);
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
@@ -1121,15 +1131,11 @@ const BlockToolsSidebar = ({
         return out;
     };
 
+    // Axiom blueprint format uses X-Z-Y order (X changes fastest)
+    // This is different from vanilla Minecraft's Y-Z-X order
     const sectionIndexToLocalXYZ = (index) => {
         const x = index & 15;
         const z = (index >> 4) & 15;
-        const y = (index >> 8) & 15;
-        return { x, y, z };
-    };
-    const sectionIndexToLocalXYZ_Alt = (index) => {
-        const z = index & 15;
-        const x = (index >> 4) & 15;
         const y = (index >> 8) & 15;
         return { x, y, z };
     };
@@ -1205,7 +1211,7 @@ const BlockToolsSidebar = ({
         return { metadata, previewBuf, structure };
     };
 
-    const convertStructureToTerrainMap = (structure) => {
+    const convertStructureToTerrainMap = (structure, customMappings = {}) => {
         // Support both prismarine-nbt shape and NBTParser shape
         const getVal = (v) => (v && v.value !== undefined ? v.value : v);
         let regions = [];
@@ -1224,7 +1230,6 @@ const BlockToolsSidebar = ({
             console.groupEnd();
         }
         const terrain = {};
-        const terrainAlt = {};
         for (let idx = 0; idx < regions.length; idx++) {
             const region = regions[idx];
             const baseX = getVal(region.X) * 16;
@@ -1271,45 +1276,26 @@ const BlockToolsSidebar = ({
                 const nameVal = getVal(entry.Name);
                 if (!nameVal || typeof nameVal !== "string") continue;
                 const mcName = nameVal;
-                const mapping = suggestMapping(mcName);
+                // Use custom mappings if provided, otherwise fall back to default
+                const mapping =
+                    customMappings[mcName] || suggestMapping(mcName);
                 if (!mapping || mapping.action === "skip") continue;
                 const blockId = parseInt(
                     mapping.id || mapping.targetBlockId || mapping?.id,
                     10
                 );
                 if (!blockId) continue;
-                {
-                    const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
-                    const x = baseX + lx;
-                    const y = baseY + ly;
-                    const z = baseZ + lz;
-                    terrain[`${x},${y},${z}`] = blockId;
-                }
-                {
-                    const {
-                        x: lx,
-                        y: ly,
-                        z: lz,
-                    } = sectionIndexToLocalXYZ_Alt(i);
-                    const x = baseX + lx;
-                    const y = baseY + ly;
-                    const z = baseZ + lz;
-                    terrainAlt[`${x},${y},${z}`] = blockId;
-                }
+
+                const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
+                const x = baseX + lx;
+                const y = baseY + ly;
+                const z = baseZ + lz;
+                terrain[`${x},${y},${z}`] = blockId;
             }
         }
-        const countA = Object.keys(terrain).length;
-        const countB = Object.keys(terrainAlt).length;
         if (DEBUG_BP_IMPORT) {
-            console.groupCollapsed("[BP] Decode choice");
-            console.log(
-                "normal count:",
-                countA,
-                "alt count:",
-                countB,
-                "chosen:",
-                countB > countA ? "alt" : "normal"
-            );
+            console.groupCollapsed("[BP] Terrain map summary");
+            console.log("Total blocks:", Object.keys(terrain).length);
             const bbox = (map) => {
                 const keys = Object.keys(map);
                 if (!keys.length) return null;
@@ -1330,11 +1316,10 @@ const BlockToolsSidebar = ({
                 }
                 return { minX, minY, minZ, maxX, maxY, maxZ };
             };
-            console.log("bbox normal:", bbox(terrain));
-            console.log("bbox alt:", bbox(terrainAlt));
+            console.log("bbox:", bbox(terrain));
             console.groupEnd();
         }
-        return countB > countA ? terrainAlt : terrain;
+        return terrain;
     };
 
     const terrainToRelativeSchematic = (terrainMap) => {
@@ -1360,12 +1345,155 @@ const BlockToolsSidebar = ({
         return { blocks: relBlocks, entities: [] };
     };
 
+    const extractUnmappedBlocks = (structure) => {
+        const getVal = (v) => (v && v.value !== undefined ? v.value : v);
+        let regions = [];
+        if (Array.isArray(structure.BlockRegion)) {
+            regions = structure.BlockRegion;
+        } else if (
+            structure.BlockRegion &&
+            structure.BlockRegion.value &&
+            structure.BlockRegion.value.value
+        ) {
+            regions = structure.BlockRegion.value.value;
+        }
+
+        const blockCounts = {};
+        const unmappedBlocks = new Set();
+
+        for (const region of regions) {
+            const bs = getVal(region.BlockStates);
+            if (!bs) continue;
+
+            let palette = getVal(bs.palette) || [];
+            if (palette && palette.value && palette.value.value) {
+                palette = palette.value.value;
+            }
+
+            let data = getVal(bs.data) || [];
+            const totalBlocks = 16 * 16 * 16;
+            const indices = decodePaletteIndices(
+                data,
+                palette.length,
+                totalBlocks
+            );
+
+            for (let i = 0; i < totalBlocks; i++) {
+                const pIdx = indices[i];
+                const entry = palette[pIdx];
+                if (!entry) continue;
+
+                const nameVal = getVal(entry.Name);
+                if (!nameVal || typeof nameVal !== "string") continue;
+
+                const mcName = nameVal;
+                blockCounts[mcName] = (blockCounts[mcName] || 0) + 1;
+
+                // Check if this block doesn't have a default mapping
+                if (!DEFAULT_BLOCK_MAPPINGS[mcName]) {
+                    const suggested = suggestMapping(mcName);
+                    if (!suggested || suggested.action === "skip") {
+                        unmappedBlocks.add(mcName);
+                    }
+                }
+            }
+        }
+
+        return {
+            unmappedBlocks: Array.from(unmappedBlocks),
+            blockCounts,
+        };
+    };
+
+    const handleBlockMappingConfirm = (customMappings) => {
+        if (!pendingBpImport) return;
+
+        const { metadata, structure, file } = pendingBpImport;
+        const terrainMap = convertStructureToTerrainMap(
+            structure,
+            customMappings
+        );
+        const schematic = terrainToRelativeSchematic(terrainMap);
+
+        if (DEBUG_BP_IMPORT) {
+            console.groupCollapsed("[BP] Import with custom mappings");
+            console.log("Custom mappings:", customMappings);
+            console.log(
+                "Block count:",
+                Object.keys(schematic.blocks || {}).length
+            );
+            console.groupEnd();
+        }
+
+        const nameTag =
+            metadata && metadata.Name && (metadata.Name.value || metadata.Name);
+        const name =
+            typeof nameTag === "string" && nameTag.trim()
+                ? nameTag
+                : file.name.replace(/\.bp$/i, "");
+
+        const entry = {
+            id: `bp-${Date.now()}`,
+            prompt: `Imported BP: ${name}`,
+            name,
+            schematic,
+            timestamp: Date.now(),
+        };
+
+        try {
+            DatabaseManager.saveData(STORES.SCHEMATICS, entry.id, entry)
+                .then(() =>
+                    window.dispatchEvent(new Event("schematicsDbUpdated"))
+                )
+                .catch((dbErr) =>
+                    console.warn("Failed to save schematic to DB:", dbErr)
+                );
+        } catch (_) {}
+
+        try {
+            if (terrainBuilderRef?.current?.activateTool) {
+                terrainBuilderRef.current.activateTool("schematic", schematic);
+            }
+        } catch (_) {}
+
+        // Clean up
+        setShowBlockRemapper(false);
+        setPendingBpImport(null);
+        setUnmappedBlocks([]);
+        setBlockCounts({});
+    };
+
+    const handleBlockMappingCancel = () => {
+        setShowBlockRemapper(false);
+        setPendingBpImport(null);
+        setUnmappedBlocks([]);
+        setBlockCounts({});
+        if (bpFileInputRef.current) {
+            bpFileInputRef.current.value = "";
+        }
+    };
+
     const handleBpFileInputChange = async (e) => {
         const files = Array.from(e.target.files || []);
         const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
         if (!bp) return;
         try {
             const { metadata, structure } = await parseAxiomBpInBrowser(bp);
+
+            // Check for unmapped blocks
+            const { unmappedBlocks, blockCounts } =
+                extractUnmappedBlocks(structure);
+
+            if (unmappedBlocks.length > 0) {
+                // Show remapper UI
+                setPendingBpImport({ metadata, structure, file: bp });
+                setUnmappedBlocks(unmappedBlocks);
+                setBlockCounts(blockCounts);
+                setShowBlockRemapper(true);
+                return;
+            }
+
+            // If no unmapped blocks, proceed with import
             const terrainMap = convertStructureToTerrainMap(structure);
             const schematic = terrainToRelativeSchematic(terrainMap);
             if (DEBUG_BP_IMPORT) {
@@ -1449,6 +1577,21 @@ const BlockToolsSidebar = ({
         if (!bp) return;
         try {
             const { metadata, structure } = await parseAxiomBpInBrowser(bp);
+
+            // Check for unmapped blocks
+            const { unmappedBlocks, blockCounts } =
+                extractUnmappedBlocks(structure);
+
+            if (unmappedBlocks.length > 0) {
+                // Show remapper UI
+                setPendingBpImport({ metadata, structure, file: bp });
+                setUnmappedBlocks(unmappedBlocks);
+                setBlockCounts(blockCounts);
+                setShowBlockRemapper(true);
+                return;
+            }
+
+            // If no unmapped blocks, proceed with import
             const terrainMap = convertStructureToTerrainMap(structure);
             const schematic = terrainToRelativeSchematic(terrainMap);
             if (DEBUG_BP_IMPORT) {
@@ -1536,418 +1679,443 @@ const BlockToolsSidebar = ({
     });
 
     return (
-        <div
-            className="block-tools-container"
-            style={{
-                display: "flex",
-                flexDirection: "column",
-                height: "100%",
-                width: "100%",
-            }}
-        >
+        <>
             <div
-                className="block-tools-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"
+                className="block-tools-container"
                 style={{
-                    width: isCompactMode ? "205px" : "295px",
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                    width: "100%",
                 }}
             >
-                <div className="flex w-full tab-button-outer-wrapper">
-                    <div
-                        className="flex w-full tab-button-inner-wrapper"
-                        style={{ width: "100%" }}
-                    >
-                        {["blocks", "models", "components"].map(
-                            (tab, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => handleTabChange(tab)}
-                                    className={`tab-button w-full ${
-                                        activeTab === tab ? "active" : ""
-                                    }`}
-                                    title={
-                                        isCompactMode
-                                            ? tab.charAt(0).toUpperCase() +
-                                              tab.slice(1)
-                                            : undefined
-                                    }
-                                >
-                                    {isCompactMode ? (
-                                        tab === "blocks" ? (
-                                            <BlockIcon className="mx-auto h-4.5 w-4.5" />
-                                        ) : tab === "models" ? (
-                                            <PalmTreeIcon className="mx-auto h-4.5 w-4.5" />
-                                        ) : (
-                                            <BlocksIcon className="mx-auto h-4.5 w-4.5" />
-                                        )
-                                    ) : (
-                                        tab
-                                    )}
-                                </button>
-                            )
-                        )}
+                <div
+                    className="block-tools-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"
+                    style={{
+                        width: isCompactMode ? "205px" : "295px",
+                    }}
+                >
+                    <div className="flex w-full tab-button-outer-wrapper">
                         <div
-                            className="tab-indicator"
-                            style={{
-                                left: `${
-                                    activeTab === "blocks"
-                                        ? "calc(0%)"
-                                        : activeTab === "models"
-                                        ? "calc(33.333% + 2px)"
-                                        : "calc(66.666% + 4px)"
-                                }`,
-                            }}
+                            className="flex w-full tab-button-inner-wrapper"
+                            style={{ width: "100%" }}
+                        >
+                            {["blocks", "models", "components"].map(
+                                (tab, index) => (
+                                    <button
+                                        key={index}
+                                        onClick={() => handleTabChange(tab)}
+                                        className={`tab-button w-full ${
+                                            activeTab === tab ? "active" : ""
+                                        }`}
+                                        title={
+                                            isCompactMode
+                                                ? tab.charAt(0).toUpperCase() +
+                                                  tab.slice(1)
+                                                : undefined
+                                        }
+                                    >
+                                        {isCompactMode ? (
+                                            tab === "blocks" ? (
+                                                <BlockIcon className="mx-auto h-4.5 w-4.5" />
+                                            ) : tab === "models" ? (
+                                                <PalmTreeIcon className="mx-auto h-4.5 w-4.5" />
+                                            ) : (
+                                                <BlocksIcon className="mx-auto h-4.5 w-4.5" />
+                                            )
+                                        ) : (
+                                            tab
+                                        )}
+                                    </button>
+                                )
+                            )}
+                            <div
+                                className="tab-indicator"
+                                style={{
+                                    left: `${
+                                        activeTab === "blocks"
+                                            ? "calc(0%)"
+                                            : activeTab === "models"
+                                            ? "calc(33.333% + 2px)"
+                                            : "calc(66.666% + 4px)"
+                                    }`,
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <div
+                        className="block-tools-divider"
+                        style={{
+                            width: "100%",
+                            height: "1px",
+                            backgroundColor: "rgba(255, 255, 255, 0.15)",
+                            marginBottom: "15px",
+                        }}
+                    />
+                    <div className="px-3">
+                        <input
+                            type="text"
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="px-3 py-2 w-full text-xs text-white rounded-md border bg-black/30 border-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
                         />
                     </div>
-                </div>
-                <div
-                    className="block-tools-divider"
-                    style={{
-                        width: "100%",
-                        height: "1px",
-                        backgroundColor: "rgba(255, 255, 255, 0.15)",
-                        marginBottom: "15px",
-                    }}
-                />
-                <div className="px-3">
-                    <input
-                        type="text"
-                        placeholder="Search..."
-                        value={searchQuery}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="px-3 py-2 w-full text-xs text-white rounded-md border bg-black/30 border-white/20 focus:outline-none focus:ring-1 focus:ring-white/50 placeholder-white/40"
-                    />
-                </div>
-                {activeTab === "models" && (
-                    <div className="flex items-center px-3 py-2">
-                        <div className="flex items-center w-full">
-                            {hasNavigatedCategories &&
-                                netNavigationCount > 0 && (
-                                    <button
-                                        onClick={() =>
-                                            navigateCategories("left")
-                                        }
-                                        className="flex flex-shrink-0 justify-center items-center mr-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
-                                        title="Previous categories"
-                                    >
-                                        <FaChevronLeft className="w-3 h-3" />
-                                    </button>
-                                )}
-
-                            <div
-                                className={`flex-1 overflow-hidden ${
-                                    hasNavigatedCategories
-                                        ? "justify-center"
-                                        : "justify-start"
-                                }`}
-                            >
-                                <div
-                                    className="flex gap-1.5 transition-transform duration-300 ease-in-out"
-                                    style={{
-                                        transform: `translateX(-${
-                                            (categoryScrollIndex / 2) * 120
-                                        }px)`, // Translation based on visible count steps
-                                    }}
-                                >
-                                    {getCategoriesForDisplay().map(
-                                        (cat, index) => (
-                                            <button
-                                                key={`${cat}-${index}`}
-                                                className={`text-xs cursor-pointer px-2 py-1 rounded-lg border transition-all duration-300 whitespace-nowrap flex-shrink-0 ${
-                                                    selectedModelCategory ===
-                                                    cat
-                                                        ? "bg-white text-black border-white"
-                                                        : "bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40"
-                                                }`}
-                                                onClick={() =>
-                                                    setSelectedModelCategory(
-                                                        cat
-                                                    )
-                                                }
-                                            >
-                                                {cat}
-                                            </button>
-                                        )
-                                    )}
-                                </div>
-                            </div>
-
-                            {(() => {
-                                const categories = getAllCategories();
-                                const maxIndex = Math.max(
-                                    0,
-                                    categories.length - 2
-                                );
-                                return (
-                                    categoryScrollIndex < maxIndex && (
+                    {activeTab === "models" && (
+                        <div className="flex items-center px-3 py-2">
+                            <div className="flex items-center w-full">
+                                {hasNavigatedCategories &&
+                                    netNavigationCount > 0 && (
                                         <button
                                             onClick={() =>
-                                                navigateCategories("right")
+                                                navigateCategories("left")
                                             }
-                                            className="flex flex-shrink-0 justify-center items-center ml-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
-                                            title="Next categories"
+                                            className="flex flex-shrink-0 justify-center items-center mr-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
+                                            title="Previous categories"
                                         >
-                                            <FaChevronRight className="w-3 h-3" />
+                                            <FaChevronLeft className="w-3 h-3" />
                                         </button>
-                                    )
-                                );
-                            })()}
-                        </div>
-                    </div>
-                )}
-                <div className="block-buttons-grid">
-                    {activeTab === "blocks" ? (
-                        <>
-                            <div className="block-tools-section-label">
-                                Default Blocks (ID: 1-99)
-                            </div>
-                            {visibleDefaultBlocks.map((blockType) => (
-                                <BlockButton
-                                    key={blockType.id}
-                                    blockType={blockType}
-                                    isSelected={
-                                        selectedBlockID === blockType.id
-                                    }
-                                    onSelect={(block) => {
-                                        handleBlockSelect(block);
-                                        localStorage.setItem(
-                                            "selectedBlock",
-                                            block.id
-                                        );
-                                    }}
-                                    handleDragStart={handleDragStart}
-                                />
-                            ))}
-                            <div className="mt-2 block-tools-section-label custom-label-with-icon">
-                                Custom Blocks (ID: 100-199)
-                                <button
-                                    className="download-all-icon-button"
-                                    onClick={handleDownloadAllCustom}
-                                    title="Download all custom textures"
-                                >
-                                    {visibleCustomBlocks.length > 0 && (
-                                        <FaDownload />
                                     )}
-                                </button>
-                            </div>
-                            {visibleCustomBlocks.map((blockType) => (
-                                <BlockButton
-                                    key={blockType.id}
-                                    blockType={blockType}
-                                    isSelected={
-                                        selectedBlockID === blockType.id
-                                    }
-                                    onSelect={(block) => {
-                                        handleBlockSelect(block);
-                                        localStorage.setItem(
-                                            "selectedBlock",
-                                            block.id
-                                        );
-                                    }}
-                                    handleDragStart={handleDragStart}
-                                    needsTexture={blockType.needsTexture}
-                                />
-                            ))}
-                        </>
-                    ) : activeTab === "models" ? (
-                        <>
-                            <div className="environment-button-wrapper">
-                                <div className="block-tools-section-label">
-                                    Default Models (ID: 200-299)
-                                </div>
-                                {visibleDefaultModels.map((envType) => (
-                                    <EnvironmentButton
-                                        key={envType.id}
-                                        envType={envType}
-                                        isSelected={
-                                            selectedBlockID === envType.id
-                                        }
-                                        onSelect={(envType) => {
-                                            handleEnvironmentSelect(envType);
-                                            localStorage.setItem(
-                                                "selectedBlock",
-                                                envType.id
-                                            );
-                                        }}
-                                    />
-                                ))}
-                                <div className="mt-2 block-tools-section-label">
-                                    Custom Models (ID: 300+)
-                                </div>
-                                {visibleCustomModels.map((envType) => (
-                                    <EnvironmentButton
-                                        key={envType.id}
-                                        envType={envType}
-                                        isSelected={
-                                            selectedBlockID === envType.id
-                                        }
-                                        onSelect={(envType) => {
-                                            handleEnvironmentSelect(envType);
-                                            localStorage.setItem(
-                                                "selectedBlock",
-                                                envType.id
-                                            );
-                                        }}
-                                    />
-                                ))}
-                            </div>
-                        </>
-                    ) : activeTab === "components" ? (
-                        <>
-                            <div className="block-tools-section-label">
-                                Saved Components
-                            </div>
-                            {visibleSchematics.length === 0 && (
-                                <div className="no-schematics-text">
-                                    No schematics saved yet. Generate some using
-                                    the AI Assistant!
-                                </div>
-                            )}
-                            {visibleSchematics.map((entry) => (
+
                                 <div
-                                    key={entry.id}
-                                    className="border transition-all duration-150 schematic-button bg-white/10 border-white/0 hover:border-white/20 active:border-white"
-                                    style={{
-                                        width: isCompactMode
-                                            ? "calc(50% - 6px)"
-                                            : "calc(33.333% - 4px)",
-                                    }}
-                                    onClick={() => handleSchematicSelect(entry)}
-                                    title={`Load: ${entry.prompt}`}
+                                    className={`flex-1 overflow-hidden ${
+                                        hasNavigatedCategories
+                                            ? "justify-center"
+                                            : "justify-start"
+                                    }`}
                                 >
-                                    <div className="schematic-button-icon">
-                                        {typeof schematicPreviews[entry.id] ===
-                                        "string" ? (
-                                            <img
-                                                src={
-                                                    schematicPreviews[entry.id]
-                                                }
-                                                alt="Schematic preview"
-                                                style={{
-                                                    width: "48px",
-                                                    height: "48px",
-                                                    objectFit: "contain",
-                                                }}
-                                            />
-                                        ) : schematicPreviews[entry.id] ===
-                                          null ? (
-                                            <FaWrench title="Preview unavailable" />
-                                        ) : (
-                                            <div
-                                                className="schematic-loading-spinner"
-                                                title="Loading preview..."
-                                            ></div>
+                                    <div
+                                        className="flex gap-1.5 transition-transform duration-300 ease-in-out"
+                                        style={{
+                                            transform: `translateX(-${
+                                                (categoryScrollIndex / 2) * 120
+                                            }px)`, // Translation based on visible count steps
+                                        }}
+                                    >
+                                        {getCategoriesForDisplay().map(
+                                            (cat, index) => (
+                                                <button
+                                                    key={`${cat}-${index}`}
+                                                    className={`text-xs cursor-pointer px-2 py-1 rounded-lg border transition-all duration-300 whitespace-nowrap flex-shrink-0 ${
+                                                        selectedModelCategory ===
+                                                        cat
+                                                            ? "bg-white text-black border-white"
+                                                            : "bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40"
+                                                    }`}
+                                                    onClick={() =>
+                                                        setSelectedModelCategory(
+                                                            cat
+                                                        )
+                                                    }
+                                                >
+                                                    {cat}
+                                                </button>
+                                            )
                                         )}
                                     </div>
-                                    <div className="schematic-button-prompt">
-                                        {entry.name && entry.name.trim()
-                                            ? entry.name.length > 50
-                                                ? entry.name.substring(0, 47) +
-                                                  "..."
-                                                : entry.name
-                                            : entry.prompt.length > 50
-                                            ? entry.prompt.substring(0, 47) +
-                                              "..."
-                                            : entry.prompt}
-                                    </div>
                                 </div>
-                            ))}
-                            <div className="flex px-3 mb-3 w-full">
-                                <input
-                                    ref={bpFileInputRef}
-                                    type="file"
-                                    multiple={false}
-                                    accept={".bp,application/octet-stream"}
-                                    onChange={handleBpFileInputChange}
-                                    style={{ display: "none" }}
-                                />
-                                <div
-                                    className="texture-drop-zone w-full py-2 h-[120px] cursor-pointer"
-                                    onDragOver={(e) => {
-                                        e.preventDefault();
-                                        e.currentTarget.classList.add(
-                                            "drag-over"
-                                        );
-                                    }}
-                                    onDragLeave={(e) => {
-                                        e.preventDefault();
-                                        e.currentTarget.classList.remove(
-                                            "drag-over"
-                                        );
-                                    }}
-                                    onDrop={handleBlueprintDropUpload}
-                                    onClick={handleComponentsDropzoneClick}
-                                >
-                                    <div className="drop-zone-content">
-                                        <div className="drop-zone-icons">
-                                            <FaUpload />
-                                        </div>
-                                        <div className="drop-zone-text">
-                                            Click or drag Axiom .bp to import as
-                                            terrain
-                                        </div>
-                                    </div>
-                                </div>
+
+                                {(() => {
+                                    const categories = getAllCategories();
+                                    const maxIndex = Math.max(
+                                        0,
+                                        categories.length - 2
+                                    );
+                                    return (
+                                        categoryScrollIndex < maxIndex && (
+                                            <button
+                                                onClick={() =>
+                                                    navigateCategories("right")
+                                                }
+                                                className="flex flex-shrink-0 justify-center items-center ml-2 w-6 h-6 text-white rounded-sm border transition-all cursor-pointer bg-white/10 hover:bg-white/20 border-white/20"
+                                                title="Next categories"
+                                            >
+                                                <FaChevronRight className="w-3 h-3" />
+                                            </button>
+                                        )
+                                    );
+                                })()}
                             </div>
-                        </>
-                    ) : null}
-                </div>
-                {(activeTab === "blocks" || activeTab === "models") && (
-                    <div className="flex px-3 mb-3 w-full">
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            multiple
-                            accept={
-                                activeTab === "blocks"
-                                    ? "image/*,.zip,application/zip,application/x-zip-compressed"
-                                    : activeTab === "models"
-                                    ? ".gltf,.glb"
-                                    : ""
-                            }
-                            onChange={handleFileInputChange}
-                            style={{ display: "none" }}
-                        />
-                        <div
-                            className="texture-drop-zone w-full py-2 h-[120px] cursor-pointer"
-                            onDragOver={(e) => {
-                                e.preventDefault();
-                                e.currentTarget.classList.add("drag-over");
-                            }}
-                            onDragLeave={(e) => {
-                                e.preventDefault();
-                                e.currentTarget.classList.remove("drag-over");
-                            }}
-                            onDrop={handleCustomAssetDropUpload}
-                            onClick={handleDropzoneClick}
-                        >
-                            <div className="drop-zone-content">
-                                <div className="drop-zone-icons">
-                                    <FaUpload />
+                        </div>
+                    )}
+                    <div className="block-buttons-grid">
+                        {activeTab === "blocks" ? (
+                            <>
+                                <div className="block-tools-section-label">
+                                    Default Blocks (ID: 1-99)
                                 </div>
-                                <div className="drop-zone-text">
-                                    {activeTab === "blocks"
-                                        ? "Click or drag images or .zip (multi-texture) to upload new blocks"
+                                {visibleDefaultBlocks.map((blockType) => (
+                                    <BlockButton
+                                        key={blockType.id}
+                                        blockType={blockType}
+                                        isSelected={
+                                            selectedBlockID === blockType.id
+                                        }
+                                        onSelect={(block) => {
+                                            handleBlockSelect(block);
+                                            localStorage.setItem(
+                                                "selectedBlock",
+                                                block.id
+                                            );
+                                        }}
+                                        handleDragStart={handleDragStart}
+                                    />
+                                ))}
+                                <div className="mt-2 block-tools-section-label custom-label-with-icon">
+                                    Custom Blocks (ID: 100-199)
+                                    <button
+                                        className="download-all-icon-button"
+                                        onClick={handleDownloadAllCustom}
+                                        title="Download all custom textures"
+                                    >
+                                        {visibleCustomBlocks.length > 0 && (
+                                            <FaDownload />
+                                        )}
+                                    </button>
+                                </div>
+                                {visibleCustomBlocks.map((blockType) => (
+                                    <BlockButton
+                                        key={blockType.id}
+                                        blockType={blockType}
+                                        isSelected={
+                                            selectedBlockID === blockType.id
+                                        }
+                                        onSelect={(block) => {
+                                            handleBlockSelect(block);
+                                            localStorage.setItem(
+                                                "selectedBlock",
+                                                block.id
+                                            );
+                                        }}
+                                        handleDragStart={handleDragStart}
+                                        needsTexture={blockType.needsTexture}
+                                    />
+                                ))}
+                            </>
+                        ) : activeTab === "models" ? (
+                            <>
+                                <div className="environment-button-wrapper">
+                                    <div className="block-tools-section-label">
+                                        Default Models (ID: 200-299)
+                                    </div>
+                                    {visibleDefaultModels.map((envType) => (
+                                        <EnvironmentButton
+                                            key={envType.id}
+                                            envType={envType}
+                                            isSelected={
+                                                selectedBlockID === envType.id
+                                            }
+                                            onSelect={(envType) => {
+                                                handleEnvironmentSelect(
+                                                    envType
+                                                );
+                                                localStorage.setItem(
+                                                    "selectedBlock",
+                                                    envType.id
+                                                );
+                                            }}
+                                        />
+                                    ))}
+                                    <div className="mt-2 block-tools-section-label">
+                                        Custom Models (ID: 300+)
+                                    </div>
+                                    {visibleCustomModels.map((envType) => (
+                                        <EnvironmentButton
+                                            key={envType.id}
+                                            envType={envType}
+                                            isSelected={
+                                                selectedBlockID === envType.id
+                                            }
+                                            onSelect={(envType) => {
+                                                handleEnvironmentSelect(
+                                                    envType
+                                                );
+                                                localStorage.setItem(
+                                                    "selectedBlock",
+                                                    envType.id
+                                                );
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            </>
+                        ) : activeTab === "components" ? (
+                            <>
+                                <div className="block-tools-section-label">
+                                    Saved Components
+                                </div>
+                                {visibleSchematics.length === 0 && (
+                                    <div className="no-schematics-text">
+                                        No schematics saved yet. Generate some
+                                        using the AI Assistant!
+                                    </div>
+                                )}
+                                {visibleSchematics.map((entry) => (
+                                    <div
+                                        key={entry.id}
+                                        className="border transition-all duration-150 schematic-button bg-white/10 border-white/0 hover:border-white/20 active:border-white"
+                                        style={{
+                                            width: isCompactMode
+                                                ? "calc(50% - 6px)"
+                                                : "calc(33.333% - 4px)",
+                                        }}
+                                        onClick={() =>
+                                            handleSchematicSelect(entry)
+                                        }
+                                        title={`Load: ${entry.prompt}`}
+                                    >
+                                        <div className="schematic-button-icon">
+                                            {typeof schematicPreviews[
+                                                entry.id
+                                            ] === "string" ? (
+                                                <img
+                                                    src={
+                                                        schematicPreviews[
+                                                            entry.id
+                                                        ]
+                                                    }
+                                                    alt="Schematic preview"
+                                                    style={{
+                                                        width: "48px",
+                                                        height: "48px",
+                                                        objectFit: "contain",
+                                                    }}
+                                                />
+                                            ) : schematicPreviews[entry.id] ===
+                                              null ? (
+                                                <FaWrench title="Preview unavailable" />
+                                            ) : (
+                                                <div
+                                                    className="schematic-loading-spinner"
+                                                    title="Loading preview..."
+                                                ></div>
+                                            )}
+                                        </div>
+                                        <div className="schematic-button-prompt">
+                                            {entry.name && entry.name.trim()
+                                                ? entry.name.length > 50
+                                                    ? entry.name.substring(
+                                                          0,
+                                                          47
+                                                      ) + "..."
+                                                    : entry.name
+                                                : entry.prompt.length > 50
+                                                ? entry.prompt.substring(
+                                                      0,
+                                                      47
+                                                  ) + "..."
+                                                : entry.prompt}
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="flex px-3 mb-3 w-full">
+                                    <input
+                                        ref={bpFileInputRef}
+                                        type="file"
+                                        multiple={false}
+                                        accept={".bp,application/octet-stream"}
+                                        onChange={handleBpFileInputChange}
+                                        style={{ display: "none" }}
+                                    />
+                                    <div
+                                        className="texture-drop-zone w-full py-2 h-[120px] cursor-pointer"
+                                        onDragOver={(e) => {
+                                            e.preventDefault();
+                                            e.currentTarget.classList.add(
+                                                "drag-over"
+                                            );
+                                        }}
+                                        onDragLeave={(e) => {
+                                            e.preventDefault();
+                                            e.currentTarget.classList.remove(
+                                                "drag-over"
+                                            );
+                                        }}
+                                        onDrop={handleBlueprintDropUpload}
+                                        onClick={handleComponentsDropzoneClick}
+                                    >
+                                        <div className="drop-zone-content">
+                                            <div className="drop-zone-icons">
+                                                <FaUpload />
+                                            </div>
+                                            <div className="drop-zone-text">
+                                                Click or drag Axiom .bp to
+                                                import as terrain
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : null}
+                    </div>
+                    {(activeTab === "blocks" || activeTab === "models") && (
+                        <div className="flex px-3 mb-3 w-full">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                multiple
+                                accept={
+                                    activeTab === "blocks"
+                                        ? "image/*,.zip,application/zip,application/x-zip-compressed"
                                         : activeTab === "models"
-                                        ? "Click or drag .gltf files to add custom models"
-                                        : ""}
+                                        ? ".gltf,.glb"
+                                        : ""
+                                }
+                                onChange={handleFileInputChange}
+                                style={{ display: "none" }}
+                            />
+                            <div
+                                className="texture-drop-zone w-full py-2 h-[120px] cursor-pointer"
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.add("drag-over");
+                                }}
+                                onDragLeave={(e) => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.remove(
+                                        "drag-over"
+                                    );
+                                }}
+                                onDrop={handleCustomAssetDropUpload}
+                                onClick={handleDropzoneClick}
+                            >
+                                <div className="drop-zone-content">
+                                    <div className="drop-zone-icons">
+                                        <FaUpload />
+                                    </div>
+                                    <div className="drop-zone-text">
+                                        {activeTab === "blocks"
+                                            ? "Click or drag images or .zip (multi-texture) to upload new blocks"
+                                            : activeTab === "models"
+                                            ? "Click or drag .gltf files to add custom models"
+                                            : ""}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                )}
-                {activeTab === "blocks" && (
-                    <div className="flex px-3 mb-3 w-full">
-                        <button
-                            className="flex justify-center items-center p-2 w-full font-medium text-center text-black bg-white rounded-md border transition-all cursor-pointer hover:border-2 hover:border-black"
-                            onClick={onOpenTextureModal}
-                        >
-                            Create Texture
-                        </button>
-                    </div>
-                )}
+                    )}
+                    {activeTab === "blocks" && (
+                        <div className="flex px-3 mb-3 w-full">
+                            <button
+                                className="flex justify-center items-center p-2 w-full font-medium text-center text-black bg-white rounded-md border transition-all cursor-pointer hover:border-2 hover:border-black"
+                                onClick={onOpenTextureModal}
+                            >
+                                Create Texture
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
+            {showBlockRemapper && (
+                <AxiomBlockRemapper
+                    unmappedBlocks={unmappedBlocks}
+                    blockCounts={blockCounts}
+                    onConfirmMappings={handleBlockMappingConfirm}
+                    onCancel={handleBlockMappingCancel}
+                />
+            )}
+        </>
     );
 };
 export default BlockToolsSidebar;

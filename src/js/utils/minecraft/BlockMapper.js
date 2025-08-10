@@ -1,11 +1,8 @@
-
 import { blockTypes, getBlockTypes } from "../../TerrainBuilder";
 
 function findBlockIdByName(pattern) {
-
     const currentBlockTypes = getBlockTypes();
     if (!currentBlockTypes || !currentBlockTypes.length) {
-
         return getFallbackBlockId(pattern);
     }
 
@@ -63,7 +60,6 @@ const BLOCK_IDS = {
     SAND: findBlockIdByName("sand"),
 };
 export const DEFAULT_BLOCK_MAPPINGS = {
-
     "minecraft:stone": {
         id: BLOCK_IDS.STONE || 1,
         name: "Stone",
@@ -155,8 +151,13 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         action: "map",
     },
     "minecraft:gravel": {
-        id: findBlockIdByName("gravel") || 4,
+        id: findBlockIdByName("gravel") || BLOCK_IDS.DIRT || 4,
         name: "Gravel",
+        action: "map",
+    },
+    "minecraft:coarse_dirt": {
+        id: BLOCK_IDS.DIRT || 4,
+        name: "Coarse Dirt",
         action: "map",
     },
 
@@ -244,17 +245,17 @@ export const DEFAULT_BLOCK_MAPPINGS = {
 
     "minecraft:oak_leaves": {
         id: findBlockIdByName("oak-leaves") || BLOCK_IDS.GRASS || 7,
-        name: "Leaves",
+        name: "Oak Leaves",
         action: "map",
     },
     "minecraft:spruce_leaves": {
         id: findBlockIdByName("oak-leaves") || BLOCK_IDS.GRASS || 7,
-        name: "Leaves",
+        name: "Spruce Leaves",
         action: "map",
     },
     "minecraft:birch_leaves": {
         id: findBlockIdByName("oak-leaves") || BLOCK_IDS.GRASS || 7,
-        name: "Leaves",
+        name: "Birch Leaves",
         action: "map",
     },
     "minecraft:jungle_leaves": {
@@ -379,11 +380,32 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         isLiquid: true,
     },
 
+    // Fences and decorative blocks
+    "minecraft:oak_fence": {
+        id: BLOCK_IDS.OAK_PLANKS || 1,
+        name: "Oak Fence",
+        action: "map",
+    },
+    "minecraft:spruce_fence": {
+        id: BLOCK_IDS.OAK_PLANKS || 1,
+        name: "Spruce Fence",
+        action: "map",
+    },
+    "minecraft:birch_fence": {
+        id: BLOCK_IDS.OAK_PLANKS || 1,
+        name: "Birch Fence",
+        action: "map",
+    },
+    "minecraft:vine": {
+        id: BLOCK_IDS.GRASS || 7,
+        name: "Vine",
+        action: "map",
+    },
+
     default: { action: "skip" },
 };
 
 export function suggestMapping(minecraftBlockName) {
-
     if (DEFAULT_BLOCK_MAPPINGS[minecraftBlockName]) {
         return DEFAULT_BLOCK_MAPPINGS[minecraftBlockName];
     }
@@ -398,8 +420,6 @@ export function suggestMapping(minecraftBlockName) {
             action: "map",
         };
     }
-
-
 
     if (blockName === "stone" || blockName === "cobblestone") {
         return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
@@ -421,7 +441,6 @@ export function suggestMapping(minecraftBlockName) {
 }
 
 function findMatchingBlock(blockNamePattern) {
-
     const currentBlockTypes = getBlockTypes();
     if (!currentBlockTypes || !currentBlockTypes.length) {
         return null;
@@ -463,11 +482,7 @@ export const DEFAULT_HYTOPIA_BLOCKS = [
 
 export function getHytopiaBlocks() {
     try {
-
         if (blockTypes && blockTypes.length > 0) {
-
-
-
             return blockTypes.map((block) => ({
                 id: block.id,
                 name:
@@ -489,7 +504,6 @@ export function generateUniqueBlockId(existingBlockTypes) {
 }
 
 export function getHytopiaBlockById(id) {
-
     const blocks = getHytopiaBlocks();
     return blocks.find((block) => block.id === id);
 }
