@@ -1,5 +1,7 @@
+/* global BigInt */
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
+import pako from "pako";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     FaDownload,
@@ -24,6 +26,8 @@ import EnvironmentButton from "./EnvironmentButton";
 import { BlockIcon } from "./icons/BlockIcon";
 import { PalmTreeIcon } from "./icons/PalmTreeIcon";
 import { BlocksIcon } from "./icons/BlocksIcon";
+import { suggestMapping } from "../utils/minecraft/BlockMapper";
+import { NBTParser } from "../utils/minecraft/NBTParser";
 
 let selectedBlockID = 0;
 export const refreshBlockTools = () => {
@@ -97,6 +101,7 @@ const BlockToolsSidebar = ({
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
     const fileInputRef = useRef(null);
+    const bpFileInputRef = useRef(null);
 
     useEffect(() => {
         const savedBlockId = localStorage.getItem("selectedBlock");
@@ -1026,6 +1031,12 @@ const BlockToolsSidebar = ({
         }
     };
 
+    const handleComponentsDropzoneClick = () => {
+        if (bpFileInputRef.current) {
+            bpFileInputRef.current.click();
+        }
+    };
+
     const handleFileInputChange = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length > 0) {
@@ -1044,6 +1055,220 @@ const BlockToolsSidebar = ({
             await handleCustomAssetDropUpload(syntheticEvent);
             // Reset the file input so the same file can be selected again if needed
             e.target.value = "";
+        }
+    };
+
+    const readFileAsArrayBuffer = (file) =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+
+    const parseNbtBrowser = async (arrayBuffer) => {
+        // Use in-repo browser-safe NBT parser (no Node polyfills)
+        // Preserve slice by passing Uint8Array directly when available
+        if (arrayBuffer instanceof Uint8Array) {
+            return NBTParser.parse(arrayBuffer);
+        }
+        if (arrayBuffer instanceof ArrayBuffer) {
+            return NBTParser.parse(new Uint8Array(arrayBuffer));
+        }
+        if (arrayBuffer && arrayBuffer.buffer instanceof ArrayBuffer) {
+            return NBTParser.parse(new Uint8Array(arrayBuffer.buffer));
+        }
+        return NBTParser.parse(arrayBuffer);
+    };
+
+    const decodeLongPairToBigInt = (pair) => {
+        const hi = BigInt((pair[0] >>> 0) >>> 0);
+        const lo = BigInt((pair[1] >>> 0) >>> 0);
+        return (hi << 32n) | lo;
+    };
+
+    const decodePaletteIndices = (longPairs, paletteLen, totalBlocks) => {
+        const longs =
+            longPairs.length > 0 && typeof longPairs[0] === "bigint"
+                ? longPairs
+                : longPairs.map(decodeLongPairToBigInt);
+        const bitsPerBlock = Math.max(
+            4,
+            Math.ceil(Math.log2(Math.max(1, paletteLen)))
+        );
+        const mask = (1n << BigInt(bitsPerBlock)) - 1n;
+        const out = new Array(totalBlocks);
+        for (let i = 0; i < totalBlocks; i++) {
+            const bitIndex = BigInt(i * bitsPerBlock);
+            const longIndex = Number(bitIndex / 64n);
+            const startBit = Number(bitIndex % 64n);
+            let value;
+            if (startBit + bitsPerBlock <= 64) {
+                value = Number((longs[longIndex] >> BigInt(startBit)) & mask);
+            } else {
+                const lowBits = 64 - startBit;
+                const low =
+                    (longs[longIndex] >> BigInt(startBit)) &
+                    ((1n << BigInt(lowBits)) - 1n);
+                const high =
+                    longs[longIndex + 1] &
+                    ((1n << BigInt(bitsPerBlock - lowBits)) - 1n);
+                value = Number(low | (high << BigInt(lowBits)));
+            }
+            out[i] = value;
+        }
+        return out;
+    };
+
+    const sectionIndexToLocalXYZ = (index) => {
+        const x = index & 15;
+        const z = (index >> 4) & 15;
+        const y = (index >> 8) & 15;
+        return { x, y, z };
+    };
+
+    const parseAxiomBpInBrowser = async (file) => {
+        const ab = await readFileAsArrayBuffer(file);
+        const bytes = new Uint8Array(ab);
+        const dv = new DataView(bytes.buffer);
+        let offset = 0;
+        // Magic
+        if (
+            !(
+                bytes[0] === 0x0a &&
+                bytes[1] === 0xe5 &&
+                bytes[2] === 0xbb &&
+                bytes[3] === 0x36
+            )
+        ) {
+            throw new Error("Invalid .bp magic");
+        }
+        offset += 4;
+        // metadata
+        const metaLen = dv.getUint32(offset);
+        offset += 4;
+        const metaBuf = bytes.subarray(offset, offset + metaLen);
+        offset += metaLen;
+        const metadata = await parseNbtBrowser(metaBuf);
+        // preview
+        const previewLen = dv.getUint32(offset);
+        offset += 4;
+        const previewBuf = bytes.subarray(offset, offset + previewLen);
+        offset += previewLen;
+        // structure (gzip NBT)
+        const structLen = dv.getUint32(offset);
+        offset += 4;
+        const structCompressed = bytes.subarray(offset, offset + structLen);
+        let structure;
+        try {
+            const structInflated = pako.ungzip(structCompressed);
+            structure = await parseNbtBrowser(structInflated);
+        } catch (e) {
+            // Some files may have raw NBT without gzip
+            structure = await parseNbtBrowser(structCompressed);
+        }
+        return { metadata, previewBuf, structure };
+    };
+
+    const convertStructureToTerrainMap = (structure) => {
+        // Support both prismarine-nbt shape and NBTParser shape
+        const getVal = (v) => (v && v.value !== undefined ? v.value : v);
+        let regions = [];
+        if (Array.isArray(structure.BlockRegion)) {
+            regions = structure.BlockRegion;
+        } else if (
+            structure.BlockRegion &&
+            structure.BlockRegion.value &&
+            structure.BlockRegion.value.value
+        ) {
+            regions = structure.BlockRegion.value.value;
+        }
+        const terrain = {};
+        for (const region of regions) {
+            const baseX = getVal(region.X) * 16;
+            const baseY = getVal(region.Y) * 16;
+            const baseZ = getVal(region.Z) * 16;
+            const bs = getVal(region.BlockStates);
+            if (!bs) continue;
+            let data = getVal(bs.data) || [];
+            let palette = getVal(bs.palette) || [];
+            if (palette && palette.value && palette.value.value) {
+                palette = palette.value.value;
+            }
+            if (!palette.length) continue;
+            const totalBlocks = 16 * 16 * 16;
+            const indices = decodePaletteIndices(
+                data,
+                palette.length,
+                totalBlocks
+            );
+            for (let i = 0; i < totalBlocks; i++) {
+                const pIdx = indices[i];
+                const entry = palette[pIdx];
+                if (!entry) continue;
+                const nameVal = getVal(entry.Name);
+                if (!nameVal || typeof nameVal !== "string") continue;
+                const mcName = nameVal;
+                const mapping = suggestMapping(mcName);
+                if (!mapping || mapping.action === "skip") continue;
+                const blockId = parseInt(
+                    mapping.id || mapping.targetBlockId || mapping?.id,
+                    10
+                );
+                if (!blockId) continue;
+                const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
+                const x = baseX + lx;
+                const y = baseY + ly;
+                const z = baseZ + lz;
+                terrain[`${x},${y},${z}`] = blockId;
+            }
+        }
+        return terrain;
+    };
+
+    const handleBpFileInputChange = async (e) => {
+        const files = Array.from(e.target.files || []);
+        const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
+        if (!bp) return;
+        try {
+            const { structure } = await parseAxiomBpInBrowser(bp);
+            const terrainMap = convertStructureToTerrainMap(structure);
+            if (
+                terrainBuilderRef &&
+                terrainBuilderRef.current &&
+                typeof terrainBuilderRef.current.updateTerrainFromToolBar ===
+                    "function"
+            ) {
+                terrainBuilderRef.current.updateTerrainFromToolBar(terrainMap);
+            }
+        } catch (err) {
+            console.error(".bp import failed:", err);
+            alert("Failed to import .bp file. See console for details.");
+        } finally {
+            e.target.value = "";
+        }
+    };
+
+    const handleBlueprintDropUpload = async (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove("drag-over");
+        const files = Array.from(e.dataTransfer.files || []);
+        const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
+        if (!bp) return;
+        try {
+            const { structure } = await parseAxiomBpInBrowser(bp);
+            const terrainMap = convertStructureToTerrainMap(structure);
+            if (
+                terrainBuilderRef &&
+                terrainBuilderRef.current &&
+                typeof terrainBuilderRef.current.updateTerrainFromToolBar ===
+                    "function"
+            ) {
+                terrainBuilderRef.current.updateTerrainFromToolBar(terrainMap);
+            }
+        } catch (err) {
+            console.error(".bp import failed:", err);
+            alert("Failed to import .bp file. See console for details.");
         }
     };
 
@@ -1403,6 +1628,43 @@ const BlockToolsSidebar = ({
                                     </div>
                                 </div>
                             ))}
+                            <div className="flex px-3 mb-3 w-full">
+                                <input
+                                    ref={bpFileInputRef}
+                                    type="file"
+                                    multiple={false}
+                                    accept={".bp,application/octet-stream"}
+                                    onChange={handleBpFileInputChange}
+                                    style={{ display: "none" }}
+                                />
+                                <div
+                                    className="texture-drop-zone w-full py-2 h-[120px] cursor-pointer"
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        e.currentTarget.classList.add(
+                                            "drag-over"
+                                        );
+                                    }}
+                                    onDragLeave={(e) => {
+                                        e.preventDefault();
+                                        e.currentTarget.classList.remove(
+                                            "drag-over"
+                                        );
+                                    }}
+                                    onDrop={handleBlueprintDropUpload}
+                                    onClick={handleComponentsDropzoneClick}
+                                >
+                                    <div className="drop-zone-content">
+                                        <div className="drop-zone-icons">
+                                            <FaUpload />
+                                        </div>
+                                        <div className="drop-zone-text">
+                                            Click or drag Axiom .bp to import as
+                                            terrain
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </>
                     ) : null}
                 </div>

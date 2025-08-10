@@ -17,34 +17,53 @@ const TAG_TYPES = {
     LONG_ARRAY: 12,
 };
 export class NBTParser {
-    constructor(buffer, littleEndian = false) {
-        this.buffer = buffer;
-        this.view = new DataView(buffer);
+    constructor(bytesOrBuffer, littleEndian = false) {
+        this.bytes =
+            bytesOrBuffer instanceof Uint8Array
+                ? bytesOrBuffer
+                : new Uint8Array(bytesOrBuffer);
+        this.view = new DataView(
+            this.bytes.buffer,
+            this.bytes.byteOffset,
+            this.bytes.byteLength
+        );
         this.offset = 0;
         this.littleEndian = littleEndian;
         this.textDecoder = new TextDecoder(); // Single reusable instance
     }
     static decompress(buffer) {
         try {
-            const view = new DataView(buffer);
+            const bytes =
+                buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+            const view = new DataView(
+                bytes.buffer,
+                bytes.byteOffset,
+                bytes.byteLength
+            );
             if (view.getUint8(0) === 0x1f && view.getUint8(1) === 0x8b) {
                 console.log("Detected GZIP compression");
-                return pako.ungzip(new Uint8Array(buffer)).buffer;
+                return pako.ungzip(bytes);
             }
             if (view.getUint8(0) === 0x78) {
                 console.log("Detected ZLIB compression");
-                return pako.inflate(new Uint8Array(buffer)).buffer;
+                return pako.inflate(bytes);
             }
             console.log("No compression detected, using raw buffer");
-            return buffer;
+            return bytes;
         } catch (e) {
             console.error("Decompression error:", e);
-            return buffer; // Fallback to raw buffer
+            return buffer instanceof Uint8Array
+                ? buffer
+                : new Uint8Array(buffer); // Fallback to raw buffer
         }
     }
     static parse(buffer, littleEndian = false) {
-        const decompressedBuffer = this.decompress(buffer);
-        const parser = new NBTParser(decompressedBuffer, littleEndian);
+        const decompressed = this.decompress(buffer);
+        const bytes =
+            decompressed instanceof Uint8Array
+                ? decompressed
+                : new Uint8Array(decompressed);
+        const parser = new NBTParser(bytes, littleEndian);
         try {
             return parser.parseCompound();
         } catch (e) {
@@ -59,7 +78,9 @@ export class NBTParser {
             const tagType = this.view.getUint8(this.offset++);
             if (tagType !== TAG_TYPES.COMPOUND) {
                 throw new Error(
-                    `Expected compound tag but got ${tagType} at offset ${this.offset - 1}`
+                    `Expected compound tag but got ${tagType} at offset ${
+                        this.offset - 1
+                    }`
                 );
             }
             const nameLength = this.view.getUint16(
@@ -68,7 +89,7 @@ export class NBTParser {
             );
             this.offset += 2;
             const name = this.textDecoder.decode(
-                new Uint8Array(this.buffer, this.offset, nameLength)
+                this.bytes.subarray(this.offset, this.offset + nameLength)
             );
             this.offset += nameLength;
         }
@@ -82,7 +103,7 @@ export class NBTParser {
             );
             this.offset += 2;
             const name = this.textDecoder.decode(
-                new Uint8Array(this.buffer, this.offset, nameLength)
+                this.bytes.subarray(this.offset, this.offset + nameLength)
             );
             this.offset += nameLength;
             result[name] = this.parseTagValue(tagType);
@@ -140,8 +161,8 @@ export class NBTParser {
                 );
                 this.offset += 4;
                 const byteArray = new Int8Array(
-                    this.buffer,
-                    this.offset,
+                    this.view.buffer,
+                    this.view.byteOffset + this.offset,
                     byteLength
                 );
                 this.offset += byteLength;
@@ -153,7 +174,7 @@ export class NBTParser {
                 );
                 this.offset += 2;
                 const strValue = this.textDecoder.decode(
-                    new Uint8Array(this.buffer, this.offset, strLength)
+                    this.bytes.subarray(this.offset, this.offset + strLength)
                 );
                 this.offset += strLength;
                 return strValue;
