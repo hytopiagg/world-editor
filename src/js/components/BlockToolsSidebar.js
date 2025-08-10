@@ -24,6 +24,7 @@ import EnvironmentButton from "./EnvironmentButton";
 import { BlockIcon } from "./icons/BlockIcon";
 import { PalmTreeIcon } from "./icons/PalmTreeIcon";
 import { BlocksIcon } from "./icons/BlocksIcon";
+import { parseAxiomBlueprintFromArrayBuffer, convertStructureToEditorSchematic } from "../utils/minecraft/AxiomBlueprint";
 
 let selectedBlockID = 0;
 export const refreshBlockTools = () => {
@@ -1017,6 +1018,66 @@ const BlockToolsSidebar = ({
                     );
                 }
             }
+        } else if (activeTab === "components") {
+            const blueprintFiles = files.filter(
+                (file) => file.name.toLowerCase().endsWith(".bp")
+            );
+            if (blueprintFiles.length > 0) {
+                try {
+                    const allSchematicsFromBPs = [];
+                    for (const blueprintFile of blueprintFiles) {
+                        try {
+                            const arrayBuffer = await blueprintFile.arrayBuffer();
+                            const parsedBlueprint = await parseAxiomBlueprintFromArrayBuffer(arrayBuffer);
+                             if (parsedBlueprint?.structure) {
+                                 const schematicData = convertStructureToEditorSchematic(parsedBlueprint.structure);
+                                 allSchematicsFromBPs.push({
+                                     id: Date.now() + allSchematicsFromBPs.length,
+                                     prompt: `Imported from ${blueprintFile.name}`,
+                                     name: blueprintFile.name.replace(/\.[^/.]+$/, ""),
+                                     schematic: schematicData,
+                                     timestamp: Date.now(),
+                                 });
+                             }
+                        } catch (bpErr) {
+                            console.error(
+                                `Error processing blueprint file ${blueprintFile.name}:`,
+                                bpErr
+                            );
+                        }
+                    }
+                    if (allSchematicsFromBPs.length > 0) {
+                                                 try {
+                             for (const entry of allSchematicsFromBPs) {
+                                 await DatabaseManager.saveData(
+                                     STORES.SCHEMATICS,
+                                     entry.id,
+                                     entry
+                                 );
+                                 try {
+                                     const blocksForPreview = entry.schematic?.blocks || entry.schematic;
+                                     const previewDataUrl = await generateSchematicPreview(blocksForPreview, { width: 48, height: 48, background: "transparent" });
+                                     if (previewDataUrl) {
+                                         await DatabaseManager.saveData(STORES.PREVIEWS, entry.id, previewDataUrl);
+                                     }
+                                 } catch (prevErr) {
+                                     console.warn("Failed generating preview for", entry.name, prevErr);
+                                 }
+                             }
+                             window.dispatchEvent(new Event("schematicsDbUpdated"));
+                             refreshBlockTools();
+                             loadSchematicsFromDB(); // Reload to show new schematics
+                         } catch (saveBPErr) {
+                            console.error(
+                                "Error saving schematics from blueprint files:",
+                                saveBPErr
+                            );
+                        }
+                    }
+                } catch (outerBPErr) {
+                    console.error("Blueprint handling error:", outerBPErr);
+                }
+            }
         }
     };
 
@@ -1348,6 +1409,9 @@ const BlockToolsSidebar = ({
                             <div className="block-tools-section-label">
                                 Saved Components
                             </div>
+                            <div className="px-3 mb-2 text-xs text-white/70">
+                                You can also drag & drop .bp (Axiom) blueprint files here to import.
+                            </div>
                             {visibleSchematics.length === 0 && (
                                 <div className="no-schematics-text">
                                     No schematics saved yet. Generate some using
@@ -1406,7 +1470,7 @@ const BlockToolsSidebar = ({
                         </>
                     ) : null}
                 </div>
-                {(activeTab === "blocks" || activeTab === "models") && (
+                {(activeTab === "blocks" || activeTab === "models" || activeTab === "components") && (
                     <div className="flex px-3 mb-3 w-full">
                         <input
                             ref={fileInputRef}
@@ -1417,7 +1481,7 @@ const BlockToolsSidebar = ({
                                     ? "image/*,.zip,application/zip,application/x-zip-compressed"
                                     : activeTab === "models"
                                     ? ".gltf,.glb"
-                                    : ""
+                                    : ".bp"
                             }
                             onChange={handleFileInputChange}
                             style={{ display: "none" }}
@@ -1444,7 +1508,7 @@ const BlockToolsSidebar = ({
                                         ? "Click or drag images or .zip (multi-texture) to upload new blocks"
                                         : activeTab === "models"
                                         ? "Click or drag .gltf files to add custom models"
-                                        : ""}
+                                        : "Click or drag .bp Axiom blueprints to import components"}
                                 </div>
                             </div>
                         </div>

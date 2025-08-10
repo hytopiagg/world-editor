@@ -21,7 +21,8 @@
         "react-scripts": "^5.0.1",
         "sharp": "^0.34.1",
         "three": "^0.160.0",
-        "typescript": "^5.8.3"
+        "typescript": "^5.8.3",
+        "prismarine-nbt": "^2.6.1"
     },
     "scripts": {
         "dev": "react-scripts start",
@@ -30,7 +31,9 @@
         "test": "react-scripts test",
         "eject": "react-scripts eject",
         "prebuild": "node scripts/generate-model-manifest.js",
-        "prestart": "node scripts/generate-model-manifest.js"
+        "prestart": "node scripts/generate-model-manifest.js",
+        "bp:parse": "node scripts/parse-axiom-bp.js",
+        "bp:convert": "node scripts/convert-axiom-bp-to-editor.js"
     },
     "eslintConfig": {
         "extends": [
@@ -56,5 +59,21 @@
         "autoprefixer": "^10.4.21",
         "postcss": "^8.5.6",
         "tailwindcss": "^3.4.17"
-    }
+    },
+    "description": "<p align=\"center\"> <img width=\"500\" alt=\"HYTOPIA World Editor - 3D Voxel Builder Interface\" src=\"https://github.com/user-attachments/assets/b3ca4a7c-cdfc-41c6-a35c-445735dfe837\" /> </p>",
+    "main": "postcss.config.js",
+    "directories": {
+        "doc": "docs"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/hytopiagg/world-editor.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/hytopiagg/world-editor/issues"
+    },
+    "homepage": "https://github.com/hytopiagg/world-editor#readme"
 }

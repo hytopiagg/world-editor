@@ -63,13 +63,14 @@ const BLOCK_IDS = {
     SAND: findBlockIdByName("sand"),
 };
 export const DEFAULT_BLOCK_MAPPINGS = {
-
-    "minecraft:stone": {
-        id: BLOCK_IDS.STONE || 1,
-        name: "Stone",
-        action: "map",
-    },
-    "minecraft:granite": {
+    "minecraft:structure_void": { action: "skip" },
+ 
+          "minecraft:stone": {
+         id: BLOCK_IDS.STONE || 1,
+         name: "Stone",
+         action: "map",
+     },
+     "minecraft:granite": {
         id: BLOCK_IDS.STONE || 1,
         name: "Stone",
         action: "map",
