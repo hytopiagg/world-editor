@@ -1120,12 +1120,15 @@ const BlockToolsSidebar = ({
         return out;
     };
 
-    const sectionIndexToLocalXYZ = (index) => {
-        const x = index & 15;
-        const z = (index >> 4) & 15;
-        const y = (index >> 8) & 15;
-        return { x, y, z };
-    };
+    // Try all 6 permutations of (8-bit axis | 4-bit axis | 4-bit axis)
+    const indexDecoders = [
+        (i) => ({ x: i & 15, z: (i >> 4) & 15, y: (i >> 8) & 15 }), // y,z,x
+        (i) => ({ z: i & 15, x: (i >> 4) & 15, y: (i >> 8) & 15 }), // y,x,z
+        (i) => ({ z: i & 15, y: (i >> 4) & 15, x: (i >> 8) & 15 }), // x,y,z
+        (i) => ({ y: i & 15, z: (i >> 4) & 15, x: (i >> 8) & 15 }), // x,z,y
+        (i) => ({ x: i & 15, y: (i >> 4) & 15, z: (i >> 8) & 15 }), // z,y,x
+        (i) => ({ y: i & 15, x: (i >> 4) & 15, z: (i >> 8) & 15 }), // z,x,y
+    ];
 
     const parseAxiomBpInBrowser = async (file) => {
         const ab = await readFileAsArrayBuffer(file);
@@ -1183,7 +1186,10 @@ const BlockToolsSidebar = ({
         ) {
             regions = structure.BlockRegion.value.value;
         }
-        const terrain = {};
+        const terrainByPerm = Array.from(
+            { length: indexDecoders.length },
+            () => ({})
+        );
         for (const region of regions) {
             const baseX = getVal(region.X) * 16;
             const baseY = getVal(region.Y) * 16;
@@ -1216,14 +1222,50 @@ const BlockToolsSidebar = ({
                     10
                 );
                 if (!blockId) continue;
-                const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
-                const x = baseX + lx;
-                const y = baseY + ly;
-                const z = baseZ + lz;
-                terrain[`${x},${y},${z}`] = blockId;
+                for (let p = 0; p < indexDecoders.length; p++) {
+                    const { x: lx, y: ly, z: lz } = indexDecoders[p](i);
+                    const x = baseX + lx;
+                    const y = baseY + ly;
+                    const z = baseZ + lz;
+                    terrainByPerm[p][`${x},${y},${z}`] = blockId;
+                }
             }
         }
-        return terrain;
+        // Prefer original Minecraft order first; fall back to alt and then others
+        const orderPreference = [0, 1, 2, 3, 4, 5];
+        let bestIdx = 0;
+        let bestCount = -1;
+        for (const idx of orderPreference) {
+            const count = Object.keys(terrainByPerm[idx]).length;
+            if (count > bestCount) {
+                bestCount = count;
+                bestIdx = idx;
+            }
+        }
+        return terrainByPerm[bestIdx];
+    };
+
+    const terrainToRelativeSchematic = (terrainMap) => {
+        const keys = Object.keys(terrainMap);
+        if (keys.length === 0) return { blocks: {}, entities: [] };
+        let minX = Infinity,
+            minY = Infinity,
+            minZ = Infinity;
+        for (const k of keys) {
+            const [x, y, z] = k.split(",").map(Number);
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (z < minZ) minZ = z;
+        }
+        const relBlocks = {};
+        for (const [k, id] of Object.entries(terrainMap)) {
+            const [x, y, z] = k.split(",").map(Number);
+            const rx = x - minX;
+            const ry = y - minY;
+            const rz = z - minZ;
+            relBlocks[`${rx},${ry},${rz}`] = id;
+        }
+        return { blocks: relBlocks, entities: [] };
     };
 
     const handleBpFileInputChange = async (e) => {
@@ -1231,16 +1273,42 @@ const BlockToolsSidebar = ({
         const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
         if (!bp) return;
         try {
-            const { structure } = await parseAxiomBpInBrowser(bp);
+            const { metadata, structure } = await parseAxiomBpInBrowser(bp);
             const terrainMap = convertStructureToTerrainMap(structure);
-            if (
-                terrainBuilderRef &&
-                terrainBuilderRef.current &&
-                typeof terrainBuilderRef.current.updateTerrainFromToolBar ===
-                    "function"
-            ) {
-                terrainBuilderRef.current.updateTerrainFromToolBar(terrainMap);
+            const schematic = terrainToRelativeSchematic(terrainMap);
+            const nameTag =
+                metadata &&
+                metadata.Name &&
+                (metadata.Name.value || metadata.Name);
+            const name =
+                typeof nameTag === "string" && nameTag.trim()
+                    ? nameTag
+                    : bp.name.replace(/\.bp$/i, "");
+            const entry = {
+                id: `bp-${Date.now()}`,
+                prompt: `Imported BP: ${name}`,
+                name,
+                schematic,
+                timestamp: Date.now(),
+            };
+            try {
+                await DatabaseManager.saveData(
+                    STORES.SCHEMATICS,
+                    entry.id,
+                    entry
+                );
+                window.dispatchEvent(new Event("schematicsDbUpdated"));
+            } catch (dbErr) {
+                console.warn("Failed to save schematic to DB:", dbErr);
             }
+            try {
+                if (terrainBuilderRef?.current?.activateTool) {
+                    terrainBuilderRef.current.activateTool(
+                        "schematic",
+                        schematic
+                    );
+                }
+            } catch (_) {}
         } catch (err) {
             console.error(".bp import failed:", err);
             alert("Failed to import .bp file. See console for details.");
@@ -1256,16 +1324,42 @@ const BlockToolsSidebar = ({
         const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
         if (!bp) return;
         try {
-            const { structure } = await parseAxiomBpInBrowser(bp);
+            const { metadata, structure } = await parseAxiomBpInBrowser(bp);
             const terrainMap = convertStructureToTerrainMap(structure);
-            if (
-                terrainBuilderRef &&
-                terrainBuilderRef.current &&
-                typeof terrainBuilderRef.current.updateTerrainFromToolBar ===
-                    "function"
-            ) {
-                terrainBuilderRef.current.updateTerrainFromToolBar(terrainMap);
+            const schematic = terrainToRelativeSchematic(terrainMap);
+            const nameTag =
+                metadata &&
+                metadata.Name &&
+                (metadata.Name.value || metadata.Name);
+            const name =
+                typeof nameTag === "string" && nameTag.trim()
+                    ? nameTag
+                    : bp.name.replace(/\.bp$/i, "");
+            const entry = {
+                id: `bp-${Date.now()}`,
+                prompt: `Imported BP: ${name}`,
+                name,
+                schematic,
+                timestamp: Date.now(),
+            };
+            try {
+                await DatabaseManager.saveData(
+                    STORES.SCHEMATICS,
+                    entry.id,
+                    entry
+                );
+                window.dispatchEvent(new Event("schematicsDbUpdated"));
+            } catch (dbErr) {
+                console.warn("Failed to save schematic to DB:", dbErr);
             }
+            try {
+                if (terrainBuilderRef?.current?.activateTool) {
+                    terrainBuilderRef.current.activateTool(
+                        "schematic",
+                        schematic
+                    );
+                }
+            } catch (_) {}
         } catch (err) {
             console.error(".bp import failed:", err);
             alert("Failed to import .bp file. See console for details.");
