@@ -30,6 +30,7 @@ import { suggestMapping } from "../utils/minecraft/BlockMapper";
 import { NBTParser } from "../utils/minecraft/NBTParser";
 
 let selectedBlockID = 0;
+const DEBUG_BP_IMPORT = true;
 export const refreshBlockTools = () => {
     const event = new CustomEvent("refreshBlockTools");
     window.dispatchEvent(event);
@@ -1120,15 +1121,18 @@ const BlockToolsSidebar = ({
         return out;
     };
 
-    // Try all 6 permutations of (8-bit axis | 4-bit axis | 4-bit axis)
-    const indexDecoders = [
-        (i) => ({ x: i & 15, z: (i >> 4) & 15, y: (i >> 8) & 15 }), // y,z,x
-        (i) => ({ z: i & 15, x: (i >> 4) & 15, y: (i >> 8) & 15 }), // y,x,z
-        (i) => ({ z: i & 15, y: (i >> 4) & 15, x: (i >> 8) & 15 }), // x,y,z
-        (i) => ({ y: i & 15, z: (i >> 4) & 15, x: (i >> 8) & 15 }), // x,z,y
-        (i) => ({ x: i & 15, y: (i >> 4) & 15, z: (i >> 8) & 15 }), // z,y,x
-        (i) => ({ y: i & 15, x: (i >> 4) & 15, z: (i >> 8) & 15 }), // z,x,y
-    ];
+    const sectionIndexToLocalXYZ = (index) => {
+        const x = index & 15;
+        const z = (index >> 4) & 15;
+        const y = (index >> 8) & 15;
+        return { x, y, z };
+    };
+    const sectionIndexToLocalXYZ_Alt = (index) => {
+        const z = index & 15;
+        const x = (index >> 4) & 15;
+        const y = (index >> 8) & 15;
+        return { x, y, z };
+    };
 
     const parseAxiomBpInBrowser = async (file) => {
         const ab = await readFileAsArrayBuffer(file);
@@ -1147,12 +1151,26 @@ const BlockToolsSidebar = ({
             throw new Error("Invalid .bp magic");
         }
         offset += 4;
+        if (DEBUG_BP_IMPORT) {
+            console.groupCollapsed("[BP] Header");
+            console.log("magic:", [...bytes.slice(0, 4)]);
+            console.groupEnd();
+        }
         // metadata
         const metaLen = dv.getUint32(offset);
         offset += 4;
         const metaBuf = bytes.subarray(offset, offset + metaLen);
         offset += metaLen;
         const metadata = await parseNbtBrowser(metaBuf);
+        if (DEBUG_BP_IMPORT) {
+            console.groupCollapsed("[BP] Metadata");
+            try {
+                const keys = Object.keys(metadata || {});
+                console.log("keys:", keys);
+                console.log("Name:", metadata?.Name?.value || metadata?.Name);
+            } catch {}
+            console.groupEnd();
+        }
         // preview
         const previewLen = dv.getUint32(offset);
         offset += 4;
@@ -1166,9 +1184,23 @@ const BlockToolsSidebar = ({
         try {
             const structInflated = pako.ungzip(structCompressed);
             structure = await parseNbtBrowser(structInflated);
+            if (DEBUG_BP_IMPORT) {
+                console.groupCollapsed("[BP] Structure: gzip decompressed");
+                console.log("inflated bytes:", structInflated.byteLength);
+                console.log("first 8 bytes:", [...structInflated.slice(0, 8)]);
+                console.groupEnd();
+            }
         } catch (e) {
             // Some files may have raw NBT without gzip
             structure = await parseNbtBrowser(structCompressed);
+            if (DEBUG_BP_IMPORT) {
+                console.groupCollapsed("[BP] Structure: raw parse fallback");
+                console.log("raw bytes:", structCompressed.byteLength);
+                console.log("first 8 bytes:", [
+                    ...structCompressed.slice(0, 8),
+                ]);
+                console.groupEnd();
+            }
         }
         return { metadata, previewBuf, structure };
     };
@@ -1186,11 +1218,15 @@ const BlockToolsSidebar = ({
         ) {
             regions = structure.BlockRegion.value.value;
         }
-        const terrainByPerm = Array.from(
-            { length: indexDecoders.length },
-            () => ({})
-        );
-        for (const region of regions) {
+        if (DEBUG_BP_IMPORT) {
+            console.groupCollapsed("[BP] BlockRegion summary");
+            console.log("regions count:", regions.length);
+            console.groupEnd();
+        }
+        const terrain = {};
+        const terrainAlt = {};
+        for (let idx = 0; idx < regions.length; idx++) {
+            const region = regions[idx];
             const baseX = getVal(region.X) * 16;
             const baseY = getVal(region.Y) * 16;
             const baseZ = getVal(region.Z) * 16;
@@ -1208,6 +1244,26 @@ const BlockToolsSidebar = ({
                 palette.length,
                 totalBlocks
             );
+            if (DEBUG_BP_IMPORT) {
+                console.groupCollapsed(
+                    `[BP] Region #${idx} @(${baseX},${baseY},${baseZ})`
+                );
+                console.log("palette length:", palette.length);
+                console.log(
+                    "bitsPerBlock:",
+                    Math.max(
+                        4,
+                        Math.ceil(Math.log2(Math.max(1, palette.length)))
+                    )
+                );
+                try {
+                    const names = palette
+                        .slice(0, 10)
+                        .map((p) => getVal(p?.Name) || "?");
+                    console.log("palette sample:", names);
+                } catch {}
+                console.groupEnd();
+            }
             for (let i = 0; i < totalBlocks; i++) {
                 const pIdx = indices[i];
                 const entry = palette[pIdx];
@@ -1222,27 +1278,63 @@ const BlockToolsSidebar = ({
                     10
                 );
                 if (!blockId) continue;
-                for (let p = 0; p < indexDecoders.length; p++) {
-                    const { x: lx, y: ly, z: lz } = indexDecoders[p](i);
+                {
+                    const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
                     const x = baseX + lx;
                     const y = baseY + ly;
                     const z = baseZ + lz;
-                    terrainByPerm[p][`${x},${y},${z}`] = blockId;
+                    terrain[`${x},${y},${z}`] = blockId;
+                }
+                {
+                    const {
+                        x: lx,
+                        y: ly,
+                        z: lz,
+                    } = sectionIndexToLocalXYZ_Alt(i);
+                    const x = baseX + lx;
+                    const y = baseY + ly;
+                    const z = baseZ + lz;
+                    terrainAlt[`${x},${y},${z}`] = blockId;
                 }
             }
         }
-        // Prefer original Minecraft order first; fall back to alt and then others
-        const orderPreference = [0, 1, 2, 3, 4, 5];
-        let bestIdx = 0;
-        let bestCount = -1;
-        for (const idx of orderPreference) {
-            const count = Object.keys(terrainByPerm[idx]).length;
-            if (count > bestCount) {
-                bestCount = count;
-                bestIdx = idx;
-            }
+        const countA = Object.keys(terrain).length;
+        const countB = Object.keys(terrainAlt).length;
+        if (DEBUG_BP_IMPORT) {
+            console.groupCollapsed("[BP] Decode choice");
+            console.log(
+                "normal count:",
+                countA,
+                "alt count:",
+                countB,
+                "chosen:",
+                countB > countA ? "alt" : "normal"
+            );
+            const bbox = (map) => {
+                const keys = Object.keys(map);
+                if (!keys.length) return null;
+                let minX = Infinity,
+                    minY = Infinity,
+                    minZ = Infinity,
+                    maxX = -Infinity,
+                    maxY = -Infinity,
+                    maxZ = -Infinity;
+                for (const k of keys) {
+                    const [x, y, z] = k.split(",").map(Number);
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (z < minZ) minZ = z;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                    if (z > maxZ) maxZ = z;
+                }
+                return { minX, minY, minZ, maxX, maxY, maxZ };
+            };
+            console.log("bbox normal:", bbox(terrain));
+            console.log("bbox alt:", bbox(terrainAlt));
+            console.groupEnd();
         }
-        return terrainByPerm[bestIdx];
+        return countB > countA ? terrainAlt : terrain;
     };
 
     const terrainToRelativeSchematic = (terrainMap) => {
@@ -1276,6 +1368,38 @@ const BlockToolsSidebar = ({
             const { metadata, structure } = await parseAxiomBpInBrowser(bp);
             const terrainMap = convertStructureToTerrainMap(structure);
             const schematic = terrainToRelativeSchematic(terrainMap);
+            if (DEBUG_BP_IMPORT) {
+                console.groupCollapsed("[BP] Schematic summary");
+                const b = Object.keys(schematic.blocks || {});
+                console.log("block count:", b.length);
+                let minX = Infinity,
+                    minY = Infinity,
+                    minZ = Infinity,
+                    maxX = -Infinity,
+                    maxY = -Infinity,
+                    maxZ = -Infinity;
+                b.slice(0, 10).forEach((k) =>
+                    console.log("sample block:", k, "->", schematic.blocks[k])
+                );
+                for (const k of b) {
+                    const [x, y, z] = k.split(",").map(Number);
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (z < minZ) minZ = z;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                    if (z > maxZ) maxZ = z;
+                }
+                console.log("bbox relative:", {
+                    minX,
+                    minY,
+                    minZ,
+                    maxX,
+                    maxY,
+                    maxZ,
+                });
+                console.groupEnd();
+            }
             const nameTag =
                 metadata &&
                 metadata.Name &&
@@ -1327,6 +1451,12 @@ const BlockToolsSidebar = ({
             const { metadata, structure } = await parseAxiomBpInBrowser(bp);
             const terrainMap = convertStructureToTerrainMap(structure);
             const schematic = terrainToRelativeSchematic(terrainMap);
+            if (DEBUG_BP_IMPORT) {
+                console.groupCollapsed("[BP] Schematic summary (drop)");
+                const b = Object.keys(schematic.blocks || {});
+                console.log("block count:", b.length);
+                console.groupEnd();
+            }
             const nameTag =
                 metadata &&
                 metadata.Name &&
