@@ -379,6 +379,11 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         isLiquid: true,
     },
 
+    // Explicit skips for non-placable/empty blocks
+    "minecraft:air": { action: "skip" },
+    "minecraft:structure_void": { action: "skip" },
+    "minecraft:barrier": { action: "skip" },
+
     default: { action: "skip" },
 };
 
