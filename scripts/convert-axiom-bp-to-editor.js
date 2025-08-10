@@ -49,54 +49,137 @@ function decodeLongPairToBigInt(pair) {
     return BigInt(pair);
 }
 
-function decodePaletteIndices(longPairs, paletteLen, totalBlocks) {
-    // Check if data is already in the right format
-    if (!longPairs || longPairs.length === 0) {
-        return new Array(totalBlocks).fill(0);
+function decodeLongLikeToBigIntArray(longLikeArray) {
+    // Normalize any representation into two candidate BigInt arrays (hiLo and loHi)
+    const hiLo = [];
+    const loHi = [];
+    for (const entry of longLikeArray || []) {
+        if (entry == null) continue;
+        if (typeof entry === "bigint") {
+            hiLo.push(entry);
+            loHi.push(entry);
+        } else if (typeof entry === "number") {
+            const v = BigInt(entry >>> 0);
+            hiLo.push(v);
+            loHi.push(v);
+        } else if (Array.isArray(entry) && entry.length >= 2) {
+            const a = BigInt((entry[0] >>> 0) >>> 0);
+            const b = BigInt((entry[1] >>> 0) >>> 0);
+            hiLo.push((a << 32n) | b);
+            loHi.push((b << 32n) | a);
+        } else if (typeof entry === "object") {
+            // prismarine-nbt Long from 'long' lib usually has { low, high }
+            const a = BigInt((entry.high >>> 0) >>> 0 || 0);
+            const b = BigInt((entry.low >>> 0) >>> 0 || 0);
+            hiLo.push((a << 32n) | b);
+            loHi.push((b << 32n) | a);
+        }
     }
+    return { hiLo, loHi };
+}
 
-    const longs =
-        longPairs.length > 0 && typeof longPairs[0] === "bigint"
-            ? longPairs
-            : longPairs.map(decodeLongPairToBigInt);
-
-    const bitsPerBlock = Math.max(
-        4,
-        Math.ceil(Math.log2(Math.max(1, paletteLen)))
-    );
+function tryDecodeWithLongs(longs, paletteLen, totalBlocks) {
+    const bitsPerBlock = Math.max(4, Math.ceil(Math.log2(Math.max(1, paletteLen))));
     const mask = (1n << BigInt(bitsPerBlock)) - 1n;
     const out = new Array(totalBlocks);
+    let invalid = 0;
 
     for (let i = 0; i < totalBlocks; i++) {
-        const bitIndex = BigInt(i * bitsPerBlock);
+        const bitIndex = BigInt(i) * BigInt(bitsPerBlock);
         const longIndex = Number(bitIndex / 64n);
         const startBit = Number(bitIndex % 64n);
         let value;
-
+        if (longIndex >= longs.length) {
+            invalid += 1;
+            out[i] = 0;
+            continue;
+        }
         if (startBit + bitsPerBlock <= 64) {
             value = Number((longs[longIndex] >> BigInt(startBit)) & mask);
         } else {
             const lowBits = 64 - startBit;
-            const low =
-                (longs[longIndex] >> BigInt(startBit)) &
-                ((1n << BigInt(lowBits)) - 1n);
-            const high =
-                longs[longIndex + 1] &
-                ((1n << BigInt(bitsPerBlock - lowBits)) - 1n);
+            const low = (longs[longIndex] >> BigInt(startBit)) & ((1n << BigInt(lowBits)) - 1n);
+            const next = longIndex + 1 < longs.length ? longs[longIndex + 1] : 0n;
+            const high = next & ((1n << BigInt(bitsPerBlock - lowBits)) - 1n);
             value = Number(low | (high << BigInt(lowBits)));
         }
         out[i] = value;
+        if (value < 0 || value >= paletteLen) invalid += 1;
     }
-    return out;
+    return { indices: out, invalidCount: invalid };
+}
+
+function decodePaletteIndices(longLikeArray, paletteLen, totalBlocks) {
+    if (!longLikeArray || longLikeArray.length === 0) {
+        return new Array(totalBlocks).fill(0);
+    }
+
+    const { hiLo, loHi } = decodeLongLikeToBigIntArray(longLikeArray);
+    const a = tryDecodeWithLongs(hiLo, paletteLen, totalBlocks);
+    const b = tryDecodeWithLongs(loHi, paletteLen, totalBlocks);
+    const best = a.invalidCount <= b.invalidCount ? a : b;
+    return best.indices;
 }
 
 // Axiom blueprint format uses X-Z-Y order (X changes fastest)
 // This is different from vanilla Minecraft's Y-Z-X order
-function sectionIndexToLocalXYZ(index) {
+function sectionIndexToLocalXYZ_XZY(index) {
     const x = index & 15;
     const z = (index >> 4) & 15;
     const y = (index >> 8) & 15;
     return { x, y, z };
+}
+
+function sectionIndexToLocalXYZ_XYZ(index) {
+    const x = index & 15;
+    const y = (index >> 4) & 15;
+    const z = (index >> 8) & 15;
+    return { x, y, z };
+}
+
+function chooseBestAxisOrder(indices, palette, debug) {
+    // Heuristic: pick order that produces more contiguous chunks (fewer boundary gaps)
+    const totalBlocks = indices.length;
+    const orders = [
+        { name: "XZY", fn: sectionIndexToLocalXYZ_XZY },
+        { name: "XYZ", fn: sectionIndexToLocalXYZ_XYZ },
+    ];
+    let best = null;
+    for (const ord of orders) {
+        const occupancy = new Map(); // chunkKey -> {minX,maxX,minY,maxY,minZ,maxZ}
+        for (let i = 0; i < totalBlocks; i++) {
+            const pIdx = indices[i];
+            const entry = palette[pIdx];
+            if (!entry) continue;
+            const rel = ord.fn(i);
+            const x = rel.x, y = rel.y, z = rel.z;
+            const cx = Math.floor(x / 16), cy = Math.floor(y / 16), cz = Math.floor(z / 16);
+            const key = `${cx},${cy},${cz}`;
+            let o = occupancy.get(key);
+            if (!o) {
+                o = { minX: 99, maxX: -99, minY: 99, maxY: -99, minZ: 99, maxZ: -99 };
+                occupancy.set(key, o);
+            }
+            o.minX = Math.min(o.minX, x);
+            o.maxX = Math.max(o.maxX, x);
+            o.minY = Math.min(o.minY, y);
+            o.maxY = Math.max(o.maxY, y);
+            o.minZ = Math.min(o.minZ, z);
+            o.maxZ = Math.max(o.maxZ, z);
+        }
+        // score completeness: count boundaries reaching at least 0..15 on X and Z
+        let score = 0;
+        for (const o of occupancy.values()) {
+            if (o.maxX - o.minX >= 15) score += 2;
+            if (o.maxZ - o.minZ >= 15) score += 2;
+            if (o.maxY - o.minY >= 15) score += 1;
+        }
+        if (!best || score > best.score) best = { order: ord, score };
+    }
+    if (debug) {
+        console.log(`Axis order heuristic picked: ${best.order.name}`);
+    }
+    return best.order.fn;
 }
 
 function getVal(v) {
@@ -163,6 +246,7 @@ function convertStructureToEditorFormat(structure, debug = false) {
 
         const totalBlocks = 16 * 16 * 16;
         const indices = decodePaletteIndices(data, palette.length, totalBlocks);
+        const axisFn = chooseBestAxisOrder(indices, palette, debug);
 
         if (debug) {
             console.log(`\nRegion #${idx} at (${baseX}, ${baseY}, ${baseZ})`);
@@ -207,7 +291,7 @@ function convertStructureToEditorFormat(structure, debug = false) {
                 continue;
             }
 
-            const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
+            const { x: lx, y: ly, z: lz } = axisFn(i);
             const x = baseX + lx;
             const y = baseY + ly;
             const z = baseZ + lz;

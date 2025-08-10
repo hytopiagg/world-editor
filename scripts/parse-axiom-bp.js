@@ -16,7 +16,6 @@
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
-const { parse } = require("prismarine-nbt");
 
 const MAGIC = Buffer.from([0x0a, 0xe5, 0xbb, 0x36]);
 
@@ -27,19 +26,151 @@ function readUInt32BE(buf, offset) {
     return buf.readUInt32BE(offset);
 }
 
-function parseNbt(buffer) {
-    return new Promise((resolve, reject) => {
-        parse(buffer, (err, data) => {
-            if (err) return reject(err);
-            // prismarine-nbt has returned different shapes across versions
-            // Try common shapes in order
-            if (data && typeof data === "object") {
-                if (data.value !== undefined) return resolve(data.value);
-                if (data.parsed !== undefined) return resolve(data.parsed);
+// Minimal NBT parser (big-endian) with gzip detection
+const TAG_TYPES = {
+    END: 0,
+    BYTE: 1,
+    SHORT: 2,
+    INT: 3,
+    LONG: 4,
+    FLOAT: 5,
+    DOUBLE: 6,
+    BYTE_ARRAY: 7,
+    STRING: 8,
+    LIST: 9,
+    COMPOUND: 10,
+    INT_ARRAY: 11,
+    LONG_ARRAY: 12,
+};
+
+class NbtReader {
+    constructor(buf) {
+        this.buf = buf; // Node Buffer
+        this.offset = 0;
+    }
+    readU8() {
+        const v = this.buf.readUInt8(this.offset);
+        this.offset += 1;
+        return v;
+    }
+    readI8() {
+        const v = this.buf.readInt8(this.offset);
+        this.offset += 1;
+        return v;
+    }
+    readI16() {
+        const v = this.buf.readInt16BE(this.offset);
+        this.offset += 2;
+        return v;
+    }
+    readI32() {
+        const v = this.buf.readInt32BE(this.offset);
+        this.offset += 4;
+        return v;
+    }
+    readF32() {
+        const v = this.buf.readFloatBE(this.offset);
+        this.offset += 4;
+        return v;
+    }
+    readF64() {
+        const v = this.buf.readDoubleBE(this.offset);
+        this.offset += 8;
+        return v;
+    }
+    readString() {
+        const len = this.readI16();
+        const s = this.buf.subarray(this.offset, this.offset + len).toString("utf8");
+        this.offset += len;
+        return s;
+    }
+    parseTagValue(tagType) {
+        switch (tagType) {
+            case TAG_TYPES.BYTE:
+                return this.readI8();
+            case TAG_TYPES.SHORT:
+                return this.readI16();
+            case TAG_TYPES.INT:
+                return this.readI32();
+            case TAG_TYPES.LONG: {
+                const hi = this.readI32();
+                const lo = this.readI32();
+                return (BigInt(hi) << 32n) | BigInt(lo >>> 0);
             }
-            return resolve(data);
-        });
-    });
+            case TAG_TYPES.FLOAT:
+                return this.readF32();
+            case TAG_TYPES.DOUBLE:
+                return this.readF64();
+            case TAG_TYPES.BYTE_ARRAY: {
+                const len = this.readI32();
+                const arr = new Int8Array(len);
+                for (let i = 0; i < len; i++) arr[i] = this.readI8();
+                return Array.from(arr);
+            }
+            case TAG_TYPES.STRING:
+                return this.readString();
+            case TAG_TYPES.LIST: {
+                const childType = this.readU8();
+                const len = this.readI32();
+                const out = [];
+                for (let i = 0; i < len; i++) {
+                    out.push(this.parseTagValue(childType));
+                }
+                return out;
+            }
+            case TAG_TYPES.COMPOUND:
+                return this.parseCompound(true);
+            case TAG_TYPES.INT_ARRAY: {
+                const len = this.readI32();
+                const out = new Array(len);
+                for (let i = 0; i < len; i++) out[i] = this.readI32();
+                return out;
+            }
+            case TAG_TYPES.LONG_ARRAY: {
+                const len = this.readI32();
+                const out = new Array(len);
+                for (let i = 0; i < len; i++) {
+                    const hi = this.readI32();
+                    const lo = this.readI32();
+                    out[i] = (BigInt(hi) << 32n) | BigInt(lo >>> 0);
+                }
+                return out;
+            }
+            default:
+                throw new Error(`Unknown tag type ${tagType} @${this.offset}`);
+        }
+    }
+    parseCompound(skipOuterHeader = false) {
+        const out = {};
+        if (!skipOuterHeader) {
+            const t = this.readU8();
+            if (t !== TAG_TYPES.COMPOUND) throw new Error(`Expected compound tag`);
+            const _name = this.readString(); // ignore root name
+        }
+        while (true) {
+            const t = this.readU8();
+            if (t === TAG_TYPES.END) break;
+            const name = this.readString();
+            out[name] = this.parseTagValue(t);
+        }
+        return out;
+    }
+}
+
+function parseNbt(buffer) {
+    // Detect gzip (0x1F 0x8B) or zlib (0x78 0x9C/DA/01)
+    let data = buffer;
+    if (buffer.length >= 2) {
+        const b0 = buffer[0], b1 = buffer[1];
+        if (b0 === 0x1f && b1 === 0x8b) {
+            data = zlib.gunzipSync(buffer);
+        } else if (b0 === 0x78) {
+            try { data = zlib.inflateSync(buffer); } catch { /* fall through */ }
+        }
+    }
+    const reader = new NbtReader(data);
+    // Root is a compound with a name header
+    return reader.parseCompound(false);
 }
 
 async function parseAxiomBlueprint(filePath) {
@@ -62,7 +193,7 @@ async function parseAxiomBlueprint(filePath) {
     offset += 4;
     const metadataBuf = buffer.subarray(offset, offset + metadataLength);
     offset += metadataLength;
-    const metadata = await parseNbt(metadataBuf);
+    const metadata = parseNbt(metadataBuf);
 
     // Preview image (PNG)
     const previewLength = readUInt32BE(buffer, offset);
@@ -96,17 +227,20 @@ async function parseAxiomBlueprint(filePath) {
         offset + structureLength
     );
     offset += structureLength;
-    let structureDecompressed;
+    let structure;
     try {
-        structureDecompressed = zlib.gunzipSync(structureCompressed);
+        structure = parseNbt(zlib.gunzipSync(structureCompressed));
     } catch (e) {
-        // Some files may store uncompressed NBT
         console.warn(
             "Structure not gzip-compressed or failed to decompress, trying raw parse..."
         );
-        structureDecompressed = structureCompressed;
+        try {
+            structure = parseNbt(structureCompressed);
+        } catch (e2) {
+            console.error("Failed to parse structure NBT:", e2);
+            throw e2;
+        }
     }
-    const structure = await parseNbt(structureDecompressed);
 
     // Optional trailing data
     if (offset !== buffer.length) {

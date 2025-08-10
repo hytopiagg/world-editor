@@ -56,5 +56,21 @@
         "autoprefixer": "^10.4.21",
         "postcss": "^8.5.6",
         "tailwindcss": "^3.4.17"
-    }
+    },
+    "description": "<p align=\"center\"> <img width=\"500\" alt=\"HYTOPIA World Editor - 3D Voxel Builder Interface\" src=\"https://github.com/user-attachments/assets/b3ca4a7c-cdfc-41c6-a35c-445735dfe837\" /> </p>",
+    "main": "postcss.config.js",
+    "directories": {
+        "doc": "docs"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/hytopiagg/world-editor.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/hytopiagg/world-editor/issues"
+    },
+    "homepage": "https://github.com/hytopiagg/world-editor#readme"
 }
