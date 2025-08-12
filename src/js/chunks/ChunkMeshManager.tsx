@@ -75,7 +75,7 @@ class ChunkMeshManager {
      * @returns {THREE.Mesh} The solid mesh
      */
     getSolidMesh(chunk, data) {
-        const { positions, normals, uvs, indices, colors } = data;
+        const { positions, normals, uvs, indices, colors, lightLevels } = data;
         const solidMesh = this._getSolidMesh(chunk);
         const solidGeometry = solidMesh.geometry;
         solidGeometry.setAttribute(
@@ -106,10 +106,23 @@ class ChunkMeshManager {
                 CHUNK_BUFFER_GEOMETRY_NUM_COLOR_COMPONENTS
             )
         );
+        if (lightLevels && lightLevels.length > 0) {
+            solidGeometry.setAttribute(
+                'lightLevel',
+                new THREE.BufferAttribute(new Float32Array(lightLevels), 1)
+            );
+        } else if (solidGeometry.getAttribute('lightLevel')) {
+            solidGeometry.deleteAttribute('lightLevel');
+        }
+
         solidGeometry.setIndex(indices);
         solidGeometry.computeBoundingSphere();
         solidMesh.name = chunk.chunkId;
         this._solidMeshes.set(chunk.chunkId, solidMesh);
+
+        // Choose lit vs non-lit material
+        const shouldUseLit = !!(lightLevels && lightLevels.length > 0 && lightLevels.some((v: number) => v > 0));
+        solidMesh.material = shouldUseLit ? BlockMaterial.instance.defaultSolidLit : BlockMaterial.instance.defaultSolidNonLit;
         return solidMesh;
     }
     /**
@@ -231,7 +244,8 @@ class ChunkMeshManager {
             return currentMesh;
         }
 
-        const material = BlockMaterial.instance.defaultMaterial;
+        // default to non-lit; will switch in getSolidMesh when data contains lightLevels
+        const material = BlockMaterial.instance.defaultSolidNonLit;
 
         if (
             BlockTextureAtlas.instance.textureAtlas &&

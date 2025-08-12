@@ -43,6 +43,8 @@ let blockTypesArray = (() => {
         isMultiTexture: Object.keys(block.sideTextures).length > 0,
         isEnvironment: false,
         hasMissingTexture: block.textureUri === "./assets/blocks/error.png",
+        // Default no emission. Users can later set lightLevel per block id via registry APIs.
+        lightLevel: undefined,
     }));
 })();
 /**
@@ -123,6 +125,12 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         name: block.name || `Custom Block ${block.id}`,
         textureUri: finalTextureUri, // Use the determined URI (data, placeholder, or error)
         sideTextures: block.sideTextures || {},
+        lightLevel:
+            typeof block.lightLevel === "number"
+                ? block.lightLevel
+                : block.lightLevel === 0
+                ? 0
+                : undefined,
 
         isMultiTexture:
             block.sideTextures && Object.keys(block.sideTextures).length > 0,
@@ -205,6 +213,24 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
                                 );
                             });
                     }
+                }
+            }
+            // Also push lightLevel into registry if provided
+            if (typeof processedBlock.lightLevel !== "undefined") {
+                try {
+                    const reg = window.BlockTypeRegistry?.instance;
+                    if (reg && reg.updateBlockType) {
+                        reg.updateBlockType({
+                            id: processedBlock.id,
+                            lightLevel: processedBlock.lightLevel,
+                        });
+                    }
+                } catch (e) {
+                    console.warn(
+                        "Failed to update lightLevel for block",
+                        processedBlock.id,
+                        e
+                    );
                 }
             }
         } catch (error) {

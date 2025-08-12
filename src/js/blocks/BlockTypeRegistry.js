@@ -99,6 +99,7 @@ class BlockTypeRegistry {
                     : BlockType.textureUriToTextureUris(
                           blockTypeData.textureUri
                       ),
+                lightLevel: blockTypeData.lightLevel,
             });
             this._blockTypes[blockTypeData.id] = blockType;
         }
@@ -165,6 +166,7 @@ class BlockTypeRegistry {
                     textureUris: convertSideTexturesToFaceNames(
                         blockTypeData.sideTextures
                     ),
+                    lightLevel: blockTypeData.lightLevel,
                 });
 
                 // Register directly without triggering additional texture loading
@@ -190,6 +192,7 @@ class BlockTypeRegistry {
                 textureUris: BlockType.textureUriToTextureUris(
                     blockTypeData.textureUri
                 ),
+                lightLevel: blockTypeData.lightLevel,
             });
             await this.registerBlockType(newBlockType);
         } else {
@@ -237,6 +240,22 @@ class BlockTypeRegistry {
                         blockTypeData.textureUri
                     );
                     await blockType.setTextureUris(textureUris);
+                }
+            }
+
+            // Update light level, trigger mesh refresh if changed
+            if (
+                typeof blockTypeData.lightLevel !== "undefined" &&
+                blockType.lightLevel !== blockTypeData.lightLevel
+            ) {
+                blockType._lightLevel = blockTypeData.lightLevel; // internal update
+                try {
+                    const event = new CustomEvent("blockTypeChanged", {
+                        detail: { blockTypeId: blockTypeData.id },
+                    });
+                    window.dispatchEvent(event);
+                } catch (e) {
+                    // no-op in non-browser context
                 }
             }
         }

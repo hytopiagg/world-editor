@@ -1,5 +1,9 @@
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
-import { CHUNK_SIZE, CHUNK_INDEX_RANGE } from "./ChunkConstants";
+import {
+    CHUNK_SIZE,
+    CHUNK_INDEX_RANGE,
+    MAX_LIGHT_LEVEL,
+} from "./ChunkConstants";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
 /**
  * Represents a chunk in the world
@@ -21,6 +25,7 @@ class Chunk {
         this._liquidMesh = undefined;
         this._solidMesh = undefined;
         this._visible = true;
+        this._lightSources = undefined;
     }
     /**
      * Get the chunk ID from origin coordinate
@@ -94,6 +99,38 @@ class Chunk {
      */
     get chunkId() {
         return Chunk.getChunkId(this.originCoordinate);
+    }
+
+    // Emissive light sources cache
+    getLightSources() {
+        if (this._lightSources !== undefined) return this._lightSources;
+        const sources = [];
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+            for (let z = 0; z < CHUNK_SIZE; z++) {
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    const id = this.getLocalBlockId({ x, y, z });
+                    if (id === 0) continue;
+                    const type = BlockTypeRegistry.instance.getBlockType(id);
+                    const level = type?.lightLevel;
+                    if (typeof level === "number" && level > 0) {
+                        sources.push({
+                            position: {
+                                x: this.originCoordinate.x + x + 0.5,
+                                y: this.originCoordinate.y + y + 0.5,
+                                z: this.originCoordinate.z + z + 0.5,
+                            },
+                            level,
+                        });
+                    }
+                }
+            }
+        }
+        this._lightSources = sources;
+        return this._lightSources;
+    }
+
+    clearLightSourceCache() {
+        this._lightSources = undefined;
     }
     /**
      * Check if the chunk has a mesh
@@ -213,6 +250,8 @@ class Chunk {
         const solidMeshUvs = [];
         const solidMeshIndices = [];
         const solidMeshColors = [];
+        const solidMeshLightLevels = [];
+        let solidMeshHasLightLevel = false;
         const liquidMeshPositions = [];
         const liquidMeshNormals = [];
         const liquidMeshUvs = [];
@@ -243,6 +282,27 @@ class Chunk {
 
         // Only now that we know we have blocks worth rendering, build the neighbour lookup table.
         this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
+
+        // Gather nearby light sources (including neighbors) within MAX_LIGHT_LEVEL radius in chunk units
+        const nearbySources = [];
+        const searchRadius = Math.ceil((MAX_LIGHT_LEVEL + 1) / CHUNK_SIZE);
+        const { x: ox, y: oy, z: oz } = this.originCoordinate;
+        for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+            for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+                for (let dz = -searchRadius; dz <= searchRadius; dz++) {
+                    const neighborOrigin = {
+                        x: ox + dx * CHUNK_SIZE,
+                        y: oy + dy * CHUNK_SIZE,
+                        z: oz + dz * CHUNK_SIZE,
+                    };
+                    const chunkId = Chunk.getChunkId(neighborOrigin);
+                    const neighbor = chunkManager.getChunkByKey?.(chunkId);
+                    if (neighbor) {
+                        nearbySources.push(...neighbor.getLightSources());
+                    }
+                }
+            }
+        }
 
         for (let y = 0; y < CHUNK_SIZE; y++) {
             // Quick test: if the entire X-Z slice at this Y level is air, skip costly per-face work
@@ -314,6 +374,7 @@ class Chunk {
                             : solidMeshUvs;
                         const ndx = meshPositions.length / 3;
 
+                        let blockLightLevel = null;
                         for (const { pos, uv, ao } of vertices) {
                             const vertexX = globalX + pos[0] - 0.5;
                             const vertexY = globalY + pos[1] - 0.5;
@@ -394,6 +455,28 @@ class Chunk {
                                     chunkManager
                                 )
                             );
+
+                            // compute light once per block at face center for smoother results
+                            if (blockLightLevel === null) {
+                                const cx = globalX + 0.5;
+                                const cy = globalY + 0.5;
+                                const cz = globalZ + 0.5;
+                                blockLightLevel = this._calculateLightLevel(
+                                    cx,
+                                    cy,
+                                    cz,
+                                    nearbySources
+                                );
+                            }
+                            const normalized = Math.max(
+                                0,
+                                Math.min(1, blockLightLevel / MAX_LIGHT_LEVEL)
+                            );
+                            if (!blockType.isLiquid) {
+                                solidMeshLightLevels.push(normalized);
+                                if (normalized > 0)
+                                    solidMeshHasLightLevel = true;
+                            }
                         }
                         meshIndices.push(
                             ndx,
@@ -427,6 +510,9 @@ class Chunk {
                       normals: solidMeshNormals,
                       positions: solidMeshPositions,
                       uvs: solidMeshUvs,
+                      lightLevels: solidMeshHasLightLevel
+                          ? solidMeshLightLevels
+                          : undefined,
                   })
                 : undefined;
 
@@ -815,7 +901,15 @@ class Chunk {
             );
         }
         const blockIndex = this._getIndex(localCoordinate);
+        const prev = this._blocks[blockIndex];
         this._blocks[blockIndex] = blockId;
+        try {
+            const oldType = BlockTypeRegistry.instance.getBlockType(prev);
+            const newType = BlockTypeRegistry.instance.getBlockType(blockId);
+            if ((oldType?.lightLevel || 0) !== (newType?.lightLevel || 0)) {
+                this.clearLightSourceCache();
+            }
+        } catch (e) {}
     }
     /**
      * Clear the vertex color cache for a specific region
@@ -1048,6 +1142,25 @@ class Chunk {
     ) {
         const baseColor = blockType.color;
         return [...baseColor]; // Return a copy of the base color
+    }
+
+    _calculateLightLevel(x, y, z, sources) {
+        let maxLevel = 0;
+        for (const s of sources) {
+            const dx = x - s.position.x + 0.5;
+            const dy = y - s.position.y + 0.5;
+            const dz = z - s.position.z + 0.5;
+            if (
+                Math.abs(dx) > s.level ||
+                Math.abs(dy) > s.level ||
+                Math.abs(dz) > s.level
+            )
+                continue;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (distance >= s.level) continue;
+            maxLevel = Math.max(maxLevel, s.level - distance);
+        }
+        return Math.min(MAX_LIGHT_LEVEL, Math.max(0, maxLevel));
     }
     /**
      * Convert local coordinate to global coordinate

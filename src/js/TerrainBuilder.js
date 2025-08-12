@@ -127,6 +127,7 @@ function TerrainBuilder(
         new SpatialGridManager(loadingManager)
     );
     const orbitControlsRef = useRef(null);
+    const ambientRef = useRef(null);
     const frustumRef = useRef(new THREE.Frustum());
     const meshesInitializedRef = useRef(false);
     const useSpatialHashRef = useRef(true);
@@ -463,6 +464,22 @@ function TerrainBuilder(
         frustumRef.current = frustum;
         return true;
     };
+
+    // Periodically sync ambient light into block materials so emissive comparisons work in shader
+    useEffect(() => {
+        const id = setInterval(() => {
+            const amb = ambientRef?.current;
+            if (amb && BlockMaterial.instance) {
+                try {
+                    BlockMaterial.instance.updateAmbient(
+                        amb.color,
+                        amb.intensity
+                    );
+                } catch (e) {}
+            }
+        }, 100);
+        return () => clearInterval(id);
+    }, []);
     const forceRefreshAllChunks = () => {
         const camera = currentCameraRef.current;
         if (!camera) {
@@ -2761,8 +2778,8 @@ function TerrainBuilder(
                 color={0xffffff}
                 castShadow={false}
             />
-            {/* Ambient light */}
-            <ambientLight intensity={0.8} />
+            {/* Ambient light (lower intensity so emissive blocks are visible) */}
+            <ambientLight ref={ambientRef} intensity={0.25} />
             {/* mesh of invisible plane to receive shadows, and grid helper to display grid */}
             <mesh
                 ref={shadowPlaneRef}

@@ -18,10 +18,14 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const textureObjects = useBlockTextures(selectedBlock);
+    const [lightLevel, setLightLevel] = useState<number>(
+        typeof selectedBlock?.lightLevel === 'number' ? selectedBlock.lightLevel : 0
+    );
 
     useEffect(() => {
         setEditableName(selectedBlock?.name || '');
         setIsEditing(false); // Reset editing state when block changes
+        setLightLevel(typeof selectedBlock?.lightLevel === 'number' ? selectedBlock.lightLevel : 0);
     }, [selectedBlock]);
 
     const handleNameChange = (event) => {
@@ -67,6 +71,23 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
     const handleDelete = () => {
         onDeleteBlock(selectedBlock);
     };
+
+    // Debounced push of lightLevel into registry so it applies before placement
+    useEffect(() => {
+        if (!selectedBlock?.id) return;
+        const clamped = Math.max(0, Math.min(15, Number(lightLevel) || 0));
+        const t = setTimeout(() => {
+            try {
+                const reg = (window as any).BlockTypeRegistry?.instance;
+                if (reg && reg.updateBlockType) {
+                    reg.updateBlockType({ id: selectedBlock.id, lightLevel: clamped });
+                }
+            } catch (e) {
+                // no-op
+            }
+        }, 200);
+        return () => clearTimeout(t);
+    }, [lightLevel, selectedBlock?.id]);
 
     if (!selectedBlock) return null;
 
@@ -145,6 +166,32 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                             </button>
                         )
                     )}
+                </div>
+                {/* Emissive lighting control */}
+                <div className="flex items-center gap-2">
+                    <label className="text-xs text-[#F1F1F1]/80 w-10">Light:</label>
+                    <input
+                        type="range"
+                        min={0}
+                        max={15}
+                        step={1}
+                        value={Math.max(0, Math.min(15, Number(lightLevel) || 0))}
+                        onChange={(e) => setLightLevel(parseInt(e.target.value, 10))}
+                        className="flex-grow"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation() as any}
+                    />
+                    <input
+                        type="number"
+                        min={0}
+                        max={15}
+                        step={1}
+                        value={Math.max(0, Math.min(15, Number(lightLevel) || 0))}
+                        onChange={(e) => setLightLevel(parseInt(e.target.value, 10) || 0)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="w-14 px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
+                        title="Emissive light level (0-15)"
+                    />
                 </div>
                 <div className="flex items-center justify-end gap-2 mt-2">
                     <button

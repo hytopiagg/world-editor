@@ -34,6 +34,7 @@ class BlockType {
         this._isLiquid = data.isLiquid || false;
         this._name = data.name || "Unknown";
         this._textureUris = data.textureUris || {};
+        this._lightLevel = data.lightLevel; // optional [0..15]
 
         this._isCommonlyUsed = data.id < 10;
 
@@ -103,6 +104,13 @@ class BlockType {
      */
     get textureUris() {
         return this._textureUris;
+    }
+
+    /**
+     * Optional emissive light level for this block type (0-15). Undefined means non-emissive.
+     */
+    get lightLevel() {
+        return this._lightLevel;
     }
     /**
      * Check if this block type has multi-sided textures
