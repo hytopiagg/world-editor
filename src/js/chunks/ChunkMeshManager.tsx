@@ -123,6 +123,11 @@ class ChunkMeshManager {
         // Choose lit vs non-lit material
         const shouldUseLit = !!(lightLevels && lightLevels.length > 0 && lightLevels.some((v: number) => v > 0));
         solidMesh.material = shouldUseLit ? BlockMaterial.instance.defaultSolidLit : BlockMaterial.instance.defaultSolidNonLit;
+
+        // Ensure the chosen material has the atlas map bound (lit material may be created lazily)
+        if (BlockTextureAtlas.instance.textureAtlas) {
+            BlockMaterial.instance.setTextureAtlas(BlockTextureAtlas.instance.textureAtlas);
+        }
         return solidMesh;
     }
     /**

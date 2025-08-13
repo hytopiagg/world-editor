@@ -146,10 +146,11 @@ class BlockMaterial {
         mat.onBeforeCompile = (params: any) => {
             if (!(mat as any).defines["HAS_LIGHT_LEVEL"]) return;
 
-            params.uniforms[UNIFORM_RAW_AMBIENT_LIGHT_COLOR] = { value: new THREE.Color(0, 0, 0) };
+            const u = { value: new THREE.Color() };
+            params.uniforms[UNIFORM_RAW_AMBIENT_LIGHT_COLOR] = u;
             // Keep a reference so we can update it each frame from updateAmbient()
             (mat as any).userData = (mat as any).userData || {};
-            (mat as any).userData.rawAmbientUniform = params.uniforms[UNIFORM_RAW_AMBIENT_LIGHT_COLOR];
+            (mat as any).userData.rawAmbientUniform = u;
 
             params.vertexShader = params.vertexShader.replace(
                 'void main() {',

@@ -135,6 +135,22 @@ class Chunk {
             }
         }
         this._lightSources = sources;
+        try {
+            if (
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true)
+            ) {
+                if (sources.length > 0) {
+                    console.log(
+                        "[light-build] cached sources for",
+                        this.chunkId,
+                        "count:",
+                        sources.length
+                    );
+                }
+            }
+        } catch (_) {}
         return this._lightSources;
     }
 
@@ -465,22 +481,17 @@ class Chunk {
                                 )
                             );
 
-                            // compute light once per block at face center for smoother results
+                            // compute light once per block using block coordinate center
                             if (blockLightLevel === null) {
-                                const cx = globalX + 0.5;
-                                const cy = globalY + 0.5;
-                                const cz = globalZ + 0.5;
                                 blockLightLevel = this._calculateLightLevel(
-                                    cx,
-                                    cy,
-                                    cz,
+                                    globalX,
+                                    globalY,
+                                    globalZ,
                                     nearbySources
                                 );
                             }
-                            const normalized = Math.max(
-                                0,
-                                Math.min(1, blockLightLevel / MAX_LIGHT_LEVEL)
-                            );
+                            const normalized =
+                                blockLightLevel / MAX_LIGHT_LEVEL;
                             if (!blockType.isLiquid) {
                                 solidMeshLightLevels.push(normalized);
                                 if (normalized > 0)
@@ -499,6 +510,20 @@ class Chunk {
                 }
             }
         }
+        try {
+            if (
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true)
+            ) {
+                console.log(
+                    "[light-build] chunk",
+                    this.chunkId,
+                    "nearbySources:",
+                    nearbySources.length
+                );
+            }
+        } catch (_) {}
 
         this._liquidMesh =
             liquidMeshPositions.length > 0

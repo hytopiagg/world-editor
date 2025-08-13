@@ -274,6 +274,7 @@ class BlockTypeRegistry {
                             // mark this chunk and neighbors within light radius for remesh
                             const searchRadius = Math.ceil((15 + 1) / 16); // MAX_LIGHT_LEVEL + 1 over CHUNK_SIZE
                             const origin = chunk.originCoordinate;
+                            const marked = [];
                             for (
                                 let dx = -searchRadius;
                                 dx <= searchRadius;
@@ -295,13 +296,33 @@ class BlockTypeRegistry {
                                             origin.z + dz * 16
                                         }`;
                                         if (manager._chunks.has(neighborKey)) {
+                                            const n =
+                                                manager._chunks.get(
+                                                    neighborKey
+                                                );
+                                            n?.clearLightSourceCache?.();
                                             manager.markChunkForRemesh(
                                                 neighborKey,
                                                 { forceCompleteRebuild: true }
                                             );
+                                            marked.push(neighborKey);
                                         }
                                     }
                                 }
+                            }
+                            if (
+                                typeof window !== "undefined" &&
+                                (window.__LIGHT_DEBUG__?.refresh ||
+                                    window.__LIGHT_DEBUG__ === true)
+                            ) {
+                                console.log(
+                                    "[light-refresh][registry] type lightLevel change affecting chunk",
+                                    {
+                                        blockTypeId: blockTypeData.id,
+                                        chunkId,
+                                        marked,
+                                    }
+                                );
                             }
                         }
                         manager.processRenderQueue?.(true);

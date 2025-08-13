@@ -6,6 +6,7 @@ import {
     CHUNKS_NUM_TO_BUILD_AT_ONCE,
     CHUNK_INDEX_RANGE,
     CHUNK_SIZE,
+    MAX_LIGHT_LEVEL,
 } from "./ChunkConstants";
 
 class ChunkManager {
@@ -558,6 +559,127 @@ class ChunkManager {
         }
 
         chunk.setBlock(localCoordinate, id, this);
+        // Always clear this chunk's cached emissive sources when content changes
+        chunk.clearLightSourceCache?.();
+
+        // If emissive state changed (or either old/new is emissive), refresh neighboring chunks within light radius
+        try {
+            const oldType =
+                BlockTypeRegistry.instance.getBlockType(currentBlockId);
+            const newType = BlockTypeRegistry.instance.getBlockType(id);
+            const oldLevel =
+                oldType && typeof oldType.lightLevel === "number"
+                    ? oldType.lightLevel
+                    : 0;
+            const newLevel =
+                newType && typeof newType.lightLevel === "number"
+                    ? newType.lightLevel
+                    : 0;
+            const debugOn =
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true);
+            if (debugOn) {
+                console.log("[light-refresh] block update", {
+                    chunkId,
+                    globalCoordinate,
+                    localCoordinate,
+                    oldBlockId: currentBlockId,
+                    newBlockId: id,
+                    oldLevel,
+                    newLevel,
+                });
+            }
+            if (oldLevel !== newLevel || oldLevel > 0 || newLevel > 0) {
+                const radius = Math.ceil((MAX_LIGHT_LEVEL + 1) / CHUNK_SIZE);
+                if (debugOn) {
+                    console.log("[light-refresh] scanning neighbor chunks", {
+                        radius,
+                        CHUNK_SIZE,
+                        MAX_LIGHT_LEVEL,
+                    });
+                }
+                const marked = [];
+                for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        for (let dz = -radius; dz <= radius; dz++) {
+                            const neighborOrigin = {
+                                x: originCoordinate.x + dx * CHUNK_SIZE,
+                                y: originCoordinate.y + dy * CHUNK_SIZE,
+                                z: originCoordinate.z + dz * CHUNK_SIZE,
+                            };
+                            const neighborId = Chunk.getChunkId(neighborOrigin);
+                            const neighbor = this._chunks.get(neighborId);
+                            if (neighbor) {
+                                neighbor.clearLightSourceCache?.();
+                                this.markChunkForRemesh(neighborId, {
+                                    forceCompleteRebuild: true,
+                                });
+                                marked.push(neighborId);
+                            } else if (debugOn) {
+                                marked.push(neighborId + " (missing)");
+                            }
+                        }
+                    }
+                }
+                if (debugOn) {
+                    console.log("[light-refresh] marked for remesh:", marked);
+                    console.log("[light-refresh] queue sizes before", {
+                        renderQueue: this._renderChunkQueue.length,
+                        pending: this._pendingRenderChunks.size,
+                    });
+                }
+                this.processRenderQueue(true);
+                if (debugOn) {
+                    console.log("[light-refresh] queue sizes after", {
+                        renderQueue: this._renderChunkQueue.length,
+                        pending: this._pendingRenderChunks.size,
+                    });
+                }
+            }
+        } catch (_) {}
+
+        // Safety pass: if this chunk currently has any emissive sources, also refresh neighbors
+        try {
+            const sourcesCount = (
+                chunk.getLightSources?.(BlockTypeRegistry.instance) || []
+            ).length;
+            const debugOn =
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true);
+            if (sourcesCount > 0) {
+                const radius = Math.ceil((MAX_LIGHT_LEVEL + 1) / CHUNK_SIZE);
+                const marked = [];
+                for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        for (let dz = -radius; dz <= radius; dz++) {
+                            const neighborOrigin = {
+                                x: originCoordinate.x + dx * CHUNK_SIZE,
+                                y: originCoordinate.y + dy * CHUNK_SIZE,
+                                z: originCoordinate.z + dz * CHUNK_SIZE,
+                            };
+                            const neighborId = Chunk.getChunkId(neighborOrigin);
+                            const neighbor = this._chunks.get(neighborId);
+                            if (neighbor) {
+                                neighbor.clearLightSourceCache?.();
+                                this.markChunkForRemesh(neighborId, {
+                                    forceCompleteRebuild: true,
+                                });
+                                marked.push(neighborId);
+                            }
+                        }
+                    }
+                }
+                if (debugOn) {
+                    console.log(
+                        "[light-refresh] safety-pass (chunk has emissive sources)",
+                        { chunkId, sourcesCount, marked }
+                    );
+                }
+                this.processRenderQueue(true);
+            }
+        } catch (_) {}
     }
 
     updateChunk(chunkData) {
@@ -724,6 +846,16 @@ class ChunkManager {
         }
 
         if (this._pendingRenderChunks.has(chunk.chunkId)) {
+            const debugOn =
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true);
+            if (debugOn) {
+                console.log("[queue] already pending, merging opts", {
+                    chunkId: chunk.chunkId,
+                    options,
+                });
+            }
             if (options && Object.keys(options).length > 0) {
                 const existingOptions =
                     this._chunkRemeshOptions.get(chunk.chunkId) || {};
@@ -752,6 +884,18 @@ class ChunkManager {
 
         const minRebuildInterval = hasBlockChanges ? 20 : 100; // Only 20ms cooldown for block changes
         if (timeSinceLastMesh < minRebuildInterval && !isHighPriority) {
+            const debugOn =
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true);
+            if (debugOn) {
+                console.log("[queue] throttled", {
+                    chunkId: chunk.chunkId,
+                    timeSinceLastMesh,
+                    minRebuildInterval,
+                    options,
+                });
+            }
             return;
         }
 
@@ -778,6 +922,17 @@ class ChunkManager {
 
         this._chunkLastQueuedTime = this._chunkLastQueuedTime || new Map();
         this._chunkLastQueuedTime.set(chunk.chunkId, now);
+        const debugOn2 =
+            typeof window !== "undefined" &&
+            (window.__LIGHT_DEBUG__?.refresh ||
+                window.__LIGHT_DEBUG__ === true);
+        if (debugOn2) {
+            console.log("[queue] enqueued", {
+                chunkId: chunk.chunkId,
+                queueLen: this._renderChunkQueue.length,
+                pendingLen: this._pendingRenderChunks.size,
+            });
+        }
     }
 
     _isChunkVisible(chunkId) {
