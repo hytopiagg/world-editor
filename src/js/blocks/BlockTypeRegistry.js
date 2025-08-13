@@ -254,9 +254,59 @@ class BlockTypeRegistry {
                         detail: { blockTypeId: blockTypeData.id },
                     });
                     window.dispatchEvent(event);
-                } catch (e) {
-                    // no-op in non-browser context
-                }
+                } catch (e) {}
+
+                // After changing light level, ensure affected and neighboring chunks are remeshed
+                try {
+                    const chunkSystem =
+                        window?.getChunkSystem?.() ||
+                        require("../chunks/TerrainBuilderIntegration").getChunkSystem();
+                    const manager = chunkSystem;
+                    if (manager && manager._chunks) {
+                        const chunkIds = Array.from(manager._chunks.keys());
+                        for (const chunkId of chunkIds) {
+                            const chunk = manager._chunks.get(chunkId);
+                            if (!chunk) continue;
+                            const hadType = chunk.containsBlockType?.(
+                                blockTypeData.id
+                            );
+                            if (!hadType) continue;
+                            // mark this chunk and neighbors within light radius for remesh
+                            const searchRadius = Math.ceil((15 + 1) / 16); // MAX_LIGHT_LEVEL + 1 over CHUNK_SIZE
+                            const origin = chunk.originCoordinate;
+                            for (
+                                let dx = -searchRadius;
+                                dx <= searchRadius;
+                                dx++
+                            ) {
+                                for (
+                                    let dy = -searchRadius;
+                                    dy <= searchRadius;
+                                    dy++
+                                ) {
+                                    for (
+                                        let dz = -searchRadius;
+                                        dz <= searchRadius;
+                                        dz++
+                                    ) {
+                                        const neighborKey = `${
+                                            origin.x + dx * 16
+                                        },${origin.y + dy * 16},${
+                                            origin.z + dz * 16
+                                        }`;
+                                        if (manager._chunks.has(neighborKey)) {
+                                            manager.markChunkForRemesh(
+                                                neighborKey,
+                                                { forceCompleteRebuild: true }
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        manager.processRenderQueue?.(true);
+                    }
+                } catch (e) {}
             }
         }
     }

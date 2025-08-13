@@ -101,6 +101,15 @@ class Chunk {
         return Chunk.getChunkId(this.originCoordinate);
     }
 
+    // Check if this chunk contains at least one block of the given type id
+    containsBlockType(blockTypeId) {
+        if (!this._blocks) return false;
+        for (let i = 0; i < this._blocks.length; i++) {
+            if (this._blocks[i] === blockTypeId) return true;
+        }
+        return false;
+    }
+
     // Emissive light sources cache
     getLightSources() {
         if (this._lightSources !== undefined) return this._lightSources;
