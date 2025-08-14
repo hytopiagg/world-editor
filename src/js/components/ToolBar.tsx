@@ -217,6 +217,16 @@ const ToolBar = ({
                 "Are you sure you want to clear the map? This cannot be undone."
             )
         ) {
+            // Reset lighting to defaults in scene and remove persisted values
+            try {
+                const tb = terrainBuilderRef?.current;
+                tb?.setAmbientLight?.({ color: "#ffffff", intensity: 0.25 });
+                tb?.setDirectionalLight?.({ color: "#ffffff", intensity: 2 });
+            } catch (_) { }
+            try {
+                DatabaseManager.deleteData(STORES.SETTINGS, "ambientLight");
+                DatabaseManager.deleteData(STORES.SETTINGS, "directionalLight");
+            } catch (_) { }
             terrainBuilderRef.current?.clearMap();
         }
     };

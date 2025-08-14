@@ -92,6 +92,31 @@ function App() {
                         console.log("Applying saved skybox on app startup:", savedSkybox);
                         terrainBuilderRef.current.changeSkybox(savedSkybox);
                     }
+                    // Also apply saved lighting settings (ambient and directional)
+                    try {
+                        type LightSettings = { color?: string; intensity?: number };
+                        const amb = (await DatabaseManager.getData(STORES.SETTINGS, "ambientLight")) as LightSettings | null;
+                        if (amb && (typeof amb.color === 'string' || typeof amb.intensity === 'number') && terrainBuilderRef.current?.setAmbientLight) {
+                            terrainBuilderRef.current.setAmbientLight({
+                                color: typeof amb.color === 'string' ? amb.color : undefined,
+                                intensity: typeof amb.intensity === 'number' ? amb.intensity : undefined,
+                            });
+                        }
+                    } catch (e) {
+                        // noop
+                    }
+                    try {
+                        type LightSettings = { color?: string; intensity?: number };
+                        const dir = (await DatabaseManager.getData(STORES.SETTINGS, "directionalLight")) as LightSettings | null;
+                        if (dir && (typeof dir.color === 'string' || typeof dir.intensity === 'number') && terrainBuilderRef.current?.setDirectionalLight) {
+                            terrainBuilderRef.current.setDirectionalLight({
+                                color: typeof dir.color === 'string' ? dir.color : undefined,
+                                intensity: typeof dir.intensity === 'number' ? dir.intensity : undefined,
+                            });
+                        }
+                    } catch (e) {
+                        // noop
+                    }
                 } catch (error) {
                     console.error("Error loading saved skybox:", error);
                 }
