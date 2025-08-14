@@ -657,6 +657,7 @@ function App() {
                         isInputDisabled={isTextureModalOpen}
                         ref={terrainBuilderRef}
                         currentBlockType={currentBlockType}
+                        setCurrentBlockType={setCurrentBlockType}
                         mode={mode}
                         axisLockEnabled={axisLockEnabled}
                         placementSize={placementSize}

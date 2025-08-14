@@ -239,6 +239,17 @@ const BlockToolsSidebar = ({
                 const customBlocksData = getCustomBlocks();
                 console.log("Custom blocks loaded:", customBlocksData);
                 setCustomBlocks(customBlocksData);
+                // Also sync currently selected block from localStorage so the
+                // visual selection updates when programmatic selection occurs
+                try {
+                    const saved = localStorage.getItem("selectedBlock");
+                    if (saved) {
+                        const parsed = parseInt(saved);
+                        if (!isNaN(parsed)) {
+                            selectedBlockID = parsed;
+                        }
+                    }
+                } catch (_) {}
             } catch (error) {
                 console.error("Error refreshing custom blocks:", error);
             }

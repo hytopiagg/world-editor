@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { FaSave, FaCog, FaDownload, FaTrash } from "react-icons/fa";
 import BlockPreview3D from "./BlockPreview3D";
 import * as THREE from 'three';
+// import { createLightVariant } from "../managers/BlockTypesManager";
 
 const FACE_ORDER = ["right", "left", "top", "bottom", "front", "back"];
 
@@ -21,6 +22,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
     const [lightLevel, setLightLevel] = useState<number>(
         typeof selectedBlock?.lightLevel === 'number' ? selectedBlock.lightLevel : 0
     );
+    // const [isCreatingVariant, setIsCreatingVariant] = useState(false);
 
     useEffect(() => {
         setEditableName(selectedBlock?.name || '');
@@ -72,6 +74,8 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
         onDeleteBlock(selectedBlock);
     };
 
+    // Removed manual Save-as-variant flow (auto variants handled in TerrainBuilder)
+
     // Debounced push of lightLevel into registry so it applies before placement
     useEffect(() => {
         if (!selectedBlock?.id) return;
@@ -80,7 +84,12 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
             try {
                 const reg = (window as any).BlockTypeRegistry?.instance;
                 if (reg && reg.updateBlockType) {
-                    reg.updateBlockType({ id: selectedBlock.id, lightLevel: clamped });
+                    // Always write the desired light level to the TRUE BASE type,
+                    // so variants remain immutable and placed blocks keep their level.
+                    const baseId = typeof (selectedBlock as any).variantOfId === 'number'
+                        ? (selectedBlock as any).variantOfId
+                        : selectedBlock.id;
+                    reg.updateBlockType({ id: baseId, lightLevel: clamped });
                 }
             } catch (e) {
                 // no-op

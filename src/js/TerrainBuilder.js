@@ -29,7 +29,11 @@ import {
     getViewDistance,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
-import { processCustomBlock } from "./managers/BlockTypesManager";
+import {
+    processCustomBlock,
+    createLightVariant,
+    getCustomBlocks,
+} from "./managers/BlockTypesManager";
 import { cameraMovementTracker } from "./managers/CameraMovementTracker";
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { loadingManager } from "./managers/LoadingManager";
@@ -107,6 +111,7 @@ function TerrainBuilder(
         onSceneReady,
         previewPositionToAppJS,
         currentBlockType,
+        setCurrentBlockType,
         undoRedoManager,
         mode,
         axisLockEnabled,
@@ -812,7 +817,7 @@ function TerrainBuilder(
         },
         [threeRaycaster.ray, gl, cameraManager]
     );
-    const handleBlockPlacement = () => {
+    const handleBlockPlacement = async () => {
         console.log("********handleBlockPlacement********");
         console.log("currentBlockTypeRef.current", currentBlockTypeRef.current);
 
@@ -878,6 +883,123 @@ function TerrainBuilder(
             ) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
+                // Auto create/select emissive variant that matches current registry light level
+                try {
+                    const selected = currentBlockTypeRef.current;
+                    const baseId =
+                        typeof selected?.variantOfId === "number"
+                            ? selected.variantOfId
+                            : selected?.id;
+                    const baseName =
+                        selected?.variantOfName || selected?.name || "";
+                    const type =
+                        BlockTypeRegistry.instance.getBlockType(baseId);
+                    const desiredLevel =
+                        type && typeof type.lightLevel === "number"
+                            ? type.lightLevel
+                            : 0;
+                    const selectedIsCustom =
+                        selected?.id >= 1000 &&
+                        typeof selected?.lightLevel === "number";
+                    const selectedMatches =
+                        selectedIsCustom &&
+                        selected.lightLevel === desiredLevel;
+                    if (desiredLevel > 0 && !selectedMatches) {
+                        const key = `${baseId}:${desiredLevel}`;
+                        // Try local cache
+                        let variant =
+                            (window.__variantCache &&
+                                window.__variantCache.get &&
+                                window.__variantCache.get(key)) ||
+                            null;
+                        if (!variant) {
+                            // Try from custom blocks by metadata
+                            const allCustom = getCustomBlocks() || [];
+                            variant =
+                                allCustom.find(
+                                    (b) =>
+                                        (b.isVariant &&
+                                            b.variantOfId === baseId &&
+                                            b.variantLightLevel ===
+                                                desiredLevel) ||
+                                        (b.name === baseName &&
+                                            typeof b.lightLevel === "number" &&
+                                            b.lightLevel === desiredLevel)
+                                ) || null;
+                        }
+                        if (!variant) {
+                            // Prevent duplicate concurrent creations
+                            window.__pendingVariantKeys =
+                                window.__pendingVariantKeys || new Set();
+                            if (!window.__pendingVariantKeys.has(key)) {
+                                window.__pendingVariantKeys.add(key);
+                                try {
+                                    variant = await createLightVariant(
+                                        baseId,
+                                        desiredLevel
+                                    );
+                                } finally {
+                                    window.__pendingVariantKeys.delete(key);
+                                }
+                            } else {
+                                console.log(
+                                    "Variant creation already pending for",
+                                    key
+                                );
+                            }
+                        }
+                        if (variant) {
+                            currentBlockTypeRef.current = {
+                                ...variant,
+                                isEnvironment: false,
+                            };
+                            // Also update sidebar selection immediately for visual feedback
+                            try {
+                                if (typeof setCurrentBlockType === "function") {
+                                    setCurrentBlockType({
+                                        ...variant,
+                                        isEnvironment: false,
+                                    });
+                                }
+                                // Mirror full click-selection behavior
+                                try {
+                                    if (window && window.localStorage) {
+                                        window.localStorage.setItem(
+                                            "selectedBlock",
+                                            String(variant.id)
+                                        );
+                                    }
+                                } catch (_) {}
+                                try {
+                                    // Update the sidebar's selectedBlockID immediately
+                                    if (
+                                        window &&
+                                        window.dispatchEvent &&
+                                        typeof window.refreshBlockTools ===
+                                            "function"
+                                    ) {
+                                        window.refreshBlockTools();
+                                    } else if (window && window.dispatchEvent) {
+                                        window.dispatchEvent(
+                                            new Event("refreshBlockTools")
+                                        );
+                                    }
+                                } catch (_) {}
+                            } catch (_) {}
+                            // Cache it globally for session
+                            try {
+                                window.__variantCache =
+                                    window.__variantCache || new Map();
+                                window.__variantCache.set(
+                                    `${baseId}:${desiredLevel}`,
+                                    variant
+                                );
+                            } catch (_) {}
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Auto variant selection failed:", e);
+                }
                 const positions = getPlacementPositions(
                     previewPositionRef.current,
                     placementSizeRef.current

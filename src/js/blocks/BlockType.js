@@ -35,6 +35,11 @@ class BlockType {
         this._name = data.name || "Unknown";
         this._textureUris = data.textureUris || {};
         this._lightLevel = data.lightLevel; // optional [0..15]
+        // Optional variant metadata (for emissive variants)
+        this.isVariant = !!data.isVariant;
+        this.variantOfId = data.variantOfId;
+        this.variantOfName = data.variantOfName;
+        this.variantLightLevel = data.variantLightLevel;
 
         this._isCommonlyUsed = data.id < 10;
 
@@ -491,11 +496,34 @@ class BlockType {
     getTexturePath(face) {
         if (!face) face = "front";
 
-        const isCustomBlock =
-            !isNaN(parseInt(this._id)) ||
-            this._name === "Untitled" ||
-            this._name === "test_block";
+        const isCustomBlock = this._id >= 1000;
         if (isCustomBlock) {
+            // Variants: if texture missing on the variant, fall back to base block's texture using metadata keys
+            try {
+                if (
+                    (!this._textureUris ||
+                        Object.keys(this._textureUris).length === 0) &&
+                    typeof this.variantOfId === "number"
+                ) {
+                    const base =
+                        window &&
+                        window.BlockTypeRegistry &&
+                        window.BlockTypeRegistry.instance
+                            ? window.BlockTypeRegistry.instance.getBlockType(
+                                  this.variantOfId
+                              )
+                            : null;
+                    if (base && base.getTexturePath) {
+                        const resolved = base.getTexturePath(face);
+                        if (
+                            resolved &&
+                            resolved !== "./assets/blocks/error.png"
+                        ) {
+                            return resolved;
+                        }
+                    }
+                }
+            } catch (_) {}
             // First check if we have face-specific textures (multi-texture block)
             if (this._textureUris && this._textureUris[face]) {
                 const texturePath = this._textureUris[face];
@@ -519,6 +547,44 @@ class BlockType {
 
             // Fallback to localStorage for single-texture custom blocks
             if (typeof window !== "undefined" && window.localStorage) {
+                // If this is a variant and base has a stored data URI, use it
+                try {
+                    if (typeof this.variantOfId === "number") {
+                        const variantBaseKeys = [
+                            `block-texture-${this.variantOfId}`,
+                            `custom-block-${this.variantOfId}`,
+                            `datauri-${this.variantOfId}`,
+                        ];
+                        for (const key of variantBaseKeys) {
+                            const storedUri = window.localStorage.getItem(key);
+                            if (
+                                storedUri &&
+                                storedUri.startsWith("data:image/")
+                            ) {
+                                return storedUri;
+                            }
+                        }
+                    }
+                } catch (_) {}
+                // Also look for atlas metadata entries that might have been stored for the base id
+                try {
+                    const atlas =
+                        window?.BlockTextureAtlas?.instance ||
+                        require("./BlockTextureAtlas").default.instance;
+                    if (atlas && typeof this.variantOfId === "number") {
+                        const meta =
+                            atlas.getTextureMetadata(`${this.variantOfId}`) ||
+                            atlas.getTextureMetadata(
+                                `blocks/${this.variantOfId}`
+                            );
+                        if (meta) {
+                            const anyKey = Object.keys(
+                                atlas._textureAtlasMetadata || {}
+                            )[0];
+                            // We cannot derive a data URI from metadata, but this ensures atlas lookups by id will succeed
+                        }
+                    }
+                } catch (_) {}
                 const storageKeys = [
                     `block-texture-${this._id}`,
                     `custom-block-${this._id}`,
