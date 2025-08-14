@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSkyboxPreview } from "../utils/SkyboxPreviewRenderer";
+import Tooltip from "./Tooltip";
 
 interface SkyboxOptionsSectionProps {
     terrainBuilderRef: any;
@@ -147,35 +148,34 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
         <div className="flex flex-wrap -mx-1">
             {availableSkyboxes.map((skybox) => (
                 <div key={skybox} className="relative px-1 mb-2 w-1/2">
-                    <button
-                        onClick={() => handleSkyboxChange(skybox)}
-                        className={`relative aspect-square border-2 rounded-lg overflow-hidden transition-all duration-200 hover:border-blue-400 ${selectedSkybox === skybox ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-600'
-                            } ${isChangingSkybox ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        disabled={isChangingSkybox}
-                    >
-                        {skyboxPreviews[skybox] ? (
-                            <>
-                                <img
-                                    src={skyboxPreviews[skybox]}
-                                    alt={skybox}
-                                    className="object-cover w-full h-full"
-                                />
-                                {/* Show transition indicator when changing skyboxes */}
-                                {isChangingSkybox && selectedSkybox === skybox && (
-                                    <div className="flex absolute inset-0 justify-center items-center bg-black bg-opacity-50">
-                                        <div className="w-6 h-6 rounded-full border-2 animate-spin border-white/30 border-t-white"></div>
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <div className="flex justify-center items-center w-full h-full bg-gray-700">
-                                <div className="w-8 h-8 rounded-full border-4 animate-spin border-white/30 border-t-white/80"></div>
-                            </div>
-                        )}
-                        <div className="absolute right-0 bottom-0 left-0 p-1 text-xs text-center text-white bg-black bg-opacity-75 z-5">
-                            {skybox.replace('-', ' ')}
-                        </div>
-                    </button>
+                    <Tooltip text={skybox.replace('-', ' ')}>
+                        <button
+                            aria-label={skybox.replace('-', ' ')}
+                            onClick={() => handleSkyboxChange(skybox)}
+                            className={`relative aspect-square border-2 rounded-lg overflow-hidden transition-all duration-200 hover:border-blue-400 ${selectedSkybox === skybox ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-600'
+                                } ${isChangingSkybox ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            disabled={isChangingSkybox}
+                        >
+                            {skyboxPreviews[skybox] ? (
+                                <>
+                                    <img
+                                        src={skyboxPreviews[skybox]}
+                                        alt={skybox}
+                                        className="object-cover w-full h-full"
+                                    />
+                                    {isChangingSkybox && selectedSkybox === skybox && (
+                                        <div className="flex absolute inset-0 justify-center items-center bg-black bg-opacity-50">
+                                            <div className="w-6 h-6 rounded-full border-2 animate-spin border-white/30 border-t-white"></div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="flex justify-center items-center w-full h-full bg-gray-700">
+                                    <div className="w-8 h-8 rounded-full border-4 animate-spin border-white/30 border-t-white/80"></div>
+                                </div>
+                            )}
+                        </button>
+                    </Tooltip>
                 </div>
             ))}
         </div>
