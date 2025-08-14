@@ -93,7 +93,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
 
     return (
         <div className="flex flex-col gap-3">
-            <div className="block-preview-container w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
+            <div className="overflow-hidden relative w-full rounded-md opacity-0 duration-150 block-preview-container bg-black/20 fade-down"
                 onWheel={(e) => e.stopPropagation()}
                 style={{
                     height: isCompactMode ? "10rem" : "12rem",
@@ -103,11 +103,11 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                 {Object.keys(textureObjects).length > 0 ? (
                     <BlockPreview3D textureObjects={textureObjects} target={[0, -0.3, 0]} showControls={false} />
                 ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-white/50">Loading Preview...</div>
+                    <div className="flex justify-center items-center h-full text-xs text-white/50">Loading Preview...</div>
                 )}
             </div>
             <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                     <label className="text-xs text-[#F1F1F1]/80 w-10">ID:</label>
                     <input
                         type="text"
@@ -117,7 +117,7 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                         className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
                     />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                     <label className="text-xs text-[#F1F1F1]/80 w-10">Name:</label>
                     {selectedBlock.isCustom && isEditing ? (
                         <input
@@ -168,19 +168,8 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                     )}
                 </div>
                 {/* Emissive lighting control */}
-                <div className="flex items-center gap-2">
-                    <label className="text-xs text-[#F1F1F1]/80 w-10">Light:</label>
-                    <input
-                        type="range"
-                        min={0}
-                        max={15}
-                        step={1}
-                        value={Math.max(0, Math.min(15, Number(lightLevel) || 0))}
-                        onChange={(e) => setLightLevel(parseInt(e.target.value, 10))}
-                        className="flex-grow"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation() as any}
-                    />
+                <div className="flex gap-x-2 items-center w-full">
+                    <label className="text-xs text-[#F1F1F1]/80 w-10">Light</label>
                     <input
                         type="number"
                         min={0}
@@ -189,11 +178,26 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                         value={Math.max(0, Math.min(15, Number(lightLevel) || 0))}
                         onChange={(e) => setLightLevel(parseInt(e.target.value, 10) || 0)}
                         onKeyDown={(e) => e.stopPropagation()}
-                        className="w-14 px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
+                        className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         title="Emissive light level (0-15)"
                     />
+                    <input
+                        type="range"
+                        min={0}
+                        max={15}
+                        step={1}
+                        value={Math.max(0, Math.min(15, Number(lightLevel) || 0))}
+                        onChange={(e) => setLightLevel(parseInt(e.target.value, 10))}
+                        className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
+                        style={{
+                            transition: "all 0.3s ease-in-out",
+                            background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${((Math.max(0, Math.min(15, Number(lightLevel) || 0)) - 0) / (15 - 0)) * 100}%, rgba(255, 255, 255, 0.1) ${((Math.max(0, Math.min(15, Number(lightLevel) || 0)) - 0) / (15 - 0)) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation() as any}
+                    />
                 </div>
-                <div className="flex items-center justify-end gap-2 mt-2">
+                <div className="flex gap-2 justify-end items-center mt-2">
                     <button
                         onClick={handleDownload}
                         className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-all hover:scale-[1.02] active:translate-y-0.5 hover:bg-white bg-white/90 text-[#0d0d0d] disabled:bg-gray-600/50 disabled:text-white/50 disabled:border-gray-500/30 disabled:cursor-not-allowed cursor-pointer`}
