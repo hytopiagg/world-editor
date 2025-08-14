@@ -227,6 +227,17 @@ const ToolBar = ({
                 DatabaseManager.deleteData(STORES.SETTINGS, "ambientLight");
                 DatabaseManager.deleteData(STORES.SETTINGS, "directionalLight");
             } catch (_) { }
+            // Notify UI sections to sync their local state with reset values (without re-saving to DB)
+            try {
+                window.dispatchEvent(
+                    new CustomEvent("lighting-reset", {
+                        detail: {
+                            ambient: { color: "#ffffff", intensity: 0.25 },
+                            directional: { color: "#ffffff", intensity: 2 },
+                        },
+                    })
+                );
+            } catch (_) { }
             terrainBuilderRef.current?.clearMap();
         }
     };

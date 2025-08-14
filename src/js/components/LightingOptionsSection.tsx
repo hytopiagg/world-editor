@@ -60,6 +60,25 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
         })();
     }, [terrainBuilderRef]);
 
+    // Listen for global lighting resets (e.g., map cleared) and update local state without re-saving
+    useEffect(() => {
+        const handler = (e: Event) => {
+            try {
+                const { ambient, directional } = (e as CustomEvent).detail || {};
+                if (ambient) {
+                    if (typeof ambient.color === "string") setAmbientColor(ambient.color);
+                    if (typeof ambient.intensity === "number") setAmbientIntensity(ambient.intensity);
+                }
+                if (directional) {
+                    if (typeof directional.color === "string") setDirColor(directional.color);
+                    if (typeof directional.intensity === "number") setDirIntensity(directional.intensity);
+                }
+            } catch (_) { }
+        };
+        window.addEventListener("lighting-reset", handler as EventListener);
+        return () => window.removeEventListener("lighting-reset", handler as EventListener);
+    }, []);
+
     const labelCls = useMemo(() => "text-xs text-[#F1F1F1] whitespace-nowrap", []);
     const numberInputCls = useMemo(() => "w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none", []);
     const rangeCls = useMemo(() => "flex flex-1 h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider", []);
