@@ -461,7 +461,7 @@ class BlockType {
         }
 
         // For custom blocks, also check if different faces have different data URIs
-        const isCustomBlock = this._id >= 100;
+        const isCustomBlock = this._id >= 1000;
         if (isCustomBlock && this._textureUris) {
             // Check all faces to see if this is a multi-texture block
             const uniqueTextures = new Set(

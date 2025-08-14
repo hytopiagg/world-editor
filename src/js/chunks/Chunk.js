@@ -411,7 +411,7 @@ class Chunk {
                                 blockType.getTexturePath(blockFace);
 
                             let texCoords;
-                            const isCustomBlock = blockType.id >= 100;
+                            const isCustomBlock = blockType.id >= 1000;
 
                             // For custom blocks, check if it's multi-texture
                             if (isCustomBlock && blockType.isMultiSided) {
@@ -935,6 +935,22 @@ class Chunk {
             );
         }
         const blockIndex = this._getIndex(localCoordinate);
+
+        // Upgrade storage to Uint16Array on-demand if IDs exceed 255
+        if (
+            blockId > 255 &&
+            this._blocks &&
+            typeof this._blocks.BYTES_PER_ELEMENT === "number" &&
+            this._blocks.BYTES_PER_ELEMENT === 1
+        ) {
+            try {
+                const upgraded = new Uint16Array(this._blocks.length);
+                for (let i = 0; i < this._blocks.length; i++) {
+                    upgraded[i] = this._blocks[i];
+                }
+                this._blocks = upgraded;
+            } catch (_) {}
+        }
         const prev = this._blocks[blockIndex];
         this._blocks[blockIndex] = blockId;
         try {

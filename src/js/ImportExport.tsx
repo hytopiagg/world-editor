@@ -326,7 +326,8 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 
                 // Find the next available ID for new custom blocks
                 const getNextAvailableId = () => {
-                    let nextId = 100; // Start at 100 for custom blocks
+                    // Start custom blocks at 1000, cap at 1999
+                    let nextId = 1000;
                     while (existingBlockIds.has(nextId)) {
                         nextId++;
                     }
@@ -340,7 +341,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 
                     if (
                         blockType.isCustom ||
-                        (blockType.id >= 100 && blockType.id < 200)
+                        (blockType.id >= 1000 && blockType.id < 2000)
                     ) {
                         // Check if block already exists by name only
                         const blockNameLower = blockType.name.toLowerCase();
@@ -383,6 +384,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             textureUri: blockType.textureUri, // Pass the URI from the file (could be path or data)
                             isCustom: true,
                             isMultiTexture: likelyIsMultiTexture,
+                            lightLevel: blockType.lightLevel,
 
                             sideTextures:
                                 blockType.sideTextures || {},
@@ -421,7 +423,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             blocks: importData.blockTypes.filter(
                                 (b) =>
                                     b.isCustom ||
-                                    (b.id >= 100 && b.id < 200)
+                                    (b.id >= 1000 && b.id < 2000)
                             ),
                         },
                     })
@@ -808,8 +810,9 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     id: block.id,
                     name: block.name,
                     textureUri: textureUriForJson, // For multi texture blocks this will be folder path; single texture blocks file path
-                    isCustom: block.isCustom || (block.id >= 100 && block.id < 200),
+                    isCustom: block.isCustom || (block.id >= 1000 && block.id < 2000),
                     isMultiTexture: isMulti,
+                    lightLevel: (block as any).lightLevel,
                 };
             }),
             blocks: simplifiedTerrain,

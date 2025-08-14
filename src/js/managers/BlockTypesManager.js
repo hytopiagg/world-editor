@@ -113,10 +113,11 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
     }
 
     if (!block.id && !existingBlock) {
+        // Allocate custom block IDs in 1000-1999 range
         const highestId = blockTypesArray
-            .filter((b) => b.id >= 100)
-            .reduce((max, b) => Math.max(max, b.id), 99);
-        block.id = highestId + 1;
+            .filter((b) => b.id >= 1000 && b.id < 2000)
+            .reduce((max, b) => Math.max(max, b.id), 999);
+        block.id = Math.max(1000, highestId + 1);
     }
 
     const processedBlock = {
@@ -342,7 +343,7 @@ const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
 const removeCustomBlock = (blockIdToRemove) => {
     const id = parseInt(blockIdToRemove);
 
-    if (id < 100) {
+    if (id < 1000) {
         console.warn("Cannot remove built-in blocks");
         return blockTypesArray;
     }
@@ -361,7 +362,7 @@ const getBlockTypes = () => blockTypesArray;
  * @returns {Array} - Custom blocks
  */
 const getCustomBlocks = () => {
-    return blockTypesArray.filter((block) => block.id >= 100);
+    return blockTypesArray.filter((block) => block.id >= 1000);
 };
 /**
  * Search blocks by name or ID
@@ -392,7 +393,7 @@ const getBlockById = (id) => {
  * @returns {boolean} - True if block is custom
  */
 const isCustomBlock = (id) => {
-    return parseInt(id) >= 100;
+    return parseInt(id) >= 1000;
 };
 
 /**
@@ -405,7 +406,7 @@ const updateCustomBlockName = async (blockId, newName) => {
     const id = parseInt(blockId);
     const trimmedName = newName.trim();
 
-    if (id < 100) {
+    if (id < 1000) {
         console.warn("Cannot rename built-in blocks.");
         return false;
     }

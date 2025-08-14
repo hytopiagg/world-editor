@@ -26,7 +26,7 @@ export const environmentModels = (() => {
             }
             return JSON.parse(xhr.responseText);
         };
-        let idCounter = 200; // Default models occupy 200-299 range
+        let idCounter = 2000; // Default models occupy 2000-4999 range
         const models = new Map();
         const result = [];
 
@@ -506,8 +506,10 @@ const EnvironmentBuilder = (
                     const newEnvironmentModel = {
                         id:
                             Math.max(
-                                ...environmentModels.map((model) => model.id),
-                                199
+                                4999, // ensure custom models start at 5000+
+                                ...environmentModels
+                                    .filter((model) => model.isCustom)
+                                    .map((model) => model.id)
                             ) + 1,
                         name: model.name,
                         modelUrl: fileUrl,

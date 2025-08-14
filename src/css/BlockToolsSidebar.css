@@ -82,6 +82,21 @@ button.block-button {
     height: 100%;
 }
 
+/* Small badge for custom block light level (top-right corner) */
+.light-level-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    padding: 1px 4px;
+    background: rgba(255, 215, 0, 0.85);
+    color: #000;
+    font-weight: 700;
+    font-size: 10px;
+    line-height: 1;
+    border-radius: 3px;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
 .block-button-label {
     display: none;
 }

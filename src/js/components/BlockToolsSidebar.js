@@ -1056,11 +1056,11 @@ const BlockToolsSidebar = ({
     };
 
     const visibleDefaultBlocks = blockTypes
-        .filter((block) => block.id < 100)
+        .filter((block) => block.id > 0 && block.id < 1000)
         .filter((block) => isMatch(block.name) || isMatch(block.id));
 
     const visibleCustomBlocks = customBlocks
-        .filter((block) => block.id >= 100 && block.id < 200)
+        .filter((block) => block.id >= 1000 && block.id < 2000)
         .filter((block) => isMatch(block.name) || isMatch(block.id));
 
     // --------- Category Filtering Helpers ---------
@@ -1250,7 +1250,7 @@ const BlockToolsSidebar = ({
                     {activeTab === "blocks" ? (
                         <>
                             <div className="block-tools-section-label">
-                                Default Blocks (ID: 1-99)
+                                Default Blocks (ID: 1-999)
                             </div>
                             {visibleDefaultBlocks.map((blockType) => (
                                 <BlockButton
@@ -1270,7 +1270,7 @@ const BlockToolsSidebar = ({
                                 />
                             ))}
                             <div className="mt-2 block-tools-section-label custom-label-with-icon">
-                                Custom Blocks (ID: 100-199)
+                                Custom Blocks (ID: 1000-1999)
                                 <button
                                     className="download-all-icon-button"
                                     onClick={handleDownloadAllCustom}
@@ -1304,7 +1304,7 @@ const BlockToolsSidebar = ({
                         <>
                             <div className="environment-button-wrapper">
                                 <div className="block-tools-section-label">
-                                    Default Models (ID: 200-299)
+                                    Default Models (ID: 2000-4999)
                                 </div>
                                 {visibleDefaultModels.map((envType) => (
                                     <EnvironmentButton
@@ -1323,7 +1323,7 @@ const BlockToolsSidebar = ({
                                     />
                                 ))}
                                 <div className="mt-2 block-tools-section-label">
-                                    Custom Models (ID: 300+)
+                                    Custom Models (ID: 5000+)
                                 </div>
                                 {visibleCustomModels.map((envType) => (
                                     <EnvironmentButton

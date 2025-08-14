@@ -72,7 +72,7 @@ class ChunkSystem {
             if (!chunkBlocks.has(chunkId)) {
                 chunkBlocks.set(
                     chunkId,
-                    new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE)
+                    new Uint16Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE)
                 );
             }
             const localX = x - originCoordinate.x;
@@ -236,7 +236,7 @@ class ChunkSystem {
 
             if (!chunk) {
 
-                const blocks = new Uint8Array(
+                const blocks = new Uint16Array(
                     CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
                 );
 
