@@ -518,6 +518,7 @@ function TerrainBuilder(
     const instancedMeshRef = useRef({});
     const shadowPlaneRef = useRef();
     const directionalLightRef = useRef();
+    const directionalFillLightRef = useRef();
     const terrainRef = useRef({});
     const gridRef = useRef();
     const mouseMoveAnimationRef = useRef(null);
@@ -2046,6 +2047,65 @@ function TerrainBuilder(
                 fadeAnimation();
             }
         },
+        /**
+         * Update ambient light color and/or intensity
+         */
+        setAmbientLight: (opts = {}) => {
+            const amb = ambientRef?.current;
+            if (!amb) return false;
+            if (opts.color !== undefined) {
+                try {
+                    amb.color.set(opts.color);
+                } catch (_) {}
+            }
+            if (opts.intensity !== undefined) {
+                amb.intensity = opts.intensity;
+            }
+            return true;
+        },
+        /**
+         * Read current ambient light settings
+         */
+        getAmbientLight: () => {
+            const amb = ambientRef?.current;
+            if (!amb) return null;
+            return {
+                color: `#${amb.color.getHexString()}`,
+                intensity: amb.intensity,
+            };
+        },
+        /**
+         * Update directional light color and/or intensity (applies to both key and fill lights if present)
+         */
+        setDirectionalLight: (opts = {}) => {
+            const key = directionalLightRef?.current;
+            const fill = directionalFillLightRef?.current;
+            const apply = (light) => {
+                if (!light) return;
+                if (opts.color !== undefined) {
+                    try {
+                        light.color.set(opts.color);
+                    } catch (_) {}
+                }
+                if (opts.intensity !== undefined) {
+                    light.intensity = opts.intensity;
+                }
+            };
+            apply(key);
+            apply(fill);
+            return !!key || !!fill;
+        },
+        /**
+         * Read current directional light settings (key light)
+         */
+        getDirectionalLight: () => {
+            const key = directionalLightRef?.current;
+            if (!key) return null;
+            return {
+                color: `#${key.color.getHexString()}`,
+                intensity: key.intensity,
+            };
+        },
         activateTool: (toolName, activationData) => {
             if (!toolManagerRef.current) {
                 console.error(
@@ -2777,6 +2837,7 @@ function TerrainBuilder(
                 intensity={1}
                 color={0xffffff}
                 castShadow={false}
+                ref={directionalFillLightRef}
             />
             {/* Ambient light (lower intensity so emissive blocks are visible) */}
             <ambientLight ref={ambientRef} intensity={0.25} />

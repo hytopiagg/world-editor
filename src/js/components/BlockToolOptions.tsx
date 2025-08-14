@@ -14,6 +14,7 @@ import SelectionToolOptionsSection from "./SelectionToolOptionsSection";
 import TerrainToolOptionsSection from "./TerrainToolOptionsSection";
 import ReplaceToolOptionsSection from "./ReplaceToolOptionsSection";
 import SkyboxOptionsSection from "./SkyboxOptionsSection";
+import LightingOptionsSection from "./LightingOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -182,6 +183,12 @@ export function BlockToolOptions({
 
                 <CollapsibleSection title="Skybox">
                     <SkyboxOptionsSection
+                        terrainBuilderRef={terrainBuilderRef}
+                    />
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Lighting">
+                    <LightingOptionsSection
                         terrainBuilderRef={terrainBuilderRef}
                     />
                 </CollapsibleSection>
