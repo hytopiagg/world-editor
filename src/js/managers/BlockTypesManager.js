@@ -61,13 +61,7 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
     const existingBlock =
         existingIndex >= 0 ? blockTypesArray[existingIndex] : null;
 
-    if (
-        existingBlock &&
-        existingBlock.textureUri &&
-        existingBlock.textureUri.startsWith("data:image/")
-    ) {
-        return blockTypesArray; // Skip processing
-    }
+    // Do not skip processing here; we need to ensure registry and atlas stay in sync
 
     let finalTextureUri = block.textureUri;
     let needsRegistryUpdate = false;
@@ -192,6 +186,36 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
                         lightLevel: processedBlock.lightLevel,
                     });
                 }
+            }
+            // Force a texture-atlas rebuild when we changed or added a single-face custom block
+            if (!processedBlock.isMultiTexture && !deferAtlasRebuild) {
+                (async () => {
+                    try {
+                        const atlas = require("../blocks/BlockTextureAtlas")
+                            .default.instance;
+                        // Attempt to bind id-based keys as well for single-face customs
+                        if (
+                            finalTextureUri &&
+                            finalTextureUri.startsWith("data:image/")
+                        ) {
+                            atlas.applyDataUriToAllFaces(
+                                `${processedBlock.id}`,
+                                finalTextureUri
+                            );
+                        }
+                        await atlas.rebuildTextureAtlas();
+                        window.dispatchEvent(
+                            new CustomEvent("textureAtlasUpdated", {
+                                detail: { blockId: processedBlock.id },
+                            })
+                        );
+                    } catch (rebuildErr) {
+                        console.warn(
+                            "Atlas rebuild failed for single-face custom",
+                            rebuildErr
+                        );
+                    }
+                })();
             }
         }
 

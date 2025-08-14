@@ -422,12 +422,196 @@ class Chunk {
                                         uv
                                     );
                             } else if (isCustomBlock) {
-                                // Single-texture custom block
-                                texCoords =
-                                    BlockTextureAtlas.instance.getTextureUVCoordinateSync(
-                                        actualTextureUri,
-                                        uv
+                                // Single-texture custom block: try multiple candidate keys
+                                const faceCoordMap = {
+                                    top: "+y",
+                                    bottom: "-y",
+                                    left: "-x",
+                                    right: "+x",
+                                    front: "+z",
+                                    back: "-z",
+                                };
+                                const faceCoord =
+                                    faceCoordMap[blockFace] || blockFace;
+                                const candidates = [];
+                                // 1) direct path/data URI
+                                if (actualTextureUri)
+                                    candidates.push(actualTextureUri);
+                                // 2) id-based keys used when applying data URIs
+                                candidates.push(String(blockType.id));
+                                candidates.push(`blocks/${blockType.id}`);
+                                candidates.push(
+                                    `blocks/${blockType.id}/${faceCoord}.png`
+                                );
+                                // 3) variant base id keys
+                                const baseId =
+                                    typeof blockType.variantOfId === "number"
+                                        ? blockType.variantOfId
+                                        : null;
+                                if (baseId) {
+                                    candidates.push(String(baseId));
+                                    candidates.push(`blocks/${baseId}`);
+                                    candidates.push(
+                                        `blocks/${baseId}/${faceCoord}.png`
                                     );
+                                }
+
+                                const atlas = BlockTextureAtlas.instance;
+                                const ERROR_KEY = "./assets/blocks/error.png";
+                                const candidateHasGoodMetadata = (
+                                    candidateKey
+                                ) => {
+                                    if (
+                                        !candidateKey ||
+                                        candidateKey === ERROR_KEY
+                                    )
+                                        return false;
+                                    // direct metadata
+                                    let meta =
+                                        atlas.getTextureMetadata(candidateKey);
+                                    if (meta && meta.debugPath !== ERROR_KEY)
+                                        return true;
+                                    // blocks/<id> or blocks/<name> variants
+                                    const blockFacePattern =
+                                        /blocks\/(.+?)(?:\/([+\-][xyz]\.png))?$/;
+                                    const m =
+                                        candidateKey.match(blockFacePattern);
+                                    if (m) {
+                                        const base = `blocks/${m[1]}`;
+                                        const faceKey = m[2];
+                                        if (faceKey) {
+                                            meta = atlas.getTextureMetadata(
+                                                `${base}/${faceKey}`
+                                            );
+                                            if (
+                                                meta &&
+                                                meta.debugPath !== ERROR_KEY
+                                            )
+                                                return true;
+                                        }
+                                        meta = atlas.getTextureMetadata(base);
+                                        if (
+                                            meta &&
+                                            meta.debugPath !== ERROR_KEY
+                                        )
+                                            return true;
+                                    }
+                                    // numeric id mapping
+                                    if (!isNaN(parseInt(candidateKey))) {
+                                        meta =
+                                            atlas.getTextureMetadata(
+                                                `${candidateKey}`
+                                            ) ||
+                                            atlas.getTextureMetadata(
+                                                `blocks/${candidateKey}`
+                                            );
+                                        if (
+                                            meta &&
+                                            meta.debugPath !== ERROR_KEY
+                                        )
+                                            return true;
+                                    }
+                                    return false;
+                                };
+
+                                for (const key of candidates) {
+                                    // Only accept non-error entries with real metadata bound
+                                    if (!candidateHasGoodMetadata(key)) {
+                                        // Make sure it's queued for load to become available next frame
+                                        atlas.queueTextureForLoading(key);
+                                        continue;
+                                    }
+                                    texCoords =
+                                        atlas.getTextureUVCoordinateSync(
+                                            key,
+                                            uv
+                                        );
+                                    if (texCoords) {
+                                        try {
+                                            if (window.__TEX_DEBUG__) {
+                                                console.log(
+                                                    "[tex-debug] Resolved UV via candidate",
+                                                    {
+                                                        key,
+                                                        id: blockType.id,
+                                                        name: blockType.name,
+                                                        face: blockFace,
+                                                    }
+                                                );
+                                            }
+                                        } catch (_) {}
+                                        break;
+                                    }
+                                }
+
+                                if (
+                                    !texCoords &&
+                                    typeof window !== "undefined"
+                                ) {
+                                    try {
+                                        if (
+                                            window.__TEX_DEBUG__ ||
+                                            window.__LIGHT_DEBUG__
+                                        ) {
+                                            console.warn(
+                                                "[tex-debug] Missing UV for custom single-face block",
+                                                {
+                                                    id: blockType.id,
+                                                    name: blockType.name,
+                                                    face: blockFace,
+                                                    actualTextureUri,
+                                                    candidates,
+                                                }
+                                            );
+                                        }
+                                    } catch (_) {}
+                                }
+
+                                // Fallback to name-based resolver like defaults use
+                                if (!texCoords) {
+                                    texCoords =
+                                        BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                            blockType.name,
+                                            blockFace,
+                                            uv
+                                        );
+                                    if (
+                                        !texCoords &&
+                                        typeof blockType.variantOfId ===
+                                            "number"
+                                    ) {
+                                        // Try base name
+                                        try {
+                                            const base =
+                                                BlockTypeRegistry.instance.getBlockType(
+                                                    blockType.variantOfId
+                                                );
+                                            if (base) {
+                                                texCoords =
+                                                    BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                                        base.name,
+                                                        blockFace,
+                                                        uv
+                                                    );
+                                            }
+                                        } catch (_) {}
+                                    }
+                                    try {
+                                        if (
+                                            !texCoords &&
+                                            window.__TEX_DEBUG__
+                                        ) {
+                                            console.warn(
+                                                "[tex-debug] Name-based UV fallback failed",
+                                                {
+                                                    id: blockType.id,
+                                                    name: blockType.name,
+                                                    face: blockFace,
+                                                }
+                                            );
+                                        }
+                                    } catch (_) {}
+                                }
                             } else {
                                 // Non-custom block - use the block name for multi-sided lookup
                                 texCoords =
@@ -468,6 +652,36 @@ class Chunk {
                                 BlockTextureAtlas.instance.queueTextureForLoading(
                                     actualTextureUri
                                 );
+                                // Also queue id-based keys to be safe for customs
+                                if (isCustomBlock) {
+                                    BlockTextureAtlas.instance.queueTextureForLoading(
+                                        String(blockType.id)
+                                    );
+                                    const faceCoordMap2 = {
+                                        top: "+y",
+                                        bottom: "-y",
+                                        left: "-x",
+                                        right: "+x",
+                                        front: "+z",
+                                        back: "-z",
+                                    };
+                                    const f2 =
+                                        faceCoordMap2[blockFace] || blockFace;
+                                    BlockTextureAtlas.instance.queueTextureForLoading(
+                                        `blocks/${blockType.id}/${f2}.png`
+                                    );
+                                    if (
+                                        typeof blockType.variantOfId ===
+                                        "number"
+                                    ) {
+                                        BlockTextureAtlas.instance.queueTextureForLoading(
+                                            `blocks/${blockType.variantOfId}/${f2}.png`
+                                        );
+                                        BlockTextureAtlas.instance.queueTextureForLoading(
+                                            `blocks/${blockType.variantOfId}`
+                                        );
+                                    }
+                                }
                             }
 
                             meshUvs.push(texCoords[0], texCoords[1]);
