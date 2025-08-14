@@ -81,7 +81,6 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
 
     const labelCls = useMemo(() => "text-xs text-[#F1F1F1] whitespace-nowrap", []);
     const numberInputCls = useMemo(() => "w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none", []);
-    const rangeCls = useMemo(() => "flex flex-1 h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider", []);
 
     const applyAmbient = async (next: { color?: string; intensity?: number }) => {
         const tb = terrainBuilderRef?.current;
@@ -138,7 +137,7 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                             setAmbientIntensity(v);
                             applyAmbient({ intensity: v });
                         }}
-                        className={rangeCls}
+                        className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
                         style={{
                             transition: "all 0.3s ease-in-out",
                             background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(ambientIntensity - 0) / (10 - 0) * 100}%, rgba(255, 255, 255, 0.1) ${(ambientIntensity - 0) / (10 - 0) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
@@ -172,7 +171,7 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                             setDirIntensity(v);
                             applyDirectional({ intensity: v });
                         }}
-                        className={rangeCls}
+                        className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
                         style={{
                             transition: "all 0.3s ease-in-out",
                             background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(dirIntensity - 0) / (10 - 0) * 100}%, rgba(255, 255, 255, 0.1) ${(dirIntensity - 0) / (10 - 0) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
