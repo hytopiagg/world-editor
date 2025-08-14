@@ -945,6 +945,17 @@ class Chunk {
             }
         } catch (e) {}
     }
+
+    // Minimal reversible nudge to guarantee a rebuild without visible change
+    _nudgeBlockForRemesh() {
+        const mid = Math.floor(CHUNK_SIZE / 2);
+        const coord = { x: mid, y: mid, z: mid };
+        const idx = this._getIndex(coord);
+        const prev = this._blocks[idx];
+        const temp = prev === 0 ? 1 : 0;
+        this._blocks[idx] = temp;
+        this._blocks[idx] = prev;
+    }
     /**
      * Clear the vertex color cache for a specific region
      * @param {Object} localCoordinate - The local coordinate

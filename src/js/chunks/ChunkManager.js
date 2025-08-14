@@ -32,6 +32,31 @@ class ChunkManager {
         this._setupBlockTypeChangeListener();
     }
 
+    // Internal: perform a tiny, reversible mutation to a chunk's block data
+    // to guarantee a remesh without leaving any persistent world changes.
+    _pokeChunkForRerender(chunk) {
+        if (!chunk || !chunk._blocks) return;
+        try {
+            // Choose center of chunk to minimize chance of visible edge-effects;
+            // the mutation is reverted immediately before any mesh rebuild.
+            const mid = Math.floor(CHUNK_SIZE / 2);
+            const coord = { x: mid, y: mid, z: mid };
+            const idx = coord.x + CHUNK_SIZE * (coord.y + CHUNK_SIZE * coord.z);
+            const prev = chunk._blocks[idx];
+
+            // Flip between air and a solid id (1) temporarily, then revert.
+            const temp = prev === 0 ? 1 : 0;
+            chunk._blocks[idx] = temp;
+            // Ensure the chunk will fully rebuild now that data changed
+            this.markChunkForRemesh(chunk.chunkId, {
+                forceCompleteRebuild: true,
+                forceMesh: true,
+            });
+            // Revert immediately so no persistent change occurs
+            chunk._blocks[idx] = prev;
+        } catch (_) {}
+    }
+
     setupConsoleFiltering() {
         const originalConsoleTime = console.time;
         const originalConsoleTimeEnd = console.timeEnd;
@@ -278,7 +303,7 @@ class ChunkManager {
             .sort((a, b) => a.distance - b.distance);
 
         const chunksToProcess = sortedChunks.slice(0, MINIMUM_VISIBLE_CHUNKS);
-        for (const { chunk, distance } of chunksToProcess) {
+        for (const { chunk } of chunksToProcess) {
             if (!this._pendingRenderChunks.has(chunk.chunkId)) {
                 this._renderChunkQueue.unshift(chunk.chunkId);
                 this._pendingRenderChunks.add(chunk.chunkId);
@@ -413,7 +438,9 @@ class ChunkManager {
                 !hasExistingMeshes ||
                 !hasBlockCoords
             ) {
-                chunk.buildMeshes(this);
+                // Ensure a flush of buffers by nudging and reverting
+                chunk._nudgeBlockForRemesh?.();
+                chunk.buildMeshes(this, options);
 
                 const shouldBeVisible = this._isChunkVisible(chunk.chunkId);
                 chunk.visible = shouldBeVisible;
@@ -422,7 +449,8 @@ class ChunkManager {
                     this._chunkRemeshOptions.delete(chunk.chunkId);
                 }
             } else {
-                chunk.buildMeshes(this);
+                chunk._nudgeBlockForRemesh?.();
+                chunk.buildMeshes(this, options);
 
                 const shouldBeVisible = this._isChunkVisible(chunk.chunkId);
                 chunk.visible = shouldBeVisible;
@@ -612,9 +640,8 @@ class ChunkManager {
                             const neighbor = this._chunks.get(neighborId);
                             if (neighbor) {
                                 neighbor.clearLightSourceCache?.();
-                                this.markChunkForRemesh(neighborId, {
-                                    forceCompleteRebuild: true,
-                                });
+                                // Hard poke to guarantee rebuild now
+                                this._pokeChunkForRerender(neighbor);
                                 marked.push(neighborId);
                             } else if (debugOn) {
                                 marked.push(neighborId + " (missing)");
@@ -663,9 +690,8 @@ class ChunkManager {
                             const neighbor = this._chunks.get(neighborId);
                             if (neighbor) {
                                 neighbor.clearLightSourceCache?.();
-                                this.markChunkForRemesh(neighborId, {
-                                    forceCompleteRebuild: true,
-                                });
+                                // Hard poke to guarantee rebuild now
+                                this._pokeChunkForRerender(neighbor);
                                 marked.push(neighborId);
                             }
                         }
