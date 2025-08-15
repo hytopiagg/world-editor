@@ -2912,7 +2912,7 @@ function TerrainBuilder(
         const onWheelZoom = (e) => {
             if (!window.__WE_PHYSICS__) return;
             // Normalize wheel delta across devices and apply gentle sensitivity
-            const sensitivity = window.__WE_CAM_WHEEL_SENS__ ?? 0.002;
+            const sensitivity = window.__WE_CAM_WHEEL_SENS__ ?? 0.005;
             const deltaScale =
                 e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1;
             const delta = e.deltaY * deltaScale;
