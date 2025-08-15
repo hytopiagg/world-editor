@@ -3300,7 +3300,36 @@ function TerrainBuilder(
 
                         // Third-person camera follow
                         // Camera follow using persistent offset (keeps perfect sync with player movement)
-                        const target = new THREE.Vector3(p.x, p.y + 1.0, p.z);
+                        // Always focus the camera on the player mesh centerline, compensating for global editor offsets
+                        const camHalfH =
+                            window.__WE_PHYSICS__ &&
+                            window.__WE_PHYSICS__.getPlayerHalfHeight
+                                ? window.__WE_PHYSICS__.getPlayerHalfHeight()
+                                : 0.75;
+                        const camWorldYOffset =
+                            window.__WE_WORLD_Y_OFFSET__ !== undefined
+                                ? window.__WE_WORLD_Y_OFFSET__
+                                : 0.5;
+                        const camWorldXOffset =
+                            window.__WE_WORLD_X_OFFSET__ !== undefined
+                                ? window.__WE_WORLD_X_OFFSET__
+                                : -0.5;
+                        const camWorldZOffset =
+                            window.__WE_WORLD_Z_OFFSET__ !== undefined
+                                ? window.__WE_WORLD_Z_OFFSET__
+                                : -0.5;
+                        const playerMeshBase = new THREE.Vector3(
+                            p.x + camWorldXOffset,
+                            p.y - camHalfH - camWorldYOffset,
+                            p.z + camWorldZOffset
+                        );
+                        const aimYOffset = Math.max(
+                            0.6,
+                            Math.min(1.25, camHalfH * 0.66)
+                        );
+                        const target = playerMeshBase
+                            .clone()
+                            .add(new THREE.Vector3(0, aimYOffset, 0));
                         if (!window.__WE_CAM_OFFSET__) {
                             const baseYaw =
                                 window.__WE_FACE_YAW__ !== undefined
