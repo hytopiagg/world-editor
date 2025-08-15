@@ -3137,15 +3137,37 @@ function TerrainBuilder(
                                                 "run",
                                             ];
                                             for (const tag of tags) {
-                                                const single = findClip([tag]);
-                                                const upper = findClip([
-                                                    `${tag}-upper`,
-                                                    `${tag}_upper`,
-                                                ]);
-                                                const lower = findClip([
-                                                    `${tag}-lower`,
-                                                    `${tag}_lower`,
-                                                ]);
+                                                const single = findClip(
+                                                    tag === "run"
+                                                        ? ["run", "sprint"]
+                                                        : [tag]
+                                                );
+                                                const upper = findClip(
+                                                    tag === "run"
+                                                        ? [
+                                                              "run-upper",
+                                                              "run_upper",
+                                                              "sprint-upper",
+                                                              "sprint_upper",
+                                                          ]
+                                                        : [
+                                                              `${tag}-upper`,
+                                                              `${tag}_upper`,
+                                                          ]
+                                                );
+                                                const lower = findClip(
+                                                    tag === "run"
+                                                        ? [
+                                                              "run-lower",
+                                                              "run_lower",
+                                                              "sprint-lower",
+                                                              "sprint_lower",
+                                                          ]
+                                                        : [
+                                                              `${tag}-lower`,
+                                                              `${tag}_lower`,
+                                                          ]
+                                                );
                                                 if (single)
                                                     actions[tag] =
                                                         mixer.clipAction(
@@ -3497,6 +3519,8 @@ function TerrainBuilder(
                                                     .duration || 0.35;
                                             window.__WE_LANDING_UNTIL__ =
                                                 performance.now() + dur * 1000;
+                                            window.__WE_LANDING_ACTION__ =
+                                                landingAction;
                                         } catch {}
                                     }
                                 } else if (seq !== lastLandedSeq) {
@@ -3546,11 +3570,28 @@ function TerrainBuilder(
                             // If a landing oneshot is currently active, defer any new state changes to let it finish
                             const landingUntil =
                                 window.__WE_LANDING_UNTIL__ || 0;
-                            const landingActive =
-                                performance.now() < landingUntil;
+                            const nowTs2 = performance.now();
+                            const landingActive = nowTs2 < landingUntil;
+                            let landingJustEnded = false;
+                            if (!landingActive && window.__WE_LANDING_UNTIL__) {
+                                // window just expired; clear and force retag to resume base loop
+                                window.__WE_LANDING_UNTIL__ = 0;
+                                try {
+                                    if (window.__WE_LANDING_ACTION__) {
+                                        window.__WE_LANDING_ACTION__.fadeOut(
+                                            0.08
+                                        );
+                                        window.__WE_LANDING_ACTION__.stop();
+                                    }
+                                } catch (_) {}
+                                window.__WE_LANDING_ACTION__ = undefined;
+                                landingJustEnded = true;
+                                window.__WE_PLAYER_ACTIVE_TAG__ = undefined;
+                            }
                             if (
                                 !landingActive &&
-                                window.__WE_PLAYER_ACTIVE_TAG__ !== tag
+                                (window.__WE_PLAYER_ACTIVE_TAG__ !== tag ||
+                                    landingJustEnded)
                             ) {
                                 // Fade out any current
                                 if (window.__WE_PLAYER_ACTIVE__)
@@ -3606,12 +3647,41 @@ function TerrainBuilder(
                                             undefined;
                                     }
                                 } else {
-                                    const upper =
-                                        actions[`${tag}-upper`] ||
-                                        actions[`${tag}_upper`];
-                                    const lower =
-                                        actions[`${tag}-lower`] ||
-                                        actions[`${tag}_lower`];
+                                    // Choose explicit clips by tag: run, walk, or idle
+                                    let upper = undefined;
+                                    let lower = undefined;
+                                    let single = undefined;
+                                    if (tag === "run") {
+                                        upper =
+                                            actions["run-upper"] ||
+                                            actions["run_upper"] ||
+                                            actions["sprint-upper"] ||
+                                            actions["sprint_upper"];
+                                        lower =
+                                            actions["run-lower"] ||
+                                            actions["run_lower"] ||
+                                            actions["sprint-lower"] ||
+                                            actions["sprint_lower"];
+                                        single =
+                                            actions["run"] || actions["sprint"];
+                                    } else if (tag === "walk") {
+                                        upper =
+                                            actions["walk-upper"] ||
+                                            actions["walk_upper"];
+                                        lower =
+                                            actions["walk-lower"] ||
+                                            actions["walk_lower"];
+                                        single = actions["walk"];
+                                    } else {
+                                        // idle
+                                        upper =
+                                            actions["idle-upper"] ||
+                                            actions["idle_upper"];
+                                        lower =
+                                            actions["idle-lower"] ||
+                                            actions["idle_lower"];
+                                        single = actions["idle"];
+                                    }
                                     if (upper && lower) {
                                         window.__WE_PLAYER_ACTIVE_UPPER__ =
                                             upper.reset().fadeIn(0.1).play();
@@ -3619,7 +3689,6 @@ function TerrainBuilder(
                                             lower.reset().fadeIn(0.1).play();
                                         window.__WE_PLAYER_ACTIVE__ = undefined;
                                     } else {
-                                        const single = actions[tag];
                                         if (single) {
                                             window.__WE_PLAYER_ACTIVE__ = single
                                                 .reset()
