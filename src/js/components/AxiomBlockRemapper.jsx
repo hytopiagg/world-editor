@@ -18,6 +18,43 @@ export const AxiomBlockRemapper = ({
     const availableBlocks = useMemo(() => getBlockTypes() || [], []);
     const availableEntities = useMemo(() => environmentModels || [], []);
 
+    const resolveTextureSrc = (uri) => {
+        if (!uri || typeof uri !== "string") return null;
+        // Normalize leading markers
+        let u = uri.trim();
+        if (u.startsWith("http://") || u.startsWith("https://")) return u;
+        if (u.startsWith("data:")) return u;
+        if (u.startsWith("./")) u = u.slice(2);
+        if (u.startsWith("/")) {
+            // Absolute /assets/... -> make it relative so we don't double-prefix later
+            if (u.startsWith("/assets/")) return `.${u}`;
+            return u; // leave other absolutes as-is
+        }
+        if (u.startsWith("assets/")) return `./${u}`;
+        return `./assets/${u}`;
+    };
+
+    const pickBlockTexture = (block) => {
+        if (!block) return "./assets/blocks/error.png";
+        const st = block.sideTextures || {};
+        // Prefer top face, then fallbacks; support both +/- keys and naked axis keys
+        const candidates = [
+            st["+y"],
+            st["-y"],
+            st["+x"],
+            st["-x"],
+            st["+z"],
+            st["-z"],
+            st["y"],
+            st["x"],
+            st["z"],
+            block.textureUri,
+        ].filter(Boolean);
+        const chosen =
+            candidates.length > 0 ? candidates[0] : "./assets/blocks/error.png";
+        return resolveTextureSrc(chosen);
+    };
+
     useEffect(() => {
         // Initialize mappings with suggestions
         const initialMappings = {};
@@ -269,49 +306,50 @@ export const AxiomBlockRemapper = ({
                                                 )
                                             }
                                         />
-                                        <div className="block-options">
-                                            {filteredBlocks
-                                                .slice(0, 5)
-                                                .map((block) => (
-                                                    <button
-                                                        key={block.id}
-                                                        className={`block-option ${
-                                                            mapping.targetBlockId ===
-                                                            block.id
-                                                                ? "selected"
-                                                                : ""
-                                                        }`}
-                                                        onClick={() =>
-                                                            handleBlockSelection(
-                                                                blockName,
+                                        <div className="selector-grid icon-only">
+                                            {filteredBlocks.map((block) => (
+                                                <button
+                                                    key={block.id}
+                                                    className={`selector-tile ${
+                                                        mapping.targetBlockId ===
+                                                        block.id
+                                                            ? "selected"
+                                                            : ""
+                                                    }`}
+                                                    title={block.name}
+                                                    onClick={() =>
+                                                        handleBlockSelection(
+                                                            blockName,
+                                                            block
+                                                        )
+                                                    }
+                                                >
+                                                    {block.isMultiTexture ||
+                                                    block.sideTextures ? (
+                                                        <img
+                                                            className="selector-icon"
+                                                            src={pickBlockTexture(
                                                                 block
-                                                            )
-                                                        }
-                                                    >
-                                                        {block.textureUri && (
-                                                            <img
-                                                                src={`/assets/${block.textureUri}`}
-                                                                alt={block.name}
-                                                                className="block-preview"
-                                                                onError={(
-                                                                    e
-                                                                ) => {
-                                                                    e.target.style.display =
-                                                                        "none";
-                                                                }}
-                                                            />
-                                                        )}
-                                                        <span>
-                                                            {block.name}
-                                                        </span>
-                                                    </button>
-                                                ))}
-                                            {filteredBlocks.length > 5 && (
-                                                <div className="more-options">
-                                                    +{filteredBlocks.length - 5}{" "}
-                                                    more options
-                                                </div>
-                                            )}
+                                                            )}
+                                                            alt={block.name}
+                                                        />
+                                                    ) : block.textureUri ? (
+                                                        <img
+                                                            className="selector-icon"
+                                                            src={resolveTextureSrc(
+                                                                block.textureUri
+                                                            )}
+                                                            alt={block.name}
+                                                        />
+                                                    ) : (
+                                                        <div className="selector-icon selector-fallback">
+                                                            {block.name?.[0] ||
+                                                                "?"}
+                                                        </div>
+                                                    )}
+                                                    {/* icon-only: no label */}
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
@@ -329,18 +367,18 @@ export const AxiomBlockRemapper = ({
                                                 )
                                             }
                                         />
-                                        <div className="block-options">
-                                            {getFilteredEntities(blockName)
-                                                .slice(0, 5)
-                                                .map((model) => (
+                                        <div className="selector-grid compact icon-only">
+                                            {getFilteredEntities(blockName).map(
+                                                (model) => (
                                                     <button
                                                         key={model.id}
-                                                        className={`block-option ${
+                                                        className={`selector-tile ${
                                                             mapping.targetEntityName ===
                                                             model.name
                                                                 ? "selected"
                                                                 : ""
                                                         }`}
+                                                        title={model.name}
                                                         onClick={() =>
                                                             handleEntitySelection(
                                                                 blockName,
@@ -348,20 +386,13 @@ export const AxiomBlockRemapper = ({
                                                             )
                                                         }
                                                     >
-                                                        <span>
-                                                            {model.name}
-                                                        </span>
+                                                        <div className="selector-icon selector-fallback">
+                                                            {model.name?.[0] ||
+                                                                "M"}
+                                                        </div>
+                                                        {/* icon-only: no label */}
                                                     </button>
-                                                ))}
-                                            {getFilteredEntities(blockName)
-                                                .length > 5 && (
-                                                <div className="more-options">
-                                                    +
-                                                    {getFilteredEntities(
-                                                        blockName
-                                                    ).length - 5}{" "}
-                                                    more options
-                                                </div>
+                                                )
                                             )}
                                         </div>
                                     </div>

@@ -78,8 +78,8 @@
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 12px;
+    padding: 12px; /* more compact */
+    margin-bottom: 10px; /* more compact */
     transition: all 0.2s ease;
 }
 
@@ -92,7 +92,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 8px; /* more compact */
 }
 
 .source-block {
@@ -136,19 +136,19 @@
 }
 
 .remapper-item-content {
-    padding-top: 12px;
+    padding-top: 8px; /* more compact */
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .block-search {
     width: 100%;
-    padding: 8px 12px;
+    padding: 6px 10px; /* more compact */
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
     color: #fff;
-    font-size: 14px;
-    margin-bottom: 12px;
+    font-size: 12px; /* more compact */
+    margin-bottom: 8px; /* more compact */
     transition: all 0.2s;
 }
 
@@ -208,6 +208,71 @@
     color: rgba(255, 255, 255, 0.5);
     font-size: 12px;
     font-style: italic;
+}
+
+/* New compact grid similar to BlockToolsSidebar */
+.selector-grid {
+    display: grid;
+    grid-template-columns: repeat(
+        auto-fill,
+        minmax(72px, 1fr)
+    ); /* more columns */
+    gap: 6px; /* tighter gap */
+}
+
+.selector-grid.compact {
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+}
+
+.selector-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px; /* tighter */
+    padding: 6px; /* tighter */
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.85);
+    transition: all 0.18s ease;
+}
+
+.selector-tile:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.selector-tile.selected {
+    background: rgba(76, 175, 80, 0.18);
+    border-color: #4caf50;
+    color: #fff;
+}
+
+.selector-icon {
+    width: 32px; /* smaller icon */
+    height: 32px;
+    border-radius: 6px;
+    object-fit: cover;
+    image-rendering: pixelated;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.selector-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.selector-label {
+    display: none; /* icon-only layout */
+}
+
+/* icon-only grid has tighter tiles */
+.selector-grid.icon-only .selector-tile {
+    padding: 6px; /* tighter */
 }
 
 .axiom-remapper-actions {
