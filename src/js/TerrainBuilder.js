@@ -9,6 +9,7 @@ import {
     useState,
 } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import BlockMaterial from "./blocks/BlockMaterial"; // Add this import
 import BlockTextureAtlas from "./blocks/BlockTextureAtlas";
 import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
@@ -2809,6 +2810,100 @@ function TerrainBuilder(
     }, [gl, handleMouseDown, handleMouseUp, cameraManager]); // Add dependencies
     useEffect(() => {
         optimizeRenderer(gl);
+        try {
+            window.__WE_SCENE__ = scene;
+        } catch (_) {}
+
+        // Allow adjusting third-person camera offset with arrow keys while in Player Mode
+        const onArrowKeyDown = (e) => {
+            try {
+                if (!window.__WE_PHYSICS__) return; // only in player mode
+                // Ignore when typing in inputs
+                if (
+                    e.target &&
+                    (e.target.tagName === "INPUT" ||
+                        e.target.tagName === "TEXTAREA" ||
+                        e.target.isContentEditable)
+                )
+                    return;
+                const key = e.key;
+                window.__WE_CAM_OFFSET_YAW__ =
+                    window.__WE_CAM_OFFSET_YAW__ ??
+                    (window.__WE_TP_YAW__ || threeCamera.rotation.y);
+                window.__WE_CAM_OFFSET_RADIUS__ =
+                    window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+                window.__WE_CAM_OFFSET_HEIGHT__ =
+                    window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+                // We only mark intent flags here; actual movement occurs each frame for smoothness.
+                if (key === "ArrowLeft") {
+                    window.__WE_CAM_KEYS__ = window.__WE_CAM_KEYS__ || {};
+                    window.__WE_CAM_KEYS__.left = true;
+                    e.preventDefault();
+                }
+                if (key === "ArrowRight") {
+                    window.__WE_CAM_KEYS__.right = true;
+                    e.preventDefault();
+                }
+                if (key === "ArrowUp") {
+                    window.__WE_CAM_KEYS__.up = true;
+                    e.preventDefault();
+                }
+                if (key === "ArrowDown") {
+                    window.__WE_CAM_KEYS__.down = true;
+                    e.preventDefault();
+                }
+            } catch (_) {}
+        };
+        const onArrowKeyUp = (e) => {
+            if (!window.__WE_PHYSICS__) return;
+            if (!window.__WE_CAM_KEYS__) return;
+            if (e.key === "ArrowLeft") window.__WE_CAM_KEYS__.left = false;
+            if (e.key === "ArrowRight") window.__WE_CAM_KEYS__.right = false;
+            if (e.key === "ArrowUp") window.__WE_CAM_KEYS__.up = false;
+            if (e.key === "ArrowDown") window.__WE_CAM_KEYS__.down = false;
+        };
+        const onMouseDownRMB = (e) => {
+            if (!window.__WE_PHYSICS__) return;
+            if (e.button === 2) {
+                window.__WE_CAM_DRAG_RMB__ = true;
+                window.__WE_CAM_DRAG_LAST_X__ = e.clientX;
+            }
+        };
+        const onMouseUpRMB = (e) => {
+            if (e.button === 2) window.__WE_CAM_DRAG_RMB__ = false;
+        };
+        const onMouseMoveRMB = (e) => {
+            if (!window.__WE_PHYSICS__ || !window.__WE_CAM_DRAG_RMB__) return;
+            const dx =
+                e.movementX ||
+                e.clientX - (window.__WE_CAM_DRAG_LAST_X__ || e.clientX) ||
+                0;
+            window.__WE_CAM_DRAG_LAST_X__ = e.clientX;
+            const sensitivity = 0.004;
+            window.__WE_CAM_OFFSET_YAW__ =
+                (window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y) -
+                dx * sensitivity;
+        };
+        const onWheelZoom = (e) => {
+            if (!window.__WE_PHYSICS__) return;
+            const delta = Math.sign(e.deltaY);
+            const stepRadius = 0.6;
+            window.__WE_CAM_OFFSET_RADIUS__ =
+                (window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0) + delta * stepRadius;
+            window.__WE_CAM_OFFSET_RADIUS__ = Math.min(
+                30.0,
+                Math.max(3.0, window.__WE_CAM_OFFSET_RADIUS__)
+            );
+            e.preventDefault();
+        };
+        window.addEventListener("keydown", onArrowKeyDown);
+        window.addEventListener("keyup", onArrowKeyUp);
+        window.addEventListener("mousedown", onMouseDownRMB);
+        window.addEventListener("mouseup", onMouseUpRMB);
+        window.addEventListener("mousemove", onMouseMoveRMB);
+        window.addEventListener("wheel", onWheelZoom, { passive: false });
+        // No pointer lock: derive yaw from current camera rotation when Player Mode is active
+
         cameraManager.initialize(threeCamera, orbitControlsRef.current);
         let frameId;
         let frameCount = 0;
@@ -2852,10 +2947,334 @@ function TerrainBuilder(
             if (frameCount % 10 === 0 && onCameraPositionChange) {
                 onCameraPositionChange(threeCamera.position.clone());
             }
+
+            // Step player physics if available
+            try {
+                const physics = window.__WE_PHYSICS__;
+                const inputMgr = window.__WE_INPUT_STATE__;
+                if (physics && inputMgr) {
+                    const now = performance.now();
+                    const dt =
+                        (window.__WE_LAST_PHYSICS_TS__
+                            ? now - window.__WE_LAST_PHYSICS_TS__
+                            : 16.6) / 1000;
+                    window.__WE_LAST_PHYSICS_TS__ = now;
+
+                    // Maintain third-person yaw accumulator
+                    if (window.__WE_TP_YAW__ === undefined) {
+                        window.__WE_TP_YAW__ = threeCamera.rotation.y;
+                    }
+                    // Update yaw from mouse movement when pointer is locked, else keep it steady
+                    // (We store last yaw elsewhere and nudge it using the change in camera yaw only when orbit controls are disabled)
+                    if (
+                        orbitControlsRef.current &&
+                        !orbitControlsRef.current.enableRotate
+                    ) {
+                        window.__WE_TP_YAW__ = threeCamera.rotation.y;
+                    }
+
+                    // Derive movement yaw. If we already have a player position, face away from camera.
+                    const prePos = physics.getPlayerPosition?.();
+                    if (threeCamera && prePos) {
+                        const dirX = prePos.x - threeCamera.position.x;
+                        const dirZ = prePos.z - threeCamera.position.z;
+                        // Face movement direction (toward where we will move): camera-forward projected
+                        window.__WE_TP_YAW__ = Math.atan2(dirX, dirZ);
+                    }
+                    physics.step(
+                        dt,
+                        inputMgr.state || {},
+                        (window.__WE_TP_YAW__ || 0) + Math.PI
+                    );
+
+                    const p = physics.getPlayerPosition?.();
+                    if (p && threeCamera) {
+                        // Ensure player mesh is loaded once
+                        if (
+                            !window.__WE_PLAYER_MESH__ &&
+                            !window.__WE_PLAYER_MESH_LOADING__
+                        ) {
+                            window.__WE_PLAYER_MESH_LOADING__ = true;
+                            const loader = new GLTFLoader();
+                            loader.load(
+                                "./assets/models/player/player.gltf",
+                                (gltf) => {
+                                    const obj = gltf.scene || gltf.scenes?.[0];
+                                    if (obj) {
+                                        obj.traverse((child) => {
+                                            if (child.isMesh) {
+                                                child.castShadow = true;
+                                                child.receiveShadow = true;
+                                            }
+                                        });
+                                        scene && scene.add(obj);
+                                        window.__WE_PLAYER_MESH__ = obj;
+
+                                        // Setup basic animation state
+                                        if (
+                                            gltf.animations &&
+                                            gltf.animations.length
+                                        ) {
+                                            const mixer =
+                                                new THREE.AnimationMixer(obj);
+                                            window.__WE_PLAYER_MIXER__ = mixer;
+                                            const clips = gltf.animations;
+                                            const findClip = (names) =>
+                                                clips.find((c) =>
+                                                    names.some((n) =>
+                                                        c.name
+                                                            .toLowerCase()
+                                                            .includes(n)
+                                                    )
+                                                );
+                                            const actions = {};
+                                            const tags = [
+                                                "idle",
+                                                "walk",
+                                                "run",
+                                            ];
+                                            for (const tag of tags) {
+                                                const single = findClip([tag]);
+                                                const upper = findClip([
+                                                    `${tag}-upper`,
+                                                    `${tag}_upper`,
+                                                ]);
+                                                const lower = findClip([
+                                                    `${tag}-lower`,
+                                                    `${tag}_lower`,
+                                                ]);
+                                                if (single)
+                                                    actions[tag] =
+                                                        mixer.clipAction(
+                                                            single
+                                                        );
+                                                if (upper)
+                                                    actions[`${tag}-upper`] =
+                                                        mixer.clipAction(upper);
+                                                if (lower)
+                                                    actions[`${tag}-lower`] =
+                                                        mixer.clipAction(lower);
+                                            }
+                                            window.__WE_PLAYER_ANIMS__ =
+                                                actions;
+                                            const start =
+                                                actions["idle-upper"] &&
+                                                actions["idle-lower"]
+                                                    ? undefined
+                                                    : actions.idle ||
+                                                      actions.walk ||
+                                                      actions.run;
+                                            if (start) {
+                                                start
+                                                    .reset()
+                                                    .fadeIn(0.2)
+                                                    .play();
+                                                window.__WE_PLAYER_ACTIVE__ =
+                                                    start;
+                                            }
+                                        }
+                                    }
+                                    window.__WE_PLAYER_MESH_LOADING__ = false;
+                                },
+                                undefined,
+                                () => {
+                                    window.__WE_PLAYER_MESH_LOADING__ = false;
+                                }
+                            );
+                        }
+
+                        // Update player mesh transform and facing
+                        if (window.__WE_PLAYER_MESH__) {
+                            const m = window.__WE_PLAYER_MESH__;
+                            const last = window.__WE_LAST_POS__ || {
+                                x: p.x,
+                                y: p.y,
+                                z: p.z,
+                            };
+                            // position lerp
+                            const cur = new THREE.Vector3(p.x, p.y, p.z);
+                            m.position.lerp(cur, 0.4);
+                            // compute facing from velocity when moving
+                            const dx = p.x - last.x;
+                            const dz = p.z - last.z;
+                            const speed2 = dx * dx + dz * dz;
+                            if (speed2 > 1e-6) {
+                                const faceYaw = Math.atan2(dx, dz) + Math.PI; // flip to face movement correctly
+                                window.__WE_FACE_YAW__ = faceYaw;
+                            }
+                            const yawToUse =
+                                window.__WE_FACE_YAW__ !== undefined
+                                    ? window.__WE_FACE_YAW__
+                                    : window.__WE_TP_YAW__ || 0;
+                            m.rotation.y = yawToUse;
+                        }
+
+                        // Apply smooth camera offset adjustments from input each frame
+                        if (window.__WE_CAM_KEYS__) {
+                            const yawStep = 1.6 * dt; // radians per second
+                            const radiusStep = 6.0 * dt; // units per second
+                            window.__WE_CAM_OFFSET_YAW__ =
+                                window.__WE_CAM_OFFSET_YAW__ ??
+                                (window.__WE_TP_YAW__ ||
+                                    threeCamera.rotation.y);
+                            window.__WE_CAM_OFFSET_RADIUS__ =
+                                window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+                            window.__WE_CAM_OFFSET_HEIGHT__ =
+                                window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+                            if (window.__WE_CAM_KEYS__.left)
+                                window.__WE_CAM_OFFSET_YAW__ -= yawStep;
+                            if (window.__WE_CAM_KEYS__.right)
+                                window.__WE_CAM_OFFSET_YAW__ += yawStep;
+                            if (window.__WE_CAM_KEYS__.up)
+                                window.__WE_CAM_OFFSET_RADIUS__ = Math.max(
+                                    3.0,
+                                    window.__WE_CAM_OFFSET_RADIUS__ - radiusStep
+                                );
+                            if (window.__WE_CAM_KEYS__.down)
+                                window.__WE_CAM_OFFSET_RADIUS__ = Math.min(
+                                    30.0,
+                                    window.__WE_CAM_OFFSET_RADIUS__ + radiusStep
+                                );
+                            const r = window.__WE_CAM_OFFSET_RADIUS__;
+                            const h = window.__WE_CAM_OFFSET_HEIGHT__;
+                            const yaw = window.__WE_CAM_OFFSET_YAW__;
+                            window.__WE_CAM_OFFSET__ = new THREE.Vector3(
+                                r * Math.sin(yaw),
+                                h,
+                                r * Math.cos(yaw)
+                            );
+                        }
+
+                        // Third-person camera follow
+                        // Camera follow using persistent offset (keeps perfect sync with player movement)
+                        const target = new THREE.Vector3(p.x, p.y + 1.0, p.z);
+                        if (!window.__WE_CAM_OFFSET__) {
+                            const baseYaw =
+                                window.__WE_FACE_YAW__ !== undefined
+                                    ? window.__WE_FACE_YAW__
+                                    : window.__WE_TP_YAW__ ||
+                                      threeCamera.rotation.y;
+                            const radius = 8.0;
+                            const height = 3.0;
+                            // Offset starts behind and above the player relative to yaw
+                            window.__WE_CAM_OFFSET__ = new THREE.Vector3(
+                                radius * Math.sin(baseYaw),
+                                height,
+                                radius * Math.cos(baseYaw)
+                            );
+                        }
+                        const desired = target
+                            .clone()
+                            .add(window.__WE_CAM_OFFSET__);
+                        threeCamera.position.lerp(desired, 0.35);
+                        threeCamera.lookAt(target);
+                        if (
+                            orbitControlsRef.current &&
+                            orbitControlsRef.current.target
+                        ) {
+                            orbitControlsRef.current.target.copy(target);
+                            orbitControlsRef.current.update();
+                        }
+
+                        // Advance animation mixer and pick state based on key state (no restart on every tick)
+                        if (window.__WE_PLAYER_MIXER__) {
+                            const mixer = window.__WE_PLAYER_MIXER__;
+                            mixer.update(dt);
+                            const state =
+                                (window.__WE_INPUT_STATE__ &&
+                                    window.__WE_INPUT_STATE__.state) ||
+                                {};
+                            const moving = !!(
+                                state.w ||
+                                state.a ||
+                                state.s ||
+                                state.d
+                            );
+                            const running = moving && !!state.sh;
+                            const actions = window.__WE_PLAYER_ANIMS__ || {};
+                            // Choose tag and actions set
+                            let tag = "idle";
+                            if (moving) tag = running ? "run" : "walk";
+                            if (window.__WE_PLAYER_ACTIVE_TAG__ !== tag) {
+                                // Fade out any current
+                                if (window.__WE_PLAYER_ACTIVE__)
+                                    window.__WE_PLAYER_ACTIVE__.fadeOut(0.1);
+                                if (window.__WE_PLAYER_ACTIVE_UPPER__)
+                                    window.__WE_PLAYER_ACTIVE_UPPER__.fadeOut(
+                                        0.1
+                                    );
+                                if (window.__WE_PLAYER_ACTIVE_LOWER__)
+                                    window.__WE_PLAYER_ACTIVE_LOWER__.fadeOut(
+                                        0.1
+                                    );
+                                // Start new
+                                const upper =
+                                    actions[`${tag}-upper`] ||
+                                    actions[`${tag}_upper`];
+                                const lower =
+                                    actions[`${tag}-lower`] ||
+                                    actions[`${tag}_lower`];
+                                if (upper && lower) {
+                                    window.__WE_PLAYER_ACTIVE_UPPER__ = upper
+                                        .reset()
+                                        .fadeIn(0.1)
+                                        .play();
+                                    window.__WE_PLAYER_ACTIVE_LOWER__ = lower
+                                        .reset()
+                                        .fadeIn(0.1)
+                                        .play();
+                                    window.__WE_PLAYER_ACTIVE__ = undefined;
+                                } else {
+                                    const single = actions[tag];
+                                    if (single) {
+                                        window.__WE_PLAYER_ACTIVE__ = single
+                                            .reset()
+                                            .fadeIn(0.1)
+                                            .play();
+                                    }
+                                    window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                        undefined;
+                                    window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                        undefined;
+                                }
+                                window.__WE_PLAYER_ACTIVE_TAG__ = tag;
+                            }
+                            // Update last pos for facing calc
+                            window.__WE_LAST_POS__ = { x: p.x, y: p.y, z: p.z };
+                        }
+
+                        // Lock editor orbit rotation while in player mode
+                        if (orbitControlsRef.current) {
+                            orbitControlsRef.current.enableRotate = false;
+                            orbitControlsRef.current.enablePan = false;
+                            orbitControlsRef.current.enableZoom = false;
+                        }
+                    }
+                } else {
+                    // Re-enable orbit controls and despawn player mesh when leaving player mode
+                    if (orbitControlsRef.current) {
+                        orbitControlsRef.current.enableRotate = true;
+                        orbitControlsRef.current.enablePan = true;
+                        orbitControlsRef.current.enableZoom = false; // project default
+                    }
+                    if (window.__WE_PLAYER_MESH__) {
+                        try {
+                            scene && scene.remove(window.__WE_PLAYER_MESH__);
+                        } catch (_) {}
+                        window.__WE_PLAYER_MESH__ = undefined;
+                    }
+                }
+            } catch (_) {}
         };
         frameId = requestAnimationFrame(animate);
         return () => {
             cancelAnimationFrame(frameId);
+            window.removeEventListener("keydown", onArrowKeyDown);
+            window.removeEventListener("keyup", onArrowKeyUp);
+            window.removeEventListener("mousedown", onMouseDownRMB);
+            window.removeEventListener("mouseup", onMouseUpRMB);
+            window.removeEventListener("mousemove", onMouseMoveRMB);
+            window.removeEventListener("wheel", onWheelZoom);
         };
     }, [gl]);
 

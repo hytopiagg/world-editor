@@ -21,6 +21,7 @@
         "react-scripts": "^5.0.1",
         "sharp": "^0.34.1",
         "three": "^0.160.0",
+        "@dimforge/rapier3d-simd-compat": "^0.18.1",
         "typescript": "^5.8.3"
     },
     "scripts": {

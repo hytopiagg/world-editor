@@ -119,6 +119,10 @@ class CameraManager {
         window.addEventListener("mousemove", this.handlePointerMove);
         // <<< end pointer lock additions
 
+        try {
+            (window as any).__WE_CAMERA_MANAGER__ = this;
+        } catch (_) { }
+
         const handleWheel = (event) => {
             const isUIElement = event.target.closest(
                 ".block-tools-sidebar, .controls-container, .debug-info, .modal-overlay"

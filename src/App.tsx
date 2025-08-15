@@ -29,6 +29,8 @@ import UndoRedoManager from "./js/managers/UndoRedoManager";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
+import PhysicsManager from './js/physics/PhysicsManager';
+import { Vector3 } from 'three';
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -64,6 +66,8 @@ function App() {
     const [isCompactMode, setIsCompactMode] = useState(true);
     const [showCrosshair, setShowCrosshair] = useState(cameraManager.isPointerLocked);
     const [cameraPosition, setCameraPosition] = useState(null);
+    const [playerModeEnabled, setPlayerModeEnabled] = useState(false);
+    const physicsRef = useRef<PhysicsManager | null>(null);
     const cameraAngle = 0;
     const gridSize = 5000;
 
@@ -293,6 +297,112 @@ function App() {
             window.removeEventListener("focusin", defocusHandler, true);
         };
     }, []);
+
+    // Removed: TerrainBuilder ref call to setCurrentBlockType (not an imperative handle)
+    // useEffect(() => {
+    //     if (terrainBuilderRef.current)
+    //         terrainBuilderRef.current.setCurrentBlockType(currentBlockType);
+    // }, [currentBlockType]);
+
+    // Initialize physics manager lazy when toggled on
+    const ensurePhysics = () => {
+        if (!physicsRef.current) {
+            physicsRef.current = new PhysicsManager({ gravity: { x: 0, y: -32, z: 0 }, tickRate: 60 });
+        }
+        return physicsRef.current!;
+    };
+
+    useEffect(() => {
+        if (!playerModeEnabled) {
+            return;
+        }
+        const stateObj = (window as any).__WE_INPUT_STATE__ || { state: {} };
+        (window as any).__WE_INPUT_STATE__ = stateObj;
+        const allowed: Record<string, boolean> = { w: true, a: true, s: true, d: true, sp: true, sh: true, c: true };
+        const mapKey = (e: KeyboardEvent): string | null => {
+            const k = e.key.toLowerCase();
+            if (k === ' ') return 'sp';
+            if (k === 'shift') return 'sh';
+            if (k === 'w' || k === 'a' || k === 's' || k === 'd' || k === 'c') return k;
+            return null;
+        };
+        const onKeyDown = (e: KeyboardEvent) => {
+            const k = mapKey(e);
+            if (!k || !allowed[k]) return;
+            stateObj.state[k] = true;
+        };
+        const onKeyUp = (e: KeyboardEvent) => {
+            const k = mapKey(e);
+            if (!k || !allowed[k]) return;
+            stateObj.state[k] = false;
+        };
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup', onKeyUp);
+        };
+    }, [playerModeEnabled]);
+
+    // Remove blocking of W/S at capture stage; OrbitControls is disabled in Player Mode already
+    // useEffect(() => {
+    //     const onKeyDown = (e: KeyboardEvent) => {
+    //         if (!playerModeEnabled) return;
+    //         if (e.key === 'w' || e.key === 'W' || e.key === 's' || e.key === 'S') {
+    //             e.preventDefault();
+    //             e.stopPropagation();
+    //         }
+    //     };
+    //     window.addEventListener('keydown', onKeyDown, { capture: true } as any);
+    //     return () => window.removeEventListener('keydown', onKeyDown, { capture: true } as any);
+    // }, [playerModeEnabled]);
+
+    // Auto pointer-lock on enter, Escape to exit Player Mode
+    // Removed per request: no pointer locking required in Player Mode
+    // useEffect(() => {
+    //     const onKeyDown = (e: KeyboardEvent) => {
+    //         if (!playerModeEnabled) return;
+    //         if (e.key === 'Escape') {
+    //             e.preventDefault();
+    //             togglePlayerMode();
+    //             try { document.exitPointerLock?.(); } catch(_) {}
+    //         }
+    //     };
+    //     window.addEventListener('keydown', onKeyDown);
+    //     return () => window.removeEventListener('keydown', onKeyDown);
+    // }, [playerModeEnabled]);
+
+    const togglePlayerMode = () => {
+        const next = !playerModeEnabled;
+        setPlayerModeEnabled(next);
+        try {
+            cameraManager.setInputDisabled(next);
+        } catch (_) { }
+        if (next) {
+            const physics = ensurePhysics();
+            (window as any).__WE_PHYSICS__ = physics;
+            (window as any).__WE_INPUT_STATE__ = (window as any).__WE_INPUT_STATE__ || { state: {} };
+            // No pointer lock
+            physics.ready().then(() => {
+                physics.addFlatGround(4000, -0.5);
+                const pos = cameraPosition ?? { x: 0, y: 10, z: 0 } as any;
+                physics.createOrResetPlayer(new Vector3(pos.x ?? 0, pos.y ?? 10, pos.z ?? 0));
+            });
+        } else {
+            try { delete (window as any).__WE_PHYSICS__; } catch (_) { }
+            // Despawn player glTF
+            try {
+                const scene: any = (window as any).__WE_SCENE__;
+                const mesh: any = (window as any).__WE_PLAYER_MESH__;
+                if (scene && mesh) { scene.remove(mesh); }
+                (window as any).__WE_PLAYER_MESH__ = undefined;
+                (window as any).__WE_PLAYER_MIXER__ = undefined;
+                (window as any).__WE_PLAYER_ANIMS__ = undefined;
+                (window as any).__WE_PLAYER_ACTIVE__ = undefined;
+            } catch (_) { }
+            // No pointer lock exit
+        }
+    };
 
     const handleToggleCompactMode = async () => {
         const newCompactValue = !isCompactMode;
@@ -730,6 +840,8 @@ function App() {
                         isAIComponentsActive={isAIComponentsActive}
                         setIsSaving={setSaveStatus}
                         activeTab={activeTab}
+                        playerModeEnabled={playerModeEnabled}
+                        onTogglePlayerMode={togglePlayerMode}
                     />
                 )}
 

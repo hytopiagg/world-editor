@@ -50,6 +50,8 @@ const ToolBar = ({
     toggleAIComponents,
     isAIComponentsActive,
     activeTab,
+    playerModeEnabled,
+    onTogglePlayerMode,
 }) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     // Replace individual submenu state variables with a single enum-based state
@@ -431,19 +433,17 @@ const ToolBar = ({
     };
 
     useEffect(() => {
-        const checkUndoRedoAvailability = async () => {
-            const undoStates =
-                (await DatabaseManager.getData(STORES.UNDO, "states")) as any[] || [];
-            const redoStates =
-                (await DatabaseManager.getData(STORES.REDO, "states")) as any[] || [];
-            setCanUndo(undoStates.length > 0);
-            setCanRedo(redoStates.length > 0);
-        };
-        checkUndoRedoAvailability();
+        const manager = undoRedoManager?.current;
+        if (!manager) return;
 
-        const interval = setInterval(checkUndoRedoAvailability, 1000);
+        const update = () => {
+            setCanUndo(!!manager?.canUndo?.());
+            setCanRedo(!!manager?.canRedo?.());
+        };
+
+        const interval = setInterval(update, 500);
         return () => clearInterval(interval);
-    }, []);
+    }, [undoRedoManager]);
 
     const onMapFileSelected = (event) => {
         console.log("Map file selected:", event.target.files[0]);
@@ -943,6 +943,14 @@ const ToolBar = ({
                                 />
                             </Tooltip>
                         )}
+                        <Tooltip text={playerModeEnabled ? "Exit Player Mode" : "Enter Player Mode (run around)"}>
+                            <button
+                                onClick={onTogglePlayerMode}
+                                className={`control-button ${playerModeEnabled ? 'selected' : ''}`}
+                            >
+                                {playerModeEnabled ? 'Exit Player' : 'Player Mode'}
+                            </button>
+                        </Tooltip>
                     </div>
                 </div>
             </div>
