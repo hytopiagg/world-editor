@@ -3240,6 +3240,7 @@ function TerrainBuilder(
                         ) {
                             const yawStep = 1.6 * dt; // radians per second
                             const radiusStep = 6.0 * dt; // units per second
+                            const heightStep = 6.0 * dt; // units per second
                             window.__WE_CAM_OFFSET_YAW__ =
                                 window.__WE_CAM_OFFSET_YAW__ ??
                                 (window.__WE_TP_YAW__ ||
@@ -3252,15 +3253,16 @@ function TerrainBuilder(
                                 window.__WE_CAM_OFFSET_YAW__ -= yawStep;
                             if (window.__WE_CAM_KEYS__.right)
                                 window.__WE_CAM_OFFSET_YAW__ += yawStep;
+                            // Up/Down arrows move camera vertically instead of zooming
                             if (window.__WE_CAM_KEYS__.up)
-                                window.__WE_CAM_OFFSET_RADIUS__ = Math.max(
-                                    3.0,
-                                    window.__WE_CAM_OFFSET_RADIUS__ - radiusStep
+                                window.__WE_CAM_OFFSET_HEIGHT__ = Math.min(
+                                    20.0,
+                                    window.__WE_CAM_OFFSET_HEIGHT__ + heightStep
                                 );
                             if (window.__WE_CAM_KEYS__.down)
-                                window.__WE_CAM_OFFSET_RADIUS__ = Math.min(
-                                    30.0,
-                                    window.__WE_CAM_OFFSET_RADIUS__ + radiusStep
+                                window.__WE_CAM_OFFSET_HEIGHT__ = Math.max(
+                                    0.5,
+                                    window.__WE_CAM_OFFSET_HEIGHT__ - heightStep
                                 );
                             // Smoothly approach target radius from wheel input
                             if (window.__WE_CAM_TARGET_RADIUS__ !== undefined) {
