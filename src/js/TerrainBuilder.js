@@ -2867,6 +2867,7 @@ function TerrainBuilder(
             if (e.button === 2) {
                 window.__WE_CAM_DRAG_RMB__ = true;
                 window.__WE_CAM_DRAG_LAST_X__ = e.clientX;
+                window.__WE_CAM_DRAG_LAST_Y__ = e.clientY;
             }
         };
         const onMouseUpRMB = (e) => {
@@ -2878,23 +2879,67 @@ function TerrainBuilder(
                 e.movementX ||
                 e.clientX - (window.__WE_CAM_DRAG_LAST_X__ || e.clientX) ||
                 0;
+            const dy =
+                e.movementY ||
+                e.clientY - (window.__WE_CAM_DRAG_LAST_Y__ || e.clientY) ||
+                0;
             window.__WE_CAM_DRAG_LAST_X__ = e.clientX;
+            window.__WE_CAM_DRAG_LAST_Y__ = e.clientY;
             const sensitivity = 0.004;
             window.__WE_CAM_OFFSET_YAW__ =
                 (window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y) -
                 dx * sensitivity;
+            // Adjust vertical height with Y drag (drag up increases height)
+            const heightSensitivity = 0.02; // world units per pixel
+            window.__WE_CAM_OFFSET_HEIGHT__ = Math.min(
+                20.0,
+                Math.max(
+                    0.5,
+                    (window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0) -
+                        dy * heightSensitivity
+                )
+            );
+            // Recompute offset immediately
+            const r = window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+            const h = window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+            const yaw = window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y;
+            window.__WE_CAM_OFFSET__ = new THREE.Vector3(
+                r * Math.sin(yaw),
+                h,
+                r * Math.cos(yaw)
+            );
         };
         const onWheelZoom = (e) => {
             if (!window.__WE_PHYSICS__) return;
-            const delta = Math.sign(e.deltaY);
-            const stepRadius = 0.6;
-            window.__WE_CAM_OFFSET_RADIUS__ =
-                (window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0) + delta * stepRadius;
-            window.__WE_CAM_OFFSET_RADIUS__ = Math.min(
-                30.0,
-                Math.max(3.0, window.__WE_CAM_OFFSET_RADIUS__)
+            // Normalize wheel delta across devices and apply gentle sensitivity
+            const sensitivity = window.__WE_CAM_WHEEL_SENS__ ?? 0.002;
+            const deltaScale =
+                e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1;
+            const delta = e.deltaY * deltaScale;
+            const dir = Math.sign(delta);
+            const MIN_R = 2.5;
+            const MAX_R = 20.0;
+            const LIMIT_PAD = window.__WE_CAM_LIMIT_PAD__ ?? 0.2; // prevent scrolling when within this of a limit
+            const current =
+                window.__WE_CAM_TARGET_RADIUS__ ??
+                window.__WE_CAM_OFFSET_RADIUS__ ??
+                8.0;
+            // Block further scrolling if already at/near the limits in the same direction
+            if (
+                (current <= MIN_R + LIMIT_PAD && dir < 0) ||
+                (current >= MAX_R - LIMIT_PAD && dir > 0)
+            ) {
+                e.preventDefault();
+                return;
+            }
+            const next = current + delta * sensitivity;
+            window.__WE_CAM_TARGET_RADIUS__ = Math.min(
+                MAX_R,
+                Math.max(MIN_R, next)
             );
             e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.stopPropagation) e.stopPropagation();
         };
         window.addEventListener("keydown", onArrowKeyDown);
         window.addEventListener("keyup", onArrowKeyUp);
@@ -3110,7 +3155,10 @@ function TerrainBuilder(
                         }
 
                         // Apply smooth camera offset adjustments from input each frame
-                        if (window.__WE_CAM_KEYS__) {
+                        if (
+                            window.__WE_CAM_KEYS__ ||
+                            window.__WE_CAM_TARGET_RADIUS__ !== undefined
+                        ) {
                             const yawStep = 1.6 * dt; // radians per second
                             const radiusStep = 6.0 * dt; // units per second
                             window.__WE_CAM_OFFSET_YAW__ =
@@ -3135,6 +3183,24 @@ function TerrainBuilder(
                                     30.0,
                                     window.__WE_CAM_OFFSET_RADIUS__ + radiusStep
                                 );
+                            // Smoothly approach target radius from wheel input
+                            if (window.__WE_CAM_TARGET_RADIUS__ !== undefined) {
+                                const target = window.__WE_CAM_TARGET_RADIUS__;
+                                const cur = window.__WE_CAM_OFFSET_RADIUS__;
+                                const lerp = 1 - Math.pow(0.001, dt); // slower, smoother
+                                window.__WE_CAM_OFFSET_RADIUS__ =
+                                    cur + (target - cur) * lerp;
+                                // Clamp hard limits
+                                const MIN_R = 2.5;
+                                const MAX_R = 20.0;
+                                window.__WE_CAM_OFFSET_RADIUS__ = Math.min(
+                                    MAX_R,
+                                    Math.max(
+                                        MIN_R,
+                                        window.__WE_CAM_OFFSET_RADIUS__
+                                    )
+                                );
+                            }
                             const r = window.__WE_CAM_OFFSET_RADIUS__;
                             const h = window.__WE_CAM_OFFSET_HEIGHT__;
                             const yaw = window.__WE_CAM_OFFSET_YAW__;
