@@ -2850,11 +2850,13 @@ function TerrainBuilder(
                 // We only mark intent flags here; actual movement occurs each frame for smoothness.
                 if (key === "ArrowLeft") {
                     window.__WE_CAM_KEYS__ = window.__WE_CAM_KEYS__ || {};
-                    window.__WE_CAM_KEYS__.left = true;
+                    // Swapped: Left arrow now behaves like previous Right
+                    window.__WE_CAM_KEYS__.right = true;
                     e.preventDefault();
                 }
                 if (key === "ArrowRight") {
-                    window.__WE_CAM_KEYS__.right = true;
+                    // Swapped: Right arrow now behaves like previous Left
+                    window.__WE_CAM_KEYS__.left = true;
                     e.preventDefault();
                 }
                 if (key === "ArrowUp") {
@@ -2870,8 +2872,8 @@ function TerrainBuilder(
         const onArrowKeyUp = (e) => {
             if (!window.__WE_PHYSICS__) return;
             if (!window.__WE_CAM_KEYS__) return;
-            if (e.key === "ArrowLeft") window.__WE_CAM_KEYS__.left = false;
-            if (e.key === "ArrowRight") window.__WE_CAM_KEYS__.right = false;
+            if (e.key === "ArrowLeft") window.__WE_CAM_KEYS__.right = false; // swapped
+            if (e.key === "ArrowRight") window.__WE_CAM_KEYS__.left = false; // swapped
             if (e.key === "ArrowUp") window.__WE_CAM_KEYS__.up = false;
             if (e.key === "ArrowDown") window.__WE_CAM_KEYS__.down = false;
         };
