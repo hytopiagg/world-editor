@@ -141,6 +141,9 @@ export class PhysicsManager {
             .setFriction(0.9)
             .setRestitution(0);
         this._world.createCollider(collider, rb);
+        // Store top surface Y for simple ground-plane checks
+        // Rapier cuboid half-height is 0.5, so top surface is y + 0.5
+        (this as any)._flatGroundTopY = y + 0.5;
         return rb;
     }
 
@@ -303,10 +306,20 @@ export class PhysicsManager {
             // Detect ground contact if a solid block is directly below within a small tolerance
             if (newVy <= 0) {
                 const nearTopOfGround = bottom <= groundY + 1 + 0.08; // tolerance 8cm
-                if (nearTopOfGround && sampleXZSolid(next.x, groundY, next.z)) {
+                const hasVoxelSupport = sampleXZSolid(next.x, groundY, next.z);
+                const planeTopY = (this as any)._flatGroundTopY;
+                const nearFlatPlane =
+                    typeof planeTopY === "number" &&
+                    Math.abs(bottom - planeTopY) <= 0.08 &&
+                    bottom <= planeTopY + 0.08;
+                if (nearTopOfGround && hasVoxelSupport) {
                     grounded = true;
                     newVy = 0;
                     next.y = groundY + 1 + halfHeight + 0.001; // small epsilon
+                } else if (nearFlatPlane) {
+                    grounded = true;
+                    newVy = 0;
+                    next.y = planeTopY + halfHeight + 0.001; // snap to plane top
                 }
             }
             // Ceiling check (moving up): stop upward motion if intersecting just below ceiling
