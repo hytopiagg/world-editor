@@ -144,6 +144,11 @@ export class PhysicsManager {
         // Store top surface Y for simple ground-plane checks
         // Rapier cuboid half-height is 0.5, so top surface is y + 0.5
         (this as any)._flatGroundTopY = y + 0.5;
+        try {
+            (window as any).__WE_PM_PLANE_TOP_Y__ = (
+                this as any
+            )._flatGroundTopY;
+        } catch {}
         return rb;
     }
 
@@ -361,6 +366,12 @@ export class PhysicsManager {
                     true
                 );
             }
+
+            // Expose diagnostics for animation system and debugging
+            try {
+                (window as any).__WE_PM_GROUNDED__ = grounded;
+                (window as any).__WE_PM_VY__ = newVy;
+            } catch {}
         }
 
         this._world.step(this._eventQueue!);

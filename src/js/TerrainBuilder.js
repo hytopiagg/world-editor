@@ -3158,6 +3158,48 @@ function TerrainBuilder(
                                                     actions[`${tag}-lower`] =
                                                         mixer.clipAction(lower);
                                             }
+                                            // Jump-related animations (oneshots/loops)
+                                            const jumpUpper = findClip([
+                                                "jump-upper",
+                                                "jump_upper",
+                                            ]);
+                                            const jumpLower = findClip([
+                                                "jump-lower",
+                                                "jump_lower",
+                                            ]);
+                                            if (jumpUpper)
+                                                actions["jump-upper"] =
+                                                    mixer.clipAction(jumpUpper);
+                                            if (jumpLower)
+                                                actions["jump-lower"] =
+                                                    mixer.clipAction(jumpLower);
+                                            const jumpLoop = findClip([
+                                                "jump-loop",
+                                                "jump_loop",
+                                            ]);
+                                            if (jumpLoop)
+                                                actions["jump-loop"] =
+                                                    mixer.clipAction(jumpLoop);
+                                            const jumpSingle = findClip([
+                                                "jump",
+                                            ]);
+                                            if (jumpSingle)
+                                                actions["jump"] =
+                                                    mixer.clipAction(
+                                                        jumpSingle
+                                                    );
+                                            const landLight = findClip([
+                                                "jump-post-light",
+                                            ]);
+                                            const landHeavy = findClip([
+                                                "jump-post-heavy",
+                                            ]);
+                                            if (landLight)
+                                                actions["land-light"] =
+                                                    mixer.clipAction(landLight);
+                                            if (landHeavy)
+                                                actions["land-heavy"] =
+                                                    mixer.clipAction(landHeavy);
                                             window.__WE_PLAYER_ANIMS__ =
                                                 actions;
                                             const start =
@@ -3374,10 +3416,142 @@ function TerrainBuilder(
                             );
                             const running = moving && !!state.sh;
                             const actions = window.__WE_PLAYER_ANIMS__ || {};
-                            // Choose tag and actions set
+                            // Grounded / airborne detection for jump animations
+                            const halfH =
+                                window.__WE_PHYSICS__ &&
+                                window.__WE_PHYSICS__.getPlayerHalfHeight
+                                    ? window.__WE_PHYSICS__.getPlayerHalfHeight()
+                                    : 0.75;
+                            const bottomY = p.y - halfH;
+                            const isSolidFn =
+                                (window.__WE_IS_SOLID__ &&
+                                    typeof window.__WE_IS_SOLID__ ===
+                                        "function" &&
+                                    window.__WE_IS_SOLID__) ||
+                                null;
+                            const bx = Math.floor(p.x);
+                            const by = Math.floor(bottomY - 0.01);
+                            const bz = Math.floor(p.z);
+                            const hasVoxelBelow = isSolidFn
+                                ? isSolidFn(bx, by, bz)
+                                : false;
+                            const nearFlatPlane =
+                                Math.abs(bottomY - 0.0) <= 0.08;
+                            const groundedNow =
+                                (hasVoxelBelow && bottomY <= by + 1 + 0.08) ||
+                                nearFlatPlane;
+                            const lastPos = window.__WE_LAST_POS__ || p;
+                            const vy = p.y - lastPos.y;
+                            const wasAirborne = !!window.__WE_AIRBORNE__;
+                            let airborneNow = wasAirborne;
+                            let playedLanding = false;
+                            const nowTs = performance.now();
+                            // Start airborne if leaving ground with upward velocity or space pressed
+                            if (!groundedNow && (state.sp || vy > 0.02)) {
+                                if (!wasAirborne) {
+                                    window.__WE_AIRBORNE_SEQ__ =
+                                        (window.__WE_AIRBORNE_SEQ__ || 0) + 1;
+                                    window.__WE_AIRBORNE_SINCE__ = nowTs;
+                                }
+                                airborneNow = true;
+                            }
+                            // End airborne on ground contact
+                            if (groundedNow && wasAirborne) {
+                                airborneNow = false;
+                                const seq = window.__WE_AIRBORNE_SEQ__ || 0;
+                                const lastLandedSeq =
+                                    window.__WE_LAST_LANDED_SEQ__ || 0;
+                                const airborneMs = Math.max(
+                                    0,
+                                    nowTs -
+                                        (window.__WE_AIRBORNE_SINCE__ || nowTs)
+                                );
+                                const speedMag = Math.abs(vy);
+                                // Only play landing once per airborne sequence, with sensible thresholds
+                                if (
+                                    seq !== lastLandedSeq &&
+                                    airborneMs > 200 &&
+                                    speedMag > 0.35
+                                ) {
+                                    const landingAction =
+                                        speedMag > 0.6
+                                            ? actions["land-heavy"]
+                                            : actions["land-light"];
+                                    if (landingAction) {
+                                        // Configure landing as oneshot and clamp at end
+                                        landingAction.setLoop(
+                                            THREE.LoopOnce,
+                                            0
+                                        );
+                                        landingAction.clampWhenFinished = true;
+                                        landingAction
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        playedLanding = true;
+                                        window.__WE_LAST_LANDED_SEQ__ = seq;
+                                        // Suppress idle/walk/run blending while landing plays
+                                        try {
+                                            const dur =
+                                                landingAction.getClip()
+                                                    .duration || 0.35;
+                                            window.__WE_LANDING_UNTIL__ =
+                                                performance.now() + dur * 1000;
+                                        } catch {}
+                                    }
+                                } else if (seq !== lastLandedSeq) {
+                                    // Consume landing sequence even if thresholds not met to avoid repeated handling
+                                    window.__WE_LAST_LANDED_SEQ__ = seq;
+                                }
+                            }
+                            window.__WE_AIRBORNE__ = airborneNow;
+
+                            // Debug logs: enable with window.__WE_DEBUG_JUMP__ = true (only on transitions/landing)
+                            if (window.__WE_DEBUG_JUMP__) {
+                                try {
+                                    const planeTop =
+                                        window.__WE_PM_PLANE_TOP_Y__;
+                                    const groundedDbg = groundedNow ? 1 : 0;
+                                    const airborneDbg = airborneNow ? 1 : 0;
+                                    const seqDbg =
+                                        window.__WE_AIRBORNE_SEQ__ || 0;
+                                    const lastDbg =
+                                        window.__WE_LAST_LANDED_SEQ__ || 0;
+                                    const shouldLog =
+                                        playedLanding ||
+                                        airborneNow !== wasAirborne;
+                                    if (shouldLog) {
+                                        console.log(
+                                            `[JumpDBG] g=${groundedDbg} a=${airborneDbg} vy=${vy.toFixed(
+                                                3
+                                            )} ms=${(
+                                                nowTs -
+                                                (window.__WE_AIRBORNE_SINCE__ ||
+                                                    nowTs)
+                                            ).toFixed(
+                                                0
+                                            )} seq=${seqDbg} last=${lastDbg} planeY=${planeTop}`
+                                        );
+                                    }
+                                } catch {}
+                            }
+
+                            // Choose tag with jump priority
                             let tag = "idle";
-                            if (moving) tag = running ? "run" : "walk";
-                            if (window.__WE_PLAYER_ACTIVE_TAG__ !== tag) {
+                            if (airborneNow) {
+                                tag = "jump";
+                            } else if (moving) {
+                                tag = running ? "run" : "walk";
+                            }
+                            // If a landing oneshot is currently active, defer any new state changes to let it finish
+                            const landingUntil =
+                                window.__WE_LANDING_UNTIL__ || 0;
+                            const landingActive =
+                                performance.now() < landingUntil;
+                            if (
+                                !landingActive &&
+                                window.__WE_PLAYER_ACTIVE_TAG__ !== tag
+                            ) {
                                 // Fade out any current
                                 if (window.__WE_PLAYER_ACTIVE__)
                                     window.__WE_PLAYER_ACTIVE__.fadeOut(0.1);
@@ -3390,34 +3564,73 @@ function TerrainBuilder(
                                         0.1
                                     );
                                 // Start new
-                                const upper =
-                                    actions[`${tag}-upper`] ||
-                                    actions[`${tag}_upper`];
-                                const lower =
-                                    actions[`${tag}-lower`] ||
-                                    actions[`${tag}_lower`];
-                                if (upper && lower) {
-                                    window.__WE_PLAYER_ACTIVE_UPPER__ = upper
-                                        .reset()
-                                        .fadeIn(0.1)
-                                        .play();
-                                    window.__WE_PLAYER_ACTIVE_LOWER__ = lower
-                                        .reset()
-                                        .fadeIn(0.1)
-                                        .play();
-                                    window.__WE_PLAYER_ACTIVE__ = undefined;
-                                } else {
-                                    const single = actions[tag];
-                                    if (single) {
-                                        window.__WE_PLAYER_ACTIVE__ = single
+                                if (tag === "jump") {
+                                    // Prefer upper/lower jump, then jump-loop, then jump
+                                    const u =
+                                        actions["jump-upper"] ||
+                                        actions["jump_upper"];
+                                    const l =
+                                        actions["jump-lower"] ||
+                                        actions["jump_lower"];
+                                    if (u && l) {
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ = u
                                             .reset()
-                                            .fadeIn(0.1)
+                                            .fadeIn(0.05)
                                             .play();
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ = l
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        window.__WE_PLAYER_ACTIVE__ = undefined;
+                                    } else if (actions["jump-loop"]) {
+                                        window.__WE_PLAYER_ACTIVE__ = actions[
+                                            "jump-loop"
+                                        ]
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            undefined;
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            undefined;
+                                    } else if (actions["jump"]) {
+                                        window.__WE_PLAYER_ACTIVE__ = actions[
+                                            "jump"
+                                        ]
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            undefined;
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            undefined;
                                     }
-                                    window.__WE_PLAYER_ACTIVE_UPPER__ =
-                                        undefined;
-                                    window.__WE_PLAYER_ACTIVE_LOWER__ =
-                                        undefined;
+                                } else {
+                                    const upper =
+                                        actions[`${tag}-upper`] ||
+                                        actions[`${tag}_upper`];
+                                    const lower =
+                                        actions[`${tag}-lower`] ||
+                                        actions[`${tag}_lower`];
+                                    if (upper && lower) {
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            upper.reset().fadeIn(0.1).play();
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            lower.reset().fadeIn(0.1).play();
+                                        window.__WE_PLAYER_ACTIVE__ = undefined;
+                                    } else {
+                                        const single = actions[tag];
+                                        if (single) {
+                                            window.__WE_PLAYER_ACTIVE__ = single
+                                                .reset()
+                                                .fadeIn(0.1)
+                                                .play();
+                                        }
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            undefined;
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            undefined;
+                                    }
                                 }
                                 window.__WE_PLAYER_ACTIVE_TAG__ = tag;
                             }
