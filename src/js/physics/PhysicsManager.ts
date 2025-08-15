@@ -30,6 +30,8 @@ export class PhysicsManager {
 
     private _readyPromise: Promise<void>;
     private _gravity: { x: number; y: number; z: number };
+    private _isSolidFn: ((x: number, y: number, z: number) => boolean) | null =
+        null;
 
     constructor(options: PhysicsInitOptions = {}) {
         this._gravity = options.gravity ?? { x: 0, y: -32, z: 0 };
@@ -56,6 +58,13 @@ export class PhysicsManager {
 
     public ready(): Promise<void> {
         return this._readyPromise;
+    }
+
+    public setIsSolidQuery(fn: (x: number, y: number, z: number) => boolean) {
+        this._isSolidFn = fn;
+    }
+    public getPlayerHalfHeight(): number {
+        return Math.max(0.01, (this._options.height ?? 1.5) / 2);
     }
 
     public setPlayerUpdateCallback(cb: (pos: THREE.Vector3) => void) {
@@ -221,14 +230,115 @@ export class PhysicsManager {
                 targetZ *= f;
             }
 
-            // Preserve Y from physics, set XZ to target
+            // Basic voxel collision using external spatial hash if available
+            const pos = this._playerBody.translation();
+            const dt = this._fixedTimeStep;
+            const radius = Math.max(0.01, this._options.radius ?? 0.35);
+            const halfHeight = Math.max(
+                0.01,
+                (this._options.height ?? 1.5) / 2
+            );
+            const next = {
+                x: pos.x + targetX * dt,
+                y: pos.y + lv.y * dt,
+                z: pos.z + targetZ * dt,
+            };
+            const isSolid = (x: number, y: number, z: number) => {
+                try {
+                    if (this._isSolidFn) return this._isSolidFn(x, y, z);
+                    // fallback to window hook if present
+                    // @ts-ignore
+                    if (typeof (window as any).__WE_IS_SOLID__ === "function") {
+                        // @ts-ignore
+                        return (window as any).__WE_IS_SOLID__(x, y, z);
+                    }
+                } catch {}
+                return false;
+            };
+
+            // Helper to sample a few points around capsule feet/head at a given Y plane
+            const sampleXZSolid = (
+                cx: number,
+                cy: number,
+                cz: number
+            ): boolean => {
+                const offsets: Array<[number, number]> = [
+                    [0, 0],
+                    [radius * 0.8, 0],
+                    [-radius * 0.8, 0],
+                    [0, radius * 0.8],
+                    [0, -radius * 0.8],
+                ];
+                const by = Math.floor(cy);
+                for (const [ox, oz] of offsets) {
+                    const bx = Math.floor(cx + ox);
+                    const bz = Math.floor(cz + oz);
+                    if (isSolid(bx, by, bz)) return true;
+                }
+                return false;
+            };
+
+            // Resolve horizontal X, Z independently to avoid getting stuck on corners
+            // Test at mid section of capsule
+            const midY = next.y;
+            // Try move in X
+            if (sampleXZSolid(next.x, midY, pos.z)) {
+                targetX = 0;
+                next.x = pos.x;
+            }
+            // Try move in Z
+            if (sampleXZSolid(pos.x, midY, next.z)) {
+                targetZ = 0;
+                next.z = pos.z;
+            }
+
+            // Vertical collision: ground and ceiling
+            let newVy = lv.y;
+            const bottom = next.y - halfHeight;
+            const top = next.y + halfHeight;
+            const groundY = Math.floor(bottom - 0.01);
+            const ceilingY = Math.floor(top + 0.01);
+
+            let grounded = false;
+            // Detect ground contact if a solid block is directly below within a small tolerance
+            if (newVy <= 0) {
+                const nearTopOfGround = bottom <= groundY + 1 + 0.08; // tolerance 8cm
+                if (nearTopOfGround && sampleXZSolid(next.x, groundY, next.z)) {
+                    grounded = true;
+                    newVy = 0;
+                    next.y = groundY + 1 + halfHeight + 0.001; // small epsilon
+                }
+            }
+            // Ceiling check (moving up): stop upward motion if intersecting just below ceiling
+            if (newVy > 0) {
+                const nearBottomOfCeiling = top >= ceilingY - 0.08;
+                if (
+                    nearBottomOfCeiling &&
+                    sampleXZSolid(next.x, ceilingY, next.z)
+                ) {
+                    newVy = 0;
+                    next.y = ceilingY - halfHeight - 0.001;
+                }
+            }
+
+            // Apply resolved velocity
             this._playerBody.setLinvel(
-                { x: targetX, y: lv.y, z: targetZ },
+                { x: targetX, y: newVy, z: targetZ },
                 true
             );
+            // Apply positional snap if changed (prevents sinking)
+            if (next.y !== pos.y || next.x !== pos.x || next.z !== pos.z) {
+                // Only correct Y snap to avoid fighting integration for XZ
+                if (next.y !== pos.y) {
+                    this._playerBody.setTranslation(
+                        { x: pos.x, y: next.y, z: pos.z },
+                        true
+                    );
+                }
+            }
 
-            // Jump (very simple: allow when roughly grounded)
-            if (input.sp && Math.abs(lv.y) < 0.001) {
+            // Jump only when grounded (prevents stuck-on-ground no-jump)
+            if (input.sp && grounded) {
                 this._playerBody.setLinvel(
                     {
                         x: targetX,
