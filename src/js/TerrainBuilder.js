@@ -2812,6 +2812,19 @@ function TerrainBuilder(
         optimizeRenderer(gl);
         try {
             window.__WE_SCENE__ = scene;
+            // Initialize camera control globals so first entry to player mode works without key presses
+            window.__WE_CAM_KEYS__ = window.__WE_CAM_KEYS__ || {
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+            };
+            window.__WE_CAM_OFFSET_RADIUS__ =
+                window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+            window.__WE_CAM_OFFSET_HEIGHT__ =
+                window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+            window.__WE_CAM_OFFSET_YAW__ =
+                window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y;
         } catch (_) {}
 
         // Allow adjusting third-person camera offset with arrow keys while in Player Mode
@@ -2868,6 +2881,9 @@ function TerrainBuilder(
                 window.__WE_CAM_DRAG_RMB__ = true;
                 window.__WE_CAM_DRAG_LAST_X__ = e.clientX;
                 window.__WE_CAM_DRAG_LAST_Y__ = e.clientY;
+                e.preventDefault();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                if (e.stopPropagation) e.stopPropagation();
             }
         };
         const onMouseUpRMB = (e) => {
@@ -2908,6 +2924,16 @@ function TerrainBuilder(
                 h,
                 r * Math.cos(yaw)
             );
+            e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.stopPropagation) e.stopPropagation();
+        };
+        const onContextMenu = (e) => {
+            if (window.__WE_PHYSICS__) {
+                e.preventDefault();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                if (e.stopPropagation) e.stopPropagation();
+            }
         };
         const onWheelZoom = (e) => {
             if (!window.__WE_PHYSICS__) return;
@@ -2947,6 +2973,9 @@ function TerrainBuilder(
         window.addEventListener("mouseup", onMouseUpRMB);
         window.addEventListener("mousemove", onMouseMoveRMB);
         window.addEventListener("wheel", onWheelZoom, { passive: false });
+        window.addEventListener("contextmenu", onContextMenu, {
+            capture: true,
+        });
         // No pointer lock: derive yaw from current camera rotation when Player Mode is active
 
         cameraManager.initialize(threeCamera, orbitControlsRef.current);
@@ -3341,6 +3370,7 @@ function TerrainBuilder(
             window.removeEventListener("mouseup", onMouseUpRMB);
             window.removeEventListener("mousemove", onMouseMoveRMB);
             window.removeEventListener("wheel", onWheelZoom);
+            window.removeEventListener("contextmenu", onContextMenu, true);
         };
     }, [gl]);
 

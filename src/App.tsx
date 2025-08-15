@@ -344,34 +344,6 @@ function App() {
         };
     }, [playerModeEnabled]);
 
-    // Remove blocking of W/S at capture stage; OrbitControls is disabled in Player Mode already
-    // useEffect(() => {
-    //     const onKeyDown = (e: KeyboardEvent) => {
-    //         if (!playerModeEnabled) return;
-    //         if (e.key === 'w' || e.key === 'W' || e.key === 's' || e.key === 'S') {
-    //             e.preventDefault();
-    //             e.stopPropagation();
-    //         }
-    //     };
-    //     window.addEventListener('keydown', onKeyDown, { capture: true } as any);
-    //     return () => window.removeEventListener('keydown', onKeyDown, { capture: true } as any);
-    // }, [playerModeEnabled]);
-
-    // Auto pointer-lock on enter, Escape to exit Player Mode
-    // Removed per request: no pointer locking required in Player Mode
-    // useEffect(() => {
-    //     const onKeyDown = (e: KeyboardEvent) => {
-    //         if (!playerModeEnabled) return;
-    //         if (e.key === 'Escape') {
-    //             e.preventDefault();
-    //             togglePlayerMode();
-    //             try { document.exitPointerLock?.(); } catch(_) {}
-    //         }
-    //     };
-    //     window.addEventListener('keydown', onKeyDown);
-    //     return () => window.removeEventListener('keydown', onKeyDown);
-    // }, [playerModeEnabled]);
-
     const togglePlayerMode = () => {
         const next = !playerModeEnabled;
         setPlayerModeEnabled(next);
@@ -382,6 +354,12 @@ function App() {
             const physics = ensurePhysics();
             (window as any).__WE_PHYSICS__ = physics;
             (window as any).__WE_INPUT_STATE__ = (window as any).__WE_INPUT_STATE__ || { state: {} };
+            // Initialize player-mode camera globals so first entry works without an arrow key press
+            (window as any).__WE_CAM_KEYS__ = (window as any).__WE_CAM_KEYS__ || { left: false, right: false, up: false, down: false };
+            (window as any).__WE_CAM_OFFSET_RADIUS__ = (window as any).__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+            (window as any).__WE_CAM_OFFSET_HEIGHT__ = (window as any).__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+            // Let TerrainBuilder compute yaw from camera on first animate tick; provide fallback here
+            (window as any).__WE_CAM_OFFSET_YAW__ = (window as any).__WE_CAM_OFFSET_YAW__ ?? (cameraManager.camera?.rotation?.y || 0);
             // No pointer lock
             physics.ready().then(() => {
                 physics.addFlatGround(4000, -0.5);
