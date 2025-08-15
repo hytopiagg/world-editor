@@ -3268,9 +3268,15 @@ function TerrainBuilder(
                             if (window.__WE_CAM_TARGET_RADIUS__ !== undefined) {
                                 const target = window.__WE_CAM_TARGET_RADIUS__;
                                 const cur = window.__WE_CAM_OFFSET_RADIUS__;
-                                const lerp = 1 - Math.pow(0.001, dt); // slower, smoother
-                                window.__WE_CAM_OFFSET_RADIUS__ =
-                                    cur + (target - cur) * lerp;
+                                const diff = target - cur;
+                                if (Math.abs(diff) < 1e-3) {
+                                    window.__WE_CAM_OFFSET_RADIUS__ = target;
+                                    window.__WE_CAM_TARGET_RADIUS__ = undefined;
+                                } else {
+                                    const lerp = 1 - Math.pow(0.001, dt); // slower, smoother
+                                    window.__WE_CAM_OFFSET_RADIUS__ =
+                                        cur + diff * lerp;
+                                }
                                 // Clamp hard limits
                                 const MIN_R = 2.5;
                                 const MAX_R = 20.0;
@@ -3319,8 +3325,8 @@ function TerrainBuilder(
                             orbitControlsRef.current &&
                             orbitControlsRef.current.target
                         ) {
+                            // Keep target aligned for when player mode ends, but avoid controls.update() to prevent damping shifts
                             orbitControlsRef.current.target.copy(target);
-                            orbitControlsRef.current.update();
                         }
 
                         // Advance animation mixer and pick state based on key state (no restart on every tick)
