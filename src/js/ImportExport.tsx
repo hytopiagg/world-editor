@@ -326,7 +326,8 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 
                 // Find the next available ID for new custom blocks
                 const getNextAvailableId = () => {
-                    let nextId = 100; // Start at 100 for custom blocks
+                    // Start custom blocks at 1000, cap at 1999
+                    let nextId = 1000;
                     while (existingBlockIds.has(nextId)) {
                         nextId++;
                     }
@@ -340,7 +341,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 
                     if (
                         blockType.isCustom ||
-                        (blockType.id >= 100 && blockType.id < 200)
+                        (blockType.id >= 1000 && blockType.id < 2000)
                     ) {
                         // Check if block already exists by name only
                         const blockNameLower = blockType.name.toLowerCase();
@@ -383,6 +384,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             textureUri: blockType.textureUri, // Pass the URI from the file (could be path or data)
                             isCustom: true,
                             isMultiTexture: likelyIsMultiTexture,
+                            lightLevel: blockType.lightLevel,
 
                             sideTextures:
                                 blockType.sideTextures || {},
@@ -421,7 +423,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             blocks: importData.blockTypes.filter(
                                 (b) =>
                                     b.isCustom ||
-                                    (b.id >= 100 && b.id < 200)
+                                    (b.id >= 1000 && b.id < 2000)
                             ),
                         },
                     })
@@ -783,6 +785,31 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         const selectedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
 
 
+        // --- Remap block IDs to 1..254 for SDK compatibility ---
+        const sortedUsedIds = Array.from(usedBlockIds)
+            .filter((id) => id !== 0)
+            .sort((a, b) => a - b);
+        const MAX_EXPORT_IDS = 254;
+        if (sortedUsedIds.length > MAX_EXPORT_IDS) {
+            loadingManager.hideLoading();
+            alert(`Too many block types to export (${sortedUsedIds.length}). The export format supports up to ${MAX_EXPORT_IDS}. Reduce unique block types and try again.`);
+            return;
+        }
+
+        const originalToExportId = new Map<number, number>();
+        let nextExportId = 1; // 1..254
+        for (const originalId of sortedUsedIds) {
+            originalToExportId.set(originalId, nextExportId++);
+        }
+
+        const remappedTerrain = Object.entries(simplifiedTerrain).reduce((acc, [key, value]) => {
+            const originalId = typeof value === 'number' ? value : Number(value);
+            const mappedId = originalToExportId.get(originalId) ?? originalId;
+            acc[key] = mappedId;
+            return acc;
+        }, {} as Record<string, number>);
+
+
         loadingManager.updateLoading("Building export data structure...", 70);
         const exportData = {
             // Export block type definitions only for the blocks actually used
@@ -805,14 +832,15 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
 
                 return {
-                    id: block.id,
+                    id: originalToExportId.get(block.id) ?? block.id,
                     name: block.name,
                     textureUri: textureUriForJson, // For multi texture blocks this will be folder path; single texture blocks file path
-                    isCustom: block.isCustom || (block.id >= 100 && block.id < 200),
+                    isCustom: block.isCustom || (block.id >= 1000 && block.id < 2000),
                     isMultiTexture: isMulti,
+                    lightLevel: (block as any).lightLevel,
                 };
             }),
-            blocks: simplifiedTerrain,
+            blocks: remappedTerrain,
             entities: environmentObjects.reduce((acc, obj) => {
                 const entityType = environmentModels.find(
                     (model) => model.modelUrl === obj.modelUrl

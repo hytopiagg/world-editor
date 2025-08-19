@@ -72,7 +72,7 @@ class ChunkSystem {
             if (!chunkBlocks.has(chunkId)) {
                 chunkBlocks.set(
                     chunkId,
-                    new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE)
+                    new Uint16Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE)
                 );
             }
             const localX = x - originCoordinate.x;
@@ -124,10 +124,11 @@ class ChunkSystem {
             return;
         }
 
-        const chunksToUpdate = new Set();
-        const chunkOptions = new Map();
+        const chunksToUpdate = new Set<string>();
+        const chunkOptions = new Map<string, any>();
+        const neighborChunksToForce = new Set<string>();
 
-        removedBlocks.forEach((block) => {
+        removedBlocks.forEach((block: any) => {
             const x = block.position[0];
             const y = block.position[1];
             const z = block.position[2];
@@ -204,9 +205,25 @@ class ChunkSystem {
                     }
                 }
             }
+
+            // If an emissive block was removed, force all 26 neighboring chunks (and self)
+            try {
+                const oldType = BlockTypeRegistry.instance.getBlockType(block.id);
+                const wasEmissive = !!(oldType && typeof oldType.lightLevel === 'number' && oldType.lightLevel > 0);
+                if (wasEmissive) {
+                    for (let ox = -1; ox <= 1; ox++) {
+                        for (let oy = -1; oy <= 1; oy++) {
+                            for (let oz = -1; oz <= 1; oz++) {
+                                const neighborChunkId = `${originX + ox * CHUNK_SIZE},${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE}`;
+                                neighborChunksToForce.add(neighborChunkId);
+                            }
+                        }
+                    }
+                }
+            } catch (_) { }
         });
 
-        addedBlocks.forEach((block) => {
+        addedBlocks.forEach((block: any) => {
             const x = block.position[0];
             const y = block.position[1];
             const z = block.position[2];
@@ -219,7 +236,7 @@ class ChunkSystem {
 
             if (!chunk) {
 
-                const blocks = new Uint8Array(
+                const blocks = new Uint16Array(
                     CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
                 );
 
@@ -297,6 +314,22 @@ class ChunkSystem {
                     }
                 }
             }
+
+            // If an emissive block was added, force all 26 neighboring chunks (and self)
+            try {
+                const newType = BlockTypeRegistry.instance.getBlockType(block.id);
+                const isEmissive = !!(newType && typeof newType.lightLevel === 'number' && newType.lightLevel > 0);
+                if (isEmissive) {
+                    for (let ox = -1; ox <= 1; ox++) {
+                        for (let oy = -1; oy <= 1; oy++) {
+                            for (let oz = -1; oz <= 1; oz++) {
+                                const neighborChunkId = `${originX + ox * CHUNK_SIZE},${originY + oy * CHUNK_SIZE},${originZ + oz * CHUNK_SIZE}`;
+                                neighborChunksToForce.add(neighborChunkId);
+                            }
+                        }
+                    }
+                }
+            } catch (_) { }
         });
 
         for (const chunkId of chunksToUpdate) {
@@ -304,12 +337,27 @@ class ChunkSystem {
             if (chunk) {
                 const options = chunkOptions.get(chunkId) || {};
 
-                if (options.added && options.added.length > 0) {
-                    options.forceCompleteRebuild = true;
-                }
+                // Ensure a hard refresh on all affected chunks (including neighbors)
+                options.forceCompleteRebuild = true;
+                options.forceMesh = true;
+
+                // Poke and revert a single cell to guarantee remesh without persistent change
+                (this._chunkManager as any)._pokeChunkForRerender?.(chunk);
 
                 this._chunkManager.queueChunkForRender(chunk, options);
             }
+        }
+
+        // Force all diagonal and cardinal neighbors when emissive state changes
+        for (const neighborId of neighborChunksToForce) {
+            const neighbor = this._chunkManager._chunks.get(neighborId);
+            if (!neighbor) continue;
+            (this._chunkManager as any)._pokeChunkForRerender?.(neighbor);
+            this._chunkManager.queueChunkForRender(neighbor, {
+                forceCompleteRebuild: true,
+                forceMesh: true,
+                skipNeighbors: true,
+            });
         }
     }
     /**

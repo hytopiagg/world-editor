@@ -1,5 +1,9 @@
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
-import { CHUNK_SIZE, CHUNK_INDEX_RANGE } from "./ChunkConstants";
+import {
+    CHUNK_SIZE,
+    CHUNK_INDEX_RANGE,
+    MAX_LIGHT_LEVEL,
+} from "./ChunkConstants";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
 /**
  * Represents a chunk in the world
@@ -21,6 +25,7 @@ class Chunk {
         this._liquidMesh = undefined;
         this._solidMesh = undefined;
         this._visible = true;
+        this._lightSources = undefined;
     }
     /**
      * Get the chunk ID from origin coordinate
@@ -94,6 +99,63 @@ class Chunk {
      */
     get chunkId() {
         return Chunk.getChunkId(this.originCoordinate);
+    }
+
+    // Check if this chunk contains at least one block of the given type id
+    containsBlockType(blockTypeId) {
+        if (!this._blocks) return false;
+        for (let i = 0; i < this._blocks.length; i++) {
+            if (this._blocks[i] === blockTypeId) return true;
+        }
+        return false;
+    }
+
+    // Emissive light sources cache
+    getLightSources() {
+        if (this._lightSources !== undefined) return this._lightSources;
+        const sources = [];
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+            for (let z = 0; z < CHUNK_SIZE; z++) {
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    const id = this.getLocalBlockId({ x, y, z });
+                    if (id === 0) continue;
+                    const type = BlockTypeRegistry.instance.getBlockType(id);
+                    const level = type?.lightLevel;
+                    if (typeof level === "number" && level > 0) {
+                        sources.push({
+                            position: {
+                                x: this.originCoordinate.x + x + 0.5,
+                                y: this.originCoordinate.y + y + 0.5,
+                                z: this.originCoordinate.z + z + 0.5,
+                            },
+                            level,
+                        });
+                    }
+                }
+            }
+        }
+        this._lightSources = sources;
+        try {
+            if (
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true)
+            ) {
+                if (sources.length > 0) {
+                    console.log(
+                        "[light-build] cached sources for",
+                        this.chunkId,
+                        "count:",
+                        sources.length
+                    );
+                }
+            }
+        } catch (_) {}
+        return this._lightSources;
+    }
+
+    clearLightSourceCache() {
+        this._lightSources = undefined;
     }
     /**
      * Check if the chunk has a mesh
@@ -213,6 +275,8 @@ class Chunk {
         const solidMeshUvs = [];
         const solidMeshIndices = [];
         const solidMeshColors = [];
+        const solidMeshLightLevels = [];
+        let solidMeshHasLightLevel = false;
         const liquidMeshPositions = [];
         const liquidMeshNormals = [];
         const liquidMeshUvs = [];
@@ -243,6 +307,27 @@ class Chunk {
 
         // Only now that we know we have blocks worth rendering, build the neighbour lookup table.
         this._extendedBlockTypes = this._getExtendedBlockTypes(chunkManager);
+
+        // Gather nearby light sources (including neighbors) within MAX_LIGHT_LEVEL radius in chunk units
+        const nearbySources = [];
+        const searchRadius = Math.ceil((MAX_LIGHT_LEVEL + 1) / CHUNK_SIZE);
+        const { x: ox, y: oy, z: oz } = this.originCoordinate;
+        for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+            for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+                for (let dz = -searchRadius; dz <= searchRadius; dz++) {
+                    const neighborOrigin = {
+                        x: ox + dx * CHUNK_SIZE,
+                        y: oy + dy * CHUNK_SIZE,
+                        z: oz + dz * CHUNK_SIZE,
+                    };
+                    const chunkId = Chunk.getChunkId(neighborOrigin);
+                    const neighbor = chunkManager.getChunkByKey?.(chunkId);
+                    if (neighbor) {
+                        nearbySources.push(...neighbor.getLightSources());
+                    }
+                }
+            }
+        }
 
         for (let y = 0; y < CHUNK_SIZE; y++) {
             // Quick test: if the entire X-Z slice at this Y level is air, skip costly per-face work
@@ -314,6 +399,7 @@ class Chunk {
                             : solidMeshUvs;
                         const ndx = meshPositions.length / 3;
 
+                        let blockLightLevel = null;
                         for (const { pos, uv, ao } of vertices) {
                             const vertexX = globalX + pos[0] - 0.5;
                             const vertexY = globalY + pos[1] - 0.5;
@@ -325,7 +411,7 @@ class Chunk {
                                 blockType.getTexturePath(blockFace);
 
                             let texCoords;
-                            const isCustomBlock = blockType.id >= 100;
+                            const isCustomBlock = blockType.id >= 1000;
 
                             // For custom blocks, check if it's multi-texture
                             if (isCustomBlock && blockType.isMultiSided) {
@@ -336,12 +422,196 @@ class Chunk {
                                         uv
                                     );
                             } else if (isCustomBlock) {
-                                // Single-texture custom block
-                                texCoords =
-                                    BlockTextureAtlas.instance.getTextureUVCoordinateSync(
-                                        actualTextureUri,
-                                        uv
+                                // Single-texture custom block: try multiple candidate keys
+                                const faceCoordMap = {
+                                    top: "+y",
+                                    bottom: "-y",
+                                    left: "-x",
+                                    right: "+x",
+                                    front: "+z",
+                                    back: "-z",
+                                };
+                                const faceCoord =
+                                    faceCoordMap[blockFace] || blockFace;
+                                const candidates = [];
+                                // 1) direct path/data URI
+                                if (actualTextureUri)
+                                    candidates.push(actualTextureUri);
+                                // 2) id-based keys used when applying data URIs
+                                candidates.push(String(blockType.id));
+                                candidates.push(`blocks/${blockType.id}`);
+                                candidates.push(
+                                    `blocks/${blockType.id}/${faceCoord}.png`
+                                );
+                                // 3) variant base id keys
+                                const baseId =
+                                    typeof blockType.variantOfId === "number"
+                                        ? blockType.variantOfId
+                                        : null;
+                                if (baseId) {
+                                    candidates.push(String(baseId));
+                                    candidates.push(`blocks/${baseId}`);
+                                    candidates.push(
+                                        `blocks/${baseId}/${faceCoord}.png`
                                     );
+                                }
+
+                                const atlas = BlockTextureAtlas.instance;
+                                const ERROR_KEY = "./assets/blocks/error.png";
+                                const candidateHasGoodMetadata = (
+                                    candidateKey
+                                ) => {
+                                    if (
+                                        !candidateKey ||
+                                        candidateKey === ERROR_KEY
+                                    )
+                                        return false;
+                                    // direct metadata
+                                    let meta =
+                                        atlas.getTextureMetadata(candidateKey);
+                                    if (meta && meta.debugPath !== ERROR_KEY)
+                                        return true;
+                                    // blocks/<id> or blocks/<name> variants
+                                    const blockFacePattern =
+                                        /blocks\/(.+?)(?:\/([+\-][xyz]\.png))?$/;
+                                    const m =
+                                        candidateKey.match(blockFacePattern);
+                                    if (m) {
+                                        const base = `blocks/${m[1]}`;
+                                        const faceKey = m[2];
+                                        if (faceKey) {
+                                            meta = atlas.getTextureMetadata(
+                                                `${base}/${faceKey}`
+                                            );
+                                            if (
+                                                meta &&
+                                                meta.debugPath !== ERROR_KEY
+                                            )
+                                                return true;
+                                        }
+                                        meta = atlas.getTextureMetadata(base);
+                                        if (
+                                            meta &&
+                                            meta.debugPath !== ERROR_KEY
+                                        )
+                                            return true;
+                                    }
+                                    // numeric id mapping
+                                    if (!isNaN(parseInt(candidateKey))) {
+                                        meta =
+                                            atlas.getTextureMetadata(
+                                                `${candidateKey}`
+                                            ) ||
+                                            atlas.getTextureMetadata(
+                                                `blocks/${candidateKey}`
+                                            );
+                                        if (
+                                            meta &&
+                                            meta.debugPath !== ERROR_KEY
+                                        )
+                                            return true;
+                                    }
+                                    return false;
+                                };
+
+                                for (const key of candidates) {
+                                    // Only accept non-error entries with real metadata bound
+                                    if (!candidateHasGoodMetadata(key)) {
+                                        // Make sure it's queued for load to become available next frame
+                                        atlas.queueTextureForLoading(key);
+                                        continue;
+                                    }
+                                    texCoords =
+                                        atlas.getTextureUVCoordinateSync(
+                                            key,
+                                            uv
+                                        );
+                                    if (texCoords) {
+                                        try {
+                                            if (window.__TEX_DEBUG__) {
+                                                console.log(
+                                                    "[tex-debug] Resolved UV via candidate",
+                                                    {
+                                                        key,
+                                                        id: blockType.id,
+                                                        name: blockType.name,
+                                                        face: blockFace,
+                                                    }
+                                                );
+                                            }
+                                        } catch (_) {}
+                                        break;
+                                    }
+                                }
+
+                                if (
+                                    !texCoords &&
+                                    typeof window !== "undefined"
+                                ) {
+                                    try {
+                                        if (
+                                            window.__TEX_DEBUG__ ||
+                                            window.__LIGHT_DEBUG__
+                                        ) {
+                                            console.warn(
+                                                "[tex-debug] Missing UV for custom single-face block",
+                                                {
+                                                    id: blockType.id,
+                                                    name: blockType.name,
+                                                    face: blockFace,
+                                                    actualTextureUri,
+                                                    candidates,
+                                                }
+                                            );
+                                        }
+                                    } catch (_) {}
+                                }
+
+                                // Fallback to name-based resolver like defaults use
+                                if (!texCoords) {
+                                    texCoords =
+                                        BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                            blockType.name,
+                                            blockFace,
+                                            uv
+                                        );
+                                    if (
+                                        !texCoords &&
+                                        typeof blockType.variantOfId ===
+                                            "number"
+                                    ) {
+                                        // Try base name
+                                        try {
+                                            const base =
+                                                BlockTypeRegistry.instance.getBlockType(
+                                                    blockType.variantOfId
+                                                );
+                                            if (base) {
+                                                texCoords =
+                                                    BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                                        base.name,
+                                                        blockFace,
+                                                        uv
+                                                    );
+                                            }
+                                        } catch (_) {}
+                                    }
+                                    try {
+                                        if (
+                                            !texCoords &&
+                                            window.__TEX_DEBUG__
+                                        ) {
+                                            console.warn(
+                                                "[tex-debug] Name-based UV fallback failed",
+                                                {
+                                                    id: blockType.id,
+                                                    name: blockType.name,
+                                                    face: blockFace,
+                                                }
+                                            );
+                                        }
+                                    } catch (_) {}
+                                }
                             } else {
                                 // Non-custom block - use the block name for multi-sided lookup
                                 texCoords =
@@ -382,6 +652,36 @@ class Chunk {
                                 BlockTextureAtlas.instance.queueTextureForLoading(
                                     actualTextureUri
                                 );
+                                // Also queue id-based keys to be safe for customs
+                                if (isCustomBlock) {
+                                    BlockTextureAtlas.instance.queueTextureForLoading(
+                                        String(blockType.id)
+                                    );
+                                    const faceCoordMap2 = {
+                                        top: "+y",
+                                        bottom: "-y",
+                                        left: "-x",
+                                        right: "+x",
+                                        front: "+z",
+                                        back: "-z",
+                                    };
+                                    const f2 =
+                                        faceCoordMap2[blockFace] || blockFace;
+                                    BlockTextureAtlas.instance.queueTextureForLoading(
+                                        `blocks/${blockType.id}/${f2}.png`
+                                    );
+                                    if (
+                                        typeof blockType.variantOfId ===
+                                        "number"
+                                    ) {
+                                        BlockTextureAtlas.instance.queueTextureForLoading(
+                                            `blocks/${blockType.variantOfId}/${f2}.png`
+                                        );
+                                        BlockTextureAtlas.instance.queueTextureForLoading(
+                                            `blocks/${blockType.variantOfId}`
+                                        );
+                                    }
+                                }
                             }
 
                             meshUvs.push(texCoords[0], texCoords[1]);
@@ -394,6 +694,23 @@ class Chunk {
                                     chunkManager
                                 )
                             );
+
+                            // compute light once per block using block coordinate center
+                            if (blockLightLevel === null) {
+                                blockLightLevel = this._calculateLightLevel(
+                                    globalX,
+                                    globalY,
+                                    globalZ,
+                                    nearbySources
+                                );
+                            }
+                            const normalized =
+                                blockLightLevel / MAX_LIGHT_LEVEL;
+                            if (!blockType.isLiquid) {
+                                solidMeshLightLevels.push(normalized);
+                                if (normalized > 0)
+                                    solidMeshHasLightLevel = true;
+                            }
                         }
                         meshIndices.push(
                             ndx,
@@ -407,6 +724,20 @@ class Chunk {
                 }
             }
         }
+        try {
+            if (
+                typeof window !== "undefined" &&
+                (window.__LIGHT_DEBUG__?.refresh ||
+                    window.__LIGHT_DEBUG__ === true)
+            ) {
+                console.log(
+                    "[light-build] chunk",
+                    this.chunkId,
+                    "nearbySources:",
+                    nearbySources.length
+                );
+            }
+        } catch (_) {}
 
         this._liquidMesh =
             liquidMeshPositions.length > 0
@@ -427,6 +758,9 @@ class Chunk {
                       normals: solidMeshNormals,
                       positions: solidMeshPositions,
                       uvs: solidMeshUvs,
+                      lightLevels: solidMeshHasLightLevel
+                          ? solidMeshLightLevels
+                          : undefined,
                   })
                 : undefined;
 
@@ -815,7 +1149,42 @@ class Chunk {
             );
         }
         const blockIndex = this._getIndex(localCoordinate);
+
+        // Upgrade storage to Uint16Array on-demand if IDs exceed 255
+        if (
+            blockId > 255 &&
+            this._blocks &&
+            typeof this._blocks.BYTES_PER_ELEMENT === "number" &&
+            this._blocks.BYTES_PER_ELEMENT === 1
+        ) {
+            try {
+                const upgraded = new Uint16Array(this._blocks.length);
+                for (let i = 0; i < this._blocks.length; i++) {
+                    upgraded[i] = this._blocks[i];
+                }
+                this._blocks = upgraded;
+            } catch (_) {}
+        }
+        const prev = this._blocks[blockIndex];
         this._blocks[blockIndex] = blockId;
+        try {
+            const oldType = BlockTypeRegistry.instance.getBlockType(prev);
+            const newType = BlockTypeRegistry.instance.getBlockType(blockId);
+            if ((oldType?.lightLevel || 0) !== (newType?.lightLevel || 0)) {
+                this.clearLightSourceCache();
+            }
+        } catch (e) {}
+    }
+
+    // Minimal reversible nudge to guarantee a rebuild without visible change
+    _nudgeBlockForRemesh() {
+        const mid = Math.floor(CHUNK_SIZE / 2);
+        const coord = { x: mid, y: mid, z: mid };
+        const idx = this._getIndex(coord);
+        const prev = this._blocks[idx];
+        const temp = prev === 0 ? 1 : 0;
+        this._blocks[idx] = temp;
+        this._blocks[idx] = prev;
     }
     /**
      * Clear the vertex color cache for a specific region
@@ -1048,6 +1417,25 @@ class Chunk {
     ) {
         const baseColor = blockType.color;
         return [...baseColor]; // Return a copy of the base color
+    }
+
+    _calculateLightLevel(x, y, z, sources) {
+        let maxLevel = 0;
+        for (const s of sources) {
+            const dx = x - s.position.x + 0.5;
+            const dy = y - s.position.y + 0.5;
+            const dz = z - s.position.z + 0.5;
+            if (
+                Math.abs(dx) > s.level ||
+                Math.abs(dy) > s.level ||
+                Math.abs(dz) > s.level
+            )
+                continue;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (distance >= s.level) continue;
+            maxLevel = Math.max(maxLevel, s.level - distance);
+        }
+        return Math.min(MAX_LIGHT_LEVEL, Math.max(0, maxLevel));
     }
     /**
      * Convert local coordinate to global coordinate

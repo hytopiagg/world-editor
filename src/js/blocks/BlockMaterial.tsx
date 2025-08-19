@@ -24,6 +24,8 @@ interface WaterShaderUniforms {
  */
 class BlockMaterial {
     private _defaultMaterial: THREE.Material | null = null;
+    private _defaultSolidLit: THREE.MeshPhongMaterial | null = null;
+    private _defaultSolidNonLit: THREE.MeshPhongMaterial | null = null;
     private _liquidMaterial: THREE.ShaderMaterial | null = null;
     private _materialManager: MaterialManager;
     private _gpuInfo: any;
@@ -47,14 +49,25 @@ class BlockMaterial {
     }
 
     /**
-     * Get the default material for solid blocks (now optimized)
+     * Non-lit solid block material (no lightLevel attribute in shader)
      */
-    get defaultMaterial(): THREE.Material {
-        if (!this._defaultMaterial) {
-            this._defaultMaterial = this._materialManager.getMaterial("block");
-            console.log("🧱 Created optimized default block material");
+    get defaultSolidNonLit(): THREE.MeshPhongMaterial {
+        if (!this._defaultSolidNonLit) {
+            this._defaultSolidNonLit = this._createSolidBlockMaterial(false);
+            console.log("🧱 Created solid non-lit material");
         }
-        return this._defaultMaterial;
+        return this._defaultSolidNonLit;
+    }
+
+    /**
+     * Lit solid block material (expects attribute float lightLevel)
+     */
+    get defaultSolidLit(): THREE.MeshPhongMaterial {
+        if (!this._defaultSolidLit) {
+            this._defaultSolidLit = this._createSolidBlockMaterial(true);
+            console.log("🧱 Created solid LIT material");
+        }
+        return this._defaultSolidLit;
     }
 
     /**
@@ -94,10 +107,14 @@ class BlockMaterial {
             this._materialManager.optimizeTexture(textureAtlas);
         }
 
-        // Update default material
-        if (this._defaultMaterial) {
-            (this._defaultMaterial as any).map = textureAtlas;
-            this._defaultMaterial.needsUpdate = true;
+        // Update solid materials
+        if (this._defaultSolidNonLit) {
+            (this._defaultSolidNonLit as any).map = textureAtlas;
+            this._defaultSolidNonLit.needsUpdate = true;
+        }
+        if (this._defaultSolidLit) {
+            (this._defaultSolidLit as any).map = textureAtlas;
+            this._defaultSolidLit.needsUpdate = true;
         }
 
         // Update liquid material uniforms
@@ -105,6 +122,81 @@ class BlockMaterial {
             this._waterShaderUniforms.textureAtlas.value = textureAtlas;
             this._liquidMaterial.needsUpdate = true;
         }
+    }
+
+    /**
+     * Create a MeshPhongMaterial for solid blocks with optional lightLevel support
+     */
+    private _createSolidBlockMaterial(hasLightLevel: boolean): THREE.MeshPhongMaterial {
+        const mat = new THREE.MeshPhongMaterial({
+            vertexColors: true,
+            transparent: true,
+            alphaTest: this._materialManager.getOptimizationSettings().alphaTestThreshold,
+            side: THREE.FrontSide,
+            shininess: 0,
+            specular: 0x000000,
+        });
+
+        // Attach define so program cache keys differ when toggling feature
+        (mat as any).defines = (mat as any).defines || {};
+        (mat as any).defines["HAS_LIGHT_LEVEL"] = hasLightLevel;
+
+        const UNIFORM_RAW_AMBIENT_LIGHT_COLOR = 'rawAmbientLightColor';
+
+        mat.onBeforeCompile = (params: any) => {
+            if (!(mat as any).defines["HAS_LIGHT_LEVEL"]) return;
+
+            const u = { value: new THREE.Color() };
+            params.uniforms[UNIFORM_RAW_AMBIENT_LIGHT_COLOR] = u;
+            // Keep a reference so we can update it each frame from updateAmbient()
+            (mat as any).userData = (mat as any).userData || {};
+            (mat as any).userData.rawAmbientUniform = u;
+
+            params.vertexShader = params.vertexShader.replace(
+                'void main() {',
+                `
+                attribute float lightLevel;
+                varying float vLightLevel;
+                void main() {
+                  vLightLevel = lightLevel;
+                `
+            );
+
+            params.fragmentShader = params.fragmentShader
+                .replace(
+                    'void main() {',
+                    `
+                    varying float vLightLevel;
+                    uniform vec3 ${UNIFORM_RAW_AMBIENT_LIGHT_COLOR};
+                    void main() {
+                    `
+                )
+                .replace(
+                    '#include <lights_fragment_begin>',
+                    `
+                    #include <lights_fragment_begin>
+                    irradiance = max(irradiance, ${UNIFORM_RAW_AMBIENT_LIGHT_COLOR} * vLightLevel);
+                    `
+                );
+        };
+
+        return mat;
+    }
+
+    /**
+     * Update ambient data on materials each frame
+     */
+    updateAmbient(ambientColor: THREE.Color, ambientIntensity: number): void {
+        const color = new THREE.Color().copy(ambientColor);
+        const apply = (mat?: THREE.MeshPhongMaterial | null) => {
+            if (!mat) return;
+            const u = (mat as any).userData?.rawAmbientUniform;
+            if (u && u.value) {
+                u.value.copy(color);
+            }
+        };
+        apply(this._defaultSolidLit);
+        apply(this._defaultSolidNonLit);
     }
 
     /**
@@ -339,10 +431,8 @@ class BlockMaterial {
      * Dispose all materials and resources
      */
     dispose(): void {
-        if (this._defaultMaterial) {
-            this._defaultMaterial.dispose();
-            this._defaultMaterial = null;
-        }
+        if (this._defaultSolidNonLit) { this._defaultSolidNonLit.dispose(); this._defaultSolidNonLit = null; }
+        if (this._defaultSolidLit) { this._defaultSolidLit.dispose(); this._defaultSolidLit = null; }
 
         if (this._liquidMaterial) {
             this._liquidMaterial.dispose();

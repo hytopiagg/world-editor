@@ -9,6 +9,7 @@ import {
     useState,
 } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import BlockMaterial from "./blocks/BlockMaterial"; // Add this import
 import BlockTextureAtlas from "./blocks/BlockTextureAtlas";
 import BlockTypeRegistry from "./blocks/BlockTypeRegistry";
@@ -29,7 +30,11 @@ import {
     getViewDistance,
     THRESHOLD_FOR_PLACING,
 } from "./constants/terrain";
-import { processCustomBlock } from "./managers/BlockTypesManager";
+import {
+    processCustomBlock,
+    createLightVariant,
+    getCustomBlocks,
+} from "./managers/BlockTypesManager";
 import { cameraMovementTracker } from "./managers/CameraMovementTracker";
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { loadingManager } from "./managers/LoadingManager";
@@ -107,6 +112,7 @@ function TerrainBuilder(
         onSceneReady,
         previewPositionToAppJS,
         currentBlockType,
+        setCurrentBlockType,
         undoRedoManager,
         mode,
         axisLockEnabled,
@@ -127,6 +133,7 @@ function TerrainBuilder(
         new SpatialGridManager(loadingManager)
     );
     const orbitControlsRef = useRef(null);
+    const ambientRef = useRef(null);
     const frustumRef = useRef(new THREE.Frustum());
     const meshesInitializedRef = useRef(false);
     const useSpatialHashRef = useRef(true);
@@ -463,6 +470,22 @@ function TerrainBuilder(
         frustumRef.current = frustum;
         return true;
     };
+
+    // Periodically sync ambient light into block materials so emissive comparisons work in shader
+    useEffect(() => {
+        const id = setInterval(() => {
+            const amb = ambientRef?.current;
+            if (amb && BlockMaterial.instance) {
+                try {
+                    BlockMaterial.instance.updateAmbient(
+                        amb.color,
+                        amb.intensity
+                    );
+                } catch (e) {}
+            }
+        }, 100);
+        return () => clearInterval(id);
+    }, []);
     const forceRefreshAllChunks = () => {
         const camera = currentCameraRef.current;
         if (!camera) {
@@ -501,6 +524,7 @@ function TerrainBuilder(
     const instancedMeshRef = useRef({});
     const shadowPlaneRef = useRef();
     const directionalLightRef = useRef();
+    const directionalFillLightRef = useRef();
     const terrainRef = useRef({});
     const gridRef = useRef();
     const mouseMoveAnimationRef = useRef(null);
@@ -794,7 +818,7 @@ function TerrainBuilder(
         },
         [threeRaycaster.ray, gl, cameraManager]
     );
-    const handleBlockPlacement = () => {
+    const handleBlockPlacement = async () => {
         console.log("********handleBlockPlacement********");
         console.log("currentBlockTypeRef.current", currentBlockTypeRef.current);
 
@@ -860,6 +884,123 @@ function TerrainBuilder(
             ) {
                 console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
+                // Auto create/select emissive variant that matches current registry light level
+                try {
+                    const selected = currentBlockTypeRef.current;
+                    const baseId =
+                        typeof selected?.variantOfId === "number"
+                            ? selected.variantOfId
+                            : selected?.id;
+                    const baseName =
+                        selected?.variantOfName || selected?.name || "";
+                    const type =
+                        BlockTypeRegistry.instance.getBlockType(baseId);
+                    const desiredLevel =
+                        type && typeof type.lightLevel === "number"
+                            ? type.lightLevel
+                            : 0;
+                    const selectedIsCustom =
+                        selected?.id >= 1000 &&
+                        typeof selected?.lightLevel === "number";
+                    const selectedMatches =
+                        selectedIsCustom &&
+                        selected.lightLevel === desiredLevel;
+                    if (desiredLevel > 0 && !selectedMatches) {
+                        const key = `${baseId}:${desiredLevel}`;
+                        // Try local cache
+                        let variant =
+                            (window.__variantCache &&
+                                window.__variantCache.get &&
+                                window.__variantCache.get(key)) ||
+                            null;
+                        if (!variant) {
+                            // Try from custom blocks by metadata
+                            const allCustom = getCustomBlocks() || [];
+                            variant =
+                                allCustom.find(
+                                    (b) =>
+                                        (b.isVariant &&
+                                            b.variantOfId === baseId &&
+                                            b.variantLightLevel ===
+                                                desiredLevel) ||
+                                        (b.name === baseName &&
+                                            typeof b.lightLevel === "number" &&
+                                            b.lightLevel === desiredLevel)
+                                ) || null;
+                        }
+                        if (!variant) {
+                            // Prevent duplicate concurrent creations
+                            window.__pendingVariantKeys =
+                                window.__pendingVariantKeys || new Set();
+                            if (!window.__pendingVariantKeys.has(key)) {
+                                window.__pendingVariantKeys.add(key);
+                                try {
+                                    variant = await createLightVariant(
+                                        baseId,
+                                        desiredLevel
+                                    );
+                                } finally {
+                                    window.__pendingVariantKeys.delete(key);
+                                }
+                            } else {
+                                console.log(
+                                    "Variant creation already pending for",
+                                    key
+                                );
+                            }
+                        }
+                        if (variant) {
+                            currentBlockTypeRef.current = {
+                                ...variant,
+                                isEnvironment: false,
+                            };
+                            // Also update sidebar selection immediately for visual feedback
+                            try {
+                                if (typeof setCurrentBlockType === "function") {
+                                    setCurrentBlockType({
+                                        ...variant,
+                                        isEnvironment: false,
+                                    });
+                                }
+                                // Mirror full click-selection behavior
+                                try {
+                                    if (window && window.localStorage) {
+                                        window.localStorage.setItem(
+                                            "selectedBlock",
+                                            String(variant.id)
+                                        );
+                                    }
+                                } catch (_) {}
+                                try {
+                                    // Update the sidebar's selectedBlockID immediately
+                                    if (
+                                        window &&
+                                        window.dispatchEvent &&
+                                        typeof window.refreshBlockTools ===
+                                            "function"
+                                    ) {
+                                        window.refreshBlockTools();
+                                    } else if (window && window.dispatchEvent) {
+                                        window.dispatchEvent(
+                                            new Event("refreshBlockTools")
+                                        );
+                                    }
+                                } catch (_) {}
+                            } catch (_) {}
+                            // Cache it globally for session
+                            try {
+                                window.__variantCache =
+                                    window.__variantCache || new Map();
+                                window.__variantCache.set(
+                                    `${baseId}:${desiredLevel}`,
+                                    variant
+                                );
+                            } catch (_) {}
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Auto variant selection failed:", e);
+                }
                 const positions = getPlacementPositions(
                     previewPositionRef.current,
                     placementSizeRef.current
@@ -2029,6 +2170,65 @@ function TerrainBuilder(
                 fadeAnimation();
             }
         },
+        /**
+         * Update ambient light color and/or intensity
+         */
+        setAmbientLight: (opts = {}) => {
+            const amb = ambientRef?.current;
+            if (!amb) return false;
+            if (opts.color !== undefined) {
+                try {
+                    amb.color.set(opts.color);
+                } catch (_) {}
+            }
+            if (opts.intensity !== undefined) {
+                amb.intensity = opts.intensity;
+            }
+            return true;
+        },
+        /**
+         * Read current ambient light settings
+         */
+        getAmbientLight: () => {
+            const amb = ambientRef?.current;
+            if (!amb) return null;
+            return {
+                color: `#${amb.color.getHexString()}`,
+                intensity: amb.intensity,
+            };
+        },
+        /**
+         * Update directional light color and/or intensity (applies to both key and fill lights if present)
+         */
+        setDirectionalLight: (opts = {}) => {
+            const key = directionalLightRef?.current;
+            const fill = directionalFillLightRef?.current;
+            const apply = (light) => {
+                if (!light) return;
+                if (opts.color !== undefined) {
+                    try {
+                        light.color.set(opts.color);
+                    } catch (_) {}
+                }
+                if (opts.intensity !== undefined) {
+                    light.intensity = opts.intensity;
+                }
+            };
+            apply(key);
+            apply(fill);
+            return !!key || !!fill;
+        },
+        /**
+         * Read current directional light settings (key light)
+         */
+        getDirectionalLight: () => {
+            const key = directionalLightRef?.current;
+            if (!key) return null;
+            return {
+                color: `#${key.color.getHexString()}`,
+                intensity: key.intensity,
+            };
+        },
         activateTool: (toolName, activationData) => {
             if (!toolManagerRef.current) {
                 console.error(
@@ -2610,6 +2810,176 @@ function TerrainBuilder(
     }, [gl, handleMouseDown, handleMouseUp, cameraManager]); // Add dependencies
     useEffect(() => {
         optimizeRenderer(gl);
+        try {
+            window.__WE_SCENE__ = scene;
+            // Initialize camera control globals so first entry to player mode works without key presses
+            window.__WE_CAM_KEYS__ = window.__WE_CAM_KEYS__ || {
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+            };
+            window.__WE_CAM_OFFSET_RADIUS__ =
+                window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+            window.__WE_CAM_OFFSET_HEIGHT__ =
+                window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+            window.__WE_CAM_OFFSET_YAW__ =
+                window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y;
+        } catch (_) {}
+
+        // Allow adjusting third-person camera offset with arrow keys while in Player Mode
+        const onArrowKeyDown = (e) => {
+            try {
+                if (!window.__WE_PHYSICS__) return; // only in player mode
+                // Ignore when typing in inputs
+                if (
+                    e.target &&
+                    (e.target.tagName === "INPUT" ||
+                        e.target.tagName === "TEXTAREA" ||
+                        e.target.isContentEditable)
+                )
+                    return;
+                const key = e.key;
+                window.__WE_CAM_OFFSET_YAW__ =
+                    window.__WE_CAM_OFFSET_YAW__ ??
+                    (window.__WE_TP_YAW__ || threeCamera.rotation.y);
+                window.__WE_CAM_OFFSET_RADIUS__ =
+                    window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+                window.__WE_CAM_OFFSET_HEIGHT__ =
+                    window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+                // We only mark intent flags here; actual movement occurs each frame for smoothness.
+                if (key === "ArrowLeft") {
+                    window.__WE_CAM_KEYS__ = window.__WE_CAM_KEYS__ || {};
+                    // Swapped: Left arrow now behaves like previous Right
+                    window.__WE_CAM_KEYS__.right = true;
+                    e.preventDefault();
+                }
+                if (key === "ArrowRight") {
+                    // Swapped: Right arrow now behaves like previous Left
+                    window.__WE_CAM_KEYS__.left = true;
+                    e.preventDefault();
+                }
+                if (key === "ArrowUp") {
+                    window.__WE_CAM_KEYS__.up = true;
+                    e.preventDefault();
+                }
+                if (key === "ArrowDown") {
+                    window.__WE_CAM_KEYS__.down = true;
+                    e.preventDefault();
+                }
+            } catch (_) {}
+        };
+        const onArrowKeyUp = (e) => {
+            if (!window.__WE_PHYSICS__) return;
+            if (!window.__WE_CAM_KEYS__) return;
+            if (e.key === "ArrowLeft") window.__WE_CAM_KEYS__.right = false; // swapped
+            if (e.key === "ArrowRight") window.__WE_CAM_KEYS__.left = false; // swapped
+            if (e.key === "ArrowUp") window.__WE_CAM_KEYS__.up = false;
+            if (e.key === "ArrowDown") window.__WE_CAM_KEYS__.down = false;
+        };
+        const onMouseDownRMB = (e) => {
+            if (!window.__WE_PHYSICS__) return;
+            if (e.button === 2) {
+                window.__WE_CAM_DRAG_RMB__ = true;
+                window.__WE_CAM_DRAG_LAST_X__ = e.clientX;
+                window.__WE_CAM_DRAG_LAST_Y__ = e.clientY;
+                e.preventDefault();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                if (e.stopPropagation) e.stopPropagation();
+            }
+        };
+        const onMouseUpRMB = (e) => {
+            if (e.button === 2) window.__WE_CAM_DRAG_RMB__ = false;
+        };
+        const onMouseMoveRMB = (e) => {
+            if (!window.__WE_PHYSICS__ || !window.__WE_CAM_DRAG_RMB__) return;
+            const dx =
+                e.movementX ||
+                e.clientX - (window.__WE_CAM_DRAG_LAST_X__ || e.clientX) ||
+                0;
+            const dy =
+                e.movementY ||
+                e.clientY - (window.__WE_CAM_DRAG_LAST_Y__ || e.clientY) ||
+                0;
+            window.__WE_CAM_DRAG_LAST_X__ = e.clientX;
+            window.__WE_CAM_DRAG_LAST_Y__ = e.clientY;
+            const sensitivity = 0.004;
+            window.__WE_CAM_OFFSET_YAW__ =
+                (window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y) -
+                dx * sensitivity;
+            // Adjust vertical height with Y drag (drag up increases height)
+            const heightSensitivity = 0.02; // world units per pixel
+            window.__WE_CAM_OFFSET_HEIGHT__ = Math.min(
+                20.0,
+                Math.max(
+                    0.5,
+                    (window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0) -
+                        dy * heightSensitivity
+                )
+            );
+            // Recompute offset immediately
+            const r = window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+            const h = window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+            const yaw = window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y;
+            window.__WE_CAM_OFFSET__ = new THREE.Vector3(
+                r * Math.sin(yaw),
+                h,
+                r * Math.cos(yaw)
+            );
+            e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.stopPropagation) e.stopPropagation();
+        };
+        const onContextMenu = (e) => {
+            if (window.__WE_PHYSICS__) {
+                e.preventDefault();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                if (e.stopPropagation) e.stopPropagation();
+            }
+        };
+        const onWheelZoom = (e) => {
+            if (!window.__WE_PHYSICS__) return;
+            // Normalize wheel delta across devices and apply gentle sensitivity
+            const sensitivity = window.__WE_CAM_WHEEL_SENS__ ?? 0.005;
+            const deltaScale =
+                e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1;
+            const delta = e.deltaY * deltaScale;
+            const dir = Math.sign(delta);
+            const MIN_R = 2.5;
+            const MAX_R = 20.0;
+            const LIMIT_PAD = window.__WE_CAM_LIMIT_PAD__ ?? 0.2; // prevent scrolling when within this of a limit
+            const current =
+                window.__WE_CAM_TARGET_RADIUS__ ??
+                window.__WE_CAM_OFFSET_RADIUS__ ??
+                8.0;
+            // Block further scrolling if already at/near the limits in the same direction
+            if (
+                (current <= MIN_R + LIMIT_PAD && dir < 0) ||
+                (current >= MAX_R - LIMIT_PAD && dir > 0)
+            ) {
+                e.preventDefault();
+                return;
+            }
+            const next = current + delta * sensitivity;
+            window.__WE_CAM_TARGET_RADIUS__ = Math.min(
+                MAX_R,
+                Math.max(MIN_R, next)
+            );
+            e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.stopPropagation) e.stopPropagation();
+        };
+        window.addEventListener("keydown", onArrowKeyDown);
+        window.addEventListener("keyup", onArrowKeyUp);
+        window.addEventListener("mousedown", onMouseDownRMB);
+        window.addEventListener("mouseup", onMouseUpRMB);
+        window.addEventListener("mousemove", onMouseMoveRMB);
+        window.addEventListener("wheel", onWheelZoom, { passive: false });
+        window.addEventListener("contextmenu", onContextMenu, {
+            capture: true,
+        });
+        // No pointer lock: derive yaw from current camera rotation when Player Mode is active
+
         cameraManager.initialize(threeCamera, orbitControlsRef.current);
         let frameId;
         let frameCount = 0;
@@ -2653,10 +3023,725 @@ function TerrainBuilder(
             if (frameCount % 10 === 0 && onCameraPositionChange) {
                 onCameraPositionChange(threeCamera.position.clone());
             }
+
+            // Step player physics if available
+            try {
+                const physics = window.__WE_PHYSICS__;
+                const inputMgr = window.__WE_INPUT_STATE__;
+                if (physics && inputMgr) {
+                    const now = performance.now();
+                    const dt =
+                        (window.__WE_LAST_PHYSICS_TS__
+                            ? now - window.__WE_LAST_PHYSICS_TS__
+                            : 16.6) / 1000;
+                    window.__WE_LAST_PHYSICS_TS__ = now;
+
+                    // Maintain third-person yaw accumulator
+                    if (window.__WE_TP_YAW__ === undefined) {
+                        window.__WE_TP_YAW__ = threeCamera.rotation.y;
+                    }
+                    // Update yaw from mouse movement when pointer is locked, else keep it steady
+                    // (We store last yaw elsewhere and nudge it using the change in camera yaw only when orbit controls are disabled)
+                    if (
+                        orbitControlsRef.current &&
+                        !orbitControlsRef.current.enableRotate
+                    ) {
+                        window.__WE_TP_YAW__ = threeCamera.rotation.y;
+                    }
+
+                    // Derive movement yaw. If we already have a player position, face away from camera.
+                    const prePos = physics.getPlayerPosition?.();
+                    if (threeCamera && prePos) {
+                        const dirX = prePos.x - threeCamera.position.x;
+                        const dirZ = prePos.z - threeCamera.position.z;
+                        // Face movement direction (toward where we will move): camera-forward projected
+                        window.__WE_TP_YAW__ = Math.atan2(dirX, dirZ);
+                    }
+                    // Provide PhysicsManager with a solid query backed by spatial hash and environment colliders
+                    try {
+                        if (!window.__WE_SOLID_BOUND__) {
+                            window.__WE_SOLID_BOUND__ = true;
+                            const solidFn = (x, y, z) => {
+                                try {
+                                    // Blocks via spatial grid
+                                    const sgm = spatialGridManagerRef.current;
+                                    if (
+                                        sgm &&
+                                        sgm.hasBlock(
+                                            Math.floor(x),
+                                            Math.floor(y),
+                                            Math.floor(z)
+                                        )
+                                    )
+                                        return true;
+                                    // Environment entities with colliders: approximate by checking an occupancy flag in spatial hash
+                                    // We already write env objects into spatial hash using updateSpatialHashForBlocks with model add/remove.
+                                    // So sgm.hasBlock covers them too when addCollider is enabled.
+                                } catch (_) {}
+                                return false;
+                            };
+                            physics.setIsSolidQuery(solidFn);
+                            // Also expose to window for fallback path inside physics
+                            window.__WE_IS_SOLID__ = solidFn;
+                        }
+                    } catch (_) {}
+
+                    physics.step(
+                        dt,
+                        inputMgr.state || {},
+                        (window.__WE_TP_YAW__ || 0) + Math.PI
+                    );
+
+                    const p = physics.getPlayerPosition?.();
+                    if (p && threeCamera) {
+                        // Ensure player mesh is loaded once
+                        if (
+                            !window.__WE_PLAYER_MESH__ &&
+                            !window.__WE_PLAYER_MESH_LOADING__
+                        ) {
+                            window.__WE_PLAYER_MESH_LOADING__ = true;
+                            const loader = new GLTFLoader();
+                            loader.load(
+                                "./assets/models/player/player.gltf",
+                                (gltf) => {
+                                    const obj = gltf.scene || gltf.scenes?.[0];
+                                    if (obj) {
+                                        obj.traverse((child) => {
+                                            if (child.isMesh) {
+                                                child.castShadow = true;
+                                                child.receiveShadow = true;
+                                            }
+                                        });
+                                        scene && scene.add(obj);
+                                        window.__WE_PLAYER_MESH__ = obj;
+
+                                        // Setup basic animation state
+                                        if (
+                                            gltf.animations &&
+                                            gltf.animations.length
+                                        ) {
+                                            const mixer =
+                                                new THREE.AnimationMixer(obj);
+                                            window.__WE_PLAYER_MIXER__ = mixer;
+                                            const clips = gltf.animations;
+                                            const findClip = (names) =>
+                                                clips.find((c) =>
+                                                    names.some((n) =>
+                                                        c.name
+                                                            .toLowerCase()
+                                                            .includes(n)
+                                                    )
+                                                );
+                                            const actions = {};
+                                            const tags = [
+                                                "idle",
+                                                "walk",
+                                                "run",
+                                            ];
+                                            for (const tag of tags) {
+                                                const single = findClip(
+                                                    tag === "run"
+                                                        ? ["run", "sprint"]
+                                                        : [tag]
+                                                );
+                                                const upper = findClip(
+                                                    tag === "run"
+                                                        ? [
+                                                              "run-upper",
+                                                              "run_upper",
+                                                              "sprint-upper",
+                                                              "sprint_upper",
+                                                          ]
+                                                        : [
+                                                              `${tag}-upper`,
+                                                              `${tag}_upper`,
+                                                          ]
+                                                );
+                                                const lower = findClip(
+                                                    tag === "run"
+                                                        ? [
+                                                              "run-lower",
+                                                              "run_lower",
+                                                              "sprint-lower",
+                                                              "sprint_lower",
+                                                          ]
+                                                        : [
+                                                              `${tag}-lower`,
+                                                              `${tag}_lower`,
+                                                          ]
+                                                );
+                                                if (single)
+                                                    actions[tag] =
+                                                        mixer.clipAction(
+                                                            single
+                                                        );
+                                                if (upper)
+                                                    actions[`${tag}-upper`] =
+                                                        mixer.clipAction(upper);
+                                                if (lower)
+                                                    actions[`${tag}-lower`] =
+                                                        mixer.clipAction(lower);
+                                            }
+                                            // Jump-related animations (oneshots/loops)
+                                            const jumpUpper = findClip([
+                                                "jump-upper",
+                                                "jump_upper",
+                                            ]);
+                                            const jumpLower = findClip([
+                                                "jump-lower",
+                                                "jump_lower",
+                                            ]);
+                                            if (jumpUpper)
+                                                actions["jump-upper"] =
+                                                    mixer.clipAction(jumpUpper);
+                                            if (jumpLower)
+                                                actions["jump-lower"] =
+                                                    mixer.clipAction(jumpLower);
+                                            const jumpLoop = findClip([
+                                                "jump-loop",
+                                                "jump_loop",
+                                            ]);
+                                            if (jumpLoop)
+                                                actions["jump-loop"] =
+                                                    mixer.clipAction(jumpLoop);
+                                            const jumpSingle = findClip([
+                                                "jump",
+                                            ]);
+                                            if (jumpSingle)
+                                                actions["jump"] =
+                                                    mixer.clipAction(
+                                                        jumpSingle
+                                                    );
+                                            const landLight = findClip([
+                                                "jump-post-light",
+                                            ]);
+                                            const landHeavy = findClip([
+                                                "jump-post-heavy",
+                                            ]);
+                                            if (landLight)
+                                                actions["land-light"] =
+                                                    mixer.clipAction(landLight);
+                                            if (landHeavy)
+                                                actions["land-heavy"] =
+                                                    mixer.clipAction(landHeavy);
+                                            window.__WE_PLAYER_ANIMS__ =
+                                                actions;
+                                            const start =
+                                                actions["idle-upper"] &&
+                                                actions["idle-lower"]
+                                                    ? undefined
+                                                    : actions.idle ||
+                                                      actions.walk ||
+                                                      actions.run;
+                                            if (start) {
+                                                start
+                                                    .reset()
+                                                    .fadeIn(0.2)
+                                                    .play();
+                                                window.__WE_PLAYER_ACTIVE__ =
+                                                    start;
+                                            }
+                                        }
+                                    }
+                                    window.__WE_PLAYER_MESH_LOADING__ = false;
+                                },
+                                undefined,
+                                () => {
+                                    window.__WE_PLAYER_MESH_LOADING__ = false;
+                                }
+                            );
+                        }
+
+                        // Update player mesh transform and facing
+                        if (window.__WE_PLAYER_MESH__) {
+                            const m = window.__WE_PLAYER_MESH__;
+                            const last = window.__WE_LAST_POS__ || {
+                                x: p.x,
+                                y: p.y,
+                                z: p.z,
+                            };
+                            // position lerp
+                            const halfH =
+                                window.__WE_PHYSICS__ &&
+                                window.__WE_PHYSICS__.getPlayerHalfHeight
+                                    ? window.__WE_PHYSICS__.getPlayerHalfHeight()
+                                    : 0.75;
+                            const worldYOffset =
+                                window.__WE_WORLD_Y_OFFSET__ !== undefined
+                                    ? window.__WE_WORLD_Y_OFFSET__
+                                    : 0.5; // editor-wide +0.5 shift compensation
+                            const worldXOffset =
+                                window.__WE_WORLD_X_OFFSET__ !== undefined
+                                    ? window.__WE_WORLD_X_OFFSET__
+                                    : -0.5; // editor-wide +0.5 shift compensation
+                            const worldZOffset =
+                                window.__WE_WORLD_Z_OFFSET__ !== undefined
+                                    ? window.__WE_WORLD_Z_OFFSET__
+                                    : -0.5; // editor-wide +0.5 shift compensation
+                            const cur = new THREE.Vector3(
+                                p.x + worldXOffset,
+                                p.y - halfH - worldYOffset,
+                                p.z + worldZOffset
+                            );
+                            m.position.lerp(cur, 0.4);
+                            // compute facing from velocity when moving
+                            const dx = p.x - last.x;
+                            const dz = p.z - last.z;
+                            const speed2 = dx * dx + dz * dz;
+                            if (speed2 > 1e-6) {
+                                const faceYaw = Math.atan2(dx, dz) + Math.PI; // flip to face movement correctly
+                                window.__WE_FACE_YAW__ = faceYaw;
+                            }
+                            const yawToUse =
+                                window.__WE_FACE_YAW__ !== undefined
+                                    ? window.__WE_FACE_YAW__
+                                    : window.__WE_TP_YAW__ || 0;
+                            m.rotation.y = yawToUse;
+                        }
+
+                        // Apply smooth camera offset adjustments from input each frame
+                        if (
+                            window.__WE_CAM_KEYS__ ||
+                            window.__WE_CAM_TARGET_RADIUS__ !== undefined
+                        ) {
+                            const yawStep = 1.6 * dt; // radians per second
+                            const radiusStep = 6.0 * dt; // units per second
+                            const heightStep = 6.0 * dt; // units per second
+                            window.__WE_CAM_OFFSET_YAW__ =
+                                window.__WE_CAM_OFFSET_YAW__ ??
+                                (window.__WE_TP_YAW__ ||
+                                    threeCamera.rotation.y);
+                            window.__WE_CAM_OFFSET_RADIUS__ =
+                                window.__WE_CAM_OFFSET_RADIUS__ ?? 8.0;
+                            window.__WE_CAM_OFFSET_HEIGHT__ =
+                                window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
+                            if (window.__WE_CAM_KEYS__.left)
+                                window.__WE_CAM_OFFSET_YAW__ -= yawStep;
+                            if (window.__WE_CAM_KEYS__.right)
+                                window.__WE_CAM_OFFSET_YAW__ += yawStep;
+                            // Up/Down arrows move camera vertically instead of zooming
+                            if (window.__WE_CAM_KEYS__.up)
+                                window.__WE_CAM_OFFSET_HEIGHT__ = Math.min(
+                                    20.0,
+                                    window.__WE_CAM_OFFSET_HEIGHT__ + heightStep
+                                );
+                            if (window.__WE_CAM_KEYS__.down)
+                                window.__WE_CAM_OFFSET_HEIGHT__ = Math.max(
+                                    0.5,
+                                    window.__WE_CAM_OFFSET_HEIGHT__ - heightStep
+                                );
+                            // Smoothly approach target radius from wheel input
+                            if (window.__WE_CAM_TARGET_RADIUS__ !== undefined) {
+                                const target = window.__WE_CAM_TARGET_RADIUS__;
+                                const cur = window.__WE_CAM_OFFSET_RADIUS__;
+                                const diff = target - cur;
+                                if (Math.abs(diff) < 1e-3) {
+                                    window.__WE_CAM_OFFSET_RADIUS__ = target;
+                                    window.__WE_CAM_TARGET_RADIUS__ = undefined;
+                                } else {
+                                    const lerp = 1 - Math.pow(0.001, dt); // slower, smoother
+                                    window.__WE_CAM_OFFSET_RADIUS__ =
+                                        cur + diff * lerp;
+                                }
+                                // Clamp hard limits
+                                const MIN_R = 2.5;
+                                const MAX_R = 20.0;
+                                window.__WE_CAM_OFFSET_RADIUS__ = Math.min(
+                                    MAX_R,
+                                    Math.max(
+                                        MIN_R,
+                                        window.__WE_CAM_OFFSET_RADIUS__
+                                    )
+                                );
+                            }
+                            const r = window.__WE_CAM_OFFSET_RADIUS__;
+                            const h = window.__WE_CAM_OFFSET_HEIGHT__;
+                            const yaw = window.__WE_CAM_OFFSET_YAW__;
+                            window.__WE_CAM_OFFSET__ = new THREE.Vector3(
+                                r * Math.sin(yaw),
+                                h,
+                                r * Math.cos(yaw)
+                            );
+                        }
+
+                        // Third-person camera follow
+                        // Camera follow using persistent offset (keeps perfect sync with player movement)
+                        // Always focus the camera on the player mesh centerline, compensating for global editor offsets
+                        const camHalfH =
+                            window.__WE_PHYSICS__ &&
+                            window.__WE_PHYSICS__.getPlayerHalfHeight
+                                ? window.__WE_PHYSICS__.getPlayerHalfHeight()
+                                : 0.75;
+                        const camWorldYOffset =
+                            window.__WE_WORLD_Y_OFFSET__ !== undefined
+                                ? window.__WE_WORLD_Y_OFFSET__
+                                : 0.5;
+                        const camWorldXOffset =
+                            window.__WE_WORLD_X_OFFSET__ !== undefined
+                                ? window.__WE_WORLD_X_OFFSET__
+                                : -0.5;
+                        const camWorldZOffset =
+                            window.__WE_WORLD_Z_OFFSET__ !== undefined
+                                ? window.__WE_WORLD_Z_OFFSET__
+                                : -0.5;
+                        const playerMeshBase = new THREE.Vector3(
+                            p.x + camWorldXOffset,
+                            p.y - camHalfH - camWorldYOffset,
+                            p.z + camWorldZOffset
+                        );
+                        const aimYOffset = Math.max(
+                            0.6,
+                            Math.min(1.25, camHalfH * 0.66)
+                        );
+                        const target = playerMeshBase
+                            .clone()
+                            .add(new THREE.Vector3(0, aimYOffset, 0));
+                        if (!window.__WE_CAM_OFFSET__) {
+                            const baseYaw =
+                                window.__WE_FACE_YAW__ !== undefined
+                                    ? window.__WE_FACE_YAW__
+                                    : window.__WE_TP_YAW__ ||
+                                      threeCamera.rotation.y;
+                            const radius = 8.0;
+                            const height = 3.0;
+                            // Offset starts behind and above the player relative to yaw
+                            window.__WE_CAM_OFFSET__ = new THREE.Vector3(
+                                radius * Math.sin(baseYaw),
+                                height,
+                                radius * Math.cos(baseYaw)
+                            );
+                        }
+                        const desired = target
+                            .clone()
+                            .add(window.__WE_CAM_OFFSET__);
+                        threeCamera.position.lerp(desired, 0.35);
+                        threeCamera.lookAt(target);
+                        if (
+                            orbitControlsRef.current &&
+                            orbitControlsRef.current.target
+                        ) {
+                            // Keep target aligned for when player mode ends, but avoid controls.update() to prevent damping shifts
+                            orbitControlsRef.current.target.copy(target);
+                        }
+
+                        // Advance animation mixer and pick state based on key state (no restart on every tick)
+                        if (window.__WE_PLAYER_MIXER__) {
+                            const mixer = window.__WE_PLAYER_MIXER__;
+                            mixer.update(dt);
+                            const state =
+                                (window.__WE_INPUT_STATE__ &&
+                                    window.__WE_INPUT_STATE__.state) ||
+                                {};
+                            const moving = !!(
+                                state.w ||
+                                state.a ||
+                                state.s ||
+                                state.d
+                            );
+                            const running = moving && !!state.sh;
+                            const actions = window.__WE_PLAYER_ANIMS__ || {};
+                            // Grounded / airborne detection for jump animations
+                            const halfH =
+                                window.__WE_PHYSICS__ &&
+                                window.__WE_PHYSICS__.getPlayerHalfHeight
+                                    ? window.__WE_PHYSICS__.getPlayerHalfHeight()
+                                    : 0.75;
+                            const bottomY = p.y - halfH;
+                            const isSolidFn =
+                                (window.__WE_IS_SOLID__ &&
+                                    typeof window.__WE_IS_SOLID__ ===
+                                        "function" &&
+                                    window.__WE_IS_SOLID__) ||
+                                null;
+                            const bx = Math.floor(p.x);
+                            const by = Math.floor(bottomY - 0.01);
+                            const bz = Math.floor(p.z);
+                            const hasVoxelBelow = isSolidFn
+                                ? isSolidFn(bx, by, bz)
+                                : false;
+                            const nearFlatPlane =
+                                Math.abs(bottomY - 0.0) <= 0.08;
+                            const groundedNow =
+                                (hasVoxelBelow && bottomY <= by + 1 + 0.08) ||
+                                nearFlatPlane;
+                            const lastPos = window.__WE_LAST_POS__ || p;
+                            const vy = p.y - lastPos.y;
+                            const wasAirborne = !!window.__WE_AIRBORNE__;
+                            let airborneNow = wasAirborne;
+                            let playedLanding = false;
+                            const nowTs = performance.now();
+                            // Start airborne if leaving ground with upward velocity or space pressed
+                            if (!groundedNow && (state.sp || vy > 0.02)) {
+                                if (!wasAirborne) {
+                                    window.__WE_AIRBORNE_SEQ__ =
+                                        (window.__WE_AIRBORNE_SEQ__ || 0) + 1;
+                                    window.__WE_AIRBORNE_SINCE__ = nowTs;
+                                }
+                                airborneNow = true;
+                            }
+                            // End airborne on ground contact
+                            if (groundedNow && wasAirborne) {
+                                airborneNow = false;
+                                const seq = window.__WE_AIRBORNE_SEQ__ || 0;
+                                const lastLandedSeq =
+                                    window.__WE_LAST_LANDED_SEQ__ || 0;
+                                const airborneMs = Math.max(
+                                    0,
+                                    nowTs -
+                                        (window.__WE_AIRBORNE_SINCE__ || nowTs)
+                                );
+                                const speedMag = Math.abs(vy);
+                                // Only play landing once per airborne sequence, with sensible thresholds
+                                if (
+                                    seq !== lastLandedSeq &&
+                                    airborneMs > 200 &&
+                                    speedMag > 0.35
+                                ) {
+                                    const landingAction =
+                                        speedMag > 0.6
+                                            ? actions["land-heavy"]
+                                            : actions["land-light"];
+                                    if (landingAction) {
+                                        // Configure landing as oneshot and clamp at end
+                                        landingAction.setLoop(
+                                            THREE.LoopOnce,
+                                            0
+                                        );
+                                        landingAction.clampWhenFinished = true;
+                                        landingAction
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        playedLanding = true;
+                                        window.__WE_LAST_LANDED_SEQ__ = seq;
+                                        // Suppress idle/walk/run blending while landing plays
+                                        try {
+                                            const dur =
+                                                landingAction.getClip()
+                                                    .duration || 0.35;
+                                            window.__WE_LANDING_UNTIL__ =
+                                                performance.now() + dur * 1000;
+                                            window.__WE_LANDING_ACTION__ =
+                                                landingAction;
+                                        } catch {}
+                                    }
+                                } else if (seq !== lastLandedSeq) {
+                                    // Consume landing sequence even if thresholds not met to avoid repeated handling
+                                    window.__WE_LAST_LANDED_SEQ__ = seq;
+                                }
+                            }
+                            window.__WE_AIRBORNE__ = airborneNow;
+
+                            // Debug logs: enable with window.__WE_DEBUG_JUMP__ = true (only on transitions/landing)
+                            if (window.__WE_DEBUG_JUMP__) {
+                                try {
+                                    const planeTop =
+                                        window.__WE_PM_PLANE_TOP_Y__;
+                                    const groundedDbg = groundedNow ? 1 : 0;
+                                    const airborneDbg = airborneNow ? 1 : 0;
+                                    const seqDbg =
+                                        window.__WE_AIRBORNE_SEQ__ || 0;
+                                    const lastDbg =
+                                        window.__WE_LAST_LANDED_SEQ__ || 0;
+                                    const shouldLog =
+                                        playedLanding ||
+                                        airborneNow !== wasAirborne;
+                                    if (shouldLog) {
+                                        console.log(
+                                            `[JumpDBG] g=${groundedDbg} a=${airborneDbg} vy=${vy.toFixed(
+                                                3
+                                            )} ms=${(
+                                                nowTs -
+                                                (window.__WE_AIRBORNE_SINCE__ ||
+                                                    nowTs)
+                                            ).toFixed(
+                                                0
+                                            )} seq=${seqDbg} last=${lastDbg} planeY=${planeTop}`
+                                        );
+                                    }
+                                } catch {}
+                            }
+
+                            // Choose tag with jump priority
+                            let tag = "idle";
+                            if (airborneNow) {
+                                tag = "jump";
+                            } else if (moving) {
+                                tag = running ? "run" : "walk";
+                            }
+                            // If a landing oneshot is currently active, defer any new state changes to let it finish
+                            const landingUntil =
+                                window.__WE_LANDING_UNTIL__ || 0;
+                            const nowTs2 = performance.now();
+                            const landingActive = nowTs2 < landingUntil;
+                            let landingJustEnded = false;
+                            if (!landingActive && window.__WE_LANDING_UNTIL__) {
+                                // window just expired; clear and force retag to resume base loop
+                                window.__WE_LANDING_UNTIL__ = 0;
+                                try {
+                                    if (window.__WE_LANDING_ACTION__) {
+                                        window.__WE_LANDING_ACTION__.fadeOut(
+                                            0.08
+                                        );
+                                        window.__WE_LANDING_ACTION__.stop();
+                                    }
+                                } catch (_) {}
+                                window.__WE_LANDING_ACTION__ = undefined;
+                                landingJustEnded = true;
+                                window.__WE_PLAYER_ACTIVE_TAG__ = undefined;
+                            }
+                            if (
+                                !landingActive &&
+                                (window.__WE_PLAYER_ACTIVE_TAG__ !== tag ||
+                                    landingJustEnded)
+                            ) {
+                                // Fade out any current
+                                if (window.__WE_PLAYER_ACTIVE__)
+                                    window.__WE_PLAYER_ACTIVE__.fadeOut(0.1);
+                                if (window.__WE_PLAYER_ACTIVE_UPPER__)
+                                    window.__WE_PLAYER_ACTIVE_UPPER__.fadeOut(
+                                        0.1
+                                    );
+                                if (window.__WE_PLAYER_ACTIVE_LOWER__)
+                                    window.__WE_PLAYER_ACTIVE_LOWER__.fadeOut(
+                                        0.1
+                                    );
+                                // Start new
+                                if (tag === "jump") {
+                                    // Prefer upper/lower jump, then jump-loop, then jump
+                                    const u =
+                                        actions["jump-upper"] ||
+                                        actions["jump_upper"];
+                                    const l =
+                                        actions["jump-lower"] ||
+                                        actions["jump_lower"];
+                                    if (u && l) {
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ = u
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ = l
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        window.__WE_PLAYER_ACTIVE__ = undefined;
+                                    } else if (actions["jump-loop"]) {
+                                        window.__WE_PLAYER_ACTIVE__ = actions[
+                                            "jump-loop"
+                                        ]
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            undefined;
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            undefined;
+                                    } else if (actions["jump"]) {
+                                        window.__WE_PLAYER_ACTIVE__ = actions[
+                                            "jump"
+                                        ]
+                                            .reset()
+                                            .fadeIn(0.05)
+                                            .play();
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            undefined;
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            undefined;
+                                    }
+                                } else {
+                                    // Choose explicit clips by tag: run, walk, or idle
+                                    let upper = undefined;
+                                    let lower = undefined;
+                                    let single = undefined;
+                                    if (tag === "run") {
+                                        upper =
+                                            actions["run-upper"] ||
+                                            actions["run_upper"] ||
+                                            actions["sprint-upper"] ||
+                                            actions["sprint_upper"];
+                                        lower =
+                                            actions["run-lower"] ||
+                                            actions["run_lower"] ||
+                                            actions["sprint-lower"] ||
+                                            actions["sprint_lower"];
+                                        single =
+                                            actions["run"] || actions["sprint"];
+                                    } else if (tag === "walk") {
+                                        upper =
+                                            actions["walk-upper"] ||
+                                            actions["walk_upper"];
+                                        lower =
+                                            actions["walk-lower"] ||
+                                            actions["walk_lower"];
+                                        single = actions["walk"];
+                                    } else {
+                                        // idle
+                                        upper =
+                                            actions["idle-upper"] ||
+                                            actions["idle_upper"];
+                                        lower =
+                                            actions["idle-lower"] ||
+                                            actions["idle_lower"];
+                                        single = actions["idle"];
+                                    }
+                                    if (upper && lower) {
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            upper.reset().fadeIn(0.1).play();
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            lower.reset().fadeIn(0.1).play();
+                                        window.__WE_PLAYER_ACTIVE__ = undefined;
+                                    } else {
+                                        if (single) {
+                                            window.__WE_PLAYER_ACTIVE__ = single
+                                                .reset()
+                                                .fadeIn(0.1)
+                                                .play();
+                                        }
+                                        window.__WE_PLAYER_ACTIVE_UPPER__ =
+                                            undefined;
+                                        window.__WE_PLAYER_ACTIVE_LOWER__ =
+                                            undefined;
+                                    }
+                                }
+                                window.__WE_PLAYER_ACTIVE_TAG__ = tag;
+                            }
+                            // Update last pos for facing calc
+                            window.__WE_LAST_POS__ = { x: p.x, y: p.y, z: p.z };
+                        }
+
+                        // Lock editor orbit rotation while in player mode
+                        if (orbitControlsRef.current) {
+                            orbitControlsRef.current.enableRotate = false;
+                            orbitControlsRef.current.enablePan = false;
+                            orbitControlsRef.current.enableZoom = false;
+                        }
+                    }
+                } else {
+                    // Re-enable orbit controls and despawn player mesh when leaving player mode
+                    if (orbitControlsRef.current) {
+                        orbitControlsRef.current.enableRotate = true;
+                        orbitControlsRef.current.enablePan = true;
+                        orbitControlsRef.current.enableZoom = false; // project default
+                    }
+                    if (window.__WE_PLAYER_MESH__) {
+                        try {
+                            scene && scene.remove(window.__WE_PLAYER_MESH__);
+                        } catch (_) {}
+                        window.__WE_PLAYER_MESH__ = undefined;
+                    }
+                }
+            } catch (_) {}
         };
         frameId = requestAnimationFrame(animate);
         return () => {
             cancelAnimationFrame(frameId);
+            window.removeEventListener("keydown", onArrowKeyDown);
+            window.removeEventListener("keyup", onArrowKeyUp);
+            window.removeEventListener("mousedown", onMouseDownRMB);
+            window.removeEventListener("mouseup", onMouseUpRMB);
+            window.removeEventListener("mousemove", onMouseMoveRMB);
+            window.removeEventListener("wheel", onWheelZoom);
+            window.removeEventListener("contextmenu", onContextMenu, true);
         };
     }, [gl]);
 
@@ -2760,9 +3845,10 @@ function TerrainBuilder(
                 intensity={1}
                 color={0xffffff}
                 castShadow={false}
+                ref={directionalFillLightRef}
             />
-            {/* Ambient light */}
-            <ambientLight intensity={0.8} />
+            {/* Ambient light (lower intensity so emissive blocks are visible) */}
+            <ambientLight ref={ambientRef} intensity={0.25} />
             {/* mesh of invisible plane to receive shadows, and grid helper to display grid */}
             <mesh
                 ref={shadowPlaneRef}

@@ -99,6 +99,7 @@ class BlockTypeRegistry {
                     : BlockType.textureUriToTextureUris(
                           blockTypeData.textureUri
                       ),
+                lightLevel: blockTypeData.lightLevel,
             });
             this._blockTypes[blockTypeData.id] = blockType;
         }
@@ -165,6 +166,7 @@ class BlockTypeRegistry {
                     textureUris: convertSideTexturesToFaceNames(
                         blockTypeData.sideTextures
                     ),
+                    lightLevel: blockTypeData.lightLevel,
                 });
 
                 // Register directly without triggering additional texture loading
@@ -190,6 +192,7 @@ class BlockTypeRegistry {
                 textureUris: BlockType.textureUriToTextureUris(
                     blockTypeData.textureUri
                 ),
+                lightLevel: blockTypeData.lightLevel,
             });
             await this.registerBlockType(newBlockType);
         } else {
@@ -238,6 +241,93 @@ class BlockTypeRegistry {
                     );
                     await blockType.setTextureUris(textureUris);
                 }
+            }
+
+            // Update light level, trigger mesh refresh if changed
+            if (
+                typeof blockTypeData.lightLevel !== "undefined" &&
+                blockType.lightLevel !== blockTypeData.lightLevel
+            ) {
+                blockType._lightLevel = blockTypeData.lightLevel; // internal update
+                try {
+                    const event = new CustomEvent("blockTypeChanged", {
+                        detail: { blockTypeId: blockTypeData.id },
+                    });
+                    window.dispatchEvent(event);
+                } catch (e) {}
+
+                // After changing light level, ensure affected and neighboring chunks are remeshed
+                try {
+                    const chunkSystem =
+                        window?.getChunkSystem?.() ||
+                        require("../chunks/TerrainBuilderIntegration").getChunkSystem();
+                    const manager = chunkSystem;
+                    if (manager && manager._chunks) {
+                        const chunkIds = Array.from(manager._chunks.keys());
+                        for (const chunkId of chunkIds) {
+                            const chunk = manager._chunks.get(chunkId);
+                            if (!chunk) continue;
+                            const hadType = chunk.containsBlockType?.(
+                                blockTypeData.id
+                            );
+                            if (!hadType) continue;
+                            // mark this chunk and neighbors within light radius for remesh
+                            const searchRadius = Math.ceil((15 + 1) / 16); // MAX_LIGHT_LEVEL + 1 over CHUNK_SIZE
+                            const origin = chunk.originCoordinate;
+                            const marked = [];
+                            for (
+                                let dx = -searchRadius;
+                                dx <= searchRadius;
+                                dx++
+                            ) {
+                                for (
+                                    let dy = -searchRadius;
+                                    dy <= searchRadius;
+                                    dy++
+                                ) {
+                                    for (
+                                        let dz = -searchRadius;
+                                        dz <= searchRadius;
+                                        dz++
+                                    ) {
+                                        const neighborKey = `${
+                                            origin.x + dx * 16
+                                        },${origin.y + dy * 16},${
+                                            origin.z + dz * 16
+                                        }`;
+                                        if (manager._chunks.has(neighborKey)) {
+                                            const n =
+                                                manager._chunks.get(
+                                                    neighborKey
+                                                );
+                                            n?.clearLightSourceCache?.();
+                                            manager.markChunkForRemesh(
+                                                neighborKey,
+                                                { forceCompleteRebuild: true }
+                                            );
+                                            marked.push(neighborKey);
+                                        }
+                                    }
+                                }
+                            }
+                            if (
+                                typeof window !== "undefined" &&
+                                (window.__LIGHT_DEBUG__?.refresh ||
+                                    window.__LIGHT_DEBUG__ === true)
+                            ) {
+                                console.log(
+                                    "[light-refresh][registry] type lightLevel change affecting chunk",
+                                    {
+                                        blockTypeId: blockTypeData.id,
+                                        chunkId,
+                                        marked,
+                                    }
+                                );
+                            }
+                        }
+                        manager.processRenderQueue?.(true);
+                    }
+                } catch (e) {}
             }
         }
     }

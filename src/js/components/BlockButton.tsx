@@ -67,6 +67,11 @@ const BlockButton = ({
                         imageRendering: "pixelated",
                     }}
                 />
+                {blockType?.isCustom && typeof blockType?.lightLevel === "number" && (
+                    <div className="light-level-badge" title={`Light: ${blockType.lightLevel}`}>
+                        {blockType.lightLevel}
+                    </div>
+                )}
                 <div className="block-button-label">{blockType.name}</div>
                 {isMissingTexture && (
                     <div className="block-button-missing-texture">

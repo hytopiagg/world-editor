@@ -119,7 +119,16 @@ class CameraManager {
         window.addEventListener("mousemove", this.handlePointerMove);
         // <<< end pointer lock additions
 
+        try {
+            (window as any).__WE_CAMERA_MANAGER__ = this;
+        } catch (_) { }
+
         const handleWheel = (event) => {
+            // Suppress editor wheel when input is disabled or when player mode is active
+            try {
+                if (this._isInputDisabled) return;
+                if ((window as any).__WE_PHYSICS__) return;
+            } catch (_) { }
             const isUIElement = event.target.closest(
                 ".block-tools-sidebar, .controls-container, .debug-info, .modal-overlay"
             );

@@ -50,6 +50,8 @@ const ToolBar = ({
     toggleAIComponents,
     isAIComponentsActive,
     activeTab,
+    playerModeEnabled,
+    onTogglePlayerMode,
 }) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     // Replace individual submenu state variables with a single enum-based state
@@ -217,6 +219,27 @@ const ToolBar = ({
                 "Are you sure you want to clear the map? This cannot be undone."
             )
         ) {
+            // Reset lighting to defaults in scene and remove persisted values
+            try {
+                const tb = terrainBuilderRef?.current;
+                tb?.setAmbientLight?.({ color: "#ffffff", intensity: 0.25 });
+                tb?.setDirectionalLight?.({ color: "#ffffff", intensity: 2 });
+            } catch (_) { }
+            try {
+                DatabaseManager.deleteData(STORES.SETTINGS, "ambientLight");
+                DatabaseManager.deleteData(STORES.SETTINGS, "directionalLight");
+            } catch (_) { }
+            // Notify UI sections to sync their local state with reset values (without re-saving to DB)
+            try {
+                window.dispatchEvent(
+                    new CustomEvent("lighting-reset", {
+                        detail: {
+                            ambient: { color: "#ffffff", intensity: 0.25 },
+                            directional: { color: "#ffffff", intensity: 2 },
+                        },
+                    })
+                );
+            } catch (_) { }
             terrainBuilderRef.current?.clearMap();
         }
     };
@@ -410,19 +433,17 @@ const ToolBar = ({
     };
 
     useEffect(() => {
-        const checkUndoRedoAvailability = async () => {
-            const undoStates =
-                (await DatabaseManager.getData(STORES.UNDO, "states")) as any[] || [];
-            const redoStates =
-                (await DatabaseManager.getData(STORES.REDO, "states")) as any[] || [];
-            setCanUndo(undoStates.length > 0);
-            setCanRedo(redoStates.length > 0);
-        };
-        checkUndoRedoAvailability();
+        const manager = undoRedoManager?.current;
+        if (!manager) return;
 
-        const interval = setInterval(checkUndoRedoAvailability, 1000);
+        const update = () => {
+            setCanUndo(!!manager?.canUndo?.());
+            setCanRedo(!!manager?.canRedo?.());
+        };
+
+        const interval = setInterval(update, 500);
         return () => clearInterval(interval);
-    }, []);
+    }, [undoRedoManager]);
 
     const onMapFileSelected = (event) => {
         console.log("Map file selected:", event.target.files[0]);
@@ -566,8 +587,7 @@ const ToolBar = ({
                                 onClick={() =>
                                     setAxisLockEnabled(!axisLockEnabled)
                                 }
-                                className={`control-button ${axisLockEnabled ? "selected" : ""
-                                    }`}
+                                className={`control-button ${axisLockEnabled ? "selected" : ""}`}
                             >
                                 {axisLockEnabled ? <FaLock /> : <FaLockOpen />}
                             </button>
@@ -577,8 +597,7 @@ const ToolBar = ({
                                 onClick={() =>
                                     undoRedoManager?.current?.handleUndo()
                                 }
-                                className={`control-button ${!canUndo ? "disabled" : ""
-                                    }`}
+                                className={`control-button ${!canUndo ? "disabled" : ""}`}
                                 disabled={!canUndo}
                             >
                                 <FaUndo className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
@@ -589,8 +608,7 @@ const ToolBar = ({
                                 onClick={() =>
                                     undoRedoManager?.current?.handleRedo()
                                 }
-                                className={`control-button ${!canRedo ? "disabled" : ""
-                                    }`}
+                                className={`control-button ${!canRedo ? "disabled" : ""}`}
                                 disabled={!canRedo}
                             >
                                 <FaRedo className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
@@ -626,7 +644,7 @@ const ToolBar = ({
                                 </button>
 
                                 {activeSubmenu === SubMenuType.PLACEMENT && (
-                                    <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                    <div className="flex absolute -top-12 left-1/2 gap-x-1 justify-center items-center h-full -translate-x-1/2 w-fit">
                                         {(activeTab === 'blocks'
                                             ? [
                                                 { label: '1×1', value: 'single' },
@@ -681,7 +699,7 @@ const ToolBar = ({
                             </Tooltip>
 
                             {activeSubmenu === SubMenuType.SWAP && (
-                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                <div className="flex absolute -top-12 left-1/2 gap-x-1 justify-center items-center h-full -translate-x-1/2 w-fit">
                                     <Tooltip text="Paint Terrain">
                                         <button
                                             className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${activeTool === 'replace' ? 'bg-white/90 text-black' : ''}`}
@@ -775,7 +793,7 @@ const ToolBar = ({
                             </Tooltip>
 
                             {activeSubmenu === SubMenuType.AI && (
-                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                <div className="flex absolute -top-12 left-1/2 gap-x-1 justify-center items-center h-full -translate-x-1/2 w-fit">
                                     <button
                                         className="w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
                                         style={{ animationDelay: '0.05s' }}
@@ -811,7 +829,7 @@ const ToolBar = ({
                             </Tooltip>
 
                             {activeSubmenu === SubMenuType.UTILS && (
-                                <div className="absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2">
+                                <div className="flex absolute -top-12 left-1/2 gap-x-1 justify-center items-center h-full -translate-x-1/2 w-fit">
                                     <button
                                         className="w-fit flex items-center whitespace-nowrap justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
                                         style={{ animationDelay: '0.05s' }}
@@ -871,7 +889,7 @@ const ToolBar = ({
                                 </button>
                             </Tooltip>
 
-                            {activeSubmenu === SubMenuType.IMPORT_EXPORT && <div className={`absolute -top-12 h-full flex w-fit items-center gap-x-1 justify-center -translate-x-1/2 left-1/2`}>
+                            {activeSubmenu === SubMenuType.IMPORT_EXPORT && <div className={`flex absolute -top-12 left-1/2 gap-x-1 justify-center items-center h-full -translate-x-1/2 w-fit`}>
                                 <input
                                     id="mapFileInput"
                                     type="file"
@@ -922,6 +940,24 @@ const ToolBar = ({
                                 />
                             </Tooltip>
                         )}
+                        <Tooltip text={playerModeEnabled ? "Exit Player Mode" : "Enter Player Mode (run around)"}>
+                            <button
+                                onClick={onTogglePlayerMode}
+                                className={`control-button ${playerModeEnabled ? 'selected' : ''}`}
+                            >
+                                <svg width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title" xmlns="http://www.w3.org/2000/svg">
+                                    <title>Running person icon</title>
+                                    <g fill="none" stroke="#ffffff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="5">
+                                        <circle cx="44" cy="12" r="6" fill="#ffffff" stroke="none" />
+                                        <path d="M40 20 L30 34" />
+                                        <path d="M36 24 L20 22" />
+                                        <path d="M38 26 L48 34" />
+                                        <path d="M30 34 L46 42 L54 58" />
+                                        <path d="M30 34 L20 48 L8 50" />
+                                    </g>
+                                </svg>
+                            </button>
+                        </Tooltip>
                     </div>
                 </div>
             </div>

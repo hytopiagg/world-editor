@@ -43,6 +43,8 @@ let blockTypesArray = (() => {
         isMultiTexture: Object.keys(block.sideTextures).length > 0,
         isEnvironment: false,
         hasMissingTexture: block.textureUri === "./assets/blocks/error.png",
+        // Default no emission. Users can later set lightLevel per block id via registry APIs.
+        lightLevel: undefined,
     }));
 })();
 /**
@@ -59,13 +61,7 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
     const existingBlock =
         existingIndex >= 0 ? blockTypesArray[existingIndex] : null;
 
-    if (
-        existingBlock &&
-        existingBlock.textureUri &&
-        existingBlock.textureUri.startsWith("data:image/")
-    ) {
-        return blockTypesArray; // Skip processing
-    }
+    // Do not skip processing here; we need to ensure registry and atlas stay in sync
 
     let finalTextureUri = block.textureUri;
     let needsRegistryUpdate = false;
@@ -111,10 +107,11 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
     }
 
     if (!block.id && !existingBlock) {
+        // Allocate custom block IDs in 1000-1999 range
         const highestId = blockTypesArray
-            .filter((b) => b.id >= 100)
-            .reduce((max, b) => Math.max(max, b.id), 99);
-        block.id = highestId + 1;
+            .filter((b) => b.id >= 1000 && b.id < 2000)
+            .reduce((max, b) => Math.max(max, b.id), 999);
+        block.id = Math.max(1000, highestId + 1);
     }
 
     const processedBlock = {
@@ -123,6 +120,12 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         name: block.name || `Custom Block ${block.id}`,
         textureUri: finalTextureUri, // Use the determined URI (data, placeholder, or error)
         sideTextures: block.sideTextures || {},
+        lightLevel:
+            typeof block.lightLevel === "number"
+                ? block.lightLevel
+                : block.lightLevel === 0
+                ? 0
+                : undefined,
 
         isMultiTexture:
             block.sideTextures && Object.keys(block.sideTextures).length > 0,
@@ -141,78 +144,98 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
         blockTypesArray.push(processedBlock);
     }
 
-    if (needsRegistryUpdate) {
-        try {
-            if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
-                const registry = window.BlockTypeRegistry.instance;
+    // Always ensure the block is registered in the BlockTypeRegistry so meshes can resolve its textures
+    try {
+        if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
+            const registry = window.BlockTypeRegistry.instance;
 
-                // Check if this is a multi-texture block
-                if (
-                    processedBlock.isMultiTexture &&
-                    processedBlock.sideTextures
-                ) {
-                    // For multi-texture blocks, we need to update the block type with all face textures
-                    registry
-                        .updateBlockType(processedBlock)
-                        .then(() => {
-                            const event = new CustomEvent(
-                                "custom-block-registered",
-                                {
-                                    detail: {
-                                        blockId: processedBlock.id,
-                                        name: processedBlock.name,
-                                        isMultiTexture: true,
-                                    },
-                                }
-                            );
-                            window.dispatchEvent(event);
+            if (processedBlock.isMultiTexture && processedBlock.sideTextures) {
+                // Multi-texture path: update with face textures (works for data URIs or paths)
+                registry.updateBlockType(processedBlock);
+                try {
+                    window.dispatchEvent(
+                        new CustomEvent("custom-block-registered", {
+                            detail: {
+                                blockId: processedBlock.id,
+                                name: processedBlock.name,
+                                isMultiTexture: true,
+                            },
                         })
-                        .catch((error) => {
-                            console.error(
-                                `Error registering multi-texture custom block ${processedBlock.id} in BlockTypeRegistry:`,
-                                error
-                            );
-                        });
-                } else if (finalTextureUri) {
-                    // For single-texture blocks, use the existing method
+                    );
+                } catch (_) {}
+            } else if (finalTextureUri) {
+                if (finalTextureUri.startsWith("data:image/")) {
+                    // Data URI path: use register API which loads and binds atlas
                     if (registry.registerCustomTextureForBlockId) {
-                        registry
-                            .registerCustomTextureForBlockId(
-                                processedBlock.id,
-                                finalTextureUri, // Use the final URI (could be data or error path)
-                                {
-                                    name: processedBlock.name,
-                                    updateMeshes: true,
-                                    rebuildAtlas: !deferAtlasRebuild,
-                                }
-                            )
-                            .then(() => {
-                                const event = new CustomEvent(
-                                    "custom-block-registered",
-                                    {
-                                        detail: {
-                                            blockId: processedBlock.id,
-                                            name: processedBlock.name,
-                                        },
-                                    }
-                                );
-                                window.dispatchEvent(event);
-                            })
-                            .catch((error) => {
-                                console.error(
-                                    `Error registering custom block ${processedBlock.id} in BlockTypeRegistry:`,
-                                    error
-                                );
-                            });
+                        registry.registerCustomTextureForBlockId(
+                            processedBlock.id,
+                            finalTextureUri,
+                            {
+                                name: processedBlock.name,
+                                updateMeshes: true,
+                                rebuildAtlas: !deferAtlasRebuild,
+                            }
+                        );
                     }
+                } else {
+                    // Asset path: directly update block type so the registry references the path
+                    registry.updateBlockType({
+                        id: processedBlock.id,
+                        name: processedBlock.name,
+                        textureUri: finalTextureUri,
+                        lightLevel: processedBlock.lightLevel,
+                    });
                 }
             }
-        } catch (error) {
-            console.error(
-                `Error during BlockTypeRegistry registration for block ID ${processedBlock.id}:`,
-                error
-            );
+            // Force a texture-atlas rebuild when we changed or added a single-face custom block
+            if (!processedBlock.isMultiTexture && !deferAtlasRebuild) {
+                (async () => {
+                    try {
+                        const atlas = require("../blocks/BlockTextureAtlas")
+                            .default.instance;
+                        // Attempt to bind id-based keys as well for single-face customs
+                        if (
+                            finalTextureUri &&
+                            finalTextureUri.startsWith("data:image/")
+                        ) {
+                            atlas.applyDataUriToAllFaces(
+                                `${processedBlock.id}`,
+                                finalTextureUri
+                            );
+                        }
+                        await atlas.rebuildTextureAtlas();
+                        window.dispatchEvent(
+                            new CustomEvent("textureAtlasUpdated", {
+                                detail: { blockId: processedBlock.id },
+                            })
+                        );
+                    } catch (rebuildErr) {
+                        console.warn(
+                            "Atlas rebuild failed for single-face custom",
+                            rebuildErr
+                        );
+                    }
+                })();
+            }
         }
+
+        // Push lightLevel again to be safe (covers both branches)
+        if (typeof processedBlock.lightLevel !== "undefined") {
+            try {
+                const reg = window.BlockTypeRegistry?.instance;
+                if (reg && reg.updateBlockType) {
+                    reg.updateBlockType({
+                        id: processedBlock.id,
+                        lightLevel: processedBlock.lightLevel,
+                    });
+                }
+            } catch (e) {}
+        }
+    } catch (error) {
+        console.error(
+            `Error during BlockTypeRegistry registration for block ID ${processedBlock.id}:`,
+            error
+        );
     }
 
     return [...blockTypesArray];
@@ -308,6 +331,89 @@ const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
         return false;
     }
 };
+
+/**
+ * Create a light variant of an existing block type.
+ * Clones textures and metadata, assigns a new custom ID (1000-1999), and sets lightLevel.
+ * @param {number} baseBlockId - The source block id to clone from
+ * @param {number} lightLevel - Emissive level 0..15
+ * @param {Object} [options]
+ * @param {string} [options.name] - Optional name override
+ * @returns {Promise<Object|null>} The created block type or null on error
+ */
+const createLightVariant = async (baseBlockId, lightLevel, options = {}) => {
+    try {
+        const base = getBlockById(baseBlockId);
+        if (!base) {
+            console.warn(
+                "createLightVariant: base block not found",
+                baseBlockId
+            );
+            return null;
+        }
+        const clamped = Math.max(0, Math.min(15, Number(lightLevel) || 0));
+        // If base is already a variant, normalize to original base id/name
+        const trueBaseId =
+            typeof base.variantOfId === "number" ? base.variantOfId : base.id;
+        const trueBaseName = base.variantOfName || base.name;
+        const name = trueBaseName;
+
+        const newBlock = {
+            // no id -> processCustomBlock will allocate in 1000-1999
+            name,
+            isCustom: true,
+            isMultiTexture: !!(
+                base.sideTextures && Object.keys(base.sideTextures).length > 0
+            ),
+            sideTextures: base.sideTextures ? { ...base.sideTextures } : {},
+            textureUri: base.textureUri,
+            lightLevel: clamped,
+            isVariant: true,
+            variantOfId: trueBaseId,
+            variantOfName: trueBaseName,
+            variantLightLevel: clamped,
+        };
+
+        // Create/Update in registry and local list
+        processCustomBlock(newBlock);
+
+        const created =
+            (getCustomBlocks() || [])
+                .filter(
+                    (b) =>
+                        b.isVariant &&
+                        b.variantOfId === trueBaseId &&
+                        b.variantLightLevel === clamped
+                )
+                .sort((a, b) => b.id - a.id)[0] || null;
+
+        // Persist to DB
+        try {
+            const updated = getCustomBlocks();
+            const { DatabaseManager, STORES } = require("./DatabaseManager");
+            await DatabaseManager.saveData(
+                STORES.CUSTOM_BLOCKS,
+                "blocks",
+                updated
+            );
+        } catch (e) {
+            console.warn("createLightVariant: failed to persist to DB", e);
+        }
+
+        // Notify UI to refresh
+        try {
+            const evt = new CustomEvent("custom-blocks-updated", {
+                detail: { block: created },
+            });
+            window.dispatchEvent(evt);
+        } catch (_) {}
+
+        return created || null;
+    } catch (e) {
+        console.error("createLightVariant error", e);
+        return null;
+    }
+};
 /**
  * Remove a custom block by ID
  * @param {number} blockIdToRemove - The ID of the block to remove
@@ -316,7 +422,7 @@ const placeCustomBlock = async (blockId, x = 0, y = 0, z = 0) => {
 const removeCustomBlock = (blockIdToRemove) => {
     const id = parseInt(blockIdToRemove);
 
-    if (id < 100) {
+    if (id < 1000) {
         console.warn("Cannot remove built-in blocks");
         return blockTypesArray;
     }
@@ -335,7 +441,7 @@ const getBlockTypes = () => blockTypesArray;
  * @returns {Array} - Custom blocks
  */
 const getCustomBlocks = () => {
-    return blockTypesArray.filter((block) => block.id >= 100);
+    return blockTypesArray.filter((block) => block.id >= 1000);
 };
 /**
  * Search blocks by name or ID
@@ -366,7 +472,7 @@ const getBlockById = (id) => {
  * @returns {boolean} - True if block is custom
  */
 const isCustomBlock = (id) => {
-    return parseInt(id) >= 100;
+    return parseInt(id) >= 1000;
 };
 
 /**
@@ -379,7 +485,7 @@ const updateCustomBlockName = async (blockId, newName) => {
     const id = parseInt(blockId);
     const trimmedName = newName.trim();
 
-    if (id < 100) {
+    if (id < 1000) {
         console.warn("Cannot rename built-in blocks.");
         return false;
     }
@@ -421,9 +527,11 @@ export {
     getBlockById,
     isCustomBlock,
     placeCustomBlock,
+    createLightVariant,
 };
 
 if (typeof window !== "undefined") {
     window.placeCustomBlock = placeCustomBlock;
     window.batchProcessCustomBlocks = batchProcessCustomBlocks;
+    window.createLightVariant = createLightVariant;
 }
