@@ -3034,6 +3034,8 @@ function TerrainBuilder(
                         (window.__WE_LAST_PHYSICS_TS__
                             ? now - window.__WE_LAST_PHYSICS_TS__
                             : 16.6) / 1000;
+                    // Clamp delta for stable, frame-rate independent smoothing
+                    const dtClamped = Math.min(0.1, Math.max(0, dt));
                     window.__WE_LAST_PHYSICS_TS__ = now;
 
                     // Maintain third-person yaw accumulator
@@ -3283,7 +3285,9 @@ function TerrainBuilder(
                                 p.y - halfH - worldYOffset,
                                 p.z + worldZOffset
                             );
-                            m.position.lerp(cur, 0.4);
+                            // Frame-rate independent smoothing for visual player mesh
+                            const meshAlpha = 1 - Math.exp(-30 * dtClamped);
+                            m.position.lerp(cur, meshAlpha);
                             // compute facing from velocity when moving
                             const dx = p.x - last.x;
                             const dz = p.z - last.z;
@@ -3384,11 +3388,18 @@ function TerrainBuilder(
                             window.__WE_WORLD_Z_OFFSET__ !== undefined
                                 ? window.__WE_WORLD_Z_OFFSET__
                                 : -0.5;
-                        const playerMeshBase = new THREE.Vector3(
-                            p.x + camWorldXOffset,
-                            p.y - camHalfH - camWorldYOffset,
-                            p.z + camWorldZOffset
-                        );
+                        // Prefer smoothed player mesh position as base to avoid camera jitter from discrete physics steps
+                        let playerMeshBase;
+                        if (window.__WE_PLAYER_MESH__) {
+                            playerMeshBase =
+                                window.__WE_PLAYER_MESH__.position.clone();
+                        } else {
+                            playerMeshBase = new THREE.Vector3(
+                                p.x + camWorldXOffset,
+                                p.y - camHalfH - camWorldYOffset,
+                                p.z + camWorldZOffset
+                            );
+                        }
                         const aimYOffset = Math.max(
                             0.6,
                             Math.min(1.25, camHalfH * 0.66)
@@ -3414,8 +3425,17 @@ function TerrainBuilder(
                         const desired = target
                             .clone()
                             .add(window.__WE_CAM_OFFSET__);
-                        threeCamera.position.lerp(desired, 0.35);
-                        threeCamera.lookAt(target);
+                        // Frame-rate independent smoothing for camera follow
+                        const camAlpha = 1 - Math.exp(-25 * dtClamped);
+                        threeCamera.position.lerp(desired, camAlpha);
+                        // Smooth orientation as well to reduce visible shaking from discrete target updates
+                        {
+                            const currentQuat = threeCamera.quaternion.clone();
+                            threeCamera.lookAt(target);
+                            const desiredQuat = threeCamera.quaternion.clone();
+                            threeCamera.quaternion.copy(currentQuat);
+                            threeCamera.quaternion.slerp(desiredQuat, camAlpha);
+                        }
                         if (
                             orbitControlsRef.current &&
                             orbitControlsRef.current.target
