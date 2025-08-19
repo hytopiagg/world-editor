@@ -90,6 +90,8 @@ class CameraManager {
 
         // >>> Pointer-move rotation when pointer lock is active
         this.handlePointerMove = (event: MouseEvent) => {
+            // Ignore pointer-driven rotation while player mode is active to avoid conflicts with third-person follow
+            try { if ((window as any).__WE_PHYSICS__) return; } catch (_) { }
             if (this.isPointerUnlockedMode || !this.isPointerLocked || !this.camera || !this.controls) return;
             const movementX = event.movementX || 0;
             const movementY = event.movementY || 0;
@@ -225,6 +227,8 @@ class CameraManager {
         }
     }
     updateCameraMovement(deltaTime = 1) {
+        // Suppress editor camera controls while in player mode (physics-driven)
+        try { if ((window as any).__WE_PHYSICS__) return; } catch (_) { }
         if (!this.controls || !this.camera || this._isInputDisabled) return;
         if (this.modifierKeysActive) return;
         let moved = false;
