@@ -15,8 +15,29 @@ export const AxiomBlockRemapper = ({
 }) => {
     const [mappings, setMappings] = useState({});
     const [searchTerms, setSearchTerms] = useState({});
+    const [expandedRows, setExpandedRows] = useState({});
     const availableBlocks = useMemo(() => getBlockTypes() || [], []);
     const availableEntities = useMemo(() => environmentModels || [], []);
+
+    // Local storage helpers for persistent user mappings
+    const STORAGE_KEY = "axiomBlockMappings";
+    const loadSavedMappings = () => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (_) {
+            return {};
+        }
+    };
+    const saveMappingsToStorage = (toSave) => {
+        try {
+            const existing = loadSavedMappings();
+            const merged = { ...existing, ...toSave };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        } catch (_) {}
+    };
 
     const resolveTextureSrc = (uri) => {
         if (!uri || typeof uri !== "string") return null;
@@ -55,16 +76,92 @@ export const AxiomBlockRemapper = ({
         return resolveTextureSrc(chosen);
     };
 
+    // Prevent background page scroll when modal is open
     useEffect(() => {
-        // Initialize mappings with suggestions
+        const original = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.body.style.overflow = original;
+        };
+    }, []);
+
+    useEffect(() => {
+        // Initialize mappings with persisted overrides or suggestions
         const initialMappings = {};
-        unmappedBlocks.forEach((blockName) => {
+        const saved = loadSavedMappings();
+        // Use all seen blocks (so auto-mapped ones can be remapped too)
+        const allBlockNames = Object.keys(blockCounts || {});
+        allBlockNames.forEach((blockName) => {
+            const savedMapping = saved[blockName];
+            if (savedMapping && savedMapping.action) {
+                if (
+                    savedMapping.action === "map" &&
+                    (savedMapping.id || savedMapping.targetBlockId)
+                ) {
+                    const id = savedMapping.id || savedMapping.targetBlockId;
+                    const name =
+                        savedMapping.name ||
+                        savedMapping.targetBlockName ||
+                        availableBlocks.find((b) => b.id === id)?.name ||
+                        "Unknown";
+                    initialMappings[blockName] = {
+                        action: "map",
+                        targetBlockId: id,
+                        targetBlockName: name,
+                        targetEntityName: null,
+                        targetEntityModelUrl: null,
+                    };
+                } else if (
+                    savedMapping.action === "entity" &&
+                    (savedMapping.entityName || savedMapping.targetEntityName)
+                ) {
+                    const entityName =
+                        savedMapping.entityName ||
+                        savedMapping.targetEntityName;
+                    const modelUrl =
+                        savedMapping.modelUrl ||
+                        savedMapping.targetEntityModelUrl ||
+                        null;
+                    initialMappings[blockName] = {
+                        action: "entity",
+                        targetBlockId: null,
+                        targetBlockName: null,
+                        targetEntityName: entityName,
+                        targetEntityModelUrl: modelUrl,
+                    };
+                } else if (savedMapping.action === "skip") {
+                    initialMappings[blockName] = {
+                        action: "skip",
+                        targetBlockId: null,
+                        targetBlockName: null,
+                        targetEntityName: null,
+                        targetEntityModelUrl: null,
+                    };
+                }
+                return;
+            }
+
+            // Fallback to automatic suggestion
             const suggestion = suggestMapping(blockName);
             if (suggestion && suggestion.action === "map" && suggestion.id) {
                 initialMappings[blockName] = {
                     action: "map",
                     targetBlockId: suggestion.id,
                     targetBlockName: suggestion.name || "Unknown",
+                    targetEntityName: null,
+                    targetEntityModelUrl: null,
+                };
+            } else if (
+                suggestion &&
+                suggestion.action === "entity" &&
+                suggestion.entityName
+            ) {
+                initialMappings[blockName] = {
+                    action: "entity",
+                    targetBlockId: null,
+                    targetBlockName: null,
+                    targetEntityName: suggestion.entityName,
+                    targetEntityModelUrl: suggestion.modelUrl || null,
                 };
             } else {
                 initialMappings[blockName] = {
@@ -77,7 +174,7 @@ export const AxiomBlockRemapper = ({
             }
         });
         setMappings(initialMappings);
-    }, [unmappedBlocks]);
+    }, [unmappedBlocks, blockCounts, availableBlocks]);
 
     const handleActionChange = (blockName, action) => {
         setMappings((prev) => ({
@@ -86,27 +183,24 @@ export const AxiomBlockRemapper = ({
                 ...prev[blockName],
                 action,
                 targetBlockId:
-                    action === "skip" || action === "entity"
-                        ? null
-                        : prev[blockName]?.targetBlockId ||
-                          availableBlocks[0]?.id,
+                    action === "map"
+                        ? prev[blockName]?.targetBlockId || null
+                        : null,
                 targetBlockName:
-                    action === "skip" || action === "entity"
-                        ? null
-                        : prev[blockName]?.targetBlockName ||
-                          availableBlocks[0]?.name,
+                    action === "map"
+                        ? prev[blockName]?.targetBlockName || null
+                        : null,
                 targetEntityName:
                     action === "entity"
-                        ? prev[blockName]?.targetEntityName ||
-                          availableEntities[0]?.name
+                        ? prev[blockName]?.targetEntityName || null
                         : null,
                 targetEntityModelUrl:
                     action === "entity"
-                        ? prev[blockName]?.targetEntityModelUrl ||
-                          availableEntities[0]?.modelUrl
+                        ? prev[blockName]?.targetEntityModelUrl || null
                         : null,
             },
         }));
+        setExpandedRows((prev) => ({ ...prev, [blockName]: true }));
     };
 
     const handleBlockSelection = (blockName, targetBlock) => {
@@ -120,6 +214,7 @@ export const AxiomBlockRemapper = ({
                 targetEntityModelUrl: null,
             },
         }));
+        setExpandedRows((prev) => ({ ...prev, [blockName]: false }));
     };
 
     const handleEntitySelection = (blockName, targetEntity) => {
@@ -133,6 +228,7 @@ export const AxiomBlockRemapper = ({
                 targetEntityModelUrl: targetEntity.modelUrl,
             },
         }));
+        setExpandedRows((prev) => ({ ...prev, [blockName]: false }));
     };
 
     const handleSearchChange = (blockName, searchTerm) => {
@@ -144,11 +240,14 @@ export const AxiomBlockRemapper = ({
 
     const getFilteredBlocks = (blockName) => {
         const searchTerm = searchTerms[blockName] || "";
-        if (!searchTerm) return availableBlocks;
+        if (!searchTerm)
+            return availableBlocks.filter((block) => !block.isVariant);
 
         const lowerSearch = searchTerm.toLowerCase();
-        return availableBlocks.filter((block) =>
-            block.name.toLowerCase().includes(lowerSearch)
+        return availableBlocks.filter(
+            (block) =>
+                !block.isVariant &&
+                block.name.toLowerCase().includes(lowerSearch)
         );
     };
 
@@ -184,21 +283,77 @@ export const AxiomBlockRemapper = ({
                 finalMappings[blockName] = { action: "skip" };
             }
         });
+        // Persist user decisions for future sessions (map/entity only)
+        const toPersist = {};
+        Object.entries(finalMappings).forEach(([blockName, m]) => {
+            if (m.action === "map") {
+                toPersist[blockName] = {
+                    action: "map",
+                    id: m.id,
+                    name: m.name,
+                };
+            } else if (m.action === "entity") {
+                toPersist[blockName] = {
+                    action: "entity",
+                    entityName: m.entityName,
+                    modelUrl: m.modelUrl || null,
+                };
+            }
+        });
+        if (Object.keys(toPersist).length > 0) {
+            saveMappingsToStorage(toPersist);
+        }
         onConfirmMappings(finalMappings);
     };
 
+    // Prepare display list: include all seen blocks; sort with unmapped first then by count desc
+    const allBlockNames = useMemo(
+        () => Object.keys(blockCounts || {}),
+        [blockCounts]
+    );
+    const savedOverrides = useMemo(() => loadSavedMappings(), [blockCounts]);
+    const unmappedSet = useMemo(
+        () => new Set(unmappedBlocks || []),
+        [unmappedBlocks]
+    );
+    const displayBlockNames = useMemo(() => {
+        // Filter out default-skipped blocks (e.g., air, structure_void) unless user overrode
+        const list = allBlockNames.filter((name) => {
+            const user = savedOverrides[name];
+            if (user && user.action && user.action !== "skip") return true;
+            const def = DEFAULT_BLOCK_MAPPINGS[name];
+            if (def && def.action === "skip") return false;
+            return true;
+        });
+        list.sort((a, b) => {
+            const aUn = unmappedSet.has(a) ? 0 : 1;
+            const bUn = unmappedSet.has(b) ? 0 : 1;
+            if (aUn !== bUn) return aUn - bUn;
+            const ca = blockCounts[a] || 0;
+            const cb = blockCounts[b] || 0;
+            return cb - ca;
+        });
+        return list;
+    }, [allBlockNames, unmappedSet, blockCounts, savedOverrides]);
+
     const mappedCount = Object.values(mappings).filter(
-        (m) => m.action === "map" || m.action === "entity"
+        (m) =>
+            (m.action === "map" && m.targetBlockId) ||
+            (m.action === "entity" && m.targetEntityName)
     ).length;
-    const totalCount = unmappedBlocks.length;
+    const totalCount = displayBlockNames.length;
 
     return (
-        <div className="axiom-remapper-overlay">
+        <div
+            className="axiom-remapper-overlay"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+        >
             <div className="axiom-remapper-modal">
                 <div className="axiom-remapper-header">
                     <h2>Remap Minecraft Blocks</h2>
                     <p className="axiom-remapper-subtitle">
-                        Found {totalCount} unique block types that need mapping
+                        Found {totalCount} unique block types in this blueprint
                     </p>
                 </div>
 
@@ -217,7 +372,7 @@ export const AxiomBlockRemapper = ({
                 </div>
 
                 <div className="axiom-remapper-list">
-                    {unmappedBlocks.map((blockName) => {
+                    {displayBlockNames.map((blockName) => {
                         const mapping = mappings[blockName] || {};
                         const count = blockCounts[blockName] || 0;
                         const filteredBlocks = getFilteredBlocks(blockName);
@@ -239,6 +394,52 @@ export const AxiomBlockRemapper = ({
                                         <span className="block-count">
                                             ({count} blocks)
                                         </span>
+                                        <div
+                                            className="current-mapping"
+                                            title="Click to remap"
+                                            onClick={() =>
+                                                setExpandedRows((prev) => ({
+                                                    ...prev,
+                                                    [blockName]: true,
+                                                }))
+                                            }
+                                        >
+                                            {mapping.action === "map" &&
+                                                mapping.targetBlockId && (
+                                                    <div className="mapping-target">
+                                                        <span className="arrow-sep">
+                                                            →
+                                                        </span>
+                                                        <img
+                                                            className="mapping-icon"
+                                                            src={pickBlockTexture(
+                                                                availableBlocks.find(
+                                                                    (b) =>
+                                                                        b.id ===
+                                                                        mapping.targetBlockId
+                                                                )
+                                                            )}
+                                                            alt={
+                                                                mapping.targetBlockName ||
+                                                                "Selected block"
+                                                            }
+                                                        />
+                                                    </div>
+                                                )}
+                                            {mapping.action === "entity" &&
+                                                mapping.targetEntityName && (
+                                                    <div className="mapping-target">
+                                                        <span className="arrow-sep">
+                                                            →
+                                                        </span>
+                                                        <span className="mapping-entity-pill">
+                                                            {
+                                                                mapping.targetEntityName
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                )}
+                                        </div>
                                     </div>
                                     <div className="action-selector">
                                         <label>
@@ -294,19 +495,33 @@ export const AxiomBlockRemapper = ({
 
                                 {mapping.action === "map" && (
                                     <div className="remapper-item-content">
-                                        <input
-                                            type="text"
-                                            className="block-search"
-                                            placeholder="Search blocks..."
-                                            value={searchTerms[blockName] || ""}
-                                            onChange={(e) =>
-                                                handleSearchChange(
-                                                    blockName,
-                                                    e.target.value
-                                                )
-                                            }
-                                        />
-                                        <div className="selector-grid icon-only">
+                                        {(expandedRows[blockName] ??
+                                            !mapping.targetBlockId) && (
+                                            <input
+                                                type="text"
+                                                className="block-search"
+                                                placeholder="Search blocks..."
+                                                value={
+                                                    searchTerms[blockName] || ""
+                                                }
+                                                onChange={(e) =>
+                                                    handleSearchChange(
+                                                        blockName,
+                                                        e.target.value
+                                                    )
+                                                }
+                                            />
+                                        )}
+                                        <div
+                                            className="selector-grid icon-only"
+                                            style={{
+                                                display:
+                                                    expandedRows[blockName] ??
+                                                    !mapping.targetBlockId
+                                                        ? undefined
+                                                        : "none",
+                                            }}
+                                        >
                                             {filteredBlocks.map((block) => (
                                                 <button
                                                     key={block.id}
@@ -355,24 +570,38 @@ export const AxiomBlockRemapper = ({
                                 )}
                                 {mapping.action === "entity" && (
                                     <div className="remapper-item-content">
-                                        <input
-                                            type="text"
-                                            className="block-search"
-                                            placeholder="Search models..."
-                                            value={searchTerms[blockName] || ""}
-                                            onChange={(e) =>
-                                                handleSearchChange(
-                                                    blockName,
-                                                    e.target.value
-                                                )
-                                            }
-                                        />
-                                        <div className="selector-grid compact icon-only">
+                                        {(expandedRows[blockName] ??
+                                            !mapping.targetEntityName) && (
+                                            <input
+                                                type="text"
+                                                className="block-search"
+                                                placeholder="Search models..."
+                                                value={
+                                                    searchTerms[blockName] || ""
+                                                }
+                                                onChange={(e) =>
+                                                    handleSearchChange(
+                                                        blockName,
+                                                        e.target.value
+                                                    )
+                                                }
+                                            />
+                                        )}
+                                        <div
+                                            className="entity-pills"
+                                            style={{
+                                                display:
+                                                    expandedRows[blockName] ??
+                                                    !mapping.targetEntityName
+                                                        ? undefined
+                                                        : "none",
+                                            }}
+                                        >
                                             {getFilteredEntities(blockName).map(
                                                 (model) => (
                                                     <button
                                                         key={model.id}
-                                                        className={`selector-tile ${
+                                                        className={`entity-pill ${
                                                             mapping.targetEntityName ===
                                                             model.name
                                                                 ? "selected"
@@ -386,11 +615,9 @@ export const AxiomBlockRemapper = ({
                                                             )
                                                         }
                                                     >
-                                                        <div className="selector-icon selector-fallback">
-                                                            {model.name?.[0] ||
-                                                                "M"}
-                                                        </div>
-                                                        {/* icon-only: no label */}
+                                                        <span className="entity-pill-label">
+                                                            {model.name}
+                                                        </span>
                                                     </button>
                                                 )
                                             )}

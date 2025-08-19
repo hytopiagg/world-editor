@@ -64,6 +64,10 @@ export const DEFAULT_BLOCK_MAPPINGS = {
     "minecraft:structure_void": {
         action: "skip",
     },
+    // Air blocks should be skipped by default
+    "minecraft:air": { action: "skip" },
+    "minecraft:cave_air": { action: "skip" },
+    "minecraft:void_air": { action: "skip" },
     "minecraft:stone": {
         id: BLOCK_IDS.STONE || 1,
         name: "Stone",
@@ -159,11 +163,7 @@ export const DEFAULT_BLOCK_MAPPINGS = {
         name: "Gravel",
         action: "map",
     },
-    "minecraft:coarse_dirt": {
-        id: BLOCK_IDS.DIRT || 4,
-        name: "Coarse Dirt",
-        action: "map",
-    },
+    // (coarse_dirt defined earlier above)
 
     "minecraft:oak_log": {
         id: findBlockIdByName("log") || 1,
@@ -1165,36 +1165,11 @@ export const DEFAULT_BLOCK_MAPPINGS = {
     },
 
     // Additional defaults for test-blueprints materials
-    "minecraft:oak_wood": {
-        id: findBlockIdByName("log") || 1,
-        name: "Log",
-        action: "map",
-    },
-    "minecraft:mushroom_stem": {
-        id: findBlockIdByName("log") || 1,
-        name: "Log",
-        action: "map",
-    },
+    // (oak_wood, mushroom_stem defined earlier above)
 
-    // Ice variants → Ice
-    "minecraft:ice": {
-        id: findBlockIdByName("ice") || findBlockIdByName("glass") || 1,
-        name: "Ice",
-        action: "map",
-    },
-    "minecraft:packed_ice": {
-        id: findBlockIdByName("ice") || findBlockIdByName("glass") || 1,
-        name: "Ice",
-        action: "map",
-    },
+    // (ice, packed_ice defined earlier above)
 
-    // Special cases to benign solids
-    "minecraft:tnt": { action: "skip" },
-    "minecraft:chest": {
-        id: BLOCK_IDS.OAK_PLANKS || 1,
-        name: "Oak Planks",
-        action: "map",
-    },
+    // (tnt, chest defined earlier above)
     "minecraft:iron_trapdoor": {
         id: BLOCK_IDS.STONE || 1,
         name: "Stone",
@@ -1234,6 +1209,188 @@ export function suggestMapping(minecraftBlockName) {
     }
     if (blockName === "water") {
         return { id: BLOCK_IDS.WATER || 6, name: "Water", action: "map" };
+    }
+
+    // --- Pattern-based fallbacks to cover blueprint blocks ---
+    // Skip decorative entities and flora
+    if (
+        /banner|skull|head|potted|flower|dandelion|daisy|tulip|orchid|cornflower|azure_bluet|sea_pickle|fern|tall_grass|scaffolding|cobweb/.test(
+            blockName
+        )
+    ) {
+        return { action: "skip" };
+    }
+
+    // Glass family (including stained and panes)
+    if (blockName.includes("glass")) {
+        return {
+            id: findBlockIdByName("glass") || BLOCK_IDS.STONE || 1,
+            name: "Glass",
+            action: "map",
+        };
+    }
+
+    // Concrete powder -> Gravel stand-in
+    if (blockName.includes("concrete_powder")) {
+        return {
+            id: findBlockIdByName("gravel") || BLOCK_IDS.DIRT || 4,
+            name: "Gravel",
+            action: "map",
+        };
+    }
+
+    // Solid concretes
+    if (blockName.includes("concrete")) {
+        const warm = /(red|yellow|orange)_concrete/.test(blockName);
+        return {
+            id: warm ? BLOCK_IDS.BRICKS || 1 : BLOCK_IDS.STONE || 1,
+            name: warm ? "Bricks" : "Stone",
+            action: "map",
+        };
+    }
+
+    // Terracotta family -> Clay
+    if (blockName.includes("terracotta")) {
+        return { id: BLOCK_IDS.CLAY || 2, name: "Clay", action: "map" };
+    }
+
+    // Quartz family -> Stone Bricks
+    if (blockName.includes("quartz")) {
+        return {
+            id: findBlockIdByName("stone-bricks") || BLOCK_IDS.BRICKS || 1,
+            name: "Stone Bricks",
+            action: "map",
+        };
+    }
+
+    // Sandstone family -> Sand
+    if (blockName.includes("sandstone")) {
+        return { id: BLOCK_IDS.SAND || 4, name: "Sand", action: "map" };
+    }
+
+    // Stone-like variants (andesite, diorite, granite, cobblestone, deepslate)
+    if (/(andesite|diorite|granite|cobblestone|deepslate)/.test(blockName)) {
+        return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
+    }
+
+    // Nether bricks and red nether bricks -> Bricks
+    if (blockName.includes("nether_brick")) {
+        return { id: BLOCK_IDS.BRICKS || 1, name: "Bricks", action: "map" };
+    }
+
+    // Blackstone family -> Stone or Bricks when "brick" appears
+    if (blockName.includes("blackstone")) {
+        const isBrick = blockName.includes("brick");
+        return {
+            id: isBrick ? BLOCK_IDS.BRICKS || 1 : BLOCK_IDS.STONE || 1,
+            name: isBrick ? "Bricks" : "Stone",
+            action: "map",
+        };
+    }
+
+    // Prismarine family -> Stone Bricks stand-in
+    if (blockName.includes("prismarine")) {
+        return {
+            id: findBlockIdByName("stone-bricks") || BLOCK_IDS.BRICKS || 1,
+            name: "Stone Bricks",
+            action: "map",
+        };
+    }
+
+    // Wood family parts (doors, trapdoors, fences, fence gates, signs, buttons, pressure plates, slabs, stairs)
+    if (
+        /(door|trapdoor|fence_gate|fence|sign|button|pressure_plate|slab|stairs)/.test(
+            blockName
+        )
+    ) {
+        // Iron variants to stone
+        if (
+            blockName.includes("iron_door") ||
+            blockName.includes("iron_trapdoor")
+        ) {
+            return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
+        }
+        // Stone buttons/pressure plates
+        if (
+            blockName.includes("stone_button") ||
+            blockName.includes("stone_pressure_plate")
+        ) {
+            return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
+        }
+        // Default wooden parts to Oak Planks stand-in
+        return {
+            id: BLOCK_IDS.OAK_PLANKS || 1,
+            name: "Oak Planks",
+            action: "map",
+        };
+    }
+
+    // Functional wood tables -> Oak Planks
+    if (
+        /(crafting_table|fletching_table|cartography_table|lectern|loom|note_block)/.test(
+            blockName
+        )
+    ) {
+        return {
+            id: BLOCK_IDS.OAK_PLANKS || 1,
+            name: "Oak Planks",
+            action: "map",
+        };
+    }
+
+    // Functional stone or metal -> Stone
+    if (
+        /anvil|furnace|cauldron|brewing_stand|grindstone|hopper/.test(blockName)
+    ) {
+        return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
+    }
+
+    // Lighting -> Dragons Stone stand-in
+    if (
+        /sea_lantern|lantern|glowstone|redstone_torch|wall_torch|end_rod/.test(
+            blockName
+        )
+    ) {
+        return {
+            id: BLOCK_IDS.DRAGON_STONE || 5,
+            name: "Dragons Stone",
+            action: "map",
+        };
+    }
+
+    // Leaves and logs -> Leaves / Log
+    if (blockName.includes("leaves")) {
+        return {
+            id: findBlockIdByName("oak-leaves") || BLOCK_IDS.GRASS || 7,
+            name: "Leaves",
+            action: "map",
+        };
+    }
+    if (blockName.includes("log") || blockName.includes("_wood")) {
+        return {
+            id: findBlockIdByName("log") || 1,
+            name: "Log",
+            action: "map",
+        };
+    }
+
+    // Ice family
+    if (blockName.includes("ice")) {
+        return {
+            id: findBlockIdByName("ice") || findBlockIdByName("glass") || 1,
+            name: "Ice",
+            action: "map",
+        };
+    }
+
+    // Rails and bars -> Stone stand-in
+    if (blockName.includes("rail") || blockName.includes("iron_bars")) {
+        return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
+    }
+
+    // Pressure plates (weighted)
+    if (blockName.includes("weighted_pressure_plate")) {
+        return { id: BLOCK_IDS.STONE || 1, name: "Stone", action: "map" };
     }
 
     return { action: "skip" };

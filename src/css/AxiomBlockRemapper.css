@@ -95,6 +95,41 @@
     margin-bottom: 8px; /* more compact */
 }
 
+.current-mapping {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.mapping-target {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.arrow-sep {
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 700;
+}
+
+.mapping-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: cover;
+    image-rendering: pixelated;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.mapping-entity-pill {
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 9999px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+}
+
 .source-block {
     display: flex;
     align-items: baseline;
@@ -273,6 +308,37 @@
 /* icon-only grid has tighter tiles */
 .selector-grid.icon-only .selector-tile {
     padding: 6px; /* tighter */
+}
+
+.entity-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.entity-pill {
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.entity-pill:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.entity-pill.selected {
+    background: rgba(76, 175, 80, 0.18);
+    border-color: #4caf50;
+    color: #fff;
+}
+
+.entity-pill-label {
+    white-space: nowrap;
 }
 
 .axiom-remapper-actions {

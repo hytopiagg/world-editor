@@ -1217,6 +1217,19 @@ const BlockToolsSidebar = ({
         return { metadata, previewBuf, structure };
     };
 
+    // Persistent Minecraft block mapping overrides
+    const MAPPING_STORAGE_KEY = "axiomBlockMappings";
+    const loadSavedMappings = () => {
+        try {
+            const raw = localStorage.getItem(MAPPING_STORAGE_KEY);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (_) {
+            return {};
+        }
+    };
+
     const convertStructureToTerrainMap = (structure, customMappings = {}) => {
         // Support both prismarine-nbt shape and NBTParser shape
         const getVal = (v) => (v && v.value !== undefined ? v.value : v);
@@ -1436,9 +1449,11 @@ const BlockToolsSidebar = ({
         if (!pendingBpImport) return;
 
         const { metadata, structure, file } = pendingBpImport;
+        const saved = loadSavedMappings();
+        const mergedMappings = { ...saved, ...customMappings };
         const { terrain, entities } = convertStructureToTerrainMap(
             structure,
-            customMappings
+            mergedMappings
         );
         const schematic = terrainToRelativeSchematic(terrain);
         if (entities && entities.length) {
@@ -1521,96 +1536,27 @@ const BlockToolsSidebar = ({
             // Check for unmapped blocks
             const { unmappedBlocks, blockCounts } =
                 extractUnmappedBlocks(structure);
+            // Apply saved mappings to reduce remap workload
+            const saved = loadSavedMappings();
+            const remainingUnmapped = unmappedBlocks.filter((name) => {
+                const m = saved[name];
+                if (!m) return true;
+                if (m.action === "map" && (m.id || m.targetBlockId))
+                    return false;
+                if (
+                    m.action === "entity" &&
+                    (m.entityName || m.targetEntityName)
+                )
+                    return false;
+                return true;
+            });
 
-            if (unmappedBlocks.length > 0) {
-                // Show remapper UI
-                setPendingBpImport({ metadata, structure, file: bp });
-                setUnmappedBlocks(unmappedBlocks);
-                setBlockCounts(blockCounts);
-                setShowBlockRemapper(true);
-                return;
-            }
-
-            // If no unmapped blocks, proceed with import
-            const { terrain, entities } =
-                convertStructureToTerrainMap(structure);
-            const schematic = terrainToRelativeSchematic(terrain);
-            if (entities && entities.length) {
-                schematic.entities = entities.map((e) => ({
-                    entityName: e.entityName,
-                    position: [
-                        e.position[0] - schematic.min.x,
-                        e.position[1] - schematic.min.y,
-                        e.position[2] - schematic.min.z,
-                    ],
-                    rotation: e.rotation,
-                }));
-            }
-            if (DEBUG_BP_IMPORT) {
-                console.groupCollapsed("[BP] Schematic summary");
-                const b = Object.keys(schematic.blocks || {});
-                console.log("block count:", b.length);
-                let minX = Infinity,
-                    minY = Infinity,
-                    minZ = Infinity,
-                    maxX = -Infinity,
-                    maxY = -Infinity,
-                    maxZ = -Infinity;
-                b.slice(0, 10).forEach((k) =>
-                    console.log("sample block:", k, "->", schematic.blocks[k])
-                );
-                for (const k of b) {
-                    const [x, y, z] = k.split(",").map(Number);
-                    if (x < minX) minX = x;
-                    if (y < minY) minY = y;
-                    if (z < minZ) minZ = z;
-                    if (x > maxX) maxX = x;
-                    if (y > maxY) maxY = y;
-                    if (z > maxZ) maxZ = z;
-                }
-                console.log("bbox relative:", {
-                    minX,
-                    minY,
-                    minZ,
-                    maxX,
-                    maxY,
-                    maxZ,
-                });
-                console.groupEnd();
-            }
-            const nameTag =
-                metadata &&
-                metadata.Name &&
-                (metadata.Name.value || metadata.Name);
-            const name =
-                typeof nameTag === "string" && nameTag.trim()
-                    ? nameTag
-                    : bp.name.replace(/\.bp$/i, "");
-            const entry = {
-                id: `bp-${Date.now()}`,
-                prompt: `Imported BP: ${name}`,
-                name,
-                schematic,
-                timestamp: Date.now(),
-            };
-            try {
-                await DatabaseManager.saveData(
-                    STORES.SCHEMATICS,
-                    entry.id,
-                    entry
-                );
-                window.dispatchEvent(new Event("schematicsDbUpdated"));
-            } catch (dbErr) {
-                console.warn("Failed to save schematic to DB:", dbErr);
-            }
-            try {
-                if (terrainBuilderRef?.current?.activateTool) {
-                    terrainBuilderRef.current.activateTool(
-                        "schematic",
-                        schematic
-                    );
-                }
-            } catch (_) {}
+            // Always show remapper UI, even if all blocks are auto-mapped
+            setPendingBpImport({ metadata, structure, file: bp });
+            setUnmappedBlocks(remainingUnmapped);
+            setBlockCounts(blockCounts);
+            setShowBlockRemapper(true);
+            return;
         } catch (err) {
             console.error(".bp import failed:", err);
             alert("Failed to import .bp file. See console for details.");
@@ -1631,70 +1577,27 @@ const BlockToolsSidebar = ({
             // Check for unmapped blocks
             const { unmappedBlocks, blockCounts } =
                 extractUnmappedBlocks(structure);
+            // Apply saved mappings to reduce remap workload
+            const saved = loadSavedMappings();
+            const remainingUnmapped = unmappedBlocks.filter((name) => {
+                const m = saved[name];
+                if (!m) return true;
+                if (m.action === "map" && (m.id || m.targetBlockId))
+                    return false;
+                if (
+                    m.action === "entity" &&
+                    (m.entityName || m.targetEntityName)
+                )
+                    return false;
+                return true;
+            });
 
-            if (unmappedBlocks.length > 0) {
-                // Show remapper UI
-                setPendingBpImport({ metadata, structure, file: bp });
-                setUnmappedBlocks(unmappedBlocks);
-                setBlockCounts(blockCounts);
-                setShowBlockRemapper(true);
-                return;
-            }
-
-            // If no unmapped blocks, proceed with import
-            const { terrain, entities } =
-                convertStructureToTerrainMap(structure);
-            const schematic = terrainToRelativeSchematic(terrain);
-            if (entities && entities.length) {
-                schematic.entities = entities.map((e) => ({
-                    entityName: e.entityName,
-                    position: [
-                        e.position[0] - schematic.min.x,
-                        e.position[1] - schematic.min.y,
-                        e.position[2] - schematic.min.z,
-                    ],
-                    rotation: e.rotation,
-                }));
-            }
-            if (DEBUG_BP_IMPORT) {
-                console.groupCollapsed("[BP] Schematic summary (drop)");
-                const b = Object.keys(schematic.blocks || {});
-                console.log("block count:", b.length);
-                console.groupEnd();
-            }
-            const nameTag =
-                metadata &&
-                metadata.Name &&
-                (metadata.Name.value || metadata.Name);
-            const name =
-                typeof nameTag === "string" && nameTag.trim()
-                    ? nameTag
-                    : bp.name.replace(/\.bp$/i, "");
-            const entry = {
-                id: `bp-${Date.now()}`,
-                prompt: `Imported BP: ${name}`,
-                name,
-                schematic,
-                timestamp: Date.now(),
-            };
-            try {
-                await DatabaseManager.saveData(
-                    STORES.SCHEMATICS,
-                    entry.id,
-                    entry
-                );
-                window.dispatchEvent(new Event("schematicsDbUpdated"));
-            } catch (dbErr) {
-                console.warn("Failed to save schematic to DB:", dbErr);
-            }
-            try {
-                if (terrainBuilderRef?.current?.activateTool) {
-                    terrainBuilderRef.current.activateTool(
-                        "schematic",
-                        schematic
-                    );
-                }
-            } catch (_) {}
+            // Always show remapper UI, even if all blocks are auto-mapped
+            setPendingBpImport({ metadata, structure, file: bp });
+            setUnmappedBlocks(remainingUnmapped);
+            setBlockCounts(blockCounts);
+            setShowBlockRemapper(true);
+            return;
         } catch (err) {
             console.error(".bp import failed:", err);
             alert("Failed to import .bp file. See console for details.");

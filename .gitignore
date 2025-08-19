@@ -26,3 +26,7 @@ yarn-error.log*
 bun.lockb
 bun.lock
 public/assets/models/environment/mattifest.json
+test-blueprints/*
+converted/*
+docs/minecraft-default-mappings.json
+public/assets/models/player/player copy.txt
