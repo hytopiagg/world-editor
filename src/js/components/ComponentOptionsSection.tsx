@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaSave, FaCog, FaTrash, FaCopy, FaDownload } from "react-icons/fa";
+import { FaSave, FaCog, FaTrash, FaCopy, FaDownload, FaExchangeAlt } from "react-icons/fa";
 import { saveAs } from "file-saver";
 import { getBlockById } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
@@ -18,6 +18,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [repeatPlacement, setRepeatPlacement] = useState<boolean>(false);
+    const [isRemapping, setIsRemapping] = useState(false);
 
     useEffect(() => {
         setEditableName(selectedComponent?.name || "");
@@ -124,7 +125,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
             .toString()
             .trim()
             .replace(/\s+/g, "-")
-            .replace(/[^a-zA-Z0-9-_\.]/g, "-")
+            .replace(/[^a-zA-Z0-9-_.]/g, "-")
             .replace(/-+/g, "-")
             .substring(0, 64);
     };
@@ -165,6 +166,17 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
         const json = JSON.stringify(exportEntry, null, 2);
         const blob = new Blob([json], { type: "application/json" });
         saveAs(blob, `${fileNameBase}.json`);
+    };
+
+    const handleRemap = async () => {
+        if (!selectedComponent?.schematic) return;
+        try {
+            setIsRemapping(true);
+            // Let the sidebar own the remap flow and saving a new component
+            window.dispatchEvent(new CustomEvent("requestComponentRemap", { detail: { component: selectedComponent } }));
+        } finally {
+            setIsRemapping(false);
+        }
     };
 
     const toggleRepeatPlacement = async (checked: boolean) => {
@@ -292,11 +304,14 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                 </div>
 
                 <div className="flex gap-2 justify-end items-center mt-2">
-                    <button onClick={handleDownload} className="flex items-center gap-1 px-2 py-1 text-xs hover:scale-[1.02] bg-[#0D0D0D]/80 active:translate-y-0.5 hover:bg-[#0D0D0D]/90 text-white rounded-lg transition-all cursor-pointer" title={`Download ${selectedComponent.name || "component"}`}>
-                        <FaDownload /> Download
+                    <button onClick={handleRemap} disabled={isRemapping} className="p-1.5 text-xs border border-white/10 hover:bg-white/20 rounded-md disabled:opacity-50" title="Remap Component">
+                        <FaExchangeAlt />
                     </button>
-                    <button onClick={handleDelete} className="flex items-center gap-1 px-2 py-1 text-xs hover:scale-[1.02] bg-[#0D0D0D]/80 active:translate-y-0.5 hover:bg-[#0D0D0D]/90 text-white rounded-lg transition-all cursor-pointer" title="Delete Component">
-                        <FaTrash /> Delete
+                    <button onClick={handleDownload} className="p-1.5 text-xs border border-white/10 hover:bg-white/20 rounded-md" title={`Download ${selectedComponent.name || "component"}`}>
+                        <FaDownload />
+                    </button>
+                    <button onClick={handleDelete} className="p-1.5 text-xs border border-white/10 hover:bg-white/20 rounded-md" title="Delete Component">
+                        <FaTrash />
                     </button>
                 </div>
 

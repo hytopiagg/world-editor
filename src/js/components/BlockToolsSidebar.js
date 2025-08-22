@@ -104,6 +104,7 @@ const BlockToolsSidebar = ({
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
     const schematicPreviewsRef = useRef(schematicPreviews);
+    const [selectedComponentID, setSelectedComponentID] = useState(null);
 
     // Block remapper state
     const [showBlockRemapper, setShowBlockRemapper] = useState(false);
@@ -121,6 +122,10 @@ const BlockToolsSidebar = ({
         if (savedBlockId) {
             selectedBlockID = parseInt(savedBlockId);
         }
+        try {
+            const savedComp = localStorage.getItem("selectedComponentId");
+            if (savedComp) setSelectedComponentID(savedComp);
+        } catch (_) {}
     }, []);
 
     const loadSchematicsFromDB = useCallback(async () => {
@@ -232,6 +237,17 @@ const BlockToolsSidebar = ({
     }, [activeTab, loadSchematicsFromDB]);
 
     useEffect(() => {
+        if (!selectedComponentID) return;
+        const exists = schematicList.some((s) => s.id === selectedComponentID);
+        if (!exists) {
+            setSelectedComponentID(null);
+            try {
+                localStorage.removeItem("selectedComponentId");
+            } catch (_) {}
+        }
+    }, [schematicList, selectedComponentID]);
+
+    useEffect(() => {
         if (activeTab === "environment" && initialPreviewUrl) {
             const model = environmentModels.find(
                 (m) => m.modelUrl === initialPreviewUrl
@@ -308,6 +324,70 @@ const BlockToolsSidebar = ({
     useEffect(() => {
         schematicListStateRef.current = schematicList;
     }, [schematicList]);
+
+    // Listen for explicit remap requests from the ComponentOptions UI
+    useEffect(() => {
+        const handler = (e) => {
+            try {
+                const comp = e?.detail?.component;
+                if (!comp || !comp.schematic) return;
+                const schematic = comp.schematic;
+                const blocksMeta = comp.blocksMeta || {};
+                // Build names from blocksMeta
+                const sourceIdToName = {};
+                Object.keys(blocksMeta || {}).forEach((k) => {
+                    const info = blocksMeta[k];
+                    const nm = (info && (info.name || info.id || k)) + "";
+                    sourceIdToName[k] = nm;
+                });
+                // If blocksMeta is empty, derive names from current registry
+                if (Object.keys(sourceIdToName).length === 0) {
+                    try {
+                        const reg = window.BlockTypeRegistry?.instance;
+                        const blocksObjProbe =
+                            (schematic && schematic.blocks) || schematic || {};
+                        for (const pos in blocksObjProbe) {
+                            const sidStr = String(blocksObjProbe[pos]);
+                            if (sourceIdToName[sidStr]) continue;
+                            const bt = reg?.getBlockType?.(
+                                parseInt(sidStr, 10)
+                            );
+                            if (bt?.name) sourceIdToName[sidStr] = bt.name;
+                        }
+                    } catch (_) {}
+                }
+                const blocksObj =
+                    (schematic && schematic.blocks) || schematic || {};
+                const countsByName = {};
+                for (const pos in blocksObj) {
+                    const sid = blocksObj[pos];
+                    const nm = sourceIdToName[String(sid)] || `Block_${sid}`;
+                    countsByName[nm] = (countsByName[nm] || 0) + 1;
+                }
+                const names = Object.keys(countsByName);
+                // Show remapper
+                setPendingComponentImport({
+                    file: null,
+                    name: comp.name || "Remapped Component",
+                    prompt:
+                        comp.prompt ||
+                        `Remapped Component: ${comp.name || comp.id}`,
+                    schematic,
+                    sourceIdToName,
+                    countsByName,
+                });
+                setUnmappedBlocks(names);
+                setBlockCounts(countsByName);
+                setShowBlockRemapper(true);
+            } catch (err) {
+                console.warn("Failed to start component remap: ", err);
+            }
+        };
+        window.addEventListener("requestComponentRemap", handler);
+        return () => {
+            window.removeEventListener("requestComponentRemap", handler);
+        };
+    }, []);
 
     useEffect(() => {
         const processQueue = async () => {
@@ -656,6 +736,10 @@ const BlockToolsSidebar = ({
             setSchematicPreviews({});
             setCurrentBlockType(null);
             selectedBlockID = 0;
+            setSelectedComponentID(null);
+            try {
+                localStorage.removeItem("selectedComponentId");
+            } catch (_) {}
             try {
                 terrainBuilderRef?.current?.activateTool?.(null);
             } catch (_) {}
@@ -705,6 +789,10 @@ const BlockToolsSidebar = ({
             setCurrentBlockType(null);
             selectedBlockID = 0;
             loadSchematicsFromDB();
+            setSelectedComponentID(null);
+            try {
+                localStorage.removeItem("selectedComponentId");
+            } catch (_) {}
         }
         setActiveTab(newTab);
     };
@@ -757,6 +845,10 @@ const BlockToolsSidebar = ({
             isComponent: true,
         });
         onLoadSchematicFromHistory(schematicEntry.schematic);
+        setSelectedComponentID(schematicEntry.id);
+        try {
+            localStorage.setItem("selectedComponentId", schematicEntry.id);
+        } catch (_) {}
     };
 
     // Category navigation functions
@@ -2284,7 +2376,11 @@ const BlockToolsSidebar = ({
                                 {visibleSchematics.map((entry) => (
                                     <div
                                         key={entry.id}
-                                        className="border transition-all duration-150 schematic-button bg-white/10 border-white/0 hover:border-white/20 active:border-white"
+                                        className={`border transition-all duration-150 schematic-button bg-white/10 ${
+                                            selectedComponentID === entry.id
+                                                ? "border-white"
+                                                : "border-white/0"
+                                        } hover:border-white/20 active:border-white`}
                                         style={{
                                             width: isCompactMode
                                                 ? "calc(50% - 6px)"
