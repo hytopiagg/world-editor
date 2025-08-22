@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { getBlockTypes } from "../TerrainBuilder";
 import {
     DEFAULT_BLOCK_MAPPINGS,
@@ -343,13 +343,28 @@ export const AxiomBlockRemapper = ({
     ).length;
     const totalCount = displayBlockNames.length;
 
+    const overlayRef = useRef(null);
+
+    const handleOverlayMouseDown = (e) => {
+        try {
+            if (overlayRef.current && e.target === overlayRef.current) {
+                onCancel && onCancel();
+            }
+        } catch (_) {}
+    };
+
     return (
         <div
             className="axiom-remapper-overlay"
+            ref={overlayRef}
+            onMouseDown={handleOverlayMouseDown}
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
         >
-            <div className="axiom-remapper-modal">
+            <div
+                className="axiom-remapper-modal"
+                onMouseDown={(e) => e.stopPropagation()}
+            >
                 <div className="axiom-remapper-header">
                     <h2>Remap Minecraft Blocks</h2>
                     <p className="axiom-remapper-subtitle">
