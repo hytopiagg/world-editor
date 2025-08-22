@@ -182,28 +182,28 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
         return (
             <div className="flex flex-col gap-3">
                 <div
-                    className="component-preview-container w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
+                    className="overflow-hidden relative w-full rounded-md opacity-0 duration-150 component-preview-container bg-black/20 fade-down"
                     style={{ height: isCompactMode ? "10rem" : "12rem", animationDelay: "0.05s" }}
                 >
-                    <div className="flex items-center justify-center h-full text-xs text-white/40">
+                    <div className="flex justify-center items-center h-full text-xs text-white/40">
                         No component selected
                     </div>
                 </div>
 
                 <div className="flex flex-col gap-2 pointer-events-none">
-                    <div className="flex items-center gap-2 opacity-60">
+                    <div className="flex gap-2 items-center opacity-60">
                         <label className="text-xs text-[#F1F1F1]/80 w-10">ID:</label>
                         <input type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
                     </div>
-                    <div className="flex items-center gap-2 opacity-60">
+                    <div className="flex gap-2 items-center opacity-60">
                         <label className="text-xs text-[#F1F1F1]/80 w-10">Name:</label>
                         <input style={{ width: 'calc(100% - 8px)' }} type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
                     </div>
-                    <div className="flex items-center gap-2 opacity-60">
+                    <div className="flex gap-2 items-center opacity-60">
                         <label className="text-xs text-[#F1F1F1]/80">Prompt:</label>
                         <input style={{ width: 'calc(100% - 8px)' }} type="text" disabled value="" className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
                     </div>
-                    <div className="flex items-center justify-between mt-2">
+                    <div className="flex justify-between items-center mt-2">
                         <label className="text-xs text-[#F1F1F1]">Repeat Placement</label>
                         <input disabled={false} type="checkbox" className="w-4 h-4 pointer-events-auto" checked={repeatPlacement} onChange={(e) => toggleRepeatPlacement(e.target.checked)} />
                     </div>
@@ -215,23 +215,23 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
     return (
         <div className="flex flex-col gap-3">
             <div
-                className="component-preview-container w-full bg-black/20 rounded-md overflow-hidden relative opacity-0 duration-150 fade-down"
+                className="overflow-hidden relative w-full rounded-md opacity-0 duration-150 component-preview-container bg-black/20 fade-down"
                 onWheel={(e) => e.stopPropagation()}
                 style={{ height: isCompactMode ? "10rem" : "12rem", animationDelay: "0.05s" }}
             >
                 {previewUrl ? (
                     <img src={previewUrl} alt="Component preview" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                 ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-white/50">Generating Preview...</div>
+                    <div className="flex justify-center items-center h-full text-xs text-white/50">Generating Preview...</div>
                 )}
             </div>
 
             <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                     <label className="text-xs text-[#F1F1F1]/80 w-10">ID:</label>
                     <input type="text" disabled value={selectedComponent.id} className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70" />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                     <label className="text-xs text-[#F1F1F1]/80 w-10">Name:</label>
                     {isEditing ? (
                         <input
@@ -275,7 +275,7 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                     )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                     <label className="text-xs text-[#F1F1F1]/80">Prompt:</label>
                     <input type="text" value={selectedComponent.prompt || ""} disabled className="flex-grow px-2 py-1 text-xs bg-black/20 border border-white/10 rounded-md text-[#F1F1F1]/70"
                         style={{
@@ -286,12 +286,12 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                     </button>
                 </div>
 
-                <div className="flex items-center justify-between mt-2">
+                <div className="flex justify-between items-center mt-2">
                     <label className="text-xs text-[#F1F1F1]">Repeat Placement</label>
                     <input disabled={false} type="checkbox" className="w-4 h-4 pointer-events-auto" checked={repeatPlacement} onChange={(e) => toggleRepeatPlacement(e.target.checked)} />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 mt-2">
+                <div className="flex gap-2 justify-end items-center mt-2">
                     <button onClick={handleDownload} className="flex items-center gap-1 px-2 py-1 text-xs hover:scale-[1.02] bg-[#0D0D0D]/80 active:translate-y-0.5 hover:bg-[#0D0D0D]/90 text-white rounded-lg transition-all cursor-pointer" title={`Download ${selectedComponent.name || "component"}`}>
                         <FaDownload /> Download
                     </button>
@@ -302,9 +302,9 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
 
                 <div className="flex flex-col gap-1 text-[10px] text-[#F1F1F1]/80 mt-3 bg-black/10 -mx-3 px-3 py-3 text-left fade-down opacity-0 duration-150" style={{ animationDelay: "0.1s" }}>
                     <p className="text-xs text-[#F1F1F1]/80 font-bold">Keyboard Shortcuts</p>
-                    <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">R</kbd> – Rotate schematic (90°)</div>
-                    <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">1</kbd>/<kbd className="bg-white/20 px-1 rounded">2</kbd> – Shift down / up</div>
-                    <div className="flex items-center gap-1"><kbd className="bg-white/20 px-1 rounded">Esc</kbd> – Cancel placement</div>
+                    <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">R</kbd> – Rotate schematic (90°)</div>
+                    <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">1</kbd>/<kbd className="px-1 rounded bg-white/20">2</kbd> – Shift down / up</div>
+                    <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">Esc</kbd> – Cancel placement</div>
                 </div>
             </div>
         </div>
