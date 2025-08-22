@@ -9,6 +9,7 @@ import {
     FaUpload,
     FaChevronLeft,
     FaChevronRight,
+    FaTrash,
 } from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
 import { cameraManager } from "../Camera";
@@ -18,6 +19,7 @@ import {
     blockTypes,
     getCustomBlocks,
     processCustomBlock,
+    getBlockById,
 } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
@@ -518,6 +520,150 @@ const BlockToolsSidebar = ({
         } catch (err) {
             console.error("Error saving custom.zip: ", err);
             alert("Failed to save custom.zip. See console.");
+        }
+    };
+
+    const sanitizeFileName = (name) => {
+        if (!name) return "component";
+        return name
+            .toString()
+            .trim()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-zA-Z0-9-_\.]/g, "-")
+            .replace(/-+/g, "-")
+            .substring(0, 64);
+    };
+
+    const buildBlocksMetaForSchematic = (schematic) => {
+        try {
+            const blocksObj =
+                (schematic && schematic.blocks) || schematic || {};
+            const usedIds = new Set();
+            for (const key in blocksObj) {
+                const id = blocksObj[key];
+                if (typeof id === "number") usedIds.add(id);
+            }
+            const meta = {};
+            usedIds.forEach((id) => {
+                const bt = getBlockById?.(id);
+                if (bt) {
+                    meta[id] = {
+                        id: bt.id,
+                        name: bt.name,
+                        isCustom: !!bt.isCustom,
+                        isMultiTexture: !!bt.isMultiTexture,
+                        textureUri: bt.textureUri || null,
+                        sideTextures: bt.sideTextures || null,
+                        lightLevel:
+                            typeof bt.lightLevel === "number"
+                                ? bt.lightLevel
+                                : undefined,
+                    };
+                }
+            });
+            return meta;
+        } catch (e) {
+            console.warn("Failed to build blocksMeta for schematic:", e);
+            return {};
+        }
+    };
+
+    const handleDownloadAllComponents = async () => {
+        try {
+            const zip = new JSZip();
+            const folder = zip.folder("components");
+
+            // Read all schematics directly from DB to ensure latest
+            const db = await DatabaseManager.getDBConnection();
+            const tx = db.transaction(STORES.SCHEMATICS, "readonly");
+            const store = tx.objectStore(STORES.SCHEMATICS);
+            const cursorRequest = store.openCursor();
+
+            const addFilePromises = [];
+            cursorRequest.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const entry = cursor.value;
+                    const name = sanitizeFileName(
+                        entry?.name || entry?.prompt || cursor.key
+                    );
+                    const fileName = `${name || "component"}-${
+                        cursor.key
+                    }.json`;
+                    const exportEntry = {
+                        ...entry,
+                        blocksMeta: buildBlocksMetaForSchematic(
+                            entry?.schematic
+                        ),
+                    };
+                    const json = JSON.stringify(exportEntry, null, 2);
+                    addFilePromises.push(
+                        Promise.resolve().then(() =>
+                            folder.file(fileName, json)
+                        )
+                    );
+                    cursor.continue();
+                } else {
+                    Promise.all(addFilePromises)
+                        .then(() => zip.generateAsync({ type: "blob" }))
+                        .then((blob) => saveAs(blob, "components.zip"))
+                        .catch((err) => {
+                            console.error(
+                                "Failed to build components.zip",
+                                err
+                            );
+                            alert(
+                                "Failed to build components.zip. See console."
+                            );
+                        });
+                }
+            };
+            cursorRequest.onerror = (event) => {
+                console.error(
+                    "Error iterating schematics store:",
+                    event.target.error
+                );
+                alert("Failed to read components from DB. See console.");
+            };
+        } catch (err) {
+            console.error("Error downloading all components:", err);
+            alert("Failed to download components. See console.");
+        }
+    };
+
+    const handleDeleteAllComponents = async () => {
+        const confirmed = window.confirm(
+            "Delete ALL saved components? This cannot be undone."
+        );
+        if (!confirmed) return;
+
+        try {
+            // Attempt to clear previews for known entries to avoid orphaned previews
+            if (schematicList && schematicList.length > 0) {
+                await Promise.all(
+                    schematicList.map((e) =>
+                        DatabaseManager.deleteData(STORES.PREVIEWS, e.id).catch(
+                            () => {}
+                        )
+                    )
+                );
+            }
+
+            await DatabaseManager.clearStore(STORES.SCHEMATICS);
+
+            // Reset local UI/state
+            setSchematicList([]);
+            setSchematicPreviews({});
+            setCurrentBlockType(null);
+            selectedBlockID = 0;
+            try {
+                terrainBuilderRef?.current?.activateTool?.(null);
+            } catch (_) {}
+
+            window.dispatchEvent(new Event("schematicsDbUpdated"));
+        } catch (err) {
+            console.error("Failed to delete all components:", err);
+            alert("Failed to delete all components. See console for details.");
         }
     };
 
@@ -1519,6 +1665,7 @@ const BlockToolsSidebar = ({
     const handleBlockMappingCancel = () => {
         setShowBlockRemapper(false);
         setPendingBpImport(null);
+        setPendingComponentImport(null);
         setUnmappedBlocks([]);
         setBlockCounts({});
         if (bpFileInputRef.current) {
@@ -1526,40 +1673,237 @@ const BlockToolsSidebar = ({
         }
     };
 
+    const primeNameBasedAutoMappings = (names) => {
+        try {
+            const normalize = (s) =>
+                (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+            const byNorm = new Map();
+            for (const b of blockTypes) {
+                byNorm.set(normalize(b.name), b);
+            }
+            const STORAGE_KEY = "axiomBlockMappings";
+            let saved = {};
+            try {
+                saved =
+                    JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {};
+            } catch (_) {}
+            let changed = false;
+            for (const name of names) {
+                if (saved[name]) continue; // don't override user choice
+                const match = byNorm.get(normalize(name));
+                if (match) {
+                    saved[name] = {
+                        action: "map",
+                        id: match.id,
+                        name: match.name,
+                    };
+                    changed = true;
+                }
+            }
+            if (changed)
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+        } catch (_) {}
+    };
+
+    const [pendingComponentImport, setPendingComponentImport] = useState(null);
+
+    const handleComponentJsonImport = async (file) => {
+        try {
+            const text = await file.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (parseErr) {
+                console.error("Invalid JSON in component file:", parseErr);
+                alert("Invalid JSON file.");
+                return;
+            }
+
+            const schematic = data?.schematic || (data?.blocks ? data : null);
+            if (!schematic) {
+                alert("JSON does not contain a component schematic.");
+                return;
+            }
+
+            const nameFromFile = file.name.replace(/\.[^/.]+$/, "");
+            const name = data?.name || nameFromFile || "Imported Component";
+            const blocksMeta = data?.blocksMeta || data?.blockDetails || null;
+            if (blocksMeta && typeof blocksMeta === "object") {
+                const sourceIdToName = {};
+                Object.keys(blocksMeta).forEach((k) => {
+                    const info = blocksMeta[k];
+                    const nm = (info && (info.name || info.id || k)) + "";
+                    sourceIdToName[k] = nm;
+                });
+                const blocksObj =
+                    (schematic && schematic.blocks) || schematic || {};
+                const countsByName = {};
+                for (const pos in blocksObj) {
+                    const sid = blocksObj[pos];
+                    const nm = sourceIdToName[String(sid)] || `Block_${sid}`;
+                    countsByName[nm] = (countsByName[nm] || 0) + 1;
+                }
+                const names = Object.keys(countsByName);
+                primeNameBasedAutoMappings(names);
+                setPendingComponentImport({
+                    file,
+                    name,
+                    prompt: data?.prompt || `Imported Component: ${name}`,
+                    schematic,
+                    sourceIdToName,
+                    countsByName,
+                });
+                setUnmappedBlocks(names);
+                setBlockCounts(countsByName);
+                setShowBlockRemapper(true);
+            } else {
+                const entry = {
+                    id: `comp-${Date.now()}`,
+                    prompt: data?.prompt || `Imported Component: ${name}`,
+                    name,
+                    schematic,
+                    timestamp: Date.now(),
+                };
+                try {
+                    const blocksForPreview =
+                        schematic && schematic.blocks
+                            ? schematic.blocks
+                            : schematic;
+                    const preview = await generateSchematicPreview(
+                        blocksForPreview,
+                        {
+                            width: 48,
+                            height: 48,
+                            background: "transparent",
+                        }
+                    );
+                    await DatabaseManager.saveData(
+                        STORES.PREVIEWS,
+                        entry.id,
+                        preview
+                    );
+                    setSchematicPreviews((prev) => ({
+                        ...prev,
+                        [entry.id]: preview,
+                    }));
+                } catch (previewErr) {
+                    console.warn(
+                        "Failed to generate/save preview for imported component:",
+                        previewErr
+                    );
+                }
+                await DatabaseManager.saveData(
+                    STORES.SCHEMATICS,
+                    entry.id,
+                    entry
+                );
+                window.dispatchEvent(new Event("schematicsDbUpdated"));
+            }
+        } catch (err) {
+            console.error("Failed to import component JSON:", err);
+            alert("Failed to import component JSON. See console for details.");
+        }
+    };
+
+    const handleComponentMappingConfirm = async (customMappings) => {
+        if (!pendingComponentImport) return;
+        const { name, prompt, schematic, sourceIdToName } =
+            pendingComponentImport;
+        const srcBlocks = (schematic && schematic.blocks) || schematic || {};
+        const newBlocks = {};
+        const newEntities = [];
+        for (const key in srcBlocks) {
+            const srcId = srcBlocks[key];
+            const nm = sourceIdToName[String(srcId)] || `Block_${srcId}`;
+            const m = customMappings[nm];
+            if (!m || m.action === "skip") continue;
+            if (m.action === "entity" && m.entityName) {
+                const [x, y, z] = key
+                    .split(",")
+                    .map((v) => parseInt(v, 10) || 0);
+                newEntities.push({
+                    entityName: m.entityName,
+                    position: [x, y, z],
+                    rotation: [0, 0, 0],
+                });
+            } else if (m.action === "map" && (m.id || m.targetBlockId)) {
+                const targetId = parseInt(m.id || m.targetBlockId, 10);
+                if (targetId > 0) newBlocks[key] = targetId;
+            }
+        }
+        const finalSchematic = { ...schematic, blocks: newBlocks };
+        if (newEntities.length) finalSchematic.entities = newEntities;
+        const entry = {
+            id: `comp-${Date.now()}`,
+            prompt,
+            name,
+            schematic: finalSchematic,
+            timestamp: Date.now(),
+        };
+        try {
+            const blocksForPreview = finalSchematic.blocks || finalSchematic;
+            const preview = await generateSchematicPreview(blocksForPreview, {
+                width: 48,
+                height: 48,
+                background: "transparent",
+            });
+            await DatabaseManager.saveData(STORES.PREVIEWS, entry.id, preview);
+            setSchematicPreviews((prev) => ({ ...prev, [entry.id]: preview }));
+        } catch (previewErr) {
+            console.warn(
+                "Failed to generate/save preview for mapped component:",
+                previewErr
+            );
+        }
+        try {
+            await DatabaseManager.saveData(STORES.SCHEMATICS, entry.id, entry);
+            window.dispatchEvent(new Event("schematicsDbUpdated"));
+        } catch (e) {
+            console.error("Failed to save mapped component:", e);
+        }
+        setShowBlockRemapper(false);
+        setPendingComponentImport(null);
+        setUnmappedBlocks([]);
+        setBlockCounts({});
+    };
+
     const handleBpFileInputChange = async (e) => {
         const files = Array.from(e.target.files || []);
         const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
-        if (!bp) return;
+        const json = files.find((f) => f.name.toLowerCase().endsWith(".json"));
         try {
-            const { metadata, structure } = await parseAxiomBpInBrowser(bp);
+            if (bp) {
+                const { metadata, structure } = await parseAxiomBpInBrowser(bp);
 
-            // Check for unmapped blocks
-            const { unmappedBlocks, blockCounts } =
-                extractUnmappedBlocks(structure);
-            // Apply saved mappings to reduce remap workload
-            const saved = loadSavedMappings();
-            const remainingUnmapped = unmappedBlocks.filter((name) => {
-                const m = saved[name];
-                if (!m) return true;
-                if (m.action === "map" && (m.id || m.targetBlockId))
-                    return false;
-                if (
-                    m.action === "entity" &&
-                    (m.entityName || m.targetEntityName)
-                )
-                    return false;
-                return true;
-            });
+                // Check for unmapped blocks
+                const { unmappedBlocks, blockCounts } =
+                    extractUnmappedBlocks(structure);
+                // Apply saved mappings to reduce remap workload
+                const saved = loadSavedMappings();
+                const remainingUnmapped = unmappedBlocks.filter((name) => {
+                    const m = saved[name];
+                    if (!m) return true;
+                    if (m.action === "map" && (m.id || m.targetBlockId))
+                        return false;
+                    if (
+                        m.action === "entity" &&
+                        (m.entityName || m.targetEntityName)
+                    )
+                        return false;
+                    return true;
+                });
 
-            // Always show remapper UI, even if all blocks are auto-mapped
-            setPendingBpImport({ metadata, structure, file: bp });
-            setUnmappedBlocks(remainingUnmapped);
-            setBlockCounts(blockCounts);
-            setShowBlockRemapper(true);
-            return;
+                // Always show remapper UI, even if all blocks are auto-mapped
+                setPendingBpImport({ metadata, structure, file: bp });
+                setUnmappedBlocks(remainingUnmapped);
+                setBlockCounts(blockCounts);
+                setShowBlockRemapper(true);
+            } else if (json) {
+                await handleComponentJsonImport(json);
+            }
         } catch (err) {
-            console.error(".bp import failed:", err);
-            alert("Failed to import .bp file. See console for details.");
+            console.error("Import failed:", err);
+            alert("Failed to import file. See console for details.");
         } finally {
             e.target.value = "";
         }
@@ -1570,37 +1914,40 @@ const BlockToolsSidebar = ({
         e.currentTarget.classList.remove("drag-over");
         const files = Array.from(e.dataTransfer.files || []);
         const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
-        if (!bp) return;
+        const json = files.find((f) => f.name.toLowerCase().endsWith(".json"));
         try {
-            const { metadata, structure } = await parseAxiomBpInBrowser(bp);
+            if (bp) {
+                const { metadata, structure } = await parseAxiomBpInBrowser(bp);
 
-            // Check for unmapped blocks
-            const { unmappedBlocks, blockCounts } =
-                extractUnmappedBlocks(structure);
-            // Apply saved mappings to reduce remap workload
-            const saved = loadSavedMappings();
-            const remainingUnmapped = unmappedBlocks.filter((name) => {
-                const m = saved[name];
-                if (!m) return true;
-                if (m.action === "map" && (m.id || m.targetBlockId))
-                    return false;
-                if (
-                    m.action === "entity" &&
-                    (m.entityName || m.targetEntityName)
-                )
-                    return false;
-                return true;
-            });
+                // Check for unmapped blocks
+                const { unmappedBlocks, blockCounts } =
+                    extractUnmappedBlocks(structure);
+                // Apply saved mappings to reduce remap workload
+                const saved = loadSavedMappings();
+                const remainingUnmapped = unmappedBlocks.filter((name) => {
+                    const m = saved[name];
+                    if (!m) return true;
+                    if (m.action === "map" && (m.id || m.targetBlockId))
+                        return false;
+                    if (
+                        m.action === "entity" &&
+                        (m.entityName || m.targetEntityName)
+                    )
+                        return false;
+                    return true;
+                });
 
-            // Always show remapper UI, even if all blocks are auto-mapped
-            setPendingBpImport({ metadata, structure, file: bp });
-            setUnmappedBlocks(remainingUnmapped);
-            setBlockCounts(blockCounts);
-            setShowBlockRemapper(true);
-            return;
+                // Always show remapper UI, even if all blocks are auto-mapped
+                setPendingBpImport({ metadata, structure, file: bp });
+                setUnmappedBlocks(remainingUnmapped);
+                setBlockCounts(blockCounts);
+                setShowBlockRemapper(true);
+            } else if (json) {
+                await handleComponentJsonImport(json);
+            }
         } catch (err) {
-            console.error(".bp import failed:", err);
-            alert("Failed to import .bp file. See console for details.");
+            console.error("Import failed:", err);
+            alert("Failed to import file. See console for details.");
         }
     };
 
@@ -1907,8 +2254,26 @@ const BlockToolsSidebar = ({
                             </>
                         ) : activeTab === "components" ? (
                             <>
-                                <div className="block-tools-section-label">
+                                <div className="block-tools-section-label custom-label-with-icon">
                                     Saved Components
+                                    <button
+                                        className="download-all-icon-button"
+                                        onClick={handleDownloadAllComponents}
+                                        title="Download all components"
+                                    >
+                                        {visibleSchematics.length > 0 && (
+                                            <FaDownload />
+                                        )}
+                                    </button>
+                                    <button
+                                        className="download-all-icon-button"
+                                        onClick={handleDeleteAllComponents}
+                                        title="Delete all components"
+                                    >
+                                        {visibleSchematics.length > 0 && (
+                                            <FaTrash />
+                                        )}
+                                    </button>
                                 </div>
                                 {visibleSchematics.length === 0 && (
                                     <div className="no-schematics-text">
@@ -1979,7 +2344,9 @@ const BlockToolsSidebar = ({
                                         ref={bpFileInputRef}
                                         type="file"
                                         multiple={false}
-                                        accept={".bp,application/octet-stream"}
+                                        accept={
+                                            ".bp,.json,application/octet-stream,application/json"
+                                        }
                                         onChange={handleBpFileInputChange}
                                         style={{ display: "none" }}
                                     />
@@ -2005,8 +2372,9 @@ const BlockToolsSidebar = ({
                                                 <FaUpload />
                                             </div>
                                             <div className="drop-zone-text">
-                                                Click or drag Axiom .bp to
-                                                import as terrain
+                                                Click or drag Axiom .bp or
+                                                component .json to import as
+                                                components.
                                             </div>
                                         </div>
                                     </div>
@@ -2077,7 +2445,11 @@ const BlockToolsSidebar = ({
                 <AxiomBlockRemapper
                     unmappedBlocks={unmappedBlocks}
                     blockCounts={blockCounts}
-                    onConfirmMappings={handleBlockMappingConfirm}
+                    onConfirmMappings={
+                        pendingComponentImport
+                            ? handleComponentMappingConfirm
+                            : handleBlockMappingConfirm
+                    }
                     onCancel={handleBlockMappingCancel}
                 />
             )}

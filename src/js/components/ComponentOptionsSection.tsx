@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { FaSave, FaCog, FaTrash, FaCopy } from "react-icons/fa";
+import { FaSave, FaCog, FaTrash, FaCopy, FaDownload } from "react-icons/fa";
+import { saveAs } from "file-saver";
+import { getBlockById } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
 
@@ -114,6 +116,55 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
         navigator.clipboard.writeText(selectedComponent.prompt || "").then(() => {
             // Optionally show toast
         });
+    };
+
+    const sanitizeFileName = (name: string) => {
+        if (!name) return "component";
+        return name
+            .toString()
+            .trim()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-zA-Z0-9-_\.]/g, "-")
+            .replace(/-+/g, "-")
+            .substring(0, 64);
+    };
+
+    const handleDownload = () => {
+        if (!selectedComponent) return;
+        const fileNameBase = sanitizeFileName(selectedComponent.name || selectedComponent.prompt || selectedComponent.id || "component");
+        const blocksMeta = (selectedComponent?.schematic)
+            ? (() => {
+                try {
+                    const blocks = (selectedComponent.schematic as any).blocks || selectedComponent.schematic;
+                    const ids = new Set<number>();
+                    Object.values(blocks || {}).forEach((v: any) => {
+                        if (typeof v === 'number') ids.add(v as number);
+                    });
+                    const meta: Record<string, any> = {};
+                    ids.forEach((id) => {
+                        const bt: any = (getBlockById as any)?.(id);
+                        if (bt) {
+                            meta[id] = {
+                                id: bt.id,
+                                name: bt.name,
+                                isCustom: !!bt.isCustom,
+                                isMultiTexture: !!bt.isMultiTexture,
+                                textureUri: bt.textureUri || null,
+                                sideTextures: bt.sideTextures || null,
+                                lightLevel: typeof bt.lightLevel === 'number' ? bt.lightLevel : undefined,
+                            };
+                        } else {
+                            meta[id] = { id };
+                        }
+                    });
+                    return meta;
+                } catch { return undefined; }
+            })()
+            : undefined;
+        const exportEntry = blocksMeta ? { ...selectedComponent, blocksMeta } : selectedComponent;
+        const json = JSON.stringify(exportEntry, null, 2);
+        const blob = new Blob([json], { type: "application/json" });
+        saveAs(blob, `${fileNameBase}.json`);
     };
 
     const toggleRepeatPlacement = async (checked: boolean) => {
@@ -241,6 +292,9 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                 </div>
 
                 <div className="flex items-center justify-end gap-2 mt-2">
+                    <button onClick={handleDownload} className="flex items-center gap-1 px-2 py-1 text-xs hover:scale-[1.02] bg-[#0D0D0D]/80 active:translate-y-0.5 hover:bg-[#0D0D0D]/90 text-white rounded-lg transition-all cursor-pointer" title={`Download ${selectedComponent.name || "component"}`}>
+                        <FaDownload /> Download
+                    </button>
                     <button onClick={handleDelete} className="flex items-center gap-1 px-2 py-1 text-xs hover:scale-[1.02] bg-[#0D0D0D]/80 active:translate-y-0.5 hover:bg-[#0D0D0D]/90 text-white rounded-lg transition-all cursor-pointer" title="Delete Component">
                         <FaTrash /> Delete
                     </button>
