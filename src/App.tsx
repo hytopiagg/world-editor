@@ -31,6 +31,7 @@ import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
 import PhysicsManager from './js/physics/PhysicsManager';
 import { Vector3 } from 'three';
+import DownloadElectronCTA from './js/components/DownloadElectronCTA';
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -396,7 +397,7 @@ function App() {
     const LoadingScreen = () => (
         <div className="loading-screen">
             <img
-                src={"/assets/img/hytopia_logo_white.png"}
+                src={"assets/img/hytopia_logo_white.png"}
                 alt="Hytopia Logo"
                 className="loading-logo"
             />
@@ -800,6 +801,9 @@ function App() {
                         cameraPosition={cameraPosition}
                     />
                 </Canvas>
+
+                {/* Desktop app CTA - hidden in Electron runtime */}
+                <DownloadElectronCTA hideIfElectron={true} />
 
                 {showToolbar && (
                     <ToolBar

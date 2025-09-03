@@ -34,7 +34,11 @@
         "prebuild": "node scripts/generate-model-manifest.js",
         "prestart": "node scripts/generate-model-manifest.js",
         "parse:bp": "node scripts/parse-axiom-bp.js",
-        "convert:bp": "node scripts/convert-axiom-bp-to-editor.js"
+        "convert:bp": "node scripts/convert-axiom-bp-to-editor.js",
+        "build:electron": "node scripts/generate-model-manifest.js && cross-env PUBLIC_URL=./ react-scripts build",
+        "electron:dev": "concurrently -k -r \"cross-env BROWSER=none react-scripts start\" \"wait-on tcp:3000 && electron .\"",
+        "electron:pack": "npm run build:electron && electron-builder --dir",
+        "electron:dist": "npm run build:electron && electron-builder"
     },
     "eslintConfig": {
         "extends": [
@@ -60,6 +64,44 @@
         "autoprefixer": "^10.4.21",
         "eslint": "^8",
         "postcss": "^8.5.6",
-        "tailwindcss": "^3.4.17"
+        "tailwindcss": "^3.4.17",
+        "concurrently": "^9.1.0",
+        "cross-env": "^7.0.3",
+        "electron": "^31.3.1",
+        "electron-builder": "^25.1.8",
+        "electron-is-dev": "^3.0.1",
+        "wait-on": "^7.2.0"
+    },
+    "main": "electron/main.js",
+    "build": {
+        "appId": "com.hytopia.worldeditor",
+        "artifactName": "Hytopia-World-Editor-${os}-${arch}.${ext}",
+        "extraMetadata": {
+            "main": "electron/main.js"
+        },
+        "files": [
+            "build/**/*",
+            "electron/**/*"
+        ],
+        "mac": {
+            "target": [
+                "dmg",
+                "zip"
+            ],
+            "category": "public.app-category.graphics-design"
+        },
+        "win": {
+            "target": [
+                "nsis",
+                "zip"
+            ]
+        },
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "category": "Graphics"
+        }
     }
 }

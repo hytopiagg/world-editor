@@ -8,19 +8,24 @@ const BlockButton = ({
     handleDragStart,
 }) => {
     const getTextureUrl = (blockType) => {
-        if (
-            !blockType.textureUri ||
-            blockType.textureUri.includes("error.png")
-        ) {
-            return "./assets/blocks/error.png";
-        }
-        if (blockType.isCustom) {
+        const toAbsolute = (p) => {
+            if (!p) return p;
+            if (p.startsWith("data:")) return p;
+            let rel = p;
+            if (p.startsWith("/assets/")) rel = `.${p}`;
+            if (p.startsWith("assets/")) rel = `./${p}`;
+            try {
+                return new URL(rel, window.location.href).toString();
+            } catch {
+                return rel;
+            }
+        };
 
-            return blockType.textureUri.startsWith("data:")
-                ? blockType.textureUri
-                : `/${blockType.textureUri}`;
+        if (!blockType.textureUri || blockType.textureUri.includes("error.png")) {
+            return toAbsolute("./assets/blocks/error.png");
         }
-        return `/${blockType.textureUri}`;
+        // Use as-is for custom (often data URIs) and built-ins (relative paths)
+        return toAbsolute(blockType.textureUri);
     };
     const isMissingTexture =
         !blockType.textureUri ||

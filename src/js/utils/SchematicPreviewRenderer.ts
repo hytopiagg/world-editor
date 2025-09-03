@@ -28,17 +28,26 @@ const BlockTypeRegistry: { instance?: BlockTypeRegistryInstance } | null =
 const _textureLoader = new THREE.TextureLoader();
 const _textureCache = new Map<string, Promise<THREE.Texture | null>>();
 
+function _normalizePath(path: string): string {
+    if (!path) return path as unknown as string;
+    if (path.startsWith("data:")) return path;
+    if (path.startsWith("/assets/")) return `.${path}`;
+    if (path.startsWith("assets/")) return `./${path}`;
+    return path;
+}
+
 function _loadTexture(
     path: string | undefined | null
 ): Promise<THREE.Texture | null> {
     if (!path) return Promise.resolve(null);
+    const normalized = _normalizePath(path);
 
     // Re-use in-flight / finished loads to avoid duplicate requests.
-    if (_textureCache.has(path)) return _textureCache.get(path)!; // Non-null assertion as we check with .has()
+    if (_textureCache.has(normalized)) return _textureCache.get(normalized)!; // Non-null assertion as we check with .has()
 
     const p = new Promise<THREE.Texture | null>((resolve) => {
         _textureLoader.load(
-            path,
+            normalized,
             (texture: THREE.Texture) => {
                 texture.minFilter = THREE.LinearMipMapLinearFilter;
                 texture.magFilter = THREE.NearestFilter;
@@ -48,13 +57,13 @@ function _loadTexture(
             () => {
                 // onError callback
                 console.warn(
-                    `SchematicPreviewRenderer – failed to load texture ${path}. Falling back to colour.`
+                    `SchematicPreviewRenderer – failed to load texture ${normalized}. Falling back to colour.`
                 );
                 resolve(null);
             }
         );
     });
-    _textureCache.set(path, p);
+    _textureCache.set(normalized, p);
     return p;
 }
 

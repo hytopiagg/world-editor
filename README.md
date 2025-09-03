@@ -73,6 +73,35 @@ Instead, it will copy all the configuration files and the transitive dependencie
 
 You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature.
 
+## Desktop App (Electron)
+
+The HYTOPIA World Editor is also available as a desktop app powered by Electron for improved performance, native windowing and GPU acceleration.
+
+### Download
+
+-   macOS, Windows, Linux builds are generated with `electron-builder`. Until automated releases are set up, build locally using the commands below.
+
+### Development
+
+-   Install dependencies: `bun install` (or `npm install`)
+-   Start the desktop app in dev mode:
+    -   `bun run electron:dev`
+    -   This runs the web app at `http://localhost:3000` and launches Electron to load it.
+
+### Production build
+
+-   Build the web bundle for Electron (file:// safe paths):
+    -   `bun run build:electron`
+-   Create distributables:
+    -   `bun run electron:dist`
+    -   Outputs installers in the `dist/` directory for your OS.
+
+### Notes
+
+-   The desktop build sets `PUBLIC_URL=./` so assets resolve under `file://`.
+-   Web Workers created via `new URL('...worker.js', import.meta.url)` continue to function under Electron.
+-   External links open in your default browser from the Electron app.
+
 ## Related Links
 
 -   [HYTOPIA Official Website](https://hytopia.com)

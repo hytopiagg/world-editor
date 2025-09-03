@@ -24,7 +24,6 @@ export const COORD_TO_FACE_NAME_MAP = {
  */
 class BlockTextureAtlas {
     constructor() {
-
         this._textureAtlasCanvas = document.createElement("canvas");
         this._textureAtlasCanvas.width = 512;
         this._textureAtlasCanvas.height = 512;
@@ -32,7 +31,9 @@ class BlockTextureAtlas {
 
         this._textureAtlas = new THREE.CanvasTexture(this._textureAtlasCanvas);
         // Use optimized texture settings from BlockMaterial
-        this._textureAtlas = BlockMaterial.instance.optimizeTexture(this._textureAtlas);
+        this._textureAtlas = BlockMaterial.instance.optimizeTexture(
+            this._textureAtlas
+        );
         this._textureAtlas.colorSpace = THREE.SRGBColorSpace;
 
         this._textureAtlasMetadata = new Map();
@@ -51,6 +52,17 @@ class BlockTextureAtlas {
 
         this._updateTimer = null;
     }
+    _normalizePath(src) {
+        if (!src) return src;
+        if (src.startsWith("data:")) return src;
+        if (src.startsWith("/assets/")) return `.${src}`;
+        if (src.startsWith("assets/")) return `./${src}`;
+        try {
+            return new URL(src, window.location.href).toString();
+        } catch {
+            return src;
+        }
+    }
     /**
      * Initialize the texture atlas with required textures
      * @returns {Promise<void>}
@@ -58,7 +70,6 @@ class BlockTextureAtlas {
     async initialize() {
         console.log("🧊 Initializing BlockTextureAtlas...");
         try {
-
             await this.loadTexture("./assets/blocks/error.png");
 
             const multiSidedBlockTypes = ["grass", "dirt", "stone"]; // Add more as needed
@@ -150,9 +161,7 @@ class BlockTextureAtlas {
                 }
                 try {
                     await this.loadTexture(textureUri);
-                } catch (error) {
-
-                }
+                } catch (error) {}
                 await new Promise((resolve) => setTimeout(resolve, 0));
             }
         } finally {
@@ -268,9 +277,7 @@ class BlockTextureAtlas {
                 try {
                     await this._loadTextureDirectly(fallbackPath);
                     return;
-                } catch (error) {
-
-                }
+                } catch (error) {}
             }
             await this._loadTextureDirectly(textureUri);
         }
@@ -589,7 +596,6 @@ class BlockTextureAtlas {
      */
     getMultiSidedTextureUV(blockType, blockFace, uvOffset) {
         if (!blockType || !blockFace) {
-
             const errorMetadata = this._textureAtlasMetadata.get(
                 "./assets/blocks/error.png"
             );
@@ -612,7 +618,6 @@ class BlockTextureAtlas {
         if (faceMetadata) {
             return this._calculateUVCoordinates(faceMetadata, uvOffset);
         }
-
 
         const blockTypePath = `blocks/${blockType}`;
         const blockTypeMetadata = this._textureAtlasMetadata.get(blockTypePath);
@@ -819,14 +824,12 @@ class BlockTextureAtlas {
         if (this._textureLoadFailures.has(textureUri))
             throw new Error(`Texture previously failed to load: ${textureUri}`);
 
-
         if (
             textureUri.includes("/Untitled/") ||
             textureUri.includes("/Untitled.") ||
             textureUri.includes("/test_block/") ||
             textureUri.includes("/test-block/")
         ) {
-
             const errorMetadata = this._textureAtlasMetadata.get(
                 "./assets/blocks/error.png"
             );
@@ -841,7 +844,7 @@ class BlockTextureAtlas {
         const loadPromise = new Promise((resolve, reject) => {
             const textureLoader = new THREE.TextureLoader();
             textureLoader.load(
-                textureUri,
+                this._normalizePath(textureUri),
                 (texture) => {
                     if (!texture.image)
                         return reject(
@@ -893,7 +896,9 @@ class BlockTextureAtlas {
                 undefined,
                 (error) => {
                     console.error(
-                        `Failed to load texture: ${textureUri}`,
+                        `Failed to load texture: ${this._normalizePath(
+                            textureUri
+                        )}`,
                         error
                     );
                     const errorMetadata = this._textureAtlasMetadata.get(
@@ -932,7 +937,6 @@ class BlockTextureAtlas {
             return false;
         }
         try {
-
             await this.loadTextureFromDataURI(dataUri, dataUri);
 
             const metadata = this._textureAtlasMetadata.get(dataUri);
@@ -945,7 +949,6 @@ class BlockTextureAtlas {
 
             const isNumericBlockType = !isNaN(parseInt(blockType));
             if (isNumericBlockType) {
-
                 this._textureAtlasMetadata.set(blockType, metadata);
 
                 this._textureAtlasMetadata.set(`${blockType}`, metadata);
@@ -1013,8 +1016,6 @@ class BlockTextureAtlas {
     _mapBlockIdToTexture(blockId, dataUri, metadata) {
         if (!blockId || !dataUri || !metadata) return;
         try {
-
-
             this._textureAtlasMetadata.set(blockId, metadata);
 
             if (
@@ -1022,7 +1023,6 @@ class BlockTextureAtlas {
                 blockId === "test-block" ||
                 blockId === "Untitled"
             ) {
-
                 this._textureAtlasMetadata.set("test_block", metadata);
                 this._textureAtlasMetadata.set("test-block", metadata);
                 this._textureAtlasMetadata.set("Untitled", metadata);
@@ -1044,7 +1044,6 @@ class BlockTextureAtlas {
             }
 
             if (typeof blockId === "number" || !isNaN(parseInt(blockId))) {
-
                 this._textureAtlasMetadata.set(`${blockId}`, metadata);
 
                 this._textureAtlasMetadata.set(`custom:${blockId}`, metadata);
@@ -1066,12 +1065,10 @@ class BlockTextureAtlas {
             ];
             if (typeof window !== "undefined" && window.localStorage) {
                 try {
-
                     storageKeys.forEach((key) => {
                         window.localStorage.setItem(key, dataUri);
                     });
                 } catch (e) {
-
                     console.warn("Failed to store texture in localStorage:", e);
                 }
             }

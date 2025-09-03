@@ -4,7 +4,7 @@ const UnderConstruction = () => {
         <div className="under-construction-overlay">
             <div className="under-construction-content">
                 <img
-                    src={'/assets/img/Hytopia_Tiny.png'}
+                    src={'assets/img/Hytopia_Tiny.png'}
                     alt="Hytopia Logo"
                     className="loading-logo"
                 />

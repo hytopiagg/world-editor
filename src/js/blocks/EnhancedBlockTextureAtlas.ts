@@ -312,6 +312,18 @@ export class EnhancedBlockTextureAtlas {
     /**
      * Load image from URI
      */
+    private _normalizePath(textureUri: string): string {
+        if (!textureUri) return textureUri;
+        if (textureUri.startsWith("data:")) return textureUri;
+        if (textureUri.startsWith("/assets/")) return `.${textureUri}`;
+        if (textureUri.startsWith("assets/")) return `./${textureUri}`;
+        try {
+            return new URL(textureUri, window.location.href).toString();
+        } catch {
+            return textureUri;
+        }
+    }
+
     private _loadImage(textureUri: string): Promise<HTMLImageElement> {
         return new Promise((resolve, reject) => {
             const image = new Image();
@@ -321,7 +333,7 @@ export class EnhancedBlockTextureAtlas {
             image.onerror = () =>
                 reject(new Error(`Failed to load image: ${textureUri}`));
 
-            image.src = textureUri;
+            image.src = this._normalizePath(textureUri);
         });
     }
 
@@ -377,7 +389,10 @@ export class EnhancedBlockTextureAtlas {
     /**
      * Get UV coordinates synchronously (for backward compatibility)
      */
-    getTextureUVCoordinateSync(textureUri: string, uvOffset: number[] = [0, 0]): Float32Array {
+    getTextureUVCoordinateSync(
+        textureUri: string,
+        uvOffset: number[] = [0, 0]
+    ): Float32Array {
         return this.getTextureUVCoordinate(textureUri, uvOffset);
     }
 
@@ -385,18 +400,23 @@ export class EnhancedBlockTextureAtlas {
      * Initialize essential textures
      */
     async initialize(): Promise<void> {
-        console.log('🧊 Initializing Enhanced BlockTextureAtlas...');
-        
+        console.log("🧊 Initializing Enhanced BlockTextureAtlas...");
+
         try {
             // Load essential textures
             for (const textureUri of this._essentialTextures) {
                 await this.loadTexture(textureUri);
             }
-            
-            console.log('✅ Enhanced BlockTextureAtlas initialization complete!');
-            console.log('📊 Optimization stats:', this.getOptimizationStats());
+
+            console.log(
+                "✅ Enhanced BlockTextureAtlas initialization complete!"
+            );
+            console.log("📊 Optimization stats:", this.getOptimizationStats());
         } catch (error) {
-            console.error('❌ Error initializing Enhanced BlockTextureAtlas:', error);
+            console.error(
+                "❌ Error initializing Enhanced BlockTextureAtlas:",
+                error
+            );
         }
     }
 

@@ -1,7 +1,7 @@
 
 const uiClickSound = new Audio("sounds/uiclick.ogg");
 uiClickSound.volume = 0.3;
-const placeSound = new Audio("/sounds/place.wav");
+const placeSound = new Audio("sounds/place.wav");
 placeSound.volume = 0.1;
 
 export let isMuted = localStorage.getItem("isMuted") === "true";

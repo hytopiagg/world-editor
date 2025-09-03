@@ -1,0 +1,70 @@
+.download-electron-cta {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1100;
+    pointer-events: none;
+}
+
+.download-electron-cta .cta-bubble {
+    position: relative;
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: #f1f1f1;
+    min-width: 220px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+    text-align: center;
+}
+
+.download-electron-cta .cta-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.download-electron-cta .cta-subtitle {
+    font-size: 12px;
+    opacity: 0.9;
+    margin-bottom: 10px;
+}
+
+.download-electron-cta .cta-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.download-electron-cta .cta-button {
+    appearance: none;
+    text-decoration: none;
+    background: #2563eb;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.download-electron-cta .cta-button:hover {
+    background: #1d4ed8;
+}
+
+.download-electron-cta .cta-button:active {
+    transform: translateY(1px);
+}
+
+.download-electron-cta .cta-dismiss {
+    appearance: none;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f1f1f1;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+}
