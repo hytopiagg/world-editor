@@ -23,6 +23,8 @@ import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
 import Tooltip from "./Tooltip";
+import { AxiomBlockRemapper } from "./AxiomBlockRemapper.jsx";
+import { getBlockTypes } from "../TerrainBuilder";
 
 // Enum to track which submenu is currently open
 enum SubMenuType {
@@ -86,6 +88,12 @@ const ToolBar = ({
 
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
+    const [showBlockRemapperModal, setShowBlockRemapperModal] = useState(false);
+    const [remapperData, setRemapperData] = useState<{
+        blocks: string[];
+        blockCounts: { [key: string]: number };
+        idToNameMap: { [key: string]: string };
+    }>({ blocks: [], blockCounts: {}, idToNameMap: {} });
     let startPos = {
         x: 0,
         y: 0,
@@ -372,6 +380,250 @@ const ToolBar = ({
             console.error("Error exporting map:", error);
             alert("Error exporting map. Please try again.");
         }
+    };
+
+    const handleBlockRemapper = async () => {
+        if (!terrainBuilderRef?.current?.getCurrentTerrainData) {
+            console.error("TerrainBuilder reference not available for block remapping");
+            return;
+        }
+
+        const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+        if (!terrainData) {
+            alert("No terrain data available to remap.");
+            return;
+        }
+
+        // Force texture atlas rebuild to ensure all textures are loaded
+        try {
+            const { rebuildTextureAtlas } = await import("../chunks/TerrainBuilderIntegration");
+            await rebuildTextureAtlas();
+        } catch (error) {
+            console.warn("Could not rebuild texture atlas:", error);
+        }
+
+        // Get available block types to convert IDs to names
+        const blockTypes = getBlockTypes() || [];
+        const blockTypeMap = new Map();
+
+        // Ensure block types have proper texture data loaded
+        console.log("Block remapper: Starting texture data processing for", blockTypes.length, "block types");
+
+        try {
+            const BlockTypeRegistry = (await import("../blocks/BlockTypeRegistry")).default;
+            console.log("Block remapper: BlockTypeRegistry loaded successfully, instance:", !!BlockTypeRegistry?.instance);
+
+            let textureDataLoaded = 0;
+            let textureDataMissing = 0;
+
+            for (const blockType of blockTypes) {
+                if (blockType.id) {
+                    const blockTypeAny = blockType as any;
+                    const hasInitialTextures = !!(blockTypeAny.sideTextures || blockTypeAny.textureUri);
+
+                    console.log(`Block remapper: Processing block ${blockType.id} (${blockType.name}):`, {
+                        hasInitialSideTextures: !!blockTypeAny.sideTextures,
+                        hasInitialTextureUri: !!blockTypeAny.textureUri,
+                        sideTextureKeys: blockTypeAny.sideTextures ? Object.keys(blockTypeAny.sideTextures) : [],
+                        initialTextureUri: blockTypeAny.textureUri || "none"
+                    });
+
+                    // For blocks without proper texture data, try to get it from registry
+                    if (BlockTypeRegistry?.instance && (!blockTypeAny.sideTextures || !blockTypeAny.textureUri)) {
+                        try {
+                            const registryBlock = BlockTypeRegistry.instance.getBlockType(blockType.id);
+                            if (registryBlock) {
+                                const registryBlockAny = registryBlock as any;
+                                console.log(`Block remapper: Found registry data for block ${blockType.id}:`, {
+                                    registryHasSideTextures: !!registryBlockAny.sideTextures,
+                                    registryHasTextureUri: !!registryBlockAny.textureUri,
+                                    registrySideTextureKeys: registryBlockAny.sideTextures ? Object.keys(registryBlockAny.sideTextures) : [],
+                                    registryTextureUri: registryBlockAny.textureUri || "none"
+                                });
+
+                                // Copy over texture data from registry (using any type to avoid strict typing issues)
+                                if (registryBlockAny.sideTextures && !blockTypeAny.sideTextures) {
+                                    blockTypeAny.sideTextures = registryBlockAny.sideTextures;
+                                    console.log(`Block remapper: Copied sideTextures for block ${blockType.id}:`, Object.keys(blockTypeAny.sideTextures));
+                                }
+                                if (registryBlockAny.textureUri && !blockTypeAny.textureUri) {
+                                    blockTypeAny.textureUri = registryBlockAny.textureUri;
+                                    console.log(`Block remapper: Copied textureUri for block ${blockType.id}:`, blockTypeAny.textureUri);
+                                }
+
+                                textureDataLoaded++;
+                            } else {
+                                console.warn(`Block remapper: No registry data found for block ${blockType.id} (${blockType.name})`);
+                                textureDataMissing++;
+                            }
+                        } catch (registryError) {
+                            console.error(`Block remapper: Error loading registry data for block ${blockType.id}:`, registryError);
+                            textureDataMissing++;
+                        }
+                    }
+
+                    // Ensure multi-texture blocks have proper flags set
+                    if (blockTypeAny.sideTextures && Object.keys(blockTypeAny.sideTextures).length > 1) {
+                        blockTypeAny.isMultiTexture = true;
+                        console.log(`Block remapper: Marked block ${blockType.id} as multi-texture with ${Object.keys(blockTypeAny.sideTextures).length} faces`);
+                    }
+
+                    // Log final texture state
+                    console.log(`Block remapper: Final texture state for block ${blockType.id} (${blockType.name}):`, {
+                        hasSideTextures: !!blockTypeAny.sideTextures,
+                        hasTextureUri: !!blockTypeAny.textureUri,
+                        isMultiTexture: !!blockTypeAny.isMultiTexture,
+                        sideTextureKeys: blockTypeAny.sideTextures ? Object.keys(blockTypeAny.sideTextures) : [],
+                        textureUri: blockTypeAny.textureUri || "none"
+                    });
+
+                    blockTypeMap.set(blockType.id.toString(), blockType);
+                }
+            }
+
+            console.log(`Block remapper: Texture data loading complete - Loaded: ${textureDataLoaded}, Missing: ${textureDataMissing}`);
+        } catch (importError) {
+            console.error("Block remapper: Could not import BlockTypeRegistry:", importError);
+            // Fallback: just process blocks as-is
+            blockTypes.forEach(blockType => {
+                if (blockType.id) {
+                    const blockTypeAny = blockType as any;
+                    console.log(`Block remapper: Fallback processing for block ${blockType.id} (${blockType.name}):`, {
+                        hasSideTextures: !!blockTypeAny.sideTextures,
+                        hasTextureUri: !!blockTypeAny.textureUri,
+                        sideTextureKeys: blockTypeAny.sideTextures ? Object.keys(blockTypeAny.sideTextures) : []
+                    });
+
+                    // Ensure multi-texture blocks have proper flags set
+                    if (blockTypeAny.sideTextures && Object.keys(blockTypeAny.sideTextures).length > 1) {
+                        blockTypeAny.isMultiTexture = true;
+                        console.log(`Block remapper: Fallback marked block ${blockType.id} as multi-texture`);
+                    }
+                    blockTypeMap.set(blockType.id.toString(), blockType);
+                }
+            });
+        }
+
+        // Analyze terrain to get unique block types and counts
+        const blockCounts: { [key: string]: number } = {};
+        const blockTypesSet = new Set<string>();
+        const idToNameMap: { [key: string]: string } = {};
+
+        Object.values(terrainData).forEach((blockId) => {
+            const id = parseInt(blockId as string);
+            if (id && id > 0) {
+                const blockType = blockTypeMap.get(id.toString());
+                if (blockType && blockType.name) {
+                    // Use the exact name from the block registry to ensure texture matching
+                    const blockName = blockType.name;
+                    blockCounts[blockName] = (blockCounts[blockName] || 0) + 1;
+                    blockTypesSet.add(blockName);
+                    idToNameMap[id.toString()] = blockName;
+                } else {
+                    // Fallback for unknown blocks with proper texture fallback
+                    const fallbackName = `Unknown Block (ID: ${id})`;
+                    blockCounts[fallbackName] = (blockCounts[fallbackName] || 0) + 1;
+                    blockTypesSet.add(fallbackName);
+                    idToNameMap[id.toString()] = fallbackName;
+                }
+            }
+        });
+
+        const uniqueBlocks = Array.from(blockTypesSet);
+
+        if (uniqueBlocks.length === 0) {
+            alert("No blocks found in the terrain to remap.");
+            return;
+        }
+
+        console.log("Block remapper data:", { uniqueBlocks, blockCounts, idToNameMap });
+
+        setRemapperData({
+            blocks: uniqueBlocks,
+            blockCounts: blockCounts,
+            idToNameMap: idToNameMap
+        });
+
+        setShowBlockRemapperModal(true);
+    };
+
+    const handleBlockRemapperConfirm = (mappings) => {
+        if (!terrainBuilderRef?.current?.getCurrentTerrainData || !terrainBuilderRef?.current?.updateTerrainBlocks) {
+            console.error("TerrainBuilder reference not available for block remapping");
+            return;
+        }
+
+        const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+        if (!terrainData || Object.keys(terrainData).length === 0) {
+            alert("No terrain data available to remap.");
+            return;
+        }
+
+        // Get available block types for name-to-ID conversion
+        const blockTypes = getBlockTypes() || [];
+        const nameToIdMap = new Map();
+        blockTypes.forEach(blockType => {
+            if (blockType.id && blockType.name) {
+                nameToIdMap.set(blockType.name, blockType.id.toString());
+            }
+        });
+
+        // Create reverse mapping from ID to name for current blocks
+        const { idToNameMap } = remapperData;
+
+        let remappedCount = 0;
+        const addedBlocks: { [key: string]: string | number } = {};
+        const removedBlocks: { [key: string]: string | number } = {};
+
+        // Process each block in the terrain
+        Object.entries(terrainData).forEach(([posKey, currentBlockId]) => {
+            const blockIdStr = (currentBlockId as string | number).toString();
+            const currentBlockName = idToNameMap[blockIdStr];
+
+            if (!currentBlockName) return; // Skip if we can't find the block name
+
+            const mapping = mappings[currentBlockName];
+
+            if (mapping && mapping.action === "map" && mapping.id) {
+                // Convert target block ID/name to actual ID
+                let targetBlockId = mapping.id;
+
+                // If the mapping.id is actually a block name, convert it to ID
+                if (isNaN(parseInt(mapping.id))) {
+                    targetBlockId = nameToIdMap.get(mapping.id) || mapping.id;
+                }
+
+                if (targetBlockId && targetBlockId.toString() !== blockIdStr) {
+                    // Block needs to be remapped
+                    removedBlocks[posKey] = currentBlockId as string | number;
+                    addedBlocks[posKey] = targetBlockId;
+                    remappedCount++;
+                }
+            } else if (mapping && mapping.action === "skip") {
+                // Block should be removed
+                removedBlocks[posKey] = currentBlockId as string | number;
+                remappedCount++;
+            }
+            // If action is "entity" or no mapping, leave the block as is
+        });
+
+        if (remappedCount === 0) {
+            alert("No blocks were changed based on the provided mappings.");
+        } else {
+            try {
+                // Apply the block changes
+                terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, removedBlocks, {
+                    syncPendingChanges: true
+                });
+
+                alert(`Block remapping completed! ${remappedCount} blocks were remapped.`);
+            } catch (error) {
+                console.error("Error applying block remapping:", error);
+                alert("An error occurred while remapping blocks. Check console for details.");
+            }
+        }
+
+        setShowBlockRemapperModal(false);
     };
 
     const handleRemoveHiddenBlocks = () => {
@@ -713,6 +965,18 @@ const ToolBar = ({
                                             <svg width="20" height="22" viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                 <path d="M4.19196 12.3389C3.21046 13.2979 3.26696 14.5764 4.31696 15.6149L6.55446 17.8749C5.39046 18.6169 3.14196 19.5299 2.06896 20.6034C0.390963 22.2814 0.402463 24.5414 2.11396 26.2649C3.83796 27.9769 6.09796 27.9999 7.77596 26.3219C8.86046 25.2374 9.76196 22.9889 10.504 21.8359L12.787 24.0849C13.826 25.1119 15.093 25.1689 16.063 24.1989L17.2845 22.9434C18.0605 22.1444 18.186 21.1624 17.627 20.2609C18.129 20.1354 18.597 19.8499 18.962 19.4734L24.27 14.1424C25.537 12.8874 25.503 11.3919 24.19 10.0789L15.002 0.890446C14.1795 0.0799465 13.0615 -5.3525e-05 12.2965 0.764946C11.954 1.10695 11.6915 1.59795 11.5545 2.25995C10.938 5.09095 9.69346 7.72745 8.23246 9.58845C7.98146 9.91945 7.81046 10.2384 7.73046 10.5699C6.94296 10.2499 6.12046 10.4214 5.43596 11.0949L4.19196 12.3389ZM17.3645 18.5259C16.8845 18.9939 16.4395 18.9594 15.9605 18.4689H15.949L9.80796 12.3274L9.81946 12.3164C9.37446 11.8824 9.16846 11.4029 9.80796 10.4784C11.132 8.57245 12.4445 5.95845 13.221 3.04745C13.2665 2.91095 13.3235 2.79645 13.426 2.69395C13.609 2.49995 13.86 2.44245 14.111 2.70495L19.6585 8.24145C19.362 10.1474 17.8435 12.0424 16.6795 13.2064C16.5655 13.3209 16.417 13.4804 16.5995 13.6634C17.1705 14.2339 20.5945 11.7799 21.9875 10.5814L22.7975 11.3804C23.3455 11.9284 23.357 12.5219 22.866 13.0124L17.3645 18.5259ZM5.73296 13.4234L6.52046 12.6474C6.87446 12.3049 7.34246 12.2934 7.70746 12.6699L15.721 20.6949C16.075 21.0714 16.086 21.5049 15.7325 21.8589L14.979 22.6464C14.614 23.0114 14.1575 23.0004 13.792 22.6239L10.9155 19.7589C10.516 19.3479 10.0595 19.5074 9.64846 20.0439C8.81546 21.2309 7.41146 24.2219 6.57846 25.0439C5.59646 26.0024 4.29496 26.0249 3.32496 25.0549C2.35496 24.0849 2.36596 22.7719 3.33646 21.8019C4.15796 20.9799 7.14846 19.5644 8.34746 18.7314C8.87246 18.3204 9.04346 17.8639 8.62096 17.4644L5.75596 14.6104C5.39096 14.2569 5.37946 13.7774 5.73346 13.4234M4.08946 24.3014C4.46646 24.6664 5.01446 24.6664 5.37946 24.3014C5.74446 23.9134 5.73346 23.3769 5.37946 23.0114C5.00296 22.6464 4.44346 22.6349 4.08946 23.0114C3.74746 23.3999 3.72446 23.9249 4.08946 24.3014Z" fill="currentColor" />
                                             </svg>
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip text="Remap All Blocks">
+                                        <button
+                                            className="w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up whitespace-nowrap"
+                                            style={{ animationDelay: '0.1s' }}
+                                            onClick={async () => {
+                                                await handleBlockRemapper();
+                                                setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
+                                            }}
+                                        >
+                                            Remap Blocks
                                         </button>
                                     </Tooltip>
                                 </div>
@@ -1272,6 +1536,14 @@ const ToolBar = ({
                         setShowMinecraftImportModal(false);
                     }}
                     terrainBuilderRef={terrainBuilderRef}
+                />
+            )}
+            {showBlockRemapperModal && (
+                <AxiomBlockRemapper
+                    unmappedBlocks={remapperData.blocks}
+                    blockCounts={remapperData.blockCounts}
+                    onConfirmMappings={handleBlockRemapperConfirm}
+                    onCancel={() => setShowBlockRemapperModal(false)}
                 />
             )}
         </>

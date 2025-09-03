@@ -366,9 +366,9 @@ export const AxiomBlockRemapper = ({
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 <div className="axiom-remapper-header">
-                    <h2>Remap Minecraft Blocks</h2>
+                    <h2>Remap Blocks</h2>
                     <p className="axiom-remapper-subtitle">
-                        Found {totalCount} unique block types in this blueprint
+                        Found {totalCount} unique block types in this map
                     </p>
                 </div>
 
@@ -649,7 +649,7 @@ export const AxiomBlockRemapper = ({
                         Cancel
                     </button>
                     <button className="btn-confirm" onClick={handleConfirm}>
-                        Import with Mappings
+                        Apply Remapping
                     </button>
                 </div>
             </div>
