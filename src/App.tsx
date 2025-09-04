@@ -3,6 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Vector3 } from 'three';
 import "./css/App.css";
 import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
@@ -13,6 +14,7 @@ import BlockToolsSidebar, {
     refreshBlockTools,
 } from "./js/components/BlockToolsSidebar";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
+import QuickTips from './js/components/QuickTips';
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import ToolBar from "./js/components/ToolBar";
 import UnderConstruction from "./js/components/UnderConstruction";
@@ -26,12 +28,11 @@ import {
 import { DatabaseManager, STORES } from "./js/managers/DatabaseManager";
 import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
-import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
-import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
-import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
 import PhysicsManager from './js/physics/PhysicsManager';
-import { Vector3 } from 'three';
-import DownloadElectronCTA from './js/components/DownloadElectronCTA';
+import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
+import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
+import { isElectronRuntime } from './js/utils/env';
+import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 
 function App() {
     const undoRedoManagerRef = useRef(null);
@@ -651,7 +652,8 @@ function App() {
 
                 <GlobalLoadingScreen />
 
-                {/* QuickTips removed per UX update */}
+                {/* Show QuickTips only on web (not Electron) and after initial load */}
+                {!isElectronRuntime() && pageIsLoaded && <QuickTips />}
 
                 <UndoRedoManager
                     ref={undoRedoManagerRef}
@@ -802,8 +804,7 @@ function App() {
                     />
                 </Canvas>
 
-                {/* Desktop app CTA - hidden in Electron runtime */}
-                <DownloadElectronCTA hideIfElectron={true} />
+                {/* Desktop app CTA removed in favor of QuickTips when on web */}
 
                 {showToolbar && (
                     <ToolBar

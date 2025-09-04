@@ -13,7 +13,7 @@ class QuickTipsManager {
      * Set the current tool tip text
      * @param {string} tipText - The tooltip text to display
      */
-    static setToolTip(tipText) {
+    static setToolTip(tipText: string) {
         QuickTipsManager.currentTip = tipText;
 
         QuickTipsManager.listeners.forEach((listener) => {
@@ -39,14 +39,14 @@ class QuickTipsManager {
      * Get the current tool tip text
      * @returns {string} The current tooltip text
      */
-    static getToolTip() {
+    static getToolTip(): string {
         return QuickTipsManager.currentTip;
     }
     /**
      * Add a listener function to be called when the tip changes
      * @param {Function} listener - Function to call with the new tip text
      */
-    static addListener(listener) {
+    static addListener(listener: (tip: string) => void) {
         if (typeof listener === "function") {
             QuickTipsManager.listeners.push(listener);
         }
@@ -55,7 +55,7 @@ class QuickTipsManager {
      * Remove a previously added listener
      * @param {Function} listener - The listener to remove
      */
-    static removeListener(listener) {
+    static removeListener(listener: (tip: string) => void) {
         QuickTipsManager.listeners = QuickTipsManager.listeners.filter(
             (l) => l !== listener
         );
