@@ -9,6 +9,8 @@ function UndoRedoManager(
 ) {
 
     const [isInitialized, setIsInitialized] = React.useState(false);
+    const [hasUndo, setHasUndo] = React.useState(false);
+    const [hasRedo, setHasRedo] = React.useState(false);
 
     React.useEffect(() => {
         const checkDatabase = async () => {
@@ -31,6 +33,17 @@ function UndoRedoManager(
                         "UndoRedoManager: Creating empty undo states array"
                     );
                     await DatabaseManager.saveData(STORES.UNDO, "states", []);
+                }
+
+                // Initialize flags
+                try {
+                    const redoStates =
+                        (await DatabaseManager.getData(STORES.REDO, "states")) || [];
+                    setHasUndo(Array.isArray(undoStates) && undoStates.length > 0);
+                    setHasRedo(Array.isArray(redoStates) && redoStates.length > 0);
+                } catch (_) {
+                    setHasUndo(Array.isArray(undoStates) && undoStates.length > 0);
+                    setHasRedo(false);
                 }
 
                 setIsInitialized(true);
@@ -91,50 +104,17 @@ function UndoRedoManager(
                 }
                 return handleRedo();
             },
-        }),
-        [isInitialized]
+            canUndo: () => {
+                if (!isInitialized) return false;
+                return hasUndo;
+            },
+            canRedo: () => {
+                if (!isInitialized) return false;
+                return hasRedo;
+            },
+        })
     );
-    const applyStates = async (states, initialTerrain, initialEnvironment) => {
-        let newTerrain = { ...initialTerrain };
-        let newEnvironment = [...initialEnvironment];
-        for (const state of states) {
 
-            if (state.terrain) {
-
-                Object.keys(state.terrain.removed || {}).forEach((key) => {
-                    delete newTerrain[key];
-                });
-
-                Object.entries(state.terrain.added || {}).forEach(
-                    ([key, value]) => {
-                        newTerrain[key] = value;
-                    }
-                );
-            }
-
-            if (state.environment?.added || state.environment?.removed) {
-
-                newEnvironment = newEnvironment.filter(
-                    (obj) =>
-                        !(state.environment.removed || []).some(
-                            (removed) =>
-                                removed.modelUrl === obj.modelUrl &&
-                                Math.abs(removed.position.x - obj.position.x) <
-                                0.001 &&
-                                Math.abs(removed.position.y - obj.position.y) <
-                                0.001 &&
-                                Math.abs(removed.position.z - obj.position.z) <
-                                0.001
-                        )
-                );
-
-                if (Array.isArray(state.environment.added)) {
-                    newEnvironment.push(...state.environment.added);
-                }
-            }
-        }
-        return { newTerrain, newEnvironment };
-    };
 
     const undo = async () => {
         try {
@@ -193,6 +173,11 @@ function UndoRedoManager(
                 );
                 throw dbError;
             }
+            // Update flags
+            try {
+                setHasUndo(remainingUndo.length > 0);
+                setHasRedo(true);
+            } catch (_) { }
             console.log("Undo operation completed successfully");
             return currentUndo;
         } catch (error) {
@@ -232,6 +217,11 @@ function UndoRedoManager(
                     ...undoStates,
                 ]),
             ]);
+            // Update flags
+            try {
+                setHasUndo(true);
+                setHasRedo(remainingRedo.length > 0);
+            } catch (_) { }
             return currentRedo;
         } catch (error) {
             console.error("Error during redo:", error);
@@ -793,6 +783,9 @@ function UndoRedoManager(
                 );
                 throw saveError;
             }
+            // Update flags
+            setHasUndo(true);
+            setHasRedo(false);
             console.log("=== UNDO STATE SAVED ===");
         } catch (error) {
             console.error("Error saving undo state:", error);

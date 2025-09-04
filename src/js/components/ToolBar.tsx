@@ -685,14 +685,13 @@ const ToolBar = ({
     };
 
     useEffect(() => {
-        const manager = undoRedoManager?.current;
-        if (!manager) return;
-
         const update = () => {
+            const manager = undoRedoManager?.current;
             setCanUndo(!!manager?.canUndo?.());
             setCanRedo(!!manager?.canRedo?.());
         };
-
+        // Run once immediately, then on interval
+        update();
         const interval = setInterval(update, 500);
         return () => clearInterval(interval);
     }, [undoRedoManager]);
