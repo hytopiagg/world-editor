@@ -432,6 +432,7 @@ const AIAssistantPanel = ({
                 <HCaptcha
                     ref={hCaptchaRef}
                     sitekey={
+                        (typeof window !== "undefined" && (window as any).WorldEditorEnv?.hcaptchaSiteKey) ||
                         process.env.REACT_APP_HCAPTCHA_SITE_KEY ||
                         "10000000-ffff-ffff-ffff-000000000001"
                     } // Fallback for local dev if .env is missing

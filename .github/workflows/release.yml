@@ -1,0 +1,47 @@
+name: Build and Release Desktop Apps
+
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Release version (e.g., 0.2.0)"
+                required: false
+    push:
+        tags:
+            - "v*"
+
+jobs:
+    release:
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [macos-latest, windows-latest, ubuntu-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 18
+
+            - name: Install dependencies
+              run: |
+                  npm ci
+
+            - name: Build web bundle
+              run: |
+                  npm run build:electron
+
+            - name: Build distributables
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  if [ "${{ runner.os }}" = "macOS" ]; then
+                    npx electron-builder --mac universal --publish always
+                  elif [ "${{ runner.os }}" = "Windows" ]; then
+                    npx electron-builder --win nsis zip --x64 --arm64 --publish always
+                  else
+                    npx electron-builder --linux AppImage deb --x64 --publish always
+                  fi

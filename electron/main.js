@@ -1,13 +1,28 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 const path = require("path");
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, Menu } = require("electron");
+let updateElectronApp;
+try {
+    updateElectronApp = require("update-electron-app").updateElectronApp;
+} catch (_) {
+    updateElectronApp = null;
+}
 const isDev = process.env.ELECTRON_IS_DEV === "1" || !app.isPackaged;
+const REMOTE_URL = process.env.WE_REMOTE_URL || "https://build.hytopia.com";
+const PREFER_REMOTE = process.env.WE_PREFER_REMOTE !== "0"; // default: prefer remote with fallback
 
 // Performance-oriented flags (safe defaults)
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
+app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("enable-accelerated-2d-canvas");
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+app.commandLine.appendSwitch("enable-zero-copy");
+app.commandLine.appendSwitch("enable-native-gpu-memory-buffers");
 app.commandLine.appendSwitch("ignore-gpu-blacklist");
+app.commandLine.appendSwitch("v8-cache-options", "code");
+app.commandLine.appendSwitch("js-flags", "--max-old-space-size=4096");
 app.commandLine.appendSwitch(
     "enable-features",
     [
@@ -17,6 +32,17 @@ app.commandLine.appendSwitch(
         "WebAssemblyTiering",
     ].join(",")
 );
+
+// Platform-specific hints
+if (process.platform === "darwin") {
+    app.commandLine.appendSwitch("use-angle", "metal");
+}
+if (process.platform === "win32") {
+    app.commandLine.appendSwitch("force_high_performance_gpu");
+}
+if (process.platform === "linux") {
+    app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+}
 
 if (isDev) {
     process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
@@ -41,6 +67,7 @@ function createMainWindow() {
             nodeIntegration: false,
             backgroundThrottling: false,
             webgl: true,
+            devTools: isDev,
         },
     });
 
@@ -48,24 +75,76 @@ function createMainWindow() {
         mainWindow.show();
     });
 
-    // Open external links in the user's browser
+    // Disable zoom/scale gestures in app
+    try {
+        mainWindow.webContents.setVisualZoomLevelLimits(1, 1);
+    } catch {}
+
+    // Hide menu in production on Windows
+    if (!isDev && process.platform === "win32") {
+        try {
+            Menu.setApplicationMenu(null);
+        } catch {}
+    }
+
+    // Open external links in the user's browser; keep only local in-app
+    const isAllowedInApp = (url) => {
+        if (url.startsWith("file://")) return true;
+        if (isDev && url.startsWith("http://localhost")) return true;
+        if (url.startsWith(REMOTE_URL)) return true;
+        if (
+            url.startsWith("https://hcaptcha.com") ||
+            url.startsWith("https://*.hcaptcha.com") ||
+            url.includes("hcaptcha.com")
+        )
+            return true;
+        return false;
+    };
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (isAllowedInApp(url)) return { action: "allow" };
         shell.openExternal(url);
         return { action: "deny" };
     });
     mainWindow.webContents.on("will-navigate", (event, url) => {
-        const isLocal =
-            url.startsWith("http://localhost") || url.startsWith("file://");
-        if (!isLocal) {
+        if (!isAllowedInApp(url)) {
             event.preventDefault();
             shell.openExternal(url);
         }
     });
 
-    const startURL = isDev
-        ? "http://localhost:3000"
-        : `file://${path.resolve(__dirname, "..", "build", "index.html")}`;
-    mainWindow.loadURL(startURL);
+    const localFallback = `file://${path.resolve(
+        __dirname,
+        "..",
+        "build",
+        "index.html"
+    )}`;
+
+    if (isDev) {
+        mainWindow.loadURL("http://localhost:3000");
+    } else if (PREFER_REMOTE) {
+        let finished = false;
+        const timer = setTimeout(() => {
+            if (!finished) {
+                try {
+                    mainWindow.loadURL(localFallback);
+                } catch (_) {}
+            }
+        }, 8000);
+        mainWindow.webContents.once("did-finish-load", () => {
+            finished = true;
+            clearTimeout(timer);
+        });
+        mainWindow.webContents.once("did-fail-load", () => {
+            finished = true;
+            clearTimeout(timer);
+            try {
+                mainWindow.loadURL(localFallback);
+            } catch (_) {}
+        });
+        mainWindow.loadURL(REMOTE_URL);
+    } else {
+        mainWindow.loadURL(localFallback);
+    }
 
     mainWindow.on("closed", () => {
         mainWindow = null;
@@ -73,6 +152,16 @@ function createMainWindow() {
 }
 
 app.whenReady().then(() => {
+    // Production auto-update
+    try {
+        if (updateElectronApp && app.isPackaged) {
+            updateElectronApp({
+                repo: "hytopiagg/desktop-releases",
+                updateInterval: "1 hour",
+                logger: undefined,
+            });
+        }
+    } catch (_) {}
     createMainWindow();
 
     app.on("activate", () => {
