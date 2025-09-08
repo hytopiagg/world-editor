@@ -374,7 +374,10 @@ export class DatabaseManager {
             const tx = db.transaction(STORES.PROJECTS, "readonly");
             const store = tx.objectStore(STORES.PROJECTS);
             const req = store.getAll();
-            req.onsuccess = () => resolve(req.result || []);
+            req.onsuccess = () => {
+                const list = (req.result || []).map((p: any) => ({ ...p }));
+                resolve(list);
+            };
             req.onerror = () => resolve([]);
         });
     }

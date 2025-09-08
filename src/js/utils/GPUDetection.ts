@@ -213,7 +213,7 @@ export function detectGPU(forceRefresh = false): GPUInfo {
 
     // Only log comprehensive info once when first detected or when forced
     const isFirstDetection = !cachedGPUInfo;
-    
+
     // Cache the result
     cachedGPUInfo = {
         vendor,
@@ -344,7 +344,8 @@ export function getOptimalContextAttributes(
         alpha: false,
         depth: true,
         stencil: false,
-        preserveDrawingBuffer: false,
+        // Enable readback for thumbnail capture (Project Home previews)
+        preserveDrawingBuffer: true,
         premultipliedAlpha: true,
         failIfMajorPerformanceCaveat: false,
         desynchronized: gpuInfo.supportsWebGL2, // Only for WebGL2

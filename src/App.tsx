@@ -31,6 +31,7 @@ import { loadingManager } from "./js/managers/LoadingManager";
 import UndoRedoManager from "./js/managers/UndoRedoManager";
 import PhysicsManager from './js/physics/PhysicsManager';
 import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
+import { updateChunkSystemCamera, processChunkRenderQueue, getChunkSystem } from "./js/chunks/TerrainBuilderIntegration";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { isElectronRuntime } from './js/utils/env';
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
@@ -49,15 +50,11 @@ function App() {
                 try {
                     if (terrainBuilderRef.current) {
                         await terrainBuilderRef.current.saveTerrainManually();
-                        try {
-                            const canvas: any = document.querySelector('canvas');
-                            if (canvas && typeof canvas.toDataURL === 'function') {
-                                // Downscale thumbnail for ProjectHome
-                                const url = canvas.toDataURL('image/jpeg', 0.75);
-                                const pid = DatabaseManager.getCurrentProjectId();
-                                await DatabaseManager.saveProjectThumbnail(pid, url);
-                            }
-                        } catch (_) { }
+                        const url = await generateWorldThumbnail();
+                        if (url) {
+                            const pid = DatabaseManager.getCurrentProjectId();
+                            await DatabaseManager.saveProjectThumbnail(pid, url);
+                        }
                     }
                     if (environmentBuilderRef.current) {
                         await environmentBuilderRef.current.updateLocalStorage();
@@ -118,6 +115,34 @@ function App() {
             terrainBuilderRef.current.updateGridSize(gridSize);
         }
     }, [gridSize, terrainBuilderRef.current?.updateGridSize]);
+
+    // Capture a thumbnail from a reset camera angle, then restore camera
+    const generateWorldThumbnail = async (): Promise<string | null> => {
+        try {
+            const container = document.querySelector('.canvas-container') as HTMLElement | null;
+            const canvas: any = (container && container.querySelector('canvas')) || null;
+            if (!canvas || typeof canvas.toDataURL !== 'function') return null;
+            const prev = cameraManager.getCameraState?.() || null;
+            let prevJson: string | null = null;
+            try { prevJson = prev ? JSON.stringify(prev) : null; } catch (_) { prevJson = null; }
+            try { cameraManager.resetCamera?.(); } catch (_) { }
+            try {
+                updateChunkSystemCamera((cameraManager as any).camera);
+                console.info('[Thumb] Camera reset + bound for thumbnail', { hasContainer: !!container, foundCanvas: !!canvas });
+            } catch (e) { console.warn('[Thumb] Failed to bind camera', e); }
+            try { if (getChunkSystem()) { processChunkRenderQueue(); } } catch (e) { console.warn('[Thumb] Failed to process render queue', e); }
+            await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+            const url = canvas.toDataURL('image/jpeg', 0.9);
+            if (prevJson) {
+                try {
+                    localStorage.setItem('cameraState', prevJson);
+                    cameraManager.loadSavedState?.();
+                    cameraManager.saveState?.();
+                } catch (_) { }
+            }
+            return url;
+        } catch (_) { return null; }
+    };
 
     // Load and apply saved skybox when page is loaded (one time only)
     useEffect(() => {
@@ -263,14 +288,11 @@ function App() {
                 try {
                     if (terrainBuilderRef.current) {
                         await terrainBuilderRef.current.saveTerrainManually();
-                        try {
-                            const canvas: any = document.querySelector('canvas');
-                            if (canvas && typeof canvas.toDataURL === 'function') {
-                                const url = canvas.toDataURL('image/jpeg', 0.75);
-                                const pid = DatabaseManager.getCurrentProjectId();
-                                await DatabaseManager.saveProjectThumbnail(pid, url);
-                            }
-                        } catch (_) { }
+                        const url = await generateWorldThumbnail();
+                        if (url) {
+                            const pid = DatabaseManager.getCurrentProjectId();
+                            await DatabaseManager.saveProjectThumbnail(pid, url);
+                        }
                     }
 
                     if (environmentBuilderRef.current) {
