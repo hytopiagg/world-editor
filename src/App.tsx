@@ -125,6 +125,15 @@ function App() {
             const prev = cameraManager.getCameraState?.() || null;
             let prevJson: string | null = null;
             try { prevJson = prev ? JSON.stringify(prev) : null; } catch (_) { prevJson = null; }
+            // Hide preview/highlight UI while capturing
+            let oldPreviewVisible: boolean | undefined;
+            try {
+                const tb = terrainBuilderRef.current;
+                if (tb && tb.previewPositionRef !== undefined) {
+                    oldPreviewVisible = (window as any).__WE_PREVIEW_VISIBLE__;
+                    (window as any).__WE_PREVIEW_VISIBLE__ = false;
+                }
+            } catch (_) { }
             try { cameraManager.resetCamera?.(); } catch (_) { }
             try {
                 updateChunkSystemCamera((cameraManager as any).camera);
@@ -140,6 +149,8 @@ function App() {
                     cameraManager.saveState?.();
                 } catch (_) { }
             }
+            // Restore preview visibility
+            try { (window as any).__WE_PREVIEW_VISIBLE__ = oldPreviewVisible; } catch (_) { }
             return url;
         } catch (_) { return null; }
     };

@@ -273,14 +273,14 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                             <div style={styles.cardTitle}>{p.name || "Untitled"}</div>
                                             <div style={styles.metaRow}>{formatLastEdited(p.updatedAt || p.createdAt)}</div>
                                         </div>
-                                        <div className="ph-menu" style={{ position: 'relative', transform: 'none' }} onClick={(e) => e.stopPropagation()}>
+                                        <div className="ph-menu" style={{ position: 'relative', transform: 'none', width: 28, height: 28, display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
                                             <button
                                                 onClick={(e) => {
                                                     const btn = e.currentTarget as HTMLButtonElement;
                                                     const menu = btn.nextElementSibling as HTMLDivElement;
                                                     if (menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
                                                 }}
-                                                style={{ ...styles.ellipsisBtn, display: hoveredId === p.id ? 'inline-flex' : 'none' } as any}
+                                                style={{ ...styles.ellipsisBtn, opacity: hoveredId === p.id ? 1 : 0, pointerEvents: hoveredId === p.id ? 'auto' : 'none' } as any}
                                             >
                                                 ⋮
                                             </button>

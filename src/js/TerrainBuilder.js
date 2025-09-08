@@ -4022,7 +4022,8 @@ function TerrainBuilder(
                 <meshPhongMaterial transparent opacity={0} />
             </mesh>
             <gridHelper position={[0.5, -0.5, 0.5]} ref={gridRef} />
-            {previewPosition &&
+            {window.__WE_PREVIEW_VISIBLE__ !== false &&
+                previewPosition &&
                 (modeRef.current === "add" || modeRef.current === "remove") && (
                     <group>
                         {getPlacementPositions(
