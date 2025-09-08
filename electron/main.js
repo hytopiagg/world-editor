@@ -2,6 +2,12 @@
 // @ts-nocheck
 const path = require("path");
 const { app, BrowserWindow, shell, Menu } = require("electron");
+let DiscordClient;
+try {
+    DiscordClient = require("@xhayper/discord-rpc").Client;
+} catch (_) {
+    DiscordClient = null;
+}
 let updateElectronApp;
 try {
     updateElectronApp = require("update-electron-app").updateElectronApp;
@@ -49,6 +55,7 @@ if (isDev) {
 }
 
 let mainWindow;
+let discordClient = null;
 
 function createMainWindow() {
     mainWindow = new BrowserWindow({
@@ -145,6 +152,33 @@ function createMainWindow() {
     } else {
         mainWindow.loadURL(localFallback);
     }
+
+    // Minimal Discord Rich Presence
+    try {
+        if (!discordClient && DiscordClient && app.isPackaged) {
+            const clientId =
+                process.env.DISCORD_APP_ID || "1178178779814834258";
+            discordClient = new DiscordClient({ clientId });
+            discordClient.on("ready", () => {
+                try {
+                    discordClient.user.setActivity({
+                        applicationId: clientId,
+                        name: "HYTOPIA World Editor",
+                        details: "Building a world",
+                        type: 0,
+                        buttons: [
+                            { label: "Open Editor", url: REMOTE_URL },
+                            {
+                                label: "Join Discord",
+                                url: "https://discord.gg/hytopia",
+                            },
+                        ],
+                    });
+                } catch (_) {}
+            });
+            discordClient.login().catch(() => {});
+        }
+    } catch (_) {}
 
     mainWindow.on("closed", () => {
         mainWindow = null;
