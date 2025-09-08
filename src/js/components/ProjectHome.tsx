@@ -18,6 +18,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     const [newName, setNewName] = useState("");
     const [query, setQuery] = useState("");
     const [hoveredId, setHoveredId] = useState<string | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ id: string | null; x: number; y: number; open: boolean }>({ id: null, x: 0, y: 0, open: false });
 
     const refresh = async () => {
         setLoading(true);
@@ -44,6 +45,16 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     useEffect(() => {
         refresh();
     }, []);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (contextMenu.open) {
+                e.preventDefault();
+            }
+        };
+        window.addEventListener('contextmenu', handler, { capture: true } as any);
+        return () => window.removeEventListener('contextmenu', handler as any, { capture: true } as any);
+    }, [contextMenu.open]);
 
     const handleCreate = async (nameOverride?: string) => {
         const nameToUse = (nameOverride ?? newName).trim();
@@ -249,9 +260,22 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             <div
                                 key={p.id}
                                 style={styles.card}
+                                data-pid={p.id}
                                 onClick={() => handleOpen(p.id)}
                                 onMouseEnter={() => setHoveredId(p.id)}
                                 onMouseLeave={() => setHoveredId(null)}
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    // Close any inline menus when global context menu opens
+                                    try {
+                                        document.querySelectorAll('.ph-inline-menu').forEach((el) => {
+                                            (el as HTMLElement).style.display = 'none';
+                                        });
+                                    } catch (_) { }
+                                    // Always reposition and open the menu at the new cursor location
+                                    setContextMenu({ id: p.id, x: e.clientX, y: e.clientY, open: false });
+                                    requestAnimationFrame(() => setContextMenu({ id: p.id, x: e.clientX, y: e.clientY, open: true }));
+                                }}
                             >
                                 <div
                                     style={{
@@ -262,9 +286,9 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                     }}
                                 >
                                     {p.thumbnailDataUrl ? (
-                                        <img src={p.thumbnailDataUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                        <img src={p.thumbnailDataUrl} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                                     ) : (
-                                        <div style={styles.placeholderThumb}>No Thumbnail</div>
+                                        <div style={{ ...styles.placeholderThumb, position: 'absolute', inset: 0 }}>No Thumbnail</div>
                                     )}
                                 </div>
                                 <div style={styles.cardBody}>
@@ -277,6 +301,14 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                             <button
                                                 onClick={(e) => {
                                                     const btn = e.currentTarget as HTMLButtonElement;
+                                                    // Close any open right-click menu
+                                                    setContextMenu({ id: null, x: 0, y: 0, open: false });
+                                                    // Close other inline menus
+                                                    try {
+                                                        document.querySelectorAll('.ph-inline-menu').forEach((el) => {
+                                                            (el as HTMLElement).style.display = 'none';
+                                                        });
+                                                    } catch (_) { }
                                                     const menu = btn.nextElementSibling as HTMLDivElement;
                                                     if (menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
                                                 }}
@@ -284,21 +316,36 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                             >
                                                 ⋮
                                             </button>
-                                            <div style={styles.menu as any} onClick={(e) => e.stopPropagation()}>
-                                                <button style={styles.menuItem as any} onClick={async () => {
-                                                    const name = window.prompt('Rename project', p.name || 'Untitled');
+                                            <div className="ph-inline-menu" style={styles.menu as any} onClick={(e) => e.stopPropagation()}>
+                                                <button style={styles.menuItem as any} onClick={async (evt) => {
+                                                    const raw = window.prompt('Rename project', p.name || 'Untitled');
+                                                    if (raw === null) return;
+                                                    const name = (raw || '').trim();
                                                     if (!name) return;
+                                                    console.log('[ProjectHome] Inline rename start', { id: p.id, prev: p.name, next: name });
                                                     try {
                                                         const db = await (DatabaseManager as any).getConnection();
                                                         await new Promise<void>((resolve) => {
-                                                            const tx = db.transaction((DatabaseManager as any).STORES.PROJECTS, 'readwrite');
-                                                            const store = tx.objectStore((DatabaseManager as any).STORES.PROJECTS);
+                                                            const tx = db.transaction(STORES.PROJECTS, 'readwrite');
+                                                            tx.onerror = (e) => console.warn('[ProjectHome] Inline rename TX error', (e as any)?.target?.error);
+                                                            const store = tx.objectStore(STORES.PROJECTS);
                                                             const next = { ...p, name, updatedAt: Date.now() };
                                                             const req = store.put(next, p.id);
-                                                            req.onsuccess = () => resolve();
-                                                            req.onerror = () => resolve();
+                                                            req.onsuccess = () => { console.log('[ProjectHome] Inline rename DB success', { id: p.id, name }); resolve(); };
+                                                            req.onerror = () => { console.warn('[ProjectHome] Inline rename DB error', req.error); resolve(); };
                                                         });
-                                                        refresh();
+                                                        // Update local state immediately
+                                                        setProjects(prev => {
+                                                            const next = prev.map(px => px.id === p.id ? { ...px, name } : px);
+                                                            console.log('[ProjectHome] Inline rename state updated');
+                                                            return next;
+                                                        });
+                                                    } catch (err) { console.error('[ProjectHome] Inline rename exception', err); }
+                                                    // Hide this inline menu
+                                                    try {
+                                                        const btn = evt.currentTarget as HTMLElement;
+                                                        const wrapper = btn.closest('.ph-inline-menu') as HTMLElement | null;
+                                                        if (wrapper) wrapper.style.display = 'none';
                                                     } catch (_) { }
                                                 }}>Rename</button>
                                                 <button style={styles.menuItem as any} onClick={() => handleDuplicate(p.id)}>Duplicate</button>
@@ -313,6 +360,83 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         ))
                     )}
                 </div>
+                {/* Global context menu (right-click) */}
+                {contextMenu.open && contextMenu.id && (
+                    <>
+                        <div
+                            onMouseDown={(e) => {
+                                // Close on left-click; allow right-click to reposition
+                                if (e.button === 0) {
+                                    setContextMenu({ id: null, x: 0, y: 0, open: false });
+                                }
+                            }}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                // Hit-test using elementsFromPoint to go through overlay
+                                const els = (document as any).elementsFromPoint ? (document as any).elementsFromPoint(e.clientX, e.clientY) : [];
+                                let pid: string | null = null;
+                                for (const el of els) {
+                                    if (el && el.getAttribute && el.getAttribute('data-pid')) {
+                                        pid = el.getAttribute('data-pid');
+                                        break;
+                                    }
+                                }
+                                if (pid) {
+                                    // Close inline menus
+                                    try {
+                                        document.querySelectorAll('.ph-inline-menu').forEach((el) => {
+                                            (el as HTMLElement).style.display = 'none';
+                                        });
+                                    } catch (_) { }
+                                    // Open immediately at new location
+                                    setContextMenu({ id: pid, x: e.clientX, y: e.clientY, open: true });
+                                } else {
+                                    setContextMenu({ id: null, x: 0, y: 0, open: false });
+                                }
+                            }}
+                            style={styles.cmOverlay as any}
+                        />
+                        <div style={{
+                            ...styles.menu,
+                            position: 'fixed',
+                            left: Math.min(contextMenu.x, window.innerWidth - 180),
+                            top: Math.min(contextMenu.y, window.innerHeight - 160),
+                            display: 'block',
+                            zIndex: 1000
+                        } as any}>
+                            <button style={styles.menuItem as any} onClick={async () => {
+                                const raw = window.prompt('Rename project');
+                                if (raw === null) return;
+                                const name = (raw || '').trim();
+                                if (!name) return;
+                                console.log('[ProjectHome] Context rename start', { id: contextMenu.id, next: name });
+                                try {
+                                    const db = await (DatabaseManager as any).getConnection();
+                                    await new Promise<void>((resolve) => {
+                                        const tx = db.transaction(STORES.PROJECTS, 'readwrite');
+                                        tx.onerror = (e) => console.warn('[ProjectHome] Context rename TX error', (e as any)?.target?.error);
+                                        const store = tx.objectStore(STORES.PROJECTS);
+                                        const src = projects.find(pp => pp.id === contextMenu.id);
+                                        const next = { ...(src || {}), id: contextMenu.id, name, updatedAt: Date.now() };
+                                        const req = store.put(next, contextMenu.id);
+                                        req.onsuccess = () => { console.log('[ProjectHome] Context rename DB success', { id: contextMenu.id, name }); resolve(); };
+                                        req.onerror = () => { console.warn('[ProjectHome] Context rename DB error', req.error); resolve(); };
+                                    });
+                                    setProjects(prev => {
+                                        const next = prev.map(px => px.id === contextMenu.id ? { ...px, name } : px);
+                                        console.log('[ProjectHome] Context rename state updated');
+                                        return next;
+                                    });
+                                } catch (err) { console.error('[ProjectHome] Context rename exception', err); }
+                                setContextMenu({ id: null, x: 0, y: 0, open: false });
+                            }}>Rename</button>
+                            <button style={styles.menuItem as any} onClick={() => { handleDuplicate(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Duplicate</button>
+                            <button style={styles.menuItem as any} onClick={() => { handleExport(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Export</button>
+                            <button style={styles.menuItem as any} onClick={() => { handleOpen(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Open</button>
+                            <button style={{ ...styles.menuItem, color: '#ff8a8a' } as any} onClick={() => { handleDelete(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Delete</button>
+                        </div>
+                    </>
+                )}
             </main>
         </div>
     );
@@ -403,25 +527,29 @@ const styles: Record<string, React.CSSProperties> = {
     gridWrap: {
         overflow: "visible",
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-        gap: 14,
+        gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+        gap: 18,
         paddingRight: 8,
     },
     card: {
         display: "flex",
         flexDirection: "column",
-        // background: "#0e131a",
-        // border: "1px solid #1a1f29",
         borderRadius: 8,
         overflow: "visible",
         transition: "box-shadow 120ms ease",
     },
     thumb: {
-        height: 160,
+        // height: 160,
         background: "#141821",
         borderRadius: 8,
         overflow: "hidden",
         transition: "transform 120ms ease, box-shadow 120ms ease, outline 120ms ease",
+        // Maintain 16:9 with aspect-ratio where supported and padding-top fallback
+        aspectRatio: '16 / 9' as any,
+        width: '100%',
+        position: 'relative',
+        height: 'auto',
+        paddingTop: '56.25%',
     },
     placeholderThumb: {
         width: "100%",
@@ -473,6 +601,7 @@ const styles: Record<string, React.CSSProperties> = {
         borderRadius: 8,
         overflow: "hidden",
         zIndex: 10,
+        width: 180,
     },
     menuItem: {
         display: "block",
@@ -483,6 +612,12 @@ const styles: Record<string, React.CSSProperties> = {
         textAlign: "left" as any,
         cursor: "pointer",
         width: "100%",
+    },
+    cmOverlay: {
+        position: 'fixed',
+        inset: 0,
+        background: 'transparent',
+        zIndex: 999,
     },
     primaryBtn: {
         background: "#2b6aff",
