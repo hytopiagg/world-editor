@@ -20,6 +20,7 @@ import {
     updateTerrainBlocks as importedUpdateTerrainBlocks,
     initChunkSystem,
     processChunkRenderQueue,
+    resetChunkSystem,
     rebuildTextureAtlas,
     updateChunkSystemCamera,
     updateTerrainChunks,
@@ -1748,21 +1749,48 @@ function TerrainBuilder(
             threeCamera.frustumCulled = false;
         }
         if (scene) {
-            scene.traverse((object) => {
-                if (object.isMesh || object.isInstancedMesh) {
-                    object.frustumCulled = false;
-                }
-            });
+            try {
+                scene.traverse((object) => {
+                    if (object.isMesh || object.isInstancedMesh) {
+                        object.frustumCulled = false;
+                    }
+                });
+            } catch (_) {}
         }
     }, [threeCamera, scene]);
     useEffect(() => {
         let mounted = true;
-        function initialize() {
+        async function initialize() {
+            console.info("[TerrainBuilder] initialize() start", {
+                hasScene: !!scene,
+                hasThreeCamera: !!threeCamera,
+                hasOrbitControls: !!orbitControlsRef.current,
+                projectId:
+                    typeof DatabaseManager?.getCurrentProjectId === "function"
+                        ? DatabaseManager.getCurrentProjectId()
+                        : "unknown",
+            });
             if (threeCamera && orbitControlsRef.current) {
                 cameraManager.initialize(threeCamera, orbitControlsRef.current);
                 orbitControlsRef.current.addEventListener("change", () => {
                     handleCameraMove();
                 });
+                try {
+                    // Try restore persisted state; fallback to reset
+                    const saved =
+                        window?.localStorage?.getItem?.("cameraState");
+                    if (saved) {
+                        try {
+                            cameraManager.loadSavedState();
+                        } catch (_) {
+                            cameraManager.resetCamera?.();
+                        }
+                    } else {
+                        cameraManager.resetCamera?.();
+                    }
+                } catch (_) {
+                    cameraManager.resetCamera?.();
+                }
             }
             const loader = new THREE.CubeTextureLoader();
             loader.setPath("./assets/skyboxes/partly-cloudy/");
@@ -1778,15 +1806,38 @@ function TerrainBuilder(
                 scene.background = textureCube;
             }
             if (scene) {
-                initChunkSystem(scene, {
-                    viewDistance: getViewDistance(),
-                    viewDistanceEnabled: true,
-                }).catch((error) => {
+                try {
+                    await initChunkSystem(scene, {
+                        viewDistance: getViewDistance(),
+                        viewDistanceEnabled: true,
+                    });
+                    console.info("[TerrainBuilder] initChunkSystem complete");
+                } catch (error) {
                     console.error("Error initializing chunk system:", error);
-                });
+                }
+                try {
+                    updateChunkSystemCamera(threeCamera);
+                    const cs = getChunkSystem();
+                    console.info(
+                        "[TerrainBuilder] camera bound to chunk system",
+                        {
+                            hasCamera: !!(cs && cs._scene && cs._scene.camera),
+                        }
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[TerrainBuilder] failed to bind camera to chunk system",
+                        e
+                    );
+                }
             }
             meshesInitializedRef.current = true;
-            DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
+            console.info(
+                "[TerrainBuilder] loading custom blocks and terrain for project",
+                DatabaseManager.getCurrentProjectId &&
+                    DatabaseManager.getCurrentProjectId()
+            );
+            await DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
                 .then((customBlocksData) => {
                     if (customBlocksData && customBlocksData.length > 0) {
                         for (const block of customBlocksData) {
@@ -1803,6 +1854,12 @@ function TerrainBuilder(
                 })
                 .then((savedTerrain) => {
                     if (!mounted) return;
+                    console.info("[TerrainBuilder] terrain fetched", {
+                        hasTerrain: !!savedTerrain,
+                        count: savedTerrain
+                            ? Object.keys(savedTerrain).length
+                            : 0,
+                    });
                     if (savedTerrain) {
                         terrainRef.current = savedTerrain;
                         totalBlocksRef.current = Object.keys(
@@ -1840,12 +1897,49 @@ function TerrainBuilder(
                                     await BlockTypeRegistry.instance.preload();
                                 }
                                 await rebuildTextureAtlas();
-                                updateTerrainChunks(
-                                    terrainRef.current,
-                                    true,
-                                    environmentBuilderRef
-                                );
-                                processChunkRenderQueue();
+                                if (!getChunkSystem()) {
+                                    console.warn(
+                                        "Chunk system not ready yet; retrying terrain update shortly"
+                                    );
+                                    setTimeout(() => {
+                                        try {
+                                            updateTerrainChunks(
+                                                terrainRef.current,
+                                                true,
+                                                environmentBuilderRef
+                                            );
+                                            try {
+                                                updateChunkSystemCamera(
+                                                    threeCamera
+                                                );
+                                            } catch (_) {}
+                                            processChunkRenderQueue();
+                                        } catch (_) {}
+                                    }, 100);
+                                } else {
+                                    updateTerrainChunks(
+                                        terrainRef.current,
+                                        true,
+                                        environmentBuilderRef
+                                    );
+                                    try {
+                                        updateChunkSystemCamera(threeCamera);
+                                    } catch (_) {}
+                                    processChunkRenderQueue();
+                                }
+                                try {
+                                    const cs = getChunkSystem();
+                                    console.info(
+                                        "[TerrainBuilder] post-apply: chunk camera set?",
+                                        {
+                                            hasCamera: !!(
+                                                cs &&
+                                                cs._scene &&
+                                                cs._scene.camera
+                                            ),
+                                        }
+                                    );
+                                } catch (_) {}
                                 window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);
@@ -1924,7 +2018,7 @@ function TerrainBuilder(
         toolManagerRef.current.registerTool("replace", replaceTool);
 
         initialize();
-        window.addEventListener("keydown", (event) => {
+        const onKeyDownOnce = (event) => {
             if (!event.key) return;
             const key = event.key.toLowerCase();
             if (
@@ -1947,7 +2041,8 @@ function TerrainBuilder(
                     window.lastKeyMoveTime = Date.now();
                 }
             }
-        });
+        };
+        window.addEventListener("keydown", onKeyDownOnce);
         window.chunkLoadCheckInterval = setInterval(() => {
             if (
                 window.fullTerrainDataRef &&
@@ -1971,6 +2066,24 @@ function TerrainBuilder(
                 clearInterval(window.chunkLoadCheckInterval);
                 window.chunkLoadCheckInterval = null;
             }
+            try {
+                window.removeEventListener("keydown", onKeyDownOnce);
+            } catch (_) {}
+            // Explicitly clear large references to help next mount
+            try {
+                terrainRef.current = {};
+            } catch (_) {}
+            try {
+                if (getChunkSystem()) {
+                    getChunkSystem().reset?.();
+                }
+            } catch (_) {}
+            try {
+                spatialGridManagerRef.current?.clear?.();
+            } catch (_) {}
+            try {
+                resetChunkSystem();
+            } catch (_) {}
         };
     }, [threeCamera, scene]);
     useEffect(() => {

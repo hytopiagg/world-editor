@@ -49,7 +49,25 @@ class CameraManager {
     }
 
     initialize(camera, controls) {
-        if (this._eventsInitialized) return;
+        // If already initialized (event listeners set), rebind to the new camera/controls
+        if (this._eventsInitialized) {
+            this.camera = camera;
+            this.controls = controls;
+            // Keep config consistent
+            if (this.controls) {
+                this.controls.enableZoom = false;
+                this.controls.panSpeed = 10;
+            }
+            if (this.camera) {
+                this.camera.rotation.order = "YXZ";
+            }
+            try {
+                this.loadSavedState();
+            } catch (_) {
+                this.resetCamera();
+            }
+            return;
+        }
         this._eventsInitialized = true;
         this.camera = camera;
         this.controls = controls;

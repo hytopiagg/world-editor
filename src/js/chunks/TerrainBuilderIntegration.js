@@ -53,6 +53,24 @@ export const getChunkSystem = () => {
     return chunkSystem;
 };
 /**
+ * Dispose and clear the global chunk system so it can be re-created
+ */
+export const resetChunkSystem = () => {
+    if (chunkSystem) {
+        try {
+            if (typeof chunkSystem.dispose === "function") {
+                chunkSystem.dispose();
+            } else {
+                // Fallback: attempt to clear chunks to free resources
+                try {
+                    chunkSystem.clearChunks?.();
+                } catch (_) {}
+            }
+        } catch (_) {}
+    }
+    chunkSystem = null;
+};
+/**
  * Update the camera in the chunk system
  * This is necessary for view distance culling calculations
  * @param {Object} camera - The THREE.js camera

@@ -227,13 +227,29 @@ function App() {
         }
     }, [pageIsLoaded, projectId]);
 
-    // When switching to Home, ensure loaders are hidden; when opening a project, reset pageIsLoaded
+    // When switching projects or returning Home, reset flags/state and clear any global player-mode leftovers
     useEffect(() => {
         if (!projectId) {
             try { loadingManager.forceHideAll(); } catch (_) { }
             setPageIsLoaded(false);
+            // Drop refs so new Canvas mounts cleanly next time
+            try { (terrainBuilderRef as any).current = null; } catch (_) { }
+            try { (environmentBuilderRef as any).current = null; } catch (_) { }
+            // Clear physics/player globals when leaving project
+            try { delete (window as any).__WE_PHYSICS__; } catch (_) { }
         } else {
             setPageIsLoaded(false);
+            // Also clear tool/undo state to prevent stale bindings
+            try { (undoRedoManagerRef as any).current = null; } catch (_) { }
+            // Ensure orbit controls are enabled on entry; clear player-mode globals
+            try {
+                delete (window as any).__WE_PHYSICS__;
+                delete (window as any).__WE_PLAYER_MESH__;
+                delete (window as any).__WE_PLAYER_MIXER__;
+                delete (window as any).__WE_PLAYER_ANIMS__;
+                (window as any).__WE_CAM_KEYS__ = { left: false, right: false, up: false, down: false };
+                cameraManager.setInputDisabled(false);
+            } catch (_) { }
         }
     }, [projectId]);
 
@@ -703,7 +719,7 @@ function App() {
         <Provider theme={defaultTheme}>
             <div className="App">
                 {!projectId && (
-                    <ProjectHome onOpen={(id) => setProjectId(id)} />
+                    <ProjectHome onOpen={(id) => { try { DatabaseManager.setCurrentProjectId(id); } catch (_) { } setProjectId(id); }} />
                 )}
                 {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
 
@@ -828,12 +844,14 @@ function App() {
 
                 {projectId && (
                     <Canvas
+                        key={projectId}
                         shadows
                         className="canvas-container"
                         gl={contextAttributes}
                         camera={{ fov: 75, near: 0.1, far: 1000 }}
                     >
                         <TerrainBuilder
+                            key={`tb-${projectId}`}
                             isInputDisabled={isTextureModalOpen}
                             ref={terrainBuilderRef}
                             currentBlockType={currentBlockType}
@@ -854,6 +872,7 @@ function App() {
                             onCameraPositionChange={setCameraPosition}
                         />
                         <EnvironmentBuilder
+                            key={`eb-${projectId}`}
                             ref={environmentBuilderRef}
                             scene={scene}
                             currentBlockType={currentBlockType}
