@@ -15,7 +15,8 @@ import {
     FaThLarge,
     FaTrash,
     FaUndo,
-    FaWrench
+    FaWrench,
+    FaHome
 } from "react-icons/fa";
 import "../../css/ToolBar.css";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
@@ -54,7 +55,8 @@ const ToolBar = ({
     activeTab,
     playerModeEnabled,
     onTogglePlayerMode,
-}) => {
+    onSwitchProject,
+}: any) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     // Replace individual submenu state variables with a single enum-based state
     const [activeSubmenu, setActiveSubmenu] = useState<SubMenuType>(SubMenuType.NONE);
@@ -234,8 +236,9 @@ const ToolBar = ({
                 tb?.setDirectionalLight?.({ color: "#ffffff", intensity: 2 });
             } catch (_) { }
             try {
-                DatabaseManager.deleteData(STORES.SETTINGS, "ambientLight");
-                DatabaseManager.deleteData(STORES.SETTINGS, "directionalLight");
+                const pidKey = (k: string) => `project:${DatabaseManager.getCurrentProjectId()}:${k}`;
+                DatabaseManager.deleteData(STORES.SETTINGS, pidKey("ambientLight"));
+                DatabaseManager.deleteData(STORES.SETTINGS, pidKey("directionalLight"));
             } catch (_) { }
             // Notify UI sections to sync their local state with reset values (without re-saving to DB)
             try {
@@ -1112,6 +1115,14 @@ const ToolBar = ({
                 </div>
                 <div className="control-group rounded-r-xl pr-2 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg">
                     <div className="control-button-wrapper">
+                        <Tooltip text="Switch Project">
+                            <button
+                                onClick={() => onSwitchProject && onSwitchProject()}
+                                className="control-button"
+                            >
+                                <FaHome className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
                         <Tooltip text="Clear entire map">
                             <button
                                 onClick={handleClearMap}

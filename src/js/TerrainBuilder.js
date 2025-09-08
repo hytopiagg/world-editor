@@ -326,6 +326,9 @@ function TerrainBuilder(
 
         try {
             const db = await DatabaseManager.getDBConnection();
+            const projectId =
+                DatabaseManager.getCurrentProjectId &&
+                DatabaseManager.getCurrentProjectId();
 
             // Number of operations (delete/put) to execute per IndexedDB transaction.
             // Keeping this value reasonable avoids hitting engine limits and keeps the UI responsive.
@@ -350,9 +353,12 @@ function TerrainBuilder(
                 const removeKeys = Object.keys(changesToSave.removed);
                 for (let i = 0; i < removeKeys.length; i += CHUNK_SIZE) {
                     const slice = removeKeys.slice(i, i + CHUNK_SIZE);
-                    await processChunk(slice, (store, key) =>
-                        store.delete(key)
-                    );
+                    await processChunk(slice, (store, key) => {
+                        const composedKey = DatabaseManager.composeKey
+                            ? DatabaseManager.composeKey(String(key), projectId)
+                            : key;
+                        store.delete(composedKey);
+                    });
                 }
                 console.log(`Deleted ${removeKeys.length} blocks from DB`);
             }
@@ -365,9 +371,12 @@ function TerrainBuilder(
                 const addEntries = Object.entries(changesToSave.added);
                 for (let i = 0; i < addEntries.length; i += CHUNK_SIZE) {
                     const slice = addEntries.slice(i, i + CHUNK_SIZE);
-                    await processChunk(slice, (store, [key, value]) =>
-                        store.put(value, key)
-                    );
+                    await processChunk(slice, (store, [key, value]) => {
+                        const composedKey = DatabaseManager.composeKey
+                            ? DatabaseManager.composeKey(String(key), projectId)
+                            : key;
+                        store.put(value, composedKey);
+                    });
                 }
                 console.log(`Added/updated ${addEntries.length} blocks in DB`);
             }
@@ -1599,14 +1608,31 @@ function TerrainBuilder(
                     }
                 };
                 clearUndoRedo(); // Call async clear
-                DatabaseManager.clearStore(STORES.TERRAIN)
-                    .then(() => {
-                        resetPendingChanges();
-                        lastSaveTimeRef.current = Date.now(); // Update last save time
-                    })
-                    .catch((error) => {
-                        console.error("Error clearing terrain store:", error);
-                    });
+                if (DatabaseManager.deleteAllByPrefix) {
+                    DatabaseManager.deleteAllByPrefix(STORES.TERRAIN)
+                        .then(() => {
+                            resetPendingChanges();
+                            lastSaveTimeRef.current = Date.now();
+                        })
+                        .catch((error) => {
+                            console.error(
+                                "Error clearing terrain keys for project:",
+                                error
+                            );
+                        });
+                } else {
+                    DatabaseManager.clearStore(STORES.TERRAIN)
+                        .then(() => {
+                            resetPendingChanges();
+                            lastSaveTimeRef.current = Date.now();
+                        })
+                        .catch((error) => {
+                            console.error(
+                                "Error clearing terrain store:",
+                                error
+                            );
+                        });
+                }
             } catch (error) {
                 console.error("Error during clearMap operation:", error);
             } finally {

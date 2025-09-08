@@ -24,7 +24,7 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
     useEffect(() => {
         const loadSavedSkybox = async () => {
             try {
-                const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
+                const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:selectedSkybox`);
                 if (typeof savedSkybox === 'string' && availableSkyboxes.includes(savedSkybox)) {
                     setSelectedSkybox(savedSkybox);
                     // Track this as the "current" skybox without applying it (it should already be active)
@@ -132,7 +132,7 @@ export default function SkyboxOptionsSection({ terrainBuilderRef }: SkyboxOption
             setIsChangingSkybox(true);
             // Update state first - the useEffect will handle applying the skybox
             setSelectedSkybox(skyboxName);
-            await DatabaseManager.saveData(STORES.SETTINGS, "selectedSkybox", skyboxName);
+            await DatabaseManager.saveData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:selectedSkybox`, skyboxName);
 
             // Wait for transition to complete (300ms transition + small buffer)
             setTimeout(() => {

@@ -19,7 +19,7 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
         const tb = terrainBuilderRef?.current;
         (async () => {
             try {
-                const savedAmb = (await DatabaseManager.getData(STORES.SETTINGS, "ambientLight")) as LightSettings | null;
+                const savedAmb = (await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:ambientLight`)) as LightSettings | null;
                 if (savedAmb && (typeof savedAmb.color === "string" || typeof savedAmb.intensity === "number")) {
                     if (typeof savedAmb.color === "string") setAmbientColor(savedAmb.color);
                     if (typeof savedAmb.intensity === "number") setAmbientIntensity(savedAmb.intensity);
@@ -39,7 +39,7 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
             } catch (_) { }
 
             try {
-                const savedDir = (await DatabaseManager.getData(STORES.SETTINGS, "directionalLight")) as LightSettings | null;
+                const savedDir = (await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:directionalLight`)) as LightSettings | null;
                 if (savedDir && (typeof savedDir.color === "string" || typeof savedDir.intensity === "number")) {
                     if (typeof savedDir.color === "string") setDirColor(savedDir.color);
                     if (typeof savedDir.intensity === "number") setDirIntensity(savedDir.intensity);
@@ -90,7 +90,7 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                 color: next.color !== undefined ? next.color : ambientColor,
                 intensity: next.intensity !== undefined ? next.intensity : ambientIntensity,
             };
-            await DatabaseManager.saveData(STORES.SETTINGS, "ambientLight", toSave);
+            await DatabaseManager.saveData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:ambientLight`, toSave);
         } catch (_) { }
     };
     const applyDirectional = async (next: { color?: string; intensity?: number }) => {
@@ -101,7 +101,7 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                 color: next.color !== undefined ? next.color : dirColor,
                 intensity: next.intensity !== undefined ? next.intensity : dirIntensity,
             };
-            await DatabaseManager.saveData(STORES.SETTINGS, "directionalLight", toSave);
+            await DatabaseManager.saveData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:directionalLight`, toSave);
         } catch (_) { }
     };
 

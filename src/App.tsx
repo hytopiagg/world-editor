@@ -18,6 +18,7 @@ import QuickTips from './js/components/QuickTips';
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import ToolBar from "./js/components/ToolBar";
 import UnderConstruction from "./js/components/UnderConstruction";
+import ProjectHome from "./js/components/ProjectHome";
 import {
     blockTypes,
     getCustomBlocks,
@@ -35,6 +36,41 @@ import { isElectronRuntime } from './js/utils/env';
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 
 function App() {
+    // Project state
+    // Always start at Project Home; don't auto-open last project
+    const [projectId, setProjectId] = useState<string | null>(null);
+    useEffect(() => {
+        if (projectId) DatabaseManager.setCurrentProjectId(projectId);
+    }, [projectId]);
+    const handleSwitchProject = async () => {
+        try {
+            const shouldSave = window.confirm("Switch projects? Save current project before switching?");
+            if (shouldSave) {
+                try {
+                    if (terrainBuilderRef.current) {
+                        await terrainBuilderRef.current.saveTerrainManually();
+                        try {
+                            const canvas: any = document.querySelector('canvas');
+                            if (canvas && typeof canvas.toDataURL === 'function') {
+                                // Downscale thumbnail for ProjectHome
+                                const url = canvas.toDataURL('image/jpeg', 0.75);
+                                const pid = DatabaseManager.getCurrentProjectId();
+                                await DatabaseManager.saveProjectThumbnail(pid, url);
+                            }
+                        } catch (_) { }
+                    }
+                    if (environmentBuilderRef.current) {
+                        await environmentBuilderRef.current.updateLocalStorage();
+                    }
+                } catch (_) { }
+            }
+        } finally {
+            try { localStorage.removeItem("CURRENT_PROJECT_ID"); } catch (_) { }
+            setProjectId(null);
+            // Ensure DB manager does not keep stale project context
+            try { DatabaseManager.setCurrentProjectId(null as any); } catch (_) { }
+        }
+    };
     const undoRedoManagerRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
     const [mode, setMode] = useState("add");
@@ -85,7 +121,7 @@ function App() {
 
     // Load and apply saved skybox when page is loaded (one time only)
     useEffect(() => {
-        if (!pageIsLoaded) return;
+        if (!projectId || !pageIsLoaded) return;
 
         const loadSavedSkybox = async () => {
             // Add a small delay to ensure terrain builder is ready
@@ -93,7 +129,7 @@ function App() {
 
             if (terrainBuilderRef.current?.changeSkybox) {
                 try {
-                    const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
+                    const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:selectedSkybox`);
                     if (typeof savedSkybox === 'string') {
                         console.log("Applying saved skybox on app startup:", savedSkybox);
                         terrainBuilderRef.current.changeSkybox(savedSkybox);
@@ -101,7 +137,7 @@ function App() {
                     // Also apply saved lighting settings (ambient and directional)
                     try {
                         type LightSettings = { color?: string; intensity?: number };
-                        const amb = (await DatabaseManager.getData(STORES.SETTINGS, "ambientLight")) as LightSettings | null;
+                        const amb = (await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:ambientLight`)) as LightSettings | null;
                         if (amb && (typeof amb.color === 'string' || typeof amb.intensity === 'number') && terrainBuilderRef.current?.setAmbientLight) {
                             terrainBuilderRef.current.setAmbientLight({
                                 color: typeof amb.color === 'string' ? amb.color : undefined,
@@ -113,7 +149,7 @@ function App() {
                     }
                     try {
                         type LightSettings = { color?: string; intensity?: number };
-                        const dir = (await DatabaseManager.getData(STORES.SETTINGS, "directionalLight")) as LightSettings | null;
+                        const dir = (await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:directionalLight`)) as LightSettings | null;
                         if (dir && (typeof dir.color === 'string' || typeof dir.intensity === 'number') && terrainBuilderRef.current?.setDirectionalLight) {
                             terrainBuilderRef.current.setDirectionalLight({
                                 color: typeof dir.color === 'string' ? dir.color : undefined,
@@ -130,9 +166,10 @@ function App() {
         };
 
         loadSavedSkybox();
-    }, [pageIsLoaded]); // Only depend on pageIsLoaded, not terrainBuilderRef.current
+    }, [pageIsLoaded, projectId]); // re-apply per-project
 
     useEffect(() => {
+        if (!projectId) return; // Only load these once a project is open
         const loadAppSettings = async () => {
             try {
                 const savedCompactMode = await DatabaseManager.getData(STORES.SETTINGS, "compactMode");
@@ -181,14 +218,24 @@ function App() {
             }
         };
 
-        if (!pageIsLoaded) {
+        if (!pageIsLoaded && projectId) {
             loadingManager.showLoading();
         }
 
         if (pageIsLoaded) {
             loadAppSettings();
         }
-    }, [pageIsLoaded]);
+    }, [pageIsLoaded, projectId]);
+
+    // When switching to Home, ensure loaders are hidden; when opening a project, reset pageIsLoaded
+    useEffect(() => {
+        if (!projectId) {
+            try { loadingManager.forceHideAll(); } catch (_) { }
+            setPageIsLoaded(false);
+        } else {
+            setPageIsLoaded(false);
+        }
+    }, [projectId]);
 
     useEffect(() => {
         const handleKeyDown = async (e) => {
@@ -200,6 +247,14 @@ function App() {
                 try {
                     if (terrainBuilderRef.current) {
                         await terrainBuilderRef.current.saveTerrainManually();
+                        try {
+                            const canvas: any = document.querySelector('canvas');
+                            if (canvas && typeof canvas.toDataURL === 'function') {
+                                const url = canvas.toDataURL('image/jpeg', 0.75);
+                                const pid = DatabaseManager.getCurrentProjectId();
+                                await DatabaseManager.saveProjectThumbnail(pid, url);
+                            }
+                        } catch (_) { }
                     }
 
                     if (environmentBuilderRef.current) {
@@ -259,9 +314,10 @@ function App() {
     }, [undoRedoManagerRef.current]);
 
     useEffect(() => {
-        DatabaseManager.clearStore(STORES.UNDO);
-        DatabaseManager.clearStore(STORES.REDO);
-    }, []);
+        if (!projectId) return; // Only initialize when a project is open
+        DatabaseManager.saveData(STORES.UNDO, "states", []);
+        DatabaseManager.saveData(STORES.REDO, "states", []);
+    }, [projectId]);
 
     useEffect(() => {
         // Poll pointer lock state to update crosshair visibility
@@ -646,22 +702,27 @@ function App() {
     return (
         <Provider theme={defaultTheme}>
             <div className="App">
+                {!projectId && (
+                    <ProjectHome onOpen={(id) => setProjectId(id)} />
+                )}
                 {IS_UNDER_CONSTRUCTION && <UnderConstruction />}
 
-                {!pageIsLoaded && <LoadingScreen />}
+                {projectId && !pageIsLoaded && <LoadingScreen />}
 
                 <GlobalLoadingScreen />
 
                 {/* Show QuickTips only on web (not Electron) and after initial load */}
                 {!isElectronRuntime() && pageIsLoaded && <QuickTips />}
 
-                <UndoRedoManager
-                    ref={undoRedoManagerRef}
-                    terrainBuilderRef={terrainBuilderRef}
-                    environmentBuilderRef={environmentBuilderRef}
-                />
+                {projectId && (
+                    <UndoRedoManager
+                        ref={undoRedoManagerRef}
+                        terrainBuilderRef={terrainBuilderRef}
+                        environmentBuilderRef={environmentBuilderRef}
+                    />
+                )}
 
-                {showBlockSidebar && (
+                {projectId && showBlockSidebar && (
                     <BlockToolsSidebar
                         isCompactMode={isCompactMode}
                         onOpenTextureModal={() => setIsTextureModalOpen(true)}
@@ -676,7 +737,7 @@ function App() {
                     />
                 )}
 
-                {showOptionsPanel && (
+                {projectId && showOptionsPanel && (
                     <BlockToolOptions
                         totalEnvironmentObjects={totalEnvironmentObjects}
                         terrainBuilderRef={terrainBuilderRef}
@@ -700,15 +761,17 @@ function App() {
                     />
                 )}
 
-                <TextureGenerationModal
-                    isOpen={isTextureModalOpen}
-                    onClose={() => setIsTextureModalOpen(false)}
-                    onTextureReady={handleTextureReady}
-                />
+                {projectId && (
+                    <TextureGenerationModal
+                        isOpen={isTextureModalOpen}
+                        onClose={() => setIsTextureModalOpen(false)}
+                        onTextureReady={handleTextureReady}
+                    />
+                )}
 
-                <div className="vignette-gradient"></div>
+                {projectId && <div className="vignette-gradient"></div>}
 
-                {saveStatus !== 'idle' && (
+                {projectId && saveStatus !== 'idle' && (
                     <div
                         style={{
                             position: "fixed",
@@ -763,50 +826,52 @@ function App() {
                     </div>
                 )}
 
-                <Canvas
-                    shadows
-                    className="canvas-container"
-                    gl={contextAttributes}
-                    camera={{ fov: 75, near: 0.1, far: 1000 }}
-                >
-                    <TerrainBuilder
-                        isInputDisabled={isTextureModalOpen}
-                        ref={terrainBuilderRef}
-                        currentBlockType={currentBlockType}
-                        setCurrentBlockType={setCurrentBlockType}
-                        mode={mode}
-                        axisLockEnabled={axisLockEnabled}
-                        placementSize={placementSize}
-                        cameraReset={cameraReset}
-                        cameraAngle={cameraAngle}
-                        setPageIsLoaded={setPageIsLoaded}
-                        onSceneReady={(sceneObject) => setScene(sceneObject)}
-                        gridSize={gridSize}
-                        environmentBuilderRef={environmentBuilderRef}
-                        previewPositionToAppJS={setCurrentPreviewPosition}
-                        undoRedoManager={undoRedoManagerRef}
-                        customBlocks={getCustomBlocks()}
-                        snapToGrid={placementSettings.snapToGrid}
-                        onCameraPositionChange={setCameraPosition}
-                    />
-                    <EnvironmentBuilder
-                        ref={environmentBuilderRef}
-                        scene={scene}
-                        currentBlockType={currentBlockType}
-                        onTotalObjectsChange={setTotalEnvironmentObjects}
-                        placementSize={placementSize}
-                        previewPositionFromAppJS={currentPreviewPosition}
-                        placementSettings={placementSettings}
-                        onPlacementSettingsChange={setPlacementSettings}
-                        undoRedoManager={undoRedoManagerRef}
-                        terrainBuilderRef={terrainBuilderRef}
-                        cameraPosition={cameraPosition}
-                    />
-                </Canvas>
+                {projectId && (
+                    <Canvas
+                        shadows
+                        className="canvas-container"
+                        gl={contextAttributes}
+                        camera={{ fov: 75, near: 0.1, far: 1000 }}
+                    >
+                        <TerrainBuilder
+                            isInputDisabled={isTextureModalOpen}
+                            ref={terrainBuilderRef}
+                            currentBlockType={currentBlockType}
+                            setCurrentBlockType={setCurrentBlockType}
+                            mode={mode}
+                            axisLockEnabled={axisLockEnabled}
+                            placementSize={placementSize}
+                            cameraReset={cameraReset}
+                            cameraAngle={cameraAngle}
+                            setPageIsLoaded={setPageIsLoaded}
+                            onSceneReady={(sceneObject) => setScene(sceneObject)}
+                            gridSize={gridSize}
+                            environmentBuilderRef={environmentBuilderRef}
+                            previewPositionToAppJS={setCurrentPreviewPosition}
+                            undoRedoManager={undoRedoManagerRef}
+                            customBlocks={getCustomBlocks()}
+                            snapToGrid={placementSettings.snapToGrid}
+                            onCameraPositionChange={setCameraPosition}
+                        />
+                        <EnvironmentBuilder
+                            ref={environmentBuilderRef}
+                            scene={scene}
+                            currentBlockType={currentBlockType}
+                            onTotalObjectsChange={setTotalEnvironmentObjects}
+                            placementSize={placementSize}
+                            previewPositionFromAppJS={currentPreviewPosition}
+                            placementSettings={placementSettings}
+                            onPlacementSettingsChange={setPlacementSettings}
+                            undoRedoManager={undoRedoManagerRef}
+                            terrainBuilderRef={terrainBuilderRef}
+                            cameraPosition={cameraPosition}
+                        />
+                    </Canvas>
+                )}
 
                 {/* Desktop app CTA removed in favor of QuickTips when on web */}
 
-                {showToolbar && (
+                {projectId && showToolbar && (
                     <ToolBar
                         terrainBuilderRef={terrainBuilderRef}
                         environmentBuilderRef={environmentBuilderRef}
@@ -825,11 +890,12 @@ function App() {
                         activeTab={activeTab}
                         playerModeEnabled={playerModeEnabled}
                         onTogglePlayerMode={togglePlayerMode}
+                        onSwitchProject={handleSwitchProject}
                     />
                 )}
 
                 {/* Crosshair visible while pointer is locked */}
-                {showCrosshair && !cameraManager.isPointerUnlockedMode && (
+                {projectId && showCrosshair && !cameraManager.isPointerUnlockedMode && (
                     <div
                         style={{
                             position: "fixed",
