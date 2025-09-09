@@ -127,24 +127,44 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     // Global outside click: close inline menus and clear hover when clicking away
     useEffect(() => {
         const onDocMouseDown = (e: MouseEvent) => {
+            console.log('[PH] doc mousedown', { btn: e.button, menuOpen: contextMenu.open });
             const target = e.target as HTMLElement | null;
             const inInlineMenu = !!(target && target.closest('.ph-inline-menu'));
             const inContextMenu = !!(target && target.closest('#ph-context-menu'));
             const onTrigger = !!(target && target.closest('.ph-menu-trigger'));
+            const onOverlay = !!(target && (target.closest as any) && (target.closest as any)('#ph-cm-overlay'));
             if (!inInlineMenu && !inContextMenu && !onTrigger) {
                 try {
                     document.querySelectorAll('.ph-inline-menu').forEach((el) => {
                         (el as HTMLElement).style.display = 'none';
                     });
                 } catch (_) { }
-                setContextMenu({ id: null, x: 0, y: 0, open: false });
+                // If a context menu is open, close it but keep selection on first outside click
+                if (contextMenu.open) {
+                    // If the click is on the overlay, let the overlay handler process selection and close the menu
+                    if (onOverlay) {
+                        console.log('[PH] overlay click detected in capture; deferring to overlay handler');
+                        return; // do nothing here
+                    }
+                    console.log('[PH] closing menu only (keeping selection)');
+                    setContextMenu({ id: null, x: 0, y: 0, open: false });
+                } else {
+                    console.log('[PH] clearing selection (no menu open)');
+                    setContextMenu({ id: null, x: 0, y: 0, open: false });
+                    setSelectedIds([]);
+                    setHoveredId(null);
+                }
             }
+            // Do not clear selection when clicking inside menus
             const onCard = !!(target && target.closest('[data-pid]'));
-            if (!onCard) { setHoveredId(null); setSelectedIds([]); }
+            if (!onCard && !inInlineMenu && !inContextMenu && !onTrigger && !contextMenu.open) {
+                setHoveredId(null);
+                setSelectedIds([]);
+            }
         };
         document.addEventListener('mousedown', onDocMouseDown, true);
         return () => document.removeEventListener('mousedown', onDocMouseDown, true);
-    }, []);
+    }, [contextMenu.open]);
 
     const beginDragSelect = (e: React.MouseEvent) => {
         if (e.button !== 0) return;
@@ -227,8 +247,15 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
 
     const handleDelete = async (id: string) => {
         if (!window.confirm("Delete this project? This cannot be undone.")) return;
-        await DatabaseManager.deleteProject(id);
-        refresh();
+        try {
+            await DatabaseManager.deleteProject(id);
+            // Update local state without full reload/animation
+            setProjects((prev) => prev.filter((p) => p.id !== id));
+            setSelectedIds((prev) => prev.filter((pid) => pid !== id));
+            if (contextMenu.id === id) setContextMenu({ id: null, x: 0, y: 0, open: false });
+        } catch (e) {
+            console.error("Delete failed", e);
+        }
     };
 
     const handleDuplicate = async (id: string) => {
@@ -255,9 +282,14 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             if (amb !== undefined) await DatabaseManager.saveData("settings", `project:${newId}:ambientLight`, amb);
             if (dir !== undefined) await DatabaseManager.saveData("settings", `project:${newId}:directionalLight`, dir);
             if (src.thumbnailDataUrl) await DatabaseManager.saveProjectThumbnail(newId, src.thumbnailDataUrl);
-            // Restore original selection, refresh list
+            // Restore original selection, update list locally (no re-animation)
             DatabaseManager.setCurrentProjectId(original);
-            refresh();
+            const now = Date.now();
+            const lastOpened = (copy as any)?.lastOpenedAt ?? now;
+            const newMeta = { ...(copy as any), thumbnailDataUrl: src.thumbnailDataUrl, updatedAt: now, lastOpenedAt: lastOpened } as any;
+            setProjects((prev) => [newMeta, ...prev]);
+            // Maintain selection on duplicate: select the new copy
+            setSelectedIds([newId]);
         } catch (e) {
             console.error("Duplicate failed", e);
         }
@@ -417,6 +449,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                 }}
                                 data-pid={p.id}
                                 onClick={(ev) => {
+                                    console.log('[PH] card click', { id: p.id, multi: ev.metaKey || ev.ctrlKey || ev.shiftKey });
                                     const multi = ev.metaKey || ev.ctrlKey || ev.shiftKey;
                                     if (multi) {
                                         setSelectedIds((prev) => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]);
@@ -428,6 +461,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                 onMouseLeave={() => setHoveredId(null)}
                                 onContextMenu={(e) => {
                                     e.preventDefault();
+                                    console.log('[PH] card right-click -> open context', { id: p.id });
                                     // Close any inline menus when global context menu opens
                                     try {
                                         document.querySelectorAll('.ph-inline-menu').forEach((el) => {
@@ -456,17 +490,12 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                     >
                                         {p.thumbnailDataUrl ? (
                                             <img
+                                                className="object-cover absolute inset-0 w-full h-full transition-transform ease-in-out transform will-change-transform"
+                                                alt="Project thumbnail"
                                                 src={p.thumbnailDataUrl}
                                                 style={{
-                                                    position: 'absolute',
-                                                    inset: 0,
-                                                    width: "100%",
-                                                    height: "100%",
-                                                    objectFit: "cover",
                                                     transform: hoveredId === p.id ? 'scale(1.07)' : 'scale(1)',
-                                                    transition: 'transform 180ms ease',
                                                     transformOrigin: 'center center',
-                                                    willChange: 'transform',
                                                 }}
                                             />
                                         ) : (
@@ -545,11 +574,32 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             onMouseDown={(e) => {
                                 // Close on left-click; allow right-click to reposition
                                 if (e.button === 0) {
+                                    console.log('[PH] overlay left-click');
+                                    try {
+                                        const els = (document as any).elementsFromPoint ? (document as any).elementsFromPoint(e.clientX, e.clientY) : [];
+                                        let pid: string | null = null;
+                                        for (const el of els) {
+                                            if (el && (el as any).getAttribute && (el as any).getAttribute('data-pid')) {
+                                                pid = (el as any).getAttribute('data-pid');
+                                                break;
+                                            }
+                                        }
+                                        if (pid) {
+                                            console.log('[PH] overlay select underlying', { pid });
+                                            const multi = e.metaKey || e.ctrlKey || e.shiftKey;
+                                            if (multi) {
+                                                setSelectedIds((prev) => prev.includes(pid!) ? prev.filter((id) => id !== pid) : [...prev, pid!]);
+                                            } else {
+                                                setSelectedIds([pid]);
+                                            }
+                                        }
+                                    } catch (_) { }
                                     setContextMenu({ id: null, x: 0, y: 0, open: false });
                                 }
                             }}
                             onContextMenu={(e) => {
                                 e.preventDefault();
+                                console.log('[PH] overlay right-click');
                                 // Hit-test using elementsFromPoint to go through overlay
                                 const els = (document as any).elementsFromPoint ? (document as any).elementsFromPoint(e.clientX, e.clientY) : [];
                                 let pid: string | null = null;
@@ -573,6 +623,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                     setContextMenu({ id: null, x: 0, y: 0, open: false });
                                 }
                             }}
+                            id="ph-cm-overlay"
                             style={styles.cmOverlay as any}
                         />
                         <div id="ph-context-menu" style={{
