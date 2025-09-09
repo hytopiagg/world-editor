@@ -155,12 +155,14 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
         const tag = target?.tagName || '';
         if (inCard || inMenu || tag === 'INPUT' || tag === 'BUTTON' || tag === 'LABEL') return;
         setDragSelecting(true);
-        setDragStart({ x: e.clientX, y: e.clientY });
-        setSelectionRect({ x: e.clientX, y: e.clientY, w: 0, h: 0 });
+        const startX = e.clientX;
+        const startY = e.clientY;
+        setDragStart({ x: startX, y: startY });
+        setSelectionRect({ x: startX, y: startY, w: 0, h: 0 });
         setSelectedIds([]);
         const onMove = (ev: MouseEvent) => {
-            const sx = dragStart?.x ?? e.clientX;
-            const sy = dragStart?.y ?? e.clientY;
+            const sx = startX;
+            const sy = startY;
             const cx = ev.clientX;
             const cy = ev.clientY;
             const x = Math.min(sx, cx);
