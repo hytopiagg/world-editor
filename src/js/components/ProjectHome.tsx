@@ -19,9 +19,67 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     const [query, setQuery] = useState("");
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{ id: string | null; x: number; y: number; open: boolean }>({ id: null, x: 0, y: 0, open: false });
+    const [cardsVisible, setCardsVisible] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [dragSelecting, setDragSelecting] = useState(false);
+    const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+    const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+
+    // Shared project actions menu (used by inline and right-click menus)
+    const ProjectActionsMenu = ({ id }: { id: string }) => (
+        <>
+            <button style={styles.menuItem as any} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#141a22'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }} onClick={async () => {
+                const raw = window.prompt('Rename project');
+                if (raw === null) return;
+                const name = (raw || '').trim();
+                if (!name) return;
+                console.log('[ProjectHome] Rename start', { id, next: name });
+                try {
+                    const db = await (DatabaseManager as any).getConnection();
+                    await new Promise<void>((resolve) => {
+                        const tx = db.transaction(STORES.PROJECTS, 'readwrite');
+                        tx.onerror = (e) => console.warn('[ProjectHome] Rename TX error', (e as any)?.target?.error);
+                        const store = tx.objectStore(STORES.PROJECTS);
+                        const src = projects.find(pp => pp.id === id);
+                        const next = { ...(src || {}), id, name, updatedAt: Date.now() };
+                        const req = store.put(next, id);
+                        req.onsuccess = () => { console.log('[ProjectHome] Rename DB success', { id, name }); resolve(); };
+                        req.onerror = () => { console.warn('[ProjectHome] Rename DB error', req.error); resolve(); };
+                    });
+                    setProjects(prev => prev.map(px => px.id === id ? { ...px, name } : px));
+                } catch (err) { console.error('[ProjectHome] Rename exception', err); }
+                try { document.querySelectorAll('.ph-inline-menu').forEach((el) => ((el as HTMLElement).style.display = 'none')); } catch (_) { }
+                setContextMenu({ id: null, x: 0, y: 0, open: false });
+            }}>Rename</button>
+            <button style={styles.menuItem as any} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#141a22'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }} onClick={() => { handleDuplicate(id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Duplicate</button>
+            <button style={styles.menuItem as any} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#141a22'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }} onClick={() => { handleExport(id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Export</button>
+            <button style={styles.menuItem as any} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#141a22'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }} onClick={() => { handleOpen(id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Open</button>
+            <button style={{ ...styles.menuItem, color: '#ff8a8a' } as any} onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#2b1a1a'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }} onClick={() => { handleDelete(id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Delete</button>
+        </>
+    );
+
+    const animateMenuStagger = (menuEl: HTMLElement | null, perItemDelayMs = 75, baseDelayMs = 180) => {
+        if (!menuEl) return;
+        try {
+            const items = Array.from(menuEl.querySelectorAll('button')) as HTMLElement[];
+            items.forEach((btn, idx) => {
+                btn.style.opacity = '0';
+                btn.style.transform = 'translateY(6px)';
+                btn.style.transition = 'opacity 220ms ease, transform 220ms ease, background-color 120ms ease';
+                btn.style.transitionDelay = `${baseDelayMs + idx * perItemDelayMs}ms`;
+            });
+            requestAnimationFrame(() => {
+                items.forEach((btn) => {
+                    btn.style.opacity = '1';
+                    btn.style.transform = 'translateY(0)';
+                });
+            });
+        } catch (_) { }
+    };
 
     const refresh = async () => {
         setLoading(true);
+        setCardsVisible(false);
         try {
             const list = await DatabaseManager.listProjects();
             setProjects(
@@ -39,12 +97,101 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             setProjects([]);
         } finally {
             setLoading(false);
+            setTimeout(() => setCardsVisible(true), 0);
         }
     };
 
     useEffect(() => {
         refresh();
     }, []);
+
+    // Animate right-click context menu on open
+    useEffect(() => {
+        if (contextMenu.open) {
+            const el = document.getElementById('ph-context-menu');
+            if (el) {
+                try {
+                    el.style.opacity = '0';
+                    el.style.transform = 'translateY(4px)';
+                    el.style.transition = 'opacity 180ms ease, transform 180ms ease';
+                    requestAnimationFrame(() => {
+                        el.style.opacity = '1';
+                        el.style.transform = 'translateY(0)';
+                        animateMenuStagger(el, 75, 180);
+                    });
+                } catch (_) { }
+            }
+        }
+    }, [contextMenu.open]);
+
+    // Global outside click: close inline menus and clear hover when clicking away
+    useEffect(() => {
+        const onDocMouseDown = (e: MouseEvent) => {
+            const target = e.target as HTMLElement | null;
+            const inInlineMenu = !!(target && target.closest('.ph-inline-menu'));
+            const inContextMenu = !!(target && target.closest('#ph-context-menu'));
+            const onTrigger = !!(target && target.closest('.ph-menu-trigger'));
+            if (!inInlineMenu && !inContextMenu && !onTrigger) {
+                try {
+                    document.querySelectorAll('.ph-inline-menu').forEach((el) => {
+                        (el as HTMLElement).style.display = 'none';
+                    });
+                } catch (_) { }
+                setContextMenu({ id: null, x: 0, y: 0, open: false });
+            }
+            const onCard = !!(target && target.closest('[data-pid]'));
+            if (!onCard) { setHoveredId(null); setSelectedIds([]); }
+        };
+        document.addEventListener('mousedown', onDocMouseDown, true);
+        return () => document.removeEventListener('mousedown', onDocMouseDown, true);
+    }, []);
+
+    const beginDragSelect = (e: React.MouseEvent) => {
+        if (e.button !== 0) return;
+        const target = e.target as HTMLElement | null;
+        const inCard = !!(target && target.closest('[data-pid]'));
+        const inMenu = !!(target && (target.closest('.ph-inline-menu') || target.closest('#ph-context-menu') || target.closest('.ph-menu-trigger')));
+        // ignore inputs/buttons in header
+        const tag = target?.tagName || '';
+        if (inCard || inMenu || tag === 'INPUT' || tag === 'BUTTON' || tag === 'LABEL') return;
+        setDragSelecting(true);
+        setDragStart({ x: e.clientX, y: e.clientY });
+        setSelectionRect({ x: e.clientX, y: e.clientY, w: 0, h: 0 });
+        setSelectedIds([]);
+        const onMove = (ev: MouseEvent) => {
+            const sx = dragStart?.x ?? e.clientX;
+            const sy = dragStart?.y ?? e.clientY;
+            const cx = ev.clientX;
+            const cy = ev.clientY;
+            const x = Math.min(sx, cx);
+            const y = Math.min(sy, cy);
+            const w = Math.abs(cx - sx);
+            const h = Math.abs(cy - sy);
+            setSelectionRect({ x, y, w, h });
+            // Update selection based on intersection
+            try {
+                const nodes = Array.from(document.querySelectorAll('[data-pid]')) as HTMLElement[];
+                const newly: string[] = [];
+                nodes.forEach((el) => {
+                    const r = el.getBoundingClientRect();
+                    const intersects = x < r.right && x + w > r.left && y < r.bottom && y + h > r.top;
+                    if (intersects) {
+                        const pid = el.getAttribute('data-pid');
+                        if (pid) newly.push(pid);
+                    }
+                });
+                setSelectedIds(Array.from(new Set(newly)));
+            } catch (_) { }
+        };
+        const onUp = () => {
+            setDragSelecting(false);
+            setSelectionRect(null);
+            document.removeEventListener('mousemove', onMove, true);
+            document.removeEventListener('mouseup', onUp, true);
+        };
+        document.addEventListener('mousemove', onMove, true);
+        document.addEventListener('mouseup', onUp, true);
+    };
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -219,7 +366,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             </aside>
 
             {/* Main area */}
-            <main style={styles.main}>
+            <main style={styles.main} onMouseDown={beginDragSelect}>
                 {/* Header */}
                 <div style={styles.headerBar}>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -259,9 +406,22 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         filtered.map((p) => (
                             <div
                                 key={p.id}
-                                style={styles.card}
+                                style={{
+                                    ...styles.card,
+                                    opacity: cardsVisible ? 1 : 0,
+                                    transform: cardsVisible ? 'none' : 'translateY(6px)',
+                                    transition: 'opacity 260ms ease, transform 260ms ease',
+                                    transitionDelay: cardsVisible ? `${Math.min(filtered.indexOf(p), 10) * 35}ms` : '0ms',
+                                }}
                                 data-pid={p.id}
-                                onClick={() => handleOpen(p.id)}
+                                onClick={(ev) => {
+                                    const multi = ev.metaKey || ev.ctrlKey || ev.shiftKey;
+                                    if (multi) {
+                                        setSelectedIds((prev) => prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]);
+                                    } else {
+                                        setSelectedIds([p.id]);
+                                    }
+                                }}
                                 onMouseEnter={() => setHoveredId(p.id)}
                                 onMouseLeave={() => setHoveredId(null)}
                                 onContextMenu={(e) => {
@@ -273,48 +433,59 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         });
                                     } catch (_) { }
                                     // Always reposition and open the menu at the new cursor location
+                                    setSelectedIds((prev) => prev.includes(p.id) ? prev : [p.id]);
                                     setContextMenu({ id: p.id, x: e.clientX, y: e.clientY, open: false });
                                     requestAnimationFrame(() => setContextMenu({ id: p.id, x: e.clientX, y: e.clientY, open: true }));
                                 }}
                             >
-                                <div
-                                    style={{
-                                        ...styles.thumb,
-                                        boxShadow: hoveredId === p.id ? '0 6px 16px rgba(0,0,0,0.35)' : 'none',
-                                        outline: hoveredId === p.id ? '1px solid rgba(255,255,255,0.9)' : '1px solid transparent',
-                                        outlineOffset: -1,
-                                    }}
-                                >
-                                    {p.thumbnailDataUrl ? (
-                                        <img
-                                            src={p.thumbnailDataUrl}
-                                            style={{
-                                                position: 'absolute',
-                                                inset: 0,
-                                                width: "100%",
-                                                height: "100%",
-                                                objectFit: "cover",
-                                                transform: hoveredId === p.id ? 'scale(1.07)' : 'scale(1)',
-                                                transition: 'transform 180ms ease',
-                                                transformOrigin: 'center center',
-                                                willChange: 'transform',
-                                            }}
-                                        />
-                                    ) : (
-                                        <div
-                                            style={{
-                                                ...styles.placeholderThumb,
-                                                position: 'absolute',
-                                                inset: 0,
-                                                transform: hoveredId === p.id ? 'scale(1.07)' : 'scale(1)',
-                                                transition: 'transform 180ms ease',
-                                                transformOrigin: 'center center',
-                                                willChange: 'transform',
-                                            }}
-                                        >
-                                            No Thumbnail
-                                        </div>
+                                <div style={{ position: 'relative' }}>
+                                    {/* Outer white ring with small gap (visible on hover or selected) */}
+                                    {(hoveredId === p.id || selectedIds.includes(p.id)) && (
+                                        <div style={{ position: 'absolute', inset: '-6px', border: '2px solid rgba(255,255,255,0.95)', borderRadius: 10, pointerEvents: 'none', zIndex: 1 }} />
                                     )}
+                                    <div
+                                        style={{
+                                            ...styles.thumb,
+                                            boxShadow: hoveredId === p.id || selectedIds.includes(p.id) ? '0 6px 16px rgba(0,0,0,0.35)' : 'none',
+                                            outline: '1px solid transparent',
+                                            outlineOffset: -1,
+                                        }}
+                                        onDoubleClick={() => handleOpen(p.id)}
+                                    >
+                                        {p.thumbnailDataUrl ? (
+                                            <img
+                                                src={p.thumbnailDataUrl}
+                                                style={{
+                                                    position: 'absolute',
+                                                    inset: 0,
+                                                    width: "100%",
+                                                    height: "100%",
+                                                    objectFit: "cover",
+                                                    transform: hoveredId === p.id ? 'scale(1.07)' : 'scale(1)',
+                                                    transition: 'transform 180ms ease',
+                                                    transformOrigin: 'center center',
+                                                    willChange: 'transform',
+                                                }}
+                                            />
+                                        ) : (
+                                            <div
+                                                style={{
+                                                    ...styles.placeholderThumb,
+                                                    position: 'absolute',
+                                                    inset: 0,
+                                                    transform: hoveredId === p.id ? 'scale(1.07)' : 'scale(1)',
+                                                    transition: 'transform 180ms ease',
+                                                    transformOrigin: 'center center',
+                                                    willChange: 'transform',
+                                                }}
+                                            >
+                                                No Thumbnail
+                                            </div>
+                                        )}
+                                        {selectedIds.includes(p.id) && (
+                                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.14)', pointerEvents: 'none' }} />
+                                        )}
+                                    </div>
                                 </div>
                                 <div style={styles.cardBody}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -323,7 +494,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                             <div style={styles.metaRow}>{formatLastEdited(p.updatedAt || p.createdAt)}</div>
                                         </div>
                                         <div className="ph-menu" style={{ position: 'relative', transform: 'none', width: 28, height: 28, display: 'inline-block' }} onClick={(e) => e.stopPropagation()}>
-                                            <button
+                                            <button className="ph-menu-trigger"
                                                 onClick={(e) => {
                                                     const btn = e.currentTarget as HTMLButtonElement;
                                                     // Close any open right-click menu
@@ -334,49 +505,29 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                                             (el as HTMLElement).style.display = 'none';
                                                         });
                                                     } catch (_) { }
+                                                    setSelectedIds((prev) => prev.includes(p.id) ? prev : [p.id]);
                                                     const menu = btn.nextElementSibling as HTMLDivElement;
-                                                    if (menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+                                                    if (menu) {
+                                                        const willShow = menu.style.display !== 'block';
+                                                        menu.style.display = willShow ? 'block' : 'none';
+                                                        if (willShow) {
+                                                            menu.style.opacity = '0';
+                                                            menu.style.transform = 'translateY(4px)';
+                                                            menu.style.transition = 'opacity 180ms ease, transform 180ms ease';
+                                                            requestAnimationFrame(() => {
+                                                                menu.style.opacity = '1';
+                                                                menu.style.transform = 'translateY(0)';
+                                                                animateMenuStagger(menu, 75, 180);
+                                                            });
+                                                        }
+                                                    }
                                                 }}
                                                 style={{ ...styles.ellipsisBtn, opacity: hoveredId === p.id ? 1 : 0, pointerEvents: hoveredId === p.id ? 'auto' : 'none' } as any}
                                             >
                                                 ⋮
                                             </button>
                                             <div className="ph-inline-menu" style={styles.menu as any} onClick={(e) => e.stopPropagation()}>
-                                                <button style={styles.menuItem as any} onClick={async (evt) => {
-                                                    const raw = window.prompt('Rename project', p.name || 'Untitled');
-                                                    if (raw === null) return;
-                                                    const name = (raw || '').trim();
-                                                    if (!name) return;
-                                                    console.log('[ProjectHome] Inline rename start', { id: p.id, prev: p.name, next: name });
-                                                    try {
-                                                        const db = await (DatabaseManager as any).getConnection();
-                                                        await new Promise<void>((resolve) => {
-                                                            const tx = db.transaction(STORES.PROJECTS, 'readwrite');
-                                                            tx.onerror = (e) => console.warn('[ProjectHome] Inline rename TX error', (e as any)?.target?.error);
-                                                            const store = tx.objectStore(STORES.PROJECTS);
-                                                            const next = { ...p, name, updatedAt: Date.now() };
-                                                            const req = store.put(next, p.id);
-                                                            req.onsuccess = () => { console.log('[ProjectHome] Inline rename DB success', { id: p.id, name }); resolve(); };
-                                                            req.onerror = () => { console.warn('[ProjectHome] Inline rename DB error', req.error); resolve(); };
-                                                        });
-                                                        // Update local state immediately
-                                                        setProjects(prev => {
-                                                            const next = prev.map(px => px.id === p.id ? { ...px, name } : px);
-                                                            console.log('[ProjectHome] Inline rename state updated');
-                                                            return next;
-                                                        });
-                                                    } catch (err) { console.error('[ProjectHome] Inline rename exception', err); }
-                                                    // Hide this inline menu
-                                                    try {
-                                                        const btn = evt.currentTarget as HTMLElement;
-                                                        const wrapper = btn.closest('.ph-inline-menu') as HTMLElement | null;
-                                                        if (wrapper) wrapper.style.display = 'none';
-                                                    } catch (_) { }
-                                                }}>Rename</button>
-                                                <button style={styles.menuItem as any} onClick={() => handleDuplicate(p.id)}>Duplicate</button>
-                                                <button style={styles.menuItem as any} onClick={() => handleExport(p.id)}>Export</button>
-                                                <button style={styles.menuItem as any} onClick={() => handleOpen(p.id)}>Open</button>
-                                                <button style={{ ...styles.menuItem, color: '#ff8a8a' } as any} onClick={() => handleDelete(p.id)}>Delete</button>
+                                                <ProjectActionsMenu id={p.id} />
                                             </div>
                                         </div>
                                     </div>
@@ -414,6 +565,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         });
                                     } catch (_) { }
                                     // Open immediately at new location
+                                    setSelectedIds((prev) => prev.includes(pid!) ? prev : [pid!]);
                                     setContextMenu({ id: pid, x: e.clientX, y: e.clientY, open: true });
                                 } else {
                                     setContextMenu({ id: null, x: 0, y: 0, open: false });
@@ -421,7 +573,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             }}
                             style={styles.cmOverlay as any}
                         />
-                        <div style={{
+                        <div id="ph-context-menu" style={{
                             ...styles.menu,
                             position: 'fixed',
                             left: Math.min(contextMenu.x, window.innerWidth - 180),
@@ -429,38 +581,24 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             display: 'block',
                             zIndex: 1000
                         } as any}>
-                            <button style={styles.menuItem as any} onClick={async () => {
-                                const raw = window.prompt('Rename project');
-                                if (raw === null) return;
-                                const name = (raw || '').trim();
-                                if (!name) return;
-                                console.log('[ProjectHome] Context rename start', { id: contextMenu.id, next: name });
-                                try {
-                                    const db = await (DatabaseManager as any).getConnection();
-                                    await new Promise<void>((resolve) => {
-                                        const tx = db.transaction(STORES.PROJECTS, 'readwrite');
-                                        tx.onerror = (e) => console.warn('[ProjectHome] Context rename TX error', (e as any)?.target?.error);
-                                        const store = tx.objectStore(STORES.PROJECTS);
-                                        const src = projects.find(pp => pp.id === contextMenu.id);
-                                        const next = { ...(src || {}), id: contextMenu.id, name, updatedAt: Date.now() };
-                                        const req = store.put(next, contextMenu.id);
-                                        req.onsuccess = () => { console.log('[ProjectHome] Context rename DB success', { id: contextMenu.id, name }); resolve(); };
-                                        req.onerror = () => { console.warn('[ProjectHome] Context rename DB error', req.error); resolve(); };
-                                    });
-                                    setProjects(prev => {
-                                        const next = prev.map(px => px.id === contextMenu.id ? { ...px, name } : px);
-                                        console.log('[ProjectHome] Context rename state updated');
-                                        return next;
-                                    });
-                                } catch (err) { console.error('[ProjectHome] Context rename exception', err); }
-                                setContextMenu({ id: null, x: 0, y: 0, open: false });
-                            }}>Rename</button>
-                            <button style={styles.menuItem as any} onClick={() => { handleDuplicate(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Duplicate</button>
-                            <button style={styles.menuItem as any} onClick={() => { handleExport(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Export</button>
-                            <button style={styles.menuItem as any} onClick={() => { handleOpen(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Open</button>
-                            <button style={{ ...styles.menuItem, color: '#ff8a8a' } as any} onClick={() => { handleDelete(contextMenu.id); setContextMenu({ id: null, x: 0, y: 0, open: false }); }}>Delete</button>
+                            <ProjectActionsMenu id={contextMenu.id as string} />
                         </div>
                     </>
+                )}
+                {/* Drag-select rectangle */}
+                {dragSelecting && selectionRect && (
+                    <div style={{
+                        position: 'fixed',
+                        left: `${selectionRect.x}px`,
+                        top: `${selectionRect.y}px`,
+                        width: `${selectionRect.w}px`,
+                        height: `${selectionRect.h}px`,
+                        background: 'rgba(43,106,255,0.15)',
+                        border: '1px solid rgba(43,106,255,0.6)',
+                        borderRadius: 2,
+                        pointerEvents: 'none',
+                        zIndex: 998
+                    }} />
                 )}
             </main>
         </div>
@@ -531,6 +669,7 @@ const styles: Record<string, React.CSSProperties> = {
         flexDirection: "column",
         padding: 16,
         gap: 16,
+        userSelect: 'none',
     },
     headerBar: {
         display: "flex",
@@ -555,6 +694,7 @@ const styles: Record<string, React.CSSProperties> = {
         gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
         gap: 18,
         paddingRight: 8,
+        position: 'relative',
     },
     card: {
         display: "flex",
