@@ -286,9 +286,34 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                     }}
                                 >
                                     {p.thumbnailDataUrl ? (
-                                        <img src={p.thumbnailDataUrl} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                                        <img
+                                            src={p.thumbnailDataUrl}
+                                            style={{
+                                                position: 'absolute',
+                                                inset: 0,
+                                                width: "100%",
+                                                height: "100%",
+                                                objectFit: "cover",
+                                                transform: hoveredId === p.id ? 'scale(1.07)' : 'scale(1)',
+                                                transition: 'transform 180ms ease',
+                                                transformOrigin: 'center center',
+                                                willChange: 'transform',
+                                            }}
+                                        />
                                     ) : (
-                                        <div style={{ ...styles.placeholderThumb, position: 'absolute', inset: 0 }}>No Thumbnail</div>
+                                        <div
+                                            style={{
+                                                ...styles.placeholderThumb,
+                                                position: 'absolute',
+                                                inset: 0,
+                                                transform: hoveredId === p.id ? 'scale(1.07)' : 'scale(1)',
+                                                transition: 'transform 180ms ease',
+                                                transformOrigin: 'center center',
+                                                willChange: 'transform',
+                                            }}
+                                        >
+                                            No Thumbnail
+                                        </div>
                                     )}
                                 </div>
                                 <div style={styles.cardBody}>
