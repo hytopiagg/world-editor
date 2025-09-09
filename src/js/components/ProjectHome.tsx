@@ -24,6 +24,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     const [dragSelecting, setDragSelecting] = useState(false);
     const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
     const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+    const [pressedCardId, setPressedCardId] = useState<string | null>(null);
 
     // Shared project actions menu (used by inline and right-click menus)
     const ProjectActionsMenu = ({ id }: { id: string }) => (
@@ -383,14 +384,38 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     <img src={"./assets/img/Hytopia_Tiny.png"} style={styles.brandLogo as any} />
                 </div>
                 <nav style={styles.nav}>
-                    <div style={styles.navItem}><span style={styles.navIcon}>🏠</span><span>Home</span></div>
-                    <div style={styles.navItem}><span style={styles.navIcon}>📁</span><span>My files</span></div>
-                    <div style={styles.navItem}><span style={styles.navIcon}>🧩</span><span>Templates</span></div>
-                    <div style={styles.navItem}><span style={styles.navIcon}>✨</span><span>Generate</span></div>
-                    <div style={styles.navItem}><span style={styles.navIcon}>🤝</span><span>Shared with me</span></div>
-                    <div style={styles.navItem}><span style={styles.navIcon}>🌐</span><span>Community</span></div>
-                    <div style={styles.navItem}><span style={styles.navIcon}>🎓</span><span>Tutorials</span></div>
-                    <div style={styles.navItem}><span style={styles.navIcon}>📥</span><span>Inbox</span></div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><path d="M3 10l9-7 9 7" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>
+                        <span style={styles.navText}>Home</span>
+                    </div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><path d="M3 7h18v12H3z" /><path d="M3 7l4-4h10l4 4" /></svg>
+                        <span style={styles.navText}>My files</span>
+                    </div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></svg>
+                        <span style={styles.navText}>Templates</span>
+                    </div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><path d="M12 2l1.8 4.6L19 8l-4.2 2.2L13 15l-1-4.8L8 8l4-1.4z" /></svg>
+                        <span style={styles.navText}>Generate</span>
+                    </div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><circle cx="8" cy="8" r="3" /><circle cx="16" cy="8" r="3" /><path d="M2 20c1.5-3 4-5 6-5s4.5 2 6 5" /></svg>
+                        <span style={styles.navText}>Shared with me</span>
+                    </div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18" /></svg>
+                        <span style={styles.navText}>Community</span>
+                    </div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><path d="M4 5h16v14H4z" /><path d="M8 5v14" /></svg>
+                        <span style={styles.navText}>Tutorials</span>
+                    </div>
+                    <div style={styles.navItem}>
+                        <svg viewBox="0 0 24 24" style={styles.navIconSvg as any}><path d="M4 13h16l-3 6H7l-3-6z" /><path d="M7 13V5h10v8" /></svg>
+                        <span style={styles.navText}>Inbox</span>
+                    </div>
                 </nav>
                 <div style={styles.sidebarFooter}>
                     <a href="https://discord.gg/hytopia" target="_blank" rel="noreferrer" style={styles.socialLink}>Discord</a>
@@ -457,8 +482,9 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         setSelectedIds([p.id]);
                                     }
                                 }}
-                                onMouseEnter={() => setHoveredId(p.id)}
-                                onMouseLeave={() => setHoveredId(null)}
+                                onMouseDown={() => setPressedCardId(p.id)}
+                                onMouseUp={() => setPressedCardId(null)}
+                                onMouseLeave={() => setPressedCardId((cur) => (cur === p.id ? null : cur))}
                                 onContextMenu={(e) => {
                                     e.preventDefault();
                                     console.log('[PH] card right-click -> open context', { id: p.id });
@@ -476,13 +502,13 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             >
                                 <div style={{ position: 'relative' }}>
                                     {/* Outer white ring with small gap (visible on hover or selected) */}
-                                    {(hoveredId === p.id || selectedIds.includes(p.id)) && (
+                                    {(hoveredId === p.id || selectedIds.includes(p.id) || pressedCardId === p.id) && (
                                         <div style={{ position: 'absolute', inset: '-6px', border: '2px solid rgba(255,255,255,0.95)', borderRadius: 10, pointerEvents: 'none', zIndex: 1 }} />
                                     )}
                                     <div
                                         style={{
                                             ...styles.thumb,
-                                            boxShadow: hoveredId === p.id || selectedIds.includes(p.id) ? '0 6px 16px rgba(0,0,0,0.35)' : 'none',
+                                            boxShadow: (hoveredId === p.id || selectedIds.includes(p.id) || pressedCardId === p.id) ? '0 6px 16px rgba(0,0,0,0.35)' : 'none',
                                             outline: '1px solid transparent',
                                             outlineOffset: -1,
                                         }}
@@ -695,16 +721,25 @@ const styles: Record<string, React.CSSProperties> = {
     navItem: {
         padding: "8px 10px",
         borderRadius: 8,
-        color: "#cfd6e4",
+        color: "rgba(255,255,255,0.6)",
         background: "transparent",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
         gap: 8,
     },
-    navIcon: {
+    navIconSvg: {
         width: 16,
-        textAlign: "center",
+        height: 16,
+        stroke: 'rgba(255,255,255,0.6)',
+        fill: 'none',
+        strokeWidth: 1.6,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        flex: '0 0 auto',
+    },
+    navText: {
+        color: 'rgba(255,255,255,0.6)',
     },
     sidebarFooter: {
         marginTop: "auto",
@@ -714,7 +749,7 @@ const styles: Record<string, React.CSSProperties> = {
         opacity: 0.85,
     },
     socialLink: {
-        color: "#8a97ad",
+        color: "rgba(255,255,255,0.6)",
         fontSize: 12,
     },
     main: {
