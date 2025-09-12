@@ -44,17 +44,13 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
         const onDocMouseDown = (e: MouseEvent) => {
             console.log('[PH] doc mousedown', { btn: e.button, menuOpen: contextMenu.open });
             const target = e.target as HTMLElement | null;
-            const inInlineMenu = !!(target && target.closest('.ph-inline-menu'));
-            const inContextMenu = !!(target && target.closest('#ph-context-menu'));
+            const inInlineMenu = !!(target && (target as any).closest && (target as any).closest('.ph-inline-menu'));
+            const inContextMenu = !!(target && (target as any).closest && (target as any).closest('.ph-context-menu'));
             const onTrigger = !!(target && target.closest('.ph-menu-trigger'));
             const onOverlay = !!(target && (target.closest as any) && (target.closest as any)('#ph-cm-overlay'));
             const onCard = !!(target && target.closest('[data-pid]'));
             if (!inInlineMenu && !inContextMenu && !onTrigger) {
-                try {
-                    document.querySelectorAll('.ph-inline-menu').forEach((el) => {
-                        (el as HTMLElement).style.display = 'none';
-                    });
-                } catch (_) { }
+                try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
                 // If a context menu is open, close it but keep selection on first outside click
                 if (contextMenu.open) {
                     // If the click is on the overlay, let the overlay handler process selection and close the menu
@@ -309,6 +305,10 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                 if (e.button === 0) {
                                     console.log('[PH] overlay left-click');
                                     try {
+                                        // If click is within an open context menu, ignore and let the menu handle it
+                                        const el = e.target as HTMLElement;
+                                        const inMenu = !!(el && (el.closest && el.closest('.ph-context-menu')));
+                                        if (inMenu) return;
                                         const els = (document as any).elementsFromPoint ? (document as any).elementsFromPoint(e.clientX, e.clientY) : [];
                                         let pid: string | null = null;
                                         for (const el of els) {
@@ -339,12 +339,8 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                     }
                                 }
                                 if (pid) {
-                                    // Close inline menus
-                                    try {
-                                        document.querySelectorAll('.ph-inline-menu').forEach((el) => {
-                                            (el as HTMLElement).style.display = 'none';
-                                        });
-                                    } catch (_) { }
+                                    // Close inline menus globally before opening context menu
+                                    try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
                                     // Open immediately at new location
                                     setSelectedIds((prev) => prev.includes(pid!) ? prev : [pid!]);
                                     setContextMenu({ id: pid, x: e.clientX, y: e.clientY, open: true });
@@ -355,12 +351,17 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             id="ph-cm-overlay"
                             className="fixed inset-0 bg-transparent z-[999]"
                         />
-                        <div id="ph-context-menu" className="fixed bg-[#0e131a] border border-[#1a1f29] rounded-lg overflow-hidden z-[1000] w-[180px]" style={{
-                            left: Math.min(contextMenu.x, window.innerWidth - 180),
-                            top: Math.min(contextMenu.y, window.innerHeight - 160)
-                        } as any}>
-                            <ProjectActionsMenu id={contextMenu.id as string} projects={projects as any} setProjects={setProjects as any} setContextMenu={setContextMenu as any} onOpen={onOpen} onRequestClose={() => setContextMenu({ id: null, x: 0, y: 0, open: false })} />
-                        </div>
+                        <ProjectActionsMenu
+                            variant="context"
+                            x={contextMenu.x}
+                            y={contextMenu.y}
+                            id={contextMenu.id as string}
+                            projects={projects as any}
+                            setProjects={setProjects as any}
+                            setContextMenu={setContextMenu as any}
+                            onOpen={onOpen}
+                            onRequestClose={() => setContextMenu({ id: null, x: 0, y: 0, open: false })}
+                        />
                     </>
                 )}
                 {/* Drag-select rectangle */}

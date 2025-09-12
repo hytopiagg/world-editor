@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ProjectActionsMenu from "./ProjectActionsMenu";
 
 interface ProjectMeta {
@@ -53,6 +53,12 @@ function formatLastEdited(ts?: number) {
 const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hoveredId, setHoveredId, onSelect, onOpen, projects, setProjects, setContextMenu }) => {
     const [menuOpen, setMenuOpen] = useState(false);
 
+    useEffect(() => {
+        const close = () => setMenuOpen(false);
+        window.addEventListener('ph-close-inline-menus' as any, close);
+        return () => window.removeEventListener('ph-close-inline-menus' as any, close);
+    }, []);
+
     return (
         <div
             className={`grid grid-cols-[160px_1fr_28px] items-center gap-x-3 p-2.5 rounded-xl border border-transparent cursor-pointer relative ${selected ? 'bg-white/10' : (hoveredId === p.id ? 'bg-white/5' : 'bg-transparent')}`}
@@ -82,15 +88,19 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
                 <div className="font-semibold">{p.name || 'Untitled'}</div>
                 <div className="opacity-70 text-[12px]">{formatLastEdited(p.updatedAt || p.createdAt)}</div>
             </div>
-            <div className="ph-menu relative w-[28px] h-[28px] justify-self-end self-center" onClick={(e) => e.stopPropagation()}>
+            <div className="ph-menu relative w-[28px] h-[28px] justify-self-end self-center z-[1100]" onClick={(e) => e.stopPropagation()}>
                 <button
                     className={`ph-menu-trigger bg-transparent border-0 text-[#cfd6e4] rounded-md w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center ${hoveredId === p.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-                    onClick={() => setMenuOpen((v) => !v)}
+                    onClick={() => {
+                        try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
+                        setContextMenu({ id: null, x: 0, y: 0, open: false });
+                        setMenuOpen(true);
+                    }}
                 >
                     ⋮
                 </button>
-                <div className={`ph-inline-menu absolute right-0 top-[30px] bg-[#0e131a] border border-[#1a1f29] rounded-lg overflow-hidden z-[1000] w-[180px] ${menuOpen ? 'block' : 'hidden'}`} onClick={(e) => e.stopPropagation()}>
-                    <ProjectActionsMenu id={p.id} projects={projects} setProjects={setProjects} setContextMenu={setContextMenu} onOpen={onOpen} onRequestClose={() => setMenuOpen(false)} />
+                <div className={`ph-inline-menu absolute right-0 top-[30px] ${menuOpen ? 'block' : 'hidden'}`} onClick={(e) => e.stopPropagation()}>
+                    <ProjectActionsMenu variant="inline" id={p.id} projects={projects} setProjects={setProjects} setContextMenu={setContextMenu} onOpen={onOpen} onRequestClose={() => setMenuOpen(false)} />
                 </div>
             </div>
         </div>

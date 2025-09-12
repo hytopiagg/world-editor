@@ -1,29 +1,5 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
-
-function animateProjectActionsMenu(menuEl: HTMLElement | null, perItemDelayMs = 25, baseDelayMs = 120) {
-    if (!menuEl) return;
-    try {
-        menuEl.style.opacity = '0';
-        menuEl.style.transform = 'translateY(4px)';
-        menuEl.style.transition = 'opacity 180ms ease, transform 180ms ease';
-        const items = Array.from(menuEl.querySelectorAll('button')) as HTMLElement[];
-        items.forEach((btn, idx) => {
-            btn.style.opacity = '0';
-            btn.style.transform = 'translateY(6px)';
-            btn.style.transition = 'opacity 220ms ease, transform 220ms ease, background-color 120ms ease';
-            btn.style.transitionDelay = `${baseDelayMs + idx * perItemDelayMs}ms`;
-        });
-        requestAnimationFrame(() => {
-            menuEl.style.opacity = '1';
-            menuEl.style.transform = 'translateY(0)';
-            items.forEach((btn) => {
-                btn.style.opacity = '1';
-                btn.style.transform = 'translateY(0)';
-            });
-        });
-    } catch (_) { }
-}
 
 export type ProjectMeta = {
     id: string;
@@ -41,16 +17,26 @@ interface Props {
     setContextMenu: (v: { id: string | null; x: number; y: number; open: boolean }) => void;
     onOpen: (id: string) => void;
     onRequestClose?: () => void;
+    variant?: "inline" | "context";
+    x?: number;
+    y?: number;
+    containerClassName?: string;
+    containerStyle?: React.CSSProperties;
 }
 
-const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setContextMenu, onOpen, onRequestClose }) => {
+const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setContextMenu, onOpen, onRequestClose, variant = "inline", x, y, containerClassName = "", containerStyle }) => {
     const rootRef = useRef<HTMLDivElement | null>(null);
+    const [entered, setEntered] = useState(false);
 
     useEffect(() => {
-        // Animate the nearest menu container when mounted (works for both inline and context menus)
-        const container = rootRef.current?.parentElement || rootRef.current;
-        animateProjectActionsMenu(container as HTMLElement);
+        const t = requestAnimationFrame(() => setEntered(true));
+        return () => cancelAnimationFrame(t);
     }, []);
+
+    const closeAllMenus = () => {
+        setContextMenu({ id: null, x: 0, y: 0, open: false });
+        onRequestClose?.();
+    };
 
     const handleRename = async () => {
         const raw = window.prompt("Rename project");
@@ -70,8 +56,7 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             });
             setProjects((prev) => prev.map((px) => (px.id === id ? { ...px, name, updatedAt: Date.now() } : px)));
         } finally {
-            setContextMenu({ id: null, x: 0, y: 0, open: false });
-            onRequestClose?.();
+            closeAllMenus();
         }
     };
 
@@ -108,8 +93,7 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             } as any;
             setProjects((prev) => [newMeta, ...prev]);
         } finally {
-            setContextMenu({ id: null, x: 0, y: 0, open: false });
-            onRequestClose?.();
+            closeAllMenus();
         }
     };
 
@@ -135,8 +119,7 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             setTimeout(() => URL.revokeObjectURL(url), 1000);
             DatabaseManager.setCurrentProjectId(original);
         } finally {
-            setContextMenu({ id: null, x: 0, y: 0, open: false });
-            onRequestClose?.();
+            closeAllMenus();
         }
     };
 
@@ -145,8 +128,7 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             await DatabaseManager.touchProject(id);
         } finally {
             onOpen(id);
-            setContextMenu({ id: null, x: 0, y: 0, open: false });
-            onRequestClose?.();
+            closeAllMenus();
         }
     };
 
@@ -156,31 +138,56 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             await DatabaseManager.deleteProject(id);
             setProjects((prev) => prev.filter((p) => p.id !== id));
         } finally {
-            setContextMenu({ id: null, x: 0, y: 0, open: false });
-            onRequestClose?.();
+            closeAllMenus();
         }
     };
 
-    return (
-        <div ref={rootRef} style={{ display: "flex", flexDirection: "column" }}>
-            <button style={menuItemStyle as any} onClick={handleRename}>Rename</button>
-            <button style={menuItemStyle as any} onClick={handleDuplicate}>Duplicate</button>
-            <button style={menuItemStyle as any} onClick={handleExport}>Export</button>
-            <button style={menuItemStyle as any} onClick={handleOpen}>Open</button>
-            <button style={{ ...(menuItemStyle as any), color: '#ff8a8a' }} onClick={handleDelete}>Delete</button>
+    const items = [
+        { label: "Rename", onClick: handleRename, danger: false },
+        { label: "Duplicate", onClick: handleDuplicate, danger: false },
+        { label: "Export", onClick: handleExport, danger: false },
+        { label: "Open", onClick: handleOpen, danger: false },
+        { label: "Delete", onClick: handleDelete, danger: true },
+    ];
+
+    const delayClasses = [
+        "delay-[120ms]",
+        "delay-[195ms]",
+        "delay-[270ms]",
+        "delay-[345ms]",
+        "delay-[420ms]",
+    ];
+
+    const panel = (
+        <div ref={rootRef} className={`ph-actions-menu flex flex-col transition-all ease-in-out duration-200 ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}>
+            {items.map((it, idx) => (
+                <button
+                    key={it.label}
+                    onClick={it.onClick}
+                    className={`block w-full text-left px-3 py-2 transition-all duration-200 ease-in-out ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${delayClasses[idx] || ''} ${it.danger ? 'text-[#ff8a8a]' : 'text-[#cfd6e4]'} bg-transparent hover:bg-white/5`}
+                >
+                    {it.label}
+                </button>
+            ))}
         </div>
     );
-};
 
-const menuItemStyle: React.CSSProperties = {
-    display: "block",
-    padding: "8px 12px",
-    color: "#cfd6e4",
-    background: "transparent",
-    border: "none",
-    textAlign: "left",
-    cursor: "pointer",
-    width: "100%",
+    if (variant === "context") {
+        const left = Math.min(x || 0, typeof window !== 'undefined' ? window.innerWidth - 180 : (x || 0));
+        const top = Math.min(y || 0, typeof window !== 'undefined' ? window.innerHeight - 160 : (y || 0));
+        return (
+            <div className={`ph-context-menu fixed bg-[#0e131a] border border-[#1a1f29] rounded-lg overflow-hidden z-[1000] w-[180px] ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} transition-all ease-in-out duration-200 ${containerClassName}`} style={{ left, top, ...(containerStyle || {}) }}>
+                {panel}
+            </div>
+        );
+    }
+
+    // inline variant
+    return (
+        <div className={`bg-[#0e131a] border border-[#1a1f29] rounded-lg overflow-hidden z-[1000] w-[180px] ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} transition-all ease-in-out duration-200 ${containerClassName}`} style={containerStyle}>
+            {panel}
+        </div>
+    );
 };
 
 export default ProjectActionsMenu;
