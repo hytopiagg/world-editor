@@ -6,6 +6,8 @@ import ProjectSidebar from "./ProjectSidebar";
 import ProjectHeader from "./ProjectHeader";
 import { useProjectSelection } from "./useProjectSelection";
 import ProjectListCard from "./ProjectListCard";
+import { DatabaseManager as DB } from "../managers/DatabaseManager";
+import ProjectFolderCard from "./ProjectFolderCard";
 
 type Project = {
     id: string;
@@ -15,6 +17,8 @@ type Project = {
     lastOpenedAt?: number;
     description?: string;
     thumbnailDataUrl?: string;
+    type?: string;
+    folderId?: string | null;
 };
 
 export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) => void }) {
@@ -29,10 +33,17 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     const [dragSelecting, setDragSelecting] = useState(false);
     const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
     const [pressedCardId, setPressedCardId] = useState<string | null>(null);
-    const [activeNav, setActiveNav] = useState<string>("my-files");
+    const [activeNav, setActiveNav] = useState<string>(() => {
+        try {
+            const hash = window.location.hash.replace('#', '') || 'my-files';
+            return hash;
+        } catch (_) { return 'my-files'; }
+    });
     const [hoverNav, setHoverNav] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     // inline menu state is now self-contained in card components
+    const [folders, setFolders] = useState<any[]>([]);
+    const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
 
     // Using shared ProjectActionsMenu component
 
@@ -200,16 +211,12 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             try { await (DatabaseManager as any).getDBConnection?.(); } catch (_) { }
             console.log('[ProjectHome] refresh -> fetching projects');
             const list = await DatabaseManager.listProjects();
+            const all = Array.isArray(list) ? list.map((p: any) => ({ ...p })) : [];
+            setFolders(all.filter((p: any) => p.type === 'folder'));
             setProjects(
-                Array.isArray(list)
-                    ? list
-                        .map((p: any) => ({ ...p }))
-                        .sort(
-                            (a: any, b: any) =>
-                                (b.lastOpenedAt || b.updatedAt || 0) -
-                                (a.lastOpenedAt || a.updatedAt || 0)
-                        )
-                    : []
+                all
+                    .filter((p: any) => p.type !== 'folder')
+                    .sort((a: any, b: any) => (b.lastOpenedAt || b.updatedAt || 0) - (a.lastOpenedAt || a.updatedAt || 0))
             );
             console.log('[ProjectHome] refresh -> projects loaded', (list || []).length);
         } catch (e) {
@@ -223,6 +230,13 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     useEffect(() => {
         refresh();
     }, []);
+    useEffect(() => {
+        try { window.location.hash = activeNav || 'my-files'; } catch (_) { }
+    }, [activeNav]);
+
+    useEffect(() => {
+        try { (window as any).__PH_SELECTED__ = selectedIds || []; } catch (_) { }
+    }, [selectedIds]);
 
     return (
         <div className="fixed inset-0 grid [grid-template-columns:280px_1fr] bg-[#0b0e12] text-[#eaeaea]">
@@ -230,45 +244,105 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             <ProjectSidebar activeNav={activeNav} setActiveNav={setActiveNav} hoverNav={hoverNav} setHoverNav={setHoverNav} />
 
             {/* Main area */}
-            <main className="flex flex-col gap-4 p-5 select-none" onMouseDown={beginDragSelect}>
+            <main className="flex flex-col p-5 gap-4 select-none" onMouseDown={beginDragSelect}
+                onContextMenu={(e) => {
+                    // Capture right-clicks at main level as a fallback to ensure consistency
+                    const target = e.target as HTMLElement;
+                    const inCard = !!(target && target.closest && (target.closest('[data-pid]') || target.closest('[data-fid]')));
+                    const inMenu = !!(target && target.closest && target.closest('.ph-context-menu'));
+                    if (inCard || inMenu) return; // let card/menu handlers manage
+                    e.preventDefault();
+                    console.log('[PH] main onContextMenu fallback');
+                    try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
+                    setSelectedIds([]);
+                    setContextMenu({ id: '__ROOT__', x: e.clientX, y: e.clientY, open: true });
+                }}
+            >
                 <ProjectHeader
                     viewMode={viewMode}
                     setViewMode={setViewMode}
                     query={query}
                     setQuery={setQuery}
                     onImport={handleImport}
+                    onCreateFolder={async () => {
+                        const raw = window.prompt('Folder name');
+                        if (raw === null) return;
+                        const name = (raw || '').trim() || 'New Folder';
+                        const folder = await DB.createFolder(name);
+                        if (folder) setFolders((prev) => [folder, ...prev]);
+                    }}
                     onCreate={async () => {
                         const name = window.prompt("Project name", newName || "Untitled Project");
                         if (!name) return;
                         await handleCreate(name);
                     }}
+                    title={activeFolderId ? (folders.find((f) => f.id === activeFolderId)?.name || 'Folder') : (activeNav === 'home' ? 'Home' : activeNav === 'my-files' ? 'My Files' : activeNav.replace('-', ' '))}
+                    breadcrumbs={activeFolderId ? [
+                        { label: 'My Files', onClick: () => setActiveFolderId(null) },
+                        { label: folders.find((f) => f.id === activeFolderId)?.name || 'Folder' },
+                    ] : []}
+                    showNewFolder={!activeFolderId}
                 />
 
                 {/* Content area */}
-                {viewMode === 'grid' ? (
-                    <div className="overflow-visible grid [grid-template-columns:repeat(auto-fill,minmax(340px,1fr))] gap-[18px] pr-2 relative">
+                {activeNav === 'my-files' && (viewMode === 'grid' ? (
+                    <div
+                        className="overflow-visible grid [grid-template-columns:repeat(auto-fill,minmax(340px,1fr))] gap-[18px] pr-2 relative"
+                        onDragOver={(e) => { e.preventDefault(); }}
+                        onDrop={async (e) => {
+                            try {
+                                const json = e.dataTransfer?.getData('application/x-project-ids');
+                                const ids = json ? JSON.parse(json) : [];
+                                if (Array.isArray(ids) && ids.length > 0) {
+                                    // Drop to root: remove folderId
+                                    for (const id of ids) await DB.updateProjectFolder(id, null);
+                                    // update local list immediately
+                                    setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId: null } : p));
+                                }
+                            } catch (_) { }
+                        }}
+                    >
+                        {/* Folders */}
+                        {!activeFolderId && folders.map((f) => (
+                            <ProjectFolderCard
+                                key={f.id}
+                                folder={f}
+                                onOpenFolder={(fid) => setActiveFolderId(fid)}
+                                setContextMenu={setContextMenu}
+                                onDropProjects={async (folderId, ids) => {
+                                    for (const id of ids) await DB.updateProjectFolder(id, folderId);
+                                    setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId } : p));
+                                }}
+                                projects={[...projects as any, ...folders as any] as any}
+                                setProjects={(updater: any) => setFolders((prev) => updater(prev as any))}
+                                selected={false}
+                                onSelect={() => { }}
+                            />
+                        ))}
                         {loading ? (
                             <div style={{ opacity: 0.7 }}>Loading...</div>
                         ) : filtered.length === 0 ? (
                             <div style={{ opacity: 0.7 }}>No projects found.</div>
                         ) : (
-                            filtered.map((p, index) => (
-                                <ProjectGridCard
-                                    key={p.id}
-                                    project={p as any}
-                                    index={index}
-                                    selected={selectedIds.includes(p.id)}
-                                    hoveredId={hoveredId}
-                                    setHoveredId={setHoveredId}
-                                    pressedCardId={pressedCardId}
-                                    setPressedCardId={setPressedCardId}
-                                    onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
-                                    onOpen={handleOpen}
-                                    projects={projects as any}
-                                    setProjects={setProjects as any}
-                                    setContextMenu={setContextMenu as any}
-                                />
-                            ))
+                            filtered
+                                .filter((p) => !activeFolderId || p.folderId === activeFolderId)
+                                .map((p, index) => (
+                                    <ProjectGridCard
+                                        key={p.id}
+                                        project={p as any}
+                                        index={index}
+                                        selected={selectedIds.includes(p.id)}
+                                        hoveredId={hoveredId}
+                                        setHoveredId={setHoveredId}
+                                        pressedCardId={pressedCardId}
+                                        setPressedCardId={setPressedCardId}
+                                        onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
+                                        onOpen={handleOpen}
+                                        projects={projects as any}
+                                        setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
+                                        setContextMenu={setContextMenu as any}
+                                    />
+                                ))
                         )}
                     </div>
                 ) : (
@@ -278,24 +352,26 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         ) : filtered.length === 0 ? (
                             <div style={{ opacity: 0.7 }}>No projects found.</div>
                         ) : (
-                            filtered.map((p, index) => (
-                                <ProjectListCard
-                                    key={p.id}
-                                    project={p}
-                                    index={index}
-                                    selected={selectedIds.includes(p.id)}
-                                    hoveredId={hoveredId}
-                                    setHoveredId={setHoveredId}
-                                    onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
-                                    onOpen={handleOpen}
-                                    projects={projects as any}
-                                    setProjects={setProjects as any}
-                                    setContextMenu={setContextMenu as any}
-                                />
-                            ))
+                            filtered
+                                .filter((p) => !activeFolderId || p.folderId === activeFolderId)
+                                .map((p, index) => (
+                                    <ProjectListCard
+                                        key={p.id}
+                                        project={p}
+                                        index={index}
+                                        selected={selectedIds.includes(p.id)}
+                                        hoveredId={hoveredId}
+                                        setHoveredId={setHoveredId}
+                                        onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
+                                        onOpen={handleOpen}
+                                        projects={projects as any}
+                                        setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
+                                        setContextMenu={setContextMenu as any}
+                                    />
+                                ))
                         )}
                     </div>
-                )}
+                ))}
                 {/* Global context menu (right-click) */}
                 {contextMenu.open && contextMenu.id && (
                     <>
@@ -345,7 +421,10 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                     setSelectedIds((prev) => prev.includes(pid!) ? prev : [pid!]);
                                     setContextMenu({ id: pid, x: e.clientX, y: e.clientY, open: true });
                                 } else {
-                                    setContextMenu({ id: null, x: 0, y: 0, open: false });
+                                    // Blank area: open root context menu (no selection)
+                                    try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
+                                    setSelectedIds([]);
+                                    setContextMenu({ id: '__ROOT__', x: e.clientX, y: e.clientY, open: true });
                                 }
                             }}
                             id="ph-cm-overlay"
@@ -357,10 +436,20 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             y={contextMenu.y}
                             id={contextMenu.id as string}
                             projects={projects as any}
-                            setProjects={setProjects as any}
+                            setProjects={(updater: any) => {
+                                // If folder was renamed/deleted, update folders list too
+                                if (contextMenu.id && contextMenu.id !== '__ROOT__' && folders.find((f) => f.id === contextMenu.id)) {
+                                    setFolders((prev) => typeof updater === 'function' ? updater(prev as any) : updater);
+                                } else {
+                                    setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater);
+                                }
+                            }}
                             setContextMenu={setContextMenu as any}
                             onOpen={onOpen}
                             onRequestClose={() => setContextMenu({ id: null, x: 0, y: 0, open: false })}
+                            containerClassName=""
+                            entityType={contextMenu.id === '__ROOT__' ? 'root' : (folders.find((f) => f.id === contextMenu.id) ? 'folder' : 'project')}
+                            onOpenFolder={(fid) => setActiveFolderId(fid)}
                         />
                     </>
                 )}

@@ -1,5 +1,10 @@
 import React from "react";
 
+interface Crumb {
+    label: string;
+    onClick?: () => void;
+}
+
 interface Props {
     viewMode: 'grid' | 'list';
     setViewMode: (m: 'grid' | 'list') => void;
@@ -7,13 +12,41 @@ interface Props {
     setQuery: (q: string) => void;
     onImport: (file: File) => void;
     onCreate: () => void;
+    onCreateFolder?: () => void;
+    title?: string;
+    breadcrumbs?: Crumb[];
+    showNewFolder?: boolean;
 }
 
-const ProjectHeader: React.FC<Props> = ({ viewMode, setViewMode, query, setQuery, onImport, onCreate }) => {
+const ProjectHeader: React.FC<Props> = ({ viewMode, setViewMode, query, setQuery, onImport, onCreate, onCreateFolder, title = 'My Files', breadcrumbs = [], showNewFolder = true }) => {
     return (
         <div className="flex items-center justify-between">
             <div className="flex gap-3 items-center">
-                <div className="text-[18px] font-bold">Home</div>
+                <div className="text-[18px] font-bold">
+                    {breadcrumbs.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                            {breadcrumbs.map((c, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                    {idx > 0 && <span className="text-white/30">/</span>}
+                                    {c.onClick ? (
+                                        <button onClick={c.onClick} className="text-white/70 hover:text-white transition-colors">
+                                            {c.label}
+                                        </button>
+                                    ) : (
+                                        <span className="text-white/90">{c.label}</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <span>{title}</span>
+                    )}
+                </div>
+                {showNewFolder && (
+                    <button onClick={onCreateFolder} className="inline-flex items-center justify-center bg-[#1a1e24] text-[#cfd6e4] border border-[#2b2f36] rounded-lg py-1.5 px-3 text-[13px]">
+                        + New Folder
+                    </button>
+                )}
             </div>
             <div className="flex gap-3 items-center">
                 <div className="inline-flex gap-2">

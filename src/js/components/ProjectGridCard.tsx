@@ -41,6 +41,17 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
             key={p.id}
             className="flex flex-col rounded-lg overflow-visible transition-shadow"
             data-pid={p.id}
+            draggable
+            onDragStart={(e) => {
+                try { e.dataTransfer?.setData('text/project-id', p.id); } catch (_) { }
+                // allow multi-select: include list of ids
+                try {
+                    const sel = (window as any).__PH_SELECTED__ || [];
+                    const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
+                    e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
+                } catch (_) { }
+            }}
+            onDragEnd={() => { }}
             onClick={(ev) => onSelect(p.id, index, ev)}
             onMouseDown={() => setPressedCardId(p.id)}
             onMouseUp={() => setPressedCardId(null)}
@@ -58,6 +69,16 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                 <div
                     className={`relative bg-[#141821] rounded-lg overflow-hidden transition-[transform,box-shadow,outline] ease-out ${isHoverOrActive ? 'shadow-[0_6px_16px_rgba(0,0,0,0.35)]' : ''}`}
                     onDoubleClick={() => onOpen(p.id)}
+                    draggable
+                    onDragStart={(e) => {
+                        try { e.dataTransfer!.effectAllowed = 'move'; } catch (_) { }
+                        try { e.dataTransfer?.setData('text/project-id', p.id); } catch (_) { }
+                        try {
+                            const sel = (window as any).__PH_SELECTED__ || [];
+                            const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
+                            e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
+                        } catch (_) { }
+                    }}
                 >
                     {/* 16:9 ratio using padding-top fallback */}
                     <div className="relative w-full pt-[56.25%]">

@@ -115,19 +115,19 @@ export class DatabaseManager {
                         } else {
                             // After deletions, write new data in chunks
                             const entries = Array.isArray(data) ? (data as any[]).map((v, i) => [String(i), v]) : Object.entries(data);
-                            const totalEntries = entries.length;
-                            const CHUNK_SIZE = 500000;
-                            try {
-                                for (let i = 0; i < totalEntries; i += CHUNK_SIZE) {
-                                    const chunk = entries.slice(i, i + CHUNK_SIZE);
-                                    const chunkNum = i / CHUNK_SIZE + 1;
-                                    const totalChunks = Math.ceil(totalEntries / CHUNK_SIZE);
+                        const totalEntries = entries.length;
+                        const CHUNK_SIZE = 500000;
+                        try {
+                            for (let i = 0; i < totalEntries; i += CHUNK_SIZE) {
+                                const chunk = entries.slice(i, i + CHUNK_SIZE);
+                                const chunkNum = i / CHUNK_SIZE + 1;
+                                const totalChunks = Math.ceil(totalEntries / CHUNK_SIZE);
                                     console.log(`[DB] Saving chunk ${chunkNum}/${totalChunks} (${chunk.length} items) for ${storeName} -> project ${projectId}`);
-                                    await new Promise<void>((resolveChunk, rejectChunk) => {
+                                await new Promise<void>((resolveChunk, rejectChunk) => {
                                         const chunkTx = db.transaction(storeName, "readwrite");
                                         const chunkStore = chunkTx.objectStore(storeName);
                                         const promises: Promise<void>[] = [];
-                                        if (storeName === STORES.TERRAIN) {
+                                    if (storeName === STORES.TERRAIN) {
                                             chunk.forEach(([coordKey, blockId]) => {
                                                 promises.push(new Promise<void>((res, rej) => {
                                                     const composed = DatabaseManager.composeKey(String(coordKey), projectId);
@@ -232,7 +232,7 @@ export class DatabaseManager {
                             }
                             cursor.continue();
                         } else {
-                            resolve(data);
+                                    resolve(data);
                         }
                     };
                     cursorReq.onerror = (e) => {
@@ -351,7 +351,7 @@ export class DatabaseManager {
         try {
             const id = this.uuidv4();
             const now = Date.now();
-            const meta = { id, name: name || "Untitled Project", createdAt: now, updatedAt: now, lastOpenedAt: now } as any;
+            const meta = { id, name: name || "Untitled Project", createdAt: now, updatedAt: now, lastOpenedAt: now, type: 'project', folderId: null } as any;
             const db = await this.getConnection();
             await new Promise<void>((resolve, reject) => {
                 const tx = db.transaction(STORES.PROJECTS, "readwrite");
@@ -365,6 +365,49 @@ export class DatabaseManager {
         } catch (e) {
             console.error("[DB] createProject failed", e);
             return null;
+        }
+    }
+    static async createFolder(name: string): Promise<{ id: string; name: string; createdAt: number; updatedAt: number; type: string; } | null> {
+        try {
+            const id = this.uuidv4();
+            const now = Date.now();
+            const meta = { id, name: name || "New Folder", createdAt: now, updatedAt: now, type: 'folder' } as any;
+            const db = await this.getConnection();
+            await new Promise<void>((resolve, reject) => {
+                const tx = db.transaction(STORES.PROJECTS, "readwrite");
+                const store = tx.objectStore(STORES.PROJECTS);
+                const req = store.put(meta, id);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+            return meta;
+        } catch (e) {
+            console.error("[DB] createFolder failed", e);
+            return null;
+        }
+    }
+    static async updateProjectFolder(projectId: string, folderId: string | null): Promise<void> {
+        try {
+            const db = await this.getConnection();
+            const meta = await new Promise<any>((resolve) => {
+                const tx = db.transaction(STORES.PROJECTS, "readonly");
+                const store = tx.objectStore(STORES.PROJECTS);
+                const req = store.get(projectId);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => resolve(null);
+            });
+            if (!meta) return;
+            meta.folderId = folderId || null;
+            meta.updatedAt = Date.now();
+            await new Promise<void>((resolve) => {
+                const tx = db.transaction(STORES.PROJECTS, "readwrite");
+                const store = tx.objectStore(STORES.PROJECTS);
+                const req = store.put(meta, projectId);
+                req.onsuccess = () => resolve();
+                req.onerror = () => resolve();
+            });
+        } catch (e) {
+            console.error("[DB] updateProjectFolder failed", e);
         }
     }
     static async listProjects(): Promise<any[]> {
@@ -395,6 +438,47 @@ export class DatabaseManager {
             }),
         ];
         await Promise.all(deletions);
+    }
+    static async deleteFolder(folderId: string): Promise<void> {
+        try {
+            const db = await this.getConnection();
+            const all = await this.listProjects();
+            const inFolder = all.filter((p: any) => p && p.folderId === folderId && p.type !== 'folder');
+            for (const p of inFolder) {
+                await this.updateProjectFolder(p.id, null);
+            }
+            await new Promise<void>((resolve) => {
+                const tx = db.transaction(STORES.PROJECTS, "readwrite");
+                const store = tx.objectStore(STORES.PROJECTS);
+                const req = store.delete(folderId);
+                req.onsuccess = () => resolve();
+                req.onerror = () => resolve();
+            });
+        } catch (e) {
+            console.error('[DB] deleteFolder failed', e);
+        }
+    }
+    static async setProjectsArchived(ids: string[], archived: boolean): Promise<void> {
+        try {
+            const db = await this.getConnection();
+            await Promise.all(ids.map((id) => new Promise<void>((resolve) => {
+                const tx = db.transaction(STORES.PROJECTS, 'readwrite');
+                const store = tx.objectStore(STORES.PROJECTS);
+                const req = store.get(id);
+                req.onsuccess = () => {
+                    const meta = req.result;
+                    if (!meta) return resolve();
+                    meta.archived = archived;
+                    meta.updatedAt = Date.now();
+                    const put = store.put(meta, id);
+                    put.onsuccess = () => resolve();
+                    put.onerror = () => resolve();
+                };
+                req.onerror = () => resolve();
+            })));
+        } catch (e) {
+            console.error('[DB] setProjectsArchived failed', e);
+        }
     }
     static async touchProject(projectId: string): Promise<void> {
         try {

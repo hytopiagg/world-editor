@@ -63,6 +63,16 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
         <div
             className={`grid grid-cols-[160px_1fr_28px] items-center gap-x-3 p-2.5 rounded-xl border border-transparent cursor-pointer relative ${selected ? 'bg-white/10' : (hoveredId === p.id ? 'bg-white/5' : 'bg-transparent')}`}
             data-pid={p.id}
+            draggable
+            onDragStart={(e) => {
+                try { e.dataTransfer?.setData('text/project-id', p.id); } catch (_) { }
+                try {
+                    const sel = (window as any).__PH_SELECTED__ || [];
+                    const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
+                    e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
+                } catch (_) { }
+            }}
+            onDragEnd={() => { }}
             onClick={(ev) => onSelect(p.id, index, ev)}
             onMouseEnter={() => setHoveredId(p.id)}
             onMouseLeave={() => setHoveredId(null)}
@@ -76,7 +86,15 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
                 {selected && (
                     <div className="absolute -inset-[6px] border-2 border-white/95 rounded-[10px] pointer-events-none z-[1]" />
                 )}
-                <div className="relative w-full h-[90px] rounded-lg overflow-hidden bg-[#141821]">
+                <div className="relative w-full h-[90px] rounded-lg overflow-hidden bg-[#141821]" draggable onDragStart={(e) => {
+                    try { e.dataTransfer!.effectAllowed = 'move'; } catch (_) { }
+                    try { e.dataTransfer?.setData('text/project-id', p.id); } catch (_) { }
+                    try {
+                        const sel = (window as any).__PH_SELECTED__ || [];
+                        const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
+                        e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
+                    } catch (_) { }
+                }}>
                     {p.thumbnailDataUrl ? (
                         <img src={p.thumbnailDataUrl} alt="Project thumbnail" className="object-cover absolute inset-0 w-full h-full" />
                     ) : (
