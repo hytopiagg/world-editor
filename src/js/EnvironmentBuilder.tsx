@@ -751,14 +751,7 @@ const EnvironmentBuilder = (
             lastPreviewTransform.current.rotation.copy(transform.rotation);
 
             previewModel.scale.copy(lastPreviewTransform.current.scale);
-            // Use placementSettings rotation as the authoritative yaw (in degrees)
-            const effectiveYawDeg = (placementSettingsRef.current?.rotation ?? 0) % 360;
-            const effectiveYawRad = (effectiveYawDeg * Math.PI) / 180;
-            previewModel.rotation.set(
-                lastPreviewTransform.current.rotation.x,
-                effectiveYawRad,
-                lastPreviewTransform.current.rotation.z
-            );
+            previewModel.rotation.copy(lastPreviewTransform.current.rotation);
 
             if (position) {
                 const offsetPosition = getVector3().copy(position).add(positionOffset.current);
@@ -1272,11 +1265,12 @@ const EnvironmentBuilder = (
             );
             const matrix = getMatrix4();
             const quaternion = getQuaternion();
-            // Apply manual 90° steps on top of current placement settings
             const rotationWithOffset = getEuler().copy(transform.rotation);
-            // Authoritative yaw from placementSettings.rotation
-            const yawDegForPlacement = (placementSettingsRef.current?.rotation ?? 0) % 360;
-            rotationWithOffset.y = (yawDegForPlacement * Math.PI) / 180;
+            // If random rotation is disabled, force yaw from placement settings; otherwise keep random yaw
+            if (!placementSettingsRef.current?.randomRotation) {
+                const yawDegForPlacement = (placementSettingsRef.current?.rotation ?? 0) % 360;
+                rotationWithOffset.y = (yawDegForPlacement * Math.PI) / 180;
+            }
             quaternion.setFromEuler(rotationWithOffset);
             matrix.compose(position, quaternion, transform.scale);
 
@@ -1668,12 +1662,7 @@ const EnvironmentBuilder = (
             const transform = getPlacementTransform();
 
             placeholderMeshRef.current.scale.copy(transform.scale);
-            const yawDeg = (placementSettingsRef.current?.rotation ?? 0) % 360;
-            placeholderMeshRef.current.rotation.set(
-                transform.rotation.x,
-                (yawDeg * Math.PI) / 180,
-                transform.rotation.z
-            );
+            placeholderMeshRef.current.rotation.copy(transform.rotation);
         }
     }, [placementSettings]);
 
