@@ -57,10 +57,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             const target = e.target as HTMLElement | null;
             const inInlineMenu = !!(target && (target as any).closest && (target as any).closest('.ph-inline-menu'));
             const inContextMenu = !!(target && (target as any).closest && (target as any).closest('.ph-context-menu'));
+            const inModal = !!(target && (target as any).closest && (target as any).closest('.ph-modal-panel'));
             const onTrigger = !!(target && target.closest('.ph-menu-trigger'));
             const onOverlay = !!(target && (target.closest as any) && (target.closest as any)('#ph-cm-overlay'));
             const onCard = !!(target && (target.closest && (target.closest('[data-pid]') || target.closest('[data-fid]'))));
-            if (!inInlineMenu && !inContextMenu && !onTrigger) {
+            if (!inInlineMenu && !inContextMenu && !onTrigger && !inModal) {
                 try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
                 // If a context menu is open, close it but keep selection on first outside click
                 if (contextMenu.open) {
@@ -80,7 +81,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                 }
             }
             // Do not clear selection when clicking inside menus
-            if (!onCard && !inInlineMenu && !inContextMenu && !onTrigger && !contextMenu.open) {
+            if (!onCard && !inInlineMenu && !inContextMenu && !onTrigger && !inModal && !contextMenu.open) {
                 setHoveredId(null);
                 clearSelection();
             }

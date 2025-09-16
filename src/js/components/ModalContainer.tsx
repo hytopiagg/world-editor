@@ -22,13 +22,13 @@ const ModalContainer: React.FC<ModalContainerProps> = ({ title, isOpen, onClose,
     if (!isOpen || typeof document === 'undefined') return null;
 
     const node = (
-        <div className="fixed inset-0 z-[1500]">
+        <div className="fixed inset-0 z-[1500] ph-modal-root">
             <div
                 className={`absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-200 ${entered ? 'opacity-100' : 'opacity-0'}`}
                 onClick={onClose}
             />
             <div className="flex absolute inset-0 justify-center items-center p-4">
-                <div className={`relative w-full max-w-[640px] rounded-2xl bg-[#0e131a] text-[#cfd6e4] shadow-2xl border border-[#1a1f29] transition-all duration-200 ease-out ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${className}`}>
+                <div className={`relative w-full max-w-[640px] rounded-2xl bg-[#0e131a] text-[#cfd6e4] shadow-2xl border border-[#1a1f29] transition-all duration-200 ease-out ph-modal-panel ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${className}`}>
                     {title && (
                         <div className="px-6 py-4 text-left text-[20px] font-bold leading-normal">
                             {title}
