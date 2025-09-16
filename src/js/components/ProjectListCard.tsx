@@ -76,6 +76,7 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
             onClick={(ev) => onSelect(p.id, index, ev)}
             onMouseEnter={() => setHoveredId(p.id)}
             onMouseLeave={() => setHoveredId(null)}
+            onMouseUp={(e) => { try { const sel = (window as any).__PH_SELECTED__ || []; console.log('[ListCard] mouseup selection snapshot', sel); } catch (_) { } }}
             onDoubleClick={() => onOpen(p.id)}
             onContextMenu={(e) => {
                 e.preventDefault();

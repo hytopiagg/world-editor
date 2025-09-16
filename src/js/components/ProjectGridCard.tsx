@@ -25,6 +25,34 @@ interface Props {
     setContextMenu: (v: { id: string | null; x: number; y: number; open: boolean }) => void;
 }
 
+function formatLastEdited(ts?: number) {
+    const t = ts || 0;
+    const diff = Date.now() - t;
+    const m = 60 * 1000;
+    const h = 60 * m;
+    const d = 24 * h;
+    const w = 7 * d;
+    const mo = 30 * d;
+    if (diff < h) {
+        const mins = Math.max(1, Math.round(diff / m));
+        return `Last edited ${mins} minute${mins === 1 ? '' : 's'} ago`;
+    }
+    if (diff < d) {
+        const hrs = Math.round(diff / h);
+        return `Last edited ${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+    }
+    if (diff < w * 2) {
+        const days = Math.round(diff / d);
+        return `Last edited ${days} day${days === 1 ? '' : 's'} ago`;
+    }
+    if (diff < mo * 2) {
+        const weeks = Math.round(diff / w);
+        return `Last edited ${weeks} week${weeks === 1 ? '' : 's'} ago`;
+    }
+    const months = Math.round(diff / mo);
+    return `Last edited ${months} month${months === 1 ? '' : 's'} ago`;
+}
+
 const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hoveredId, setHoveredId, pressedCardId, setPressedCardId, onSelect, onOpen, projects, setProjects, setContextMenu }) => {
     const [inlineOpen, setInlineOpen] = useState(false);
 
@@ -55,7 +83,7 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
             onDragEnd={() => { console.log('[Card] dragend', p.id); }}
             onClick={(ev) => onSelect(p.id, index, ev)}
             onMouseDown={() => setPressedCardId(p.id)}
-            onMouseUp={() => setPressedCardId(null)}
+            onMouseUp={(e) => { setPressedCardId(null); try { const sel = (window as any).__PH_SELECTED__ || []; console.log('[Card] mouseup selection snapshot', sel); } catch (_) { } }}
             onMouseLeave={() => { setPressedCardId((cur) => (cur === p.id ? null : cur)); setHoveredId(null); }}
             onMouseEnter={() => setHoveredId(p.id)}
             onContextMenu={(e) => {
@@ -103,7 +131,7 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                 <div className="flex items-center justify-between">
                     <div className="text-left">
                         <div className="font-semibold bg-transparent">{p.name || "Untitled"}</div>
-                        <div className="opacity-70 text-[12px] bg-transparent"></div>
+                        <div className="opacity-70 text-[12px] bg-transparent">{formatLastEdited(p.updatedAt || p.createdAt)}</div>
                     </div>
                     <div className="ph-menu relative transform-none w-[28px] h-[28px] inline-block z-[1100]" onClick={(e) => e.stopPropagation()}>
                         <button

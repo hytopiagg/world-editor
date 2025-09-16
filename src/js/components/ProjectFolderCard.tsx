@@ -65,18 +65,12 @@ const ProjectFolderCard: React.FC<Props> = ({ folder, onOpenFolder, setContextMe
             {isHoverOrActive && (
                 <div className="absolute -inset-[6px] border-2 border-white/95 rounded-[10px] pointer-events-none z-[1]" />
             )}
-            <div className="flex items-center justify-between mb-2">
-                <div>
-                    <div className="font-semibold">{folder.name}</div>
-                    <div className="text-white/50 text-[12px]">Folder • {childProjects.length}</div>
-                </div>
-            </div>
             <div className="relative">
-                <div className="grid grid-cols-3 gap-[4px]">
+                <div className="grid grid-cols-3 gap-[4px] rounded-md overflow-hidden">
                     {childProjects.slice(0, 9).map((p: any, idx: number) => (
                         <div key={p.id} className="relative w-full pt-[56%] rounded-md overflow-hidden bg-[#141821]">
                             {p.thumbnailDataUrl ? (
-                                <img src={p.thumbnailDataUrl} className="absolute inset-0 w-full h-full object-cover" alt="thumb" />
+                                <img src={p.thumbnailDataUrl} className="object-cover absolute inset-0 w-full h-full" alt="thumb" />
                             ) : (
                                 <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white/50">No img</div>
                             )}
@@ -89,6 +83,10 @@ const ProjectFolderCard: React.FC<Props> = ({ folder, onOpenFolder, setContextMe
                         <div className="col-span-3 text-white/40 text-[12px] py-6 text-center">Empty folder</div>
                     )}
                 </div>
+            </div>
+            <div className="mt-2">
+                <div className="font-semibold bg-transparent">{folder.name}</div>
+                <div className="opacity-70 text-[12px] bg-transparent">Folder • {childProjects.length}</div>
             </div>
             <div className="absolute top-2 right-2">
                 <button

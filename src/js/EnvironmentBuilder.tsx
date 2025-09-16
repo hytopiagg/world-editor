@@ -1575,27 +1575,25 @@ const EnvironmentBuilder = (
     };
 
     const refreshEnvironmentFromDB = async () => {
-        console.log("refreshEnvironmentFromDB");
+        console.log('[Env] refreshEnvironmentFromDB start', { currentProjectId: DatabaseManager.getCurrentProjectId() });
         try {
             const savedEnv = await DatabaseManager.getData(
                 STORES.ENVIRONMENT,
                 "current"
             );
-            console.log("savedEnv", savedEnv);
-            if (Object.keys(savedEnv).length > 0) {
-                console.log(
-                    `Loading ${Object.keys(savedEnv).length} environment objects from database`
-                );
+            console.log('[Env] savedEnv type/len', { type: typeof savedEnv, isArray: Array.isArray(savedEnv), keys: savedEnv && typeof savedEnv === 'object' ? Object.keys(savedEnv).length : 'n/a' });
+            if (savedEnv && Object.keys(savedEnv).length > 0) {
+                console.log(`[Env] Loading ${Object.keys(savedEnv).length} environment objects from database`);
 
                 updateEnvironmentToMatch(Object.values(savedEnv));
                 // Rebuild all visible instances after loading from database
                 rebuildAllVisibleInstances(cameraPosition);
             } else {
-                console.log("No environment objects found in database");
+                console.log("[Env] No environment objects found in database; clearing local env");
                 clearEnvironments();
             }
         } catch (error) {
-            console.error("Error refreshing environment:", error);
+            console.error("[Env] Error refreshing environment:", error);
         }
     };
     const updatePreviewPosition = (position) => {
@@ -1636,18 +1634,22 @@ const EnvironmentBuilder = (
     }, [totalEnvironmentObjects, onTotalObjectsChange]);
 
     useEffect(() => {
+        console.log('[Env] mount/preload guard', { hasScene: !!scene, projectId });
         if (!scene) return;
         if (!projectId) return;
+        console.log('[Env] calling preloadModels');
         preloadModels().catch((error) => {
-            console.error("Error in preloadModels:", error);
+            console.error("[Env] Error in preloadModels:", error);
         });
     }, [scene, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Reload environment whenever projectId changes (after models have been preloaded once)
     useEffect(() => {
+        console.log('[Env] projectId/scene effect', { hasScene: !!scene, projectId });
         if (!projectId) return;
         // If scene is ready and models likely loaded, refresh entities for this project
         if (scene && typeof refreshEnvironmentFromDB === 'function') {
+            console.log('[Env] refreshing from DB for project', projectId);
             refreshEnvironmentFromDB();
         }
     }, [projectId, scene]); // eslint-disable-line react-hooks/exhaustive-deps

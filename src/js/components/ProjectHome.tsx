@@ -236,6 +236,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
 
     useEffect(() => {
         try { (window as any).__PH_SELECTED__ = selectedIds || []; } catch (_) { }
+        try { console.log('[PH] selection changed', selectedIds); } catch (_) { }
     }, [selectedIds]);
 
     const titleForNav = () => {
@@ -331,6 +332,10 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                 setProjects={(updater: any) => setFolders((prev) => updater(prev as any))}
                                 selected={false}
                                 onSelect={() => { }}
+                                hoveredId={hoveredId}
+                                setHoveredId={setHoveredId}
+                                pressedCardId={pressedCardId}
+                                setPressedCardId={setPressedCardId}
                             />
                         ))}
                         {loading ? (

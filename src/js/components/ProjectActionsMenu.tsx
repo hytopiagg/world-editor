@@ -87,10 +87,20 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
     const [moveOpen, setMoveOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [selectionSnapshot, setSelectionSnapshot] = useState<string[]>([]);
 
     useEffect(() => {
         const t = requestAnimationFrame(() => setEntered(true));
         return () => cancelAnimationFrame(t);
+    }, []);
+
+    // Capture selection at the moment the menu mounts so later clicks do not clear it
+    useEffect(() => {
+        try {
+            const live = (typeof window !== 'undefined' && (window as any).__PH_SELECTED__ ? (window as any).__PH_SELECTED__ : []) as string[];
+            setSelectionSnapshot(Array.isArray(live) ? [...live] : []);
+            console.log('[ActionsMenu] selection snapshot at open', live);
+        } catch (_) { setSelectionSnapshot([]); }
     }, []);
 
     const closeAllMenus = () => {
@@ -278,9 +288,9 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
                     onClose={() => setMoveOpen(false)}
                     onMove={async (folderId) => {
                         try {
-                            const currentSelected = (typeof window !== 'undefined' && (window as any).__PH_SELECTED__ ? (window as any).__PH_SELECTED__ : []) as string[];
-                            const ids = Array.isArray(currentSelected) && currentSelected.length > 1 ? currentSelected : [id];
-                            console.log('[MoveTo] begin', { targetFolderId: folderId, count: ids.length, ids });
+                            const currentSelected = selectionSnapshot;
+                            const ids = Array.isArray(currentSelected) && currentSelected.length > 0 ? currentSelected : [id];
+                            console.log('[MoveTo] begin', { fromClickId: id, targetFolderId: folderId, selectionAtStart: currentSelected, finalIds: ids, count: ids.length });
                             await Promise.all(ids.map((pid) => DatabaseManager.updateProjectFolder(pid, folderId)));
                             setProjects((prev: any) => prev.map((p: any) => ids.includes(p.id) ? { ...p, folderId } : p));
                             console.log('[MoveTo] updated state', { ids, to: folderId });

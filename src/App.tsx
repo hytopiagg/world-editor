@@ -41,7 +41,11 @@ function App() {
     // Always start at Project Home; don't auto-open last project
     const [projectId, setProjectId] = useState<string | null>(null);
     useEffect(() => {
-        if (projectId) DatabaseManager.setCurrentProjectId(projectId);
+        console.log('[App] projectId effect', { projectId });
+        if (projectId) {
+            console.log('[App] setCurrentProjectId', { projectId });
+            DatabaseManager.setCurrentProjectId(projectId);
+        }
     }, [projectId]);
     const handleSwitchProject = async () => {
         try {
@@ -895,7 +899,7 @@ function App() {
                             cameraReset={cameraReset}
                             cameraAngle={cameraAngle}
                             setPageIsLoaded={setPageIsLoaded}
-                            onSceneReady={(sceneObject) => setScene(sceneObject)}
+                            onSceneReady={(sceneObject) => { console.log('[App] onSceneReady'); setScene(sceneObject); }}
                             gridSize={gridSize}
                             environmentBuilderRef={environmentBuilderRef}
                             previewPositionToAppJS={setCurrentPreviewPosition}
