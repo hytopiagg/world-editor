@@ -201,6 +201,22 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
         }
     };
 
+    const handleCreateProject = async () => {
+        const raw = window.prompt('Project name', 'Untitled Project');
+        if (raw === null) return;
+        const name = (raw || '').trim() || 'Untitled Project';
+        try {
+            const meta = await DatabaseManager.createProject(name);
+            const pid = (meta as any)?.id as string | undefined;
+            if (pid) {
+                await DatabaseManager.touchProject(pid);
+                onOpen(pid);
+            }
+        } finally {
+            closeAllMenus();
+        }
+    };
+
     const handleOpen = async () => {
         try { await DatabaseManager.touchProject(id); } finally { onOpen(id); closeAllMenus(); }
     };
@@ -225,6 +241,7 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
 
     const items = type === 'root'
         ? [
+            { label: "+ New Project", onClick: handleCreateProject, danger: false },
             {
                 label: "+ New Folder", onClick: () => {
                     const eventName = '[Actions] Create folder';

@@ -81,9 +81,24 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                 } catch (err) { console.warn('[Card] dragstart error', err); }
             }}
             onDragEnd={() => { console.log('[Card] dragend', p.id); }}
-            onClick={(ev) => onSelect(p.id, index, ev)}
-            onMouseDown={() => setPressedCardId(p.id)}
-            onMouseUp={(e) => { setPressedCardId(null); try { const sel = (window as any).__PH_SELECTED__ || []; console.log('[Card] mouseup selection snapshot', sel); } catch (_) { } }}
+            onClick={(ev) => {
+                try {
+                    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                    console.log('[GridCard] click', { id: p.id, index, x: ev.clientX, y: ev.clientY, rect, meta: { name: p.name } });
+                } catch (_) { }
+                onSelect(p.id, index, ev);
+            }}
+            onMouseDown={(e) => {
+                try { console.log('[GridCard] mousedown', { id: p.id, index, button: e.button }); } catch (_) { }
+                setPressedCardId(p.id);
+            }}
+            onMouseUp={(e) => {
+                setPressedCardId(null);
+                try {
+                    const sel = (window as any).__PH_SELECTED__ || [];
+                    console.log('[GridCard] mouseup selection snapshot', { id: p.id, index, selectedIds: sel });
+                } catch (_) { }
+            }}
             onMouseLeave={() => { setPressedCardId((cur) => (cur === p.id ? null : cur)); setHoveredId(null); }}
             onMouseEnter={() => setHoveredId(p.id)}
             onContextMenu={(e) => {

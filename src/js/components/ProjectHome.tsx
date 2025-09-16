@@ -340,7 +340,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         ))}
                         {loading ? (
                             <div style={{ opacity: 0.7 }}>Loading...</div>
-                        ) : filtered.filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId)).length === 0 ? (
+                        ) : (filtered.filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId)).length === 0 && (!activeFolderId ? folders.length === 0 : true)) ? (
                             <div style={{ opacity: 0.7 }}>No projects found.</div>
                         ) : (
                             filtered
@@ -355,7 +355,16 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         setHoveredId={setHoveredId}
                                         pressedCardId={pressedCardId}
                                         setPressedCardId={setPressedCardId}
-                                        onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
+                                        onSelect={(id, idx, ev) => {
+                                            let visibleIds: string[] = [];
+                                            try {
+                                                visibleIds = filtered
+                                                    .filter((pp) => !activeFolderId ? (pp.folderId == null) : (pp.folderId === activeFolderId))
+                                                    .map((pp) => pp.id);
+                                                console.log('[ProjectHome] onSelect (grid)', { clickedId: id, idx, visibleIds, selectedIdsBefore: selectedIds });
+                                            } catch (_) { }
+                                            selectByIndex(visibleIds, idx, ev);
+                                        }}
                                         onOpen={handleOpen}
                                         projects={[...folders as any, ...projects as any] as any}
                                         setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
@@ -394,7 +403,12 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         selected={selectedIds.includes(p.id)}
                                         hoveredId={hoveredId}
                                         setHoveredId={setHoveredId}
-                                        onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
+                                        onSelect={(id, idx, ev) => {
+                                            const visibleIds = filtered
+                                                .filter((pp) => !activeFolderId ? (pp.folderId == null) : (pp.folderId === activeFolderId))
+                                                .map((pp) => pp.id);
+                                            selectByIndex(visibleIds, idx, ev);
+                                        }}
                                         onOpen={handleOpen}
                                         projects={[...folders as any, ...projects as any] as any}
                                         setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
@@ -427,8 +441,10 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         }
                                         if (pid) {
                                             console.log('[PH] overlay select underlying', { pid });
-                                            const idx = filtered.findIndex(pp => pp.id === pid);
-                                            selectByIndex(filtered.map(pp => pp.id), idx, e as any);
+                                            const visible = filtered.filter((pp) => !activeFolderId ? (pp.folderId == null) : (pp.folderId === activeFolderId));
+                                            const visibleIds = visible.map(pp => pp.id);
+                                            const idx = visibleIds.findIndex((vid) => vid === pid);
+                                            selectByIndex(visibleIds, idx, e as any);
                                         }
                                     } catch (_) { }
                                     setContextMenu({ id: null, x: 0, y: 0, open: false });
