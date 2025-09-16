@@ -66,6 +66,7 @@ const getModelYShift = (modelUrl?: string) => {
 const EnvironmentBuilder = (
     {
         scene,
+        projectId,
         previewPositionFromAppJS,
         currentBlockType,
         onTotalObjectsChange,
@@ -1635,12 +1636,21 @@ const EnvironmentBuilder = (
     }, [totalEnvironmentObjects, onTotalObjectsChange]);
 
     useEffect(() => {
-        if (scene) {
-            preloadModels().catch((error) => {
-                console.error("Error in preloadModels:", error);
-            });
+        if (!scene) return;
+        if (!projectId) return;
+        preloadModels().catch((error) => {
+            console.error("Error in preloadModels:", error);
+        });
+    }, [scene, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Reload environment whenever projectId changes (after models have been preloaded once)
+    useEffect(() => {
+        if (!projectId) return;
+        // If scene is ready and models likely loaded, refresh entities for this project
+        if (scene && typeof refreshEnvironmentFromDB === 'function') {
+            refreshEnvironmentFromDB();
         }
-    }, [scene]);
+    }, [projectId, scene]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (currentBlockType?.isEnvironment) {

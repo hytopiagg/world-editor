@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
+import ModalContainer from "./ModalContainer";
 
 interface FolderMeta { id: string; name: string; }
 
@@ -10,27 +11,41 @@ interface Props {
 }
 
 const MoveToModal: React.FC<Props> = ({ isOpen, folders, onClose, onMove }) => {
-    if (!isOpen) return null;
+    const [query, setQuery] = useState("");
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return folders;
+        return folders.filter((f) => (f.name || "").toLowerCase().includes(q));
+    }, [folders, query]);
+
     return (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-            <div className="relative bg-[#0e131a] border border-[#1a1f29] rounded-lg w-[340px] p-4 text-[#cfd6e4] shadow-xl">
-                <div className="text-white font-semibold mb-3">Move to…</div>
-                <div className="max-h-[240px] overflow-auto space-y-1">
-                    <button className="w-full text-left px-3 py-2 rounded hover:bg-white/5" onClick={() => onMove(null)}>
+        <ModalContainer isOpen={isOpen} onClose={onClose} title="Move to…" className="min-w-[480px]">
+            <div className="flex flex-col gap-3">
+                <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search folders"
+                    className="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                />
+                <div className="max-h-[320px] overflow-auto rounded-xl border border-white/10">
+                    <button className="w-full text-left px-3 py-2 hover:bg-white/10" onClick={() => onMove(null)}>
                         Root
                     </button>
-                    {folders.map((f) => (
-                        <button key={f.id} className="w-full text-left px-3 py-2 rounded hover:bg-white/5" onClick={() => onMove(f.id)}>
+                    {filtered.map((f) => (
+                        <button key={f.id} className="w-full text-left px-3 py-2 hover:bg-white/10" onClick={() => onMove(f.id)}>
                             {f.name}
                         </button>
                     ))}
+                    {filtered.length === 0 && (
+                        <div className="px-3 py-6 text-white/50 text-center">No matching folders</div>
+                    )}
                 </div>
-                <div className="mt-3 flex justify-end gap-2">
-                    <button className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/15" onClick={onClose}>Cancel</button>
+                <div className="flex justify-end gap-2">
+                    <button className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15" onClick={onClose}>Cancel</button>
                 </div>
             </div>
-        </div>
+        </ModalContainer>
     );
 };
 

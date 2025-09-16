@@ -1,6 +1,57 @@
 import React, { useEffect, useRef, useState } from "react";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
+import ModalContainer from "./ModalContainer";
 import MoveToModal from "./MoveToModal";
+
+interface RenameModalProps {
+    isOpen: boolean;
+    initialName: string;
+    title?: string;
+    onCancel: () => void;
+    onConfirm: (name: string) => void;
+}
+
+const RenameModal: React.FC<RenameModalProps> = ({ isOpen, initialName, title = "Rename", onCancel, onConfirm }) => {
+    const [value, setValue] = useState(initialName);
+    useEffect(() => { if (isOpen) setValue(initialName); }, [isOpen, initialName]);
+    if (!isOpen) return null;
+    return (
+        <ModalContainer isOpen={isOpen} onClose={onCancel} title={title} className="min-w-[480px]">
+            <form onSubmit={(e) => { e.preventDefault(); onConfirm((value || '').trim()); }} className="flex flex-col gap-3">
+                <input value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none" placeholder="Name" />
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={onCancel} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15">Cancel</button>
+                    <button type="submit" className="px-3 py-2 rounded-xl bg-white/20 hover:bg-white/25">Save</button>
+                </div>
+            </form>
+        </ModalContainer>
+    );
+};
+
+interface ConfirmModalProps {
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+}
+
+const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, title = "Confirm", message, confirmLabel = "Delete", cancelLabel = "Cancel", onCancel, onConfirm }) => {
+    if (!isOpen) return null;
+    return (
+        <ModalContainer isOpen={isOpen} onClose={onCancel} title={title} className="min-w-[480px]">
+            <div className="flex flex-col gap-4">
+                <div className="text-white/80">{message}</div>
+                <div className="flex justify-end gap-2">
+                    <button onClick={onCancel} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15">{cancelLabel}</button>
+                    <button onClick={onConfirm} className="px-3 py-2 rounded-xl bg-[#3a3f46] text-[#ff8a8a] border border-[#504a4a]">{confirmLabel}</button>
+                </div>
+            </div>
+        </ModalContainer>
+    );
+};
 
 export type ProjectMeta = {
     id: string;
@@ -27,12 +78,15 @@ interface Props {
     containerStyle?: React.CSSProperties;
     entityType?: "project" | "folder" | "root";
     onOpenFolder?: (id: string) => void;
+    folders?: { id: string; name: string }[];
 }
 
-const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setContextMenu, onOpen, onRequestClose, variant = "inline", x, y, containerClassName = "", containerStyle, entityType, onOpenFolder }) => {
+const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setContextMenu, onOpen, onRequestClose, variant = "inline", x, y, containerClassName = "", containerStyle, entityType, onOpenFolder, folders = [] }) => {
     const rootRef = useRef<HTMLDivElement | null>(null);
     const [entered, setEntered] = useState(false);
     const [moveOpen, setMoveOpen] = useState(false);
+    const [renameOpen, setRenameOpen] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     useEffect(() => {
         const t = requestAnimationFrame(() => setEntered(true));
@@ -44,10 +98,7 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
         onRequestClose?.();
     };
 
-    const handleRename = async () => {
-        const raw = window.prompt("Rename");
-        if (raw === null) return;
-        const name = (raw || "").trim();
+    const performRename = async (name: string) => {
         if (!name) return;
         try {
             console.log('[Actions] Rename start', { id, name });
@@ -55,31 +106,30 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             await new Promise<void>((resolve) => {
                 const tx = db.transaction(STORES.PROJECTS, "readwrite");
                 const store = tx.objectStore(STORES.PROJECTS);
-                const src = projects.find((pp) => pp.id === id) || { id } as any;
+                const src = (projects.find((pp) => pp.id === id) || { id }) as any;
                 const next = {
                     ...(src || {}),
                     id,
                     name,
                     updatedAt: Date.now(),
-                    // Preserve entity type and folder assignment
-                    type: (src && (src as any).type) || (entityType === 'folder' ? 'folder' : 'project'),
-                    folderId: (src && (src as any).folderId) !== undefined ? (src as any).folderId : null,
+                    type: (src && src.type) || (entityType === 'folder' ? 'folder' : 'project'),
+                    folderId: src?.folderId ?? null,
                 } as any;
                 const req = store.put(next, id);
                 req.onsuccess = () => resolve();
                 req.onerror = () => resolve();
             });
-            setProjects((prev) => prev.map((px) => (px.id === id ? { ...px, name, updatedAt: Date.now(), type: (px as any).type || (entityType === 'folder' ? 'folder' : (px as any).type), folderId: (px as any).folderId ?? null } : px)) as any);
+            setProjects((prev: any[]) => prev.map((px: any) => (px.id === id ? { ...px, name, updatedAt: Date.now() } : px)));
         } finally {
             console.log('[Actions] Rename done');
-            closeAllMenus();
         }
     };
 
     const handleDuplicate = async () => {
         try {
             console.log('[Actions] Duplicate start', { id });
-            const src = projects.find((p) => p.id === id) || (await DatabaseManager.listProjects()).find((p) => p.id === id);
+            const all = await DatabaseManager.listProjects();
+            const src = (projects.find((p) => p.id === id) || all.find((p) => p.id === id)) as any;
             if (!src) return;
             const copy = await DatabaseManager.createProject(`${src.name} (Copy)`);
             const newId = (copy && (copy as any).id) as string | undefined;
@@ -97,13 +147,13 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             if (sky !== undefined) await DatabaseManager.saveData("settings", `project:${newId}:selectedSkybox`, sky);
             if (amb !== undefined) await DatabaseManager.saveData("settings", `project:${newId}:ambientLight`, amb);
             if (dir !== undefined) await DatabaseManager.saveData("settings", `project:${newId}:directionalLight`, dir);
-            if ((src as any).thumbnailDataUrl) await DatabaseManager.saveProjectThumbnail(newId, (src as any).thumbnailDataUrl);
+            if (src.thumbnailDataUrl) await DatabaseManager.saveProjectThumbnail(newId, src.thumbnailDataUrl);
             DatabaseManager.setCurrentProjectId(original);
             const now = Date.now();
             const newMeta: any = {
                 ...(copy as any),
                 name: `${src.name} (Copy)`,
-                thumbnailDataUrl: (src as any).thumbnailDataUrl,
+                thumbnailDataUrl: src.thumbnailDataUrl,
                 type: 'project',
                 updatedAt: now,
                 lastOpenedAt: now,
@@ -142,31 +192,20 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
     };
 
     const handleOpen = async () => {
-        try {
-            await DatabaseManager.touchProject(id);
-        } finally {
-            onOpen(id);
-            closeAllMenus();
-        }
+        try { await DatabaseManager.touchProject(id); } finally { onOpen(id); closeAllMenus(); }
     };
 
-    const handleOpenFolder = () => {
-        try { onOpenFolder && onOpenFolder(id); } finally { closeAllMenus(); }
-    };
+    const handleOpenFolder = () => { try { onOpenFolder && onOpenFolder(id); } finally { closeAllMenus(); } };
 
-    const handleDelete = async () => {
-        try {
-            console.log('[Actions] Delete start', { id });
+    const performDelete = async () => {
+        if (entityType === 'folder') {
+            await DatabaseManager.deleteFolder(id);
+            // Folders are managed by caller; setProjects here is assumed to update appropriate list (caller decides which setter to pass)
+            setProjects((prev: any[]) => prev.filter((p: any) => p.id !== id));
+        } else {
             await DatabaseManager.deleteProject(id);
-            setProjects((prev) => prev.filter((p) => p.id !== id));
-        } finally {
-            console.log('[Actions] Delete done');
-            closeAllMenus();
+            setProjects((prev: any[]) => prev.filter((p: any) => p.id !== id));
         }
-    };
-
-    const handleDeleteFolder = async () => {
-        try { await DatabaseManager.deleteFolder(id); setProjects((prev) => prev.filter((p) => p.id !== id)); } finally { closeAllMenus(); }
     };
 
     const selected = (typeof window !== 'undefined' && (window as any).__PH_SELECTED__ ? (window as any).__PH_SELECTED__ : []) as string[];
@@ -177,19 +216,26 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
     const items = type === 'root'
         ? [
             {
-                label: "+ New Folder", onClick: async () => {
-                    const raw = window.prompt('Folder name');
-                    if (raw === null) return;
-                    const name = (raw || '').trim() || 'New Folder';
-                    try { const f = await DatabaseManager.createFolder(name); setProjects((prev: any) => [f, ...prev]); } finally { closeAllMenus(); }
+                label: "+ New Folder", onClick: () => {
+                    const eventName = '[Actions] Create folder';
+                    const doCreate = async () => {
+                        const raw = window.prompt('Folder name');
+                        if (raw === null) return;
+                        const name = (raw || '').trim() || 'New Folder';
+                        console.log(eventName, { name });
+                        const f = await DatabaseManager.createFolder(name);
+                        setProjects((prev: any) => [f, ...prev]);
+                        closeAllMenus();
+                    };
+                    doCreate();
                 }, danger: false
             },
         ]
         : type === 'folder'
             ? [
                 { label: "Open", onClick: handleOpenFolder, danger: false },
-                { label: "Rename", onClick: handleRename, danger: false },
-                { label: "Delete", onClick: handleDeleteFolder, danger: true },
+                { label: "Rename", onClick: () => setRenameOpen(true), danger: false },
+                { label: "Delete", onClick: () => setConfirmOpen(true), danger: true },
             ]
             : [
                 ...(multi ? [
@@ -198,11 +244,11 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
                     { label: "Archive all", onClick: async () => { try { await DatabaseManager.setProjectsArchived(selected, true); } finally { closeAllMenus(); } }, danger: false },
                 ] : [
                     { label: "Move to…", onClick: () => setMoveOpen(true), danger: false },
-                    { label: "Rename", onClick: handleRename, danger: false },
+                    { label: "Rename", onClick: () => setRenameOpen(true), danger: false },
                     { label: "Duplicate", onClick: handleDuplicate, danger: false },
                     { label: "Export", onClick: handleExport, danger: false },
                     { label: "Open", onClick: handleOpen, danger: false },
-                    { label: "Delete", onClick: async () => { try { await handleDelete(); } finally { } }, danger: true },
+                    { label: "Delete", onClick: () => setConfirmOpen(true), danger: true },
                 ]),
             ];
 
@@ -228,7 +274,7 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             {moveOpen && (
                 <MoveToModal
                     isOpen={moveOpen}
-                    folders={(projects as any[]).filter((p: any) => p && p.type === 'folder') as any}
+                    folders={folders || []}
                     onClose={() => setMoveOpen(false)}
                     onMove={async (folderId) => {
                         try {
@@ -243,21 +289,36 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
                     }}
                 />
             )}
+            {renameOpen && (
+                <RenameModal
+                    isOpen={renameOpen}
+                    initialName={(projects.find((pp) => pp.id === id)?.name) || ''}
+                    onCancel={() => setRenameOpen(false)}
+                    onConfirm={async (name) => { await performRename(name); setRenameOpen(false); closeAllMenus(); }}
+                />
+            )}
+            {confirmOpen && (
+                <ConfirmModal
+                    isOpen={confirmOpen}
+                    title={entityType === 'folder' ? 'Delete folder' : 'Delete project'}
+                    message={entityType === 'folder' ? 'This will delete the folder. Projects inside will be moved to root.' : 'This will permanently delete the project.'}
+                    onCancel={() => setConfirmOpen(false)}
+                    onConfirm={async () => { await performDelete(); setConfirmOpen(false); closeAllMenus(); }}
+                />
+            )}
         </div>
     );
 
-    if (variant === "context") {
-        const left = Math.min(x || 0, typeof window !== 'undefined' ? window.innerWidth - 180 : (x || 0));
-        const top = Math.min(y || 0, typeof window !== 'undefined' ? window.innerHeight - 160 : (y || 0));
+    if (variant === 'inline') {
         return (
-            <div className={`ph-context-menu fixed bg-[#0e131a] border border-[#1a1f29] rounded-lg overflow-hidden z-[1000] w-[180px] ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} transition-all ease-in-out duration-200 ${containerClassName}`} style={{ left, top, ...(containerStyle || {}) }}>
-                {panel}
-            </div>
+            <div className={`ph-context-menu z-[1100] min-w-[180px] rounded-xl border border-[#1a1f29] bg-[#0e131a] p-1 shadow-xl ${containerClassName}`} style={containerStyle}>{panel}</div>
         );
     }
 
+    // context
+    const style: React.CSSProperties = { position: 'fixed', left: (x || 0), top: (y || 0), zIndex: 1100, ...containerStyle };
     return (
-        <div className={`bg-[#0e131a] border border-[#1a1f29] rounded-lg overflow-hidden z-[1000] w-[180px] ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} transition-all ease-in-out duration-200 ${containerClassName}`} style={containerStyle}>
+        <div className={`ph-context-menu fixed rounded-xl border border-[#1a1f29] bg-[#0e131a] p-1 shadow-xl ${containerClassName}`} style={style}>
             {panel}
         </div>
     );

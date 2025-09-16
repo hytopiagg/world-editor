@@ -59,7 +59,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             const inContextMenu = !!(target && (target as any).closest && (target as any).closest('.ph-context-menu'));
             const onTrigger = !!(target && target.closest('.ph-menu-trigger'));
             const onOverlay = !!(target && (target.closest as any) && (target.closest as any)('#ph-cm-overlay'));
-            const onCard = !!(target && target.closest('[data-pid]'));
+            const onCard = !!(target && (target.closest && (target.closest('[data-pid]') || target.closest('[data-fid]'))));
             if (!inInlineMenu && !inContextMenu && !onTrigger) {
                 try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
                 // If a context menu is open, close it but keep selection on first outside click
@@ -92,7 +92,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     const beginDragSelect = (e: React.MouseEvent) => {
         if (e.button !== 0) return;
         const target = e.target as HTMLElement | null;
-        const inCard = !!(target && target.closest('[data-pid]'));
+        const inCard = !!(target && (target.closest('[data-pid]') || target.closest('[data-fid]')));
         const inMenu = !!(target && (target.closest('.ph-inline-menu') || target.closest('#ph-context-menu') || target.closest('.ph-menu-trigger')));
         // ignore inputs/buttons in header
         const tag = target?.tagName || '';
@@ -238,6 +238,22 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
         try { (window as any).__PH_SELECTED__ = selectedIds || []; } catch (_) { }
     }, [selectedIds]);
 
+    const titleForNav = () => {
+        if (activeFolderId) return folders.find((f) => f.id === activeFolderId)?.name || 'Folder';
+        // Match sidebar labels exactly
+        switch (activeNav) {
+            case 'home': return 'Home';
+            case 'my-files': return 'My files';
+            case 'templates': return 'Templates';
+            case 'generate': return 'Generate';
+            case 'shared': return 'Shared with me';
+            case 'community': return 'Community';
+            case 'tutorials': return 'Tutorials';
+            case 'changelog': return 'Changelog';
+            default: return activeNav.replace('-', ' ');
+        }
+    };
+
     return (
         <div className="fixed inset-0 grid [grid-template-columns:280px_1fr] bg-[#0b0e12] text-[#eaeaea]">
             {/* Sidebar */}
@@ -252,7 +268,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     const inMenu = !!(target && target.closest && target.closest('.ph-context-menu'));
                     if (inCard || inMenu) return; // let card/menu handlers manage
                     e.preventDefault();
-                    console.log('[PH] main onContextMenu fallback');
+                    console.log('[PH] main onContextMenu fallback -> open root menu');
                     try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
                     setSelectedIds([]);
                     setContextMenu({ id: '__ROOT__', x: e.clientX, y: e.clientY, open: true });
@@ -265,6 +281,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     setQuery={setQuery}
                     onImport={handleImport}
                     onCreateFolder={async () => {
+                        if (activeNav !== 'my-files' || activeFolderId) return; // Only show on My files root
                         const raw = window.prompt('Folder name');
                         if (raw === null) return;
                         const name = (raw || '').trim() || 'New Folder';
@@ -276,30 +293,26 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         if (!name) return;
                         await handleCreate(name);
                     }}
-                    title={activeFolderId ? (folders.find((f) => f.id === activeFolderId)?.name || 'Folder') : (activeNav === 'home' ? 'Home' : activeNav === 'my-files' ? 'My Files' : activeNav.replace('-', ' '))}
-                    breadcrumbs={activeFolderId ? [
-                        { label: 'My Files', onClick: () => setActiveFolderId(null) },
-                        { label: folders.find((f) => f.id === activeFolderId)?.name || 'Folder' },
-                    ] : []}
-                    showNewFolder={!activeFolderId}
+                    title={titleForNav()}
+                    breadcrumbs={activeFolderId ? [{ label: 'My files', onClick: () => setActiveFolderId(null) }, { label: folders.find((f) => f.id === activeFolderId)?.name || 'Folder' }] : []}
+                    showNewFolder={activeNav === 'my-files' && !activeFolderId}
                 />
 
                 {/* Content area */}
                 {activeNav === 'my-files' && (viewMode === 'grid' ? (
                     <div
                         className="overflow-visible grid [grid-template-columns:repeat(auto-fill,minmax(340px,1fr))] gap-[18px] pr-2 relative"
-                        onDragOver={(e) => { e.preventDefault(); }}
+                        onDragOver={(e) => { e.preventDefault(); try { e.dataTransfer!.dropEffect = 'move'; } catch (_) { } }}
                         onDrop={async (e) => {
                             try {
                                 const json = e.dataTransfer?.getData('application/x-project-ids');
                                 const ids = json ? JSON.parse(json) : [];
+                                console.log('[PH] drop on root', ids);
                                 if (Array.isArray(ids) && ids.length > 0) {
-                                    // Drop to root: remove folderId
                                     for (const id of ids) await DB.updateProjectFolder(id, null);
-                                    // update local list immediately
                                     setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId: null } : p));
                                 }
-                            } catch (_) { }
+                            } catch (err) { console.warn('[PH] root drop error', err); }
                         }}
                     >
                         {/* Folders */}
@@ -310,10 +323,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                 onOpenFolder={(fid) => setActiveFolderId(fid)}
                                 setContextMenu={setContextMenu}
                                 onDropProjects={async (folderId, ids) => {
+                                    console.log('[PH] drop into folder', folderId, ids);
                                     for (const id of ids) await DB.updateProjectFolder(id, folderId);
                                     setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId } : p));
                                 }}
-                                projects={[...projects as any, ...folders as any] as any}
+                                projects={[...folders as any, ...projects as any] as any}
                                 setProjects={(updater: any) => setFolders((prev) => updater(prev as any))}
                                 selected={false}
                                 onSelect={() => { }}
@@ -338,7 +352,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         setPressedCardId={setPressedCardId}
                                         onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
                                         onOpen={handleOpen}
-                                        projects={projects as any}
+                                        projects={[...folders as any, ...projects as any] as any}
                                         setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
                                         setContextMenu={setContextMenu as any}
                                     />
@@ -346,7 +360,20 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         )}
                     </div>
                 ) : (
-                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))] gap-[14px] pr-2 relative">
+                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))] gap-[14px] pr-2 relative"
+                        onDragOver={(e) => { e.preventDefault(); try { e.dataTransfer!.dropEffect = 'move'; } catch (_) { } }}
+                        onDrop={async (e) => {
+                            try {
+                                const json = e.dataTransfer?.getData('application/x-project-ids');
+                                const ids = json ? JSON.parse(json) : [];
+                                console.log('[PH] drop on root (list)', ids);
+                                if (Array.isArray(ids) && ids.length > 0) {
+                                    for (const id of ids) await DB.updateProjectFolder(id, null);
+                                    setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId: null } : p));
+                                }
+                            } catch (err) { console.warn('[PH] root drop error', err); }
+                        }}
+                    >
                         {loading ? (
                             <div style={{ opacity: 0.7 }}>Loading...</div>
                         ) : filtered.length === 0 ? (
@@ -364,7 +391,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         setHoveredId={setHoveredId}
                                         onSelect={(id, idx, ev) => selectByIndex(filtered.map(pp => pp.id), idx, ev)}
                                         onOpen={handleOpen}
-                                        projects={projects as any}
+                                        projects={[...folders as any, ...projects as any] as any}
                                         setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
                                         setContextMenu={setContextMenu as any}
                                     />
@@ -409,8 +436,8 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                 const els = (document as any).elementsFromPoint ? (document as any).elementsFromPoint(e.clientX, e.clientY) : [];
                                 let pid: string | null = null;
                                 for (const el of els) {
-                                    if (el && el.getAttribute && el.getAttribute('data-pid')) {
-                                        pid = el.getAttribute('data-pid');
+                                    if (el && (el as any).getAttribute && (el as any).getAttribute('data-pid')) {
+                                        pid = (el as any).getAttribute('data-pid');
                                         break;
                                     }
                                 }
@@ -435,7 +462,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             x={contextMenu.x}
                             y={contextMenu.y}
                             id={contextMenu.id as string}
-                            projects={projects as any}
+                            projects={[...folders as any, ...projects as any] as any}
                             setProjects={(updater: any) => {
                                 // If folder was renamed/deleted, update folders list too
                                 if (contextMenu.id && contextMenu.id !== '__ROOT__' && folders.find((f) => f.id === contextMenu.id)) {
@@ -450,6 +477,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             containerClassName=""
                             entityType={contextMenu.id === '__ROOT__' ? 'root' : (folders.find((f) => f.id === contextMenu.id) ? 'folder' : 'project')}
                             onOpenFolder={(fid) => setActiveFolderId(fid)}
+                            folders={folders as any}
                         />
                     </>
                 )}

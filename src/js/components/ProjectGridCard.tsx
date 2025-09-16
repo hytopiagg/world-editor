@@ -43,15 +43,16 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
             data-pid={p.id}
             draggable
             onDragStart={(e) => {
+                try { e.dataTransfer!.effectAllowed = 'move'; } catch (_) { }
                 try { e.dataTransfer?.setData('text/project-id', p.id); } catch (_) { }
-                // allow multi-select: include list of ids
                 try {
                     const sel = (window as any).__PH_SELECTED__ || [];
                     const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
                     e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
-                } catch (_) { }
+                    console.log('[Card] dragstart', { id: p.id, payload });
+                } catch (err) { console.warn('[Card] dragstart error', err); }
             }}
-            onDragEnd={() => { }}
+            onDragEnd={() => { console.log('[Card] dragend', p.id); }}
             onClick={(ev) => onSelect(p.id, index, ev)}
             onMouseDown={() => setPressedCardId(p.id)}
             onMouseUp={() => setPressedCardId(null)}
@@ -77,7 +78,8 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                             const sel = (window as any).__PH_SELECTED__ || [];
                             const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
                             e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
-                        } catch (_) { }
+                            console.log('[Card] dragstart (thumb)', { id: p.id, payload });
+                        } catch (err) { console.warn('[Card] dragstart error', err); }
                     }}
                 >
                     {/* 16:9 ratio using padding-top fallback */}

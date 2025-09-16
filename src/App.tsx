@@ -908,6 +908,7 @@ function App() {
                             key={`eb-${projectId}`}
                             ref={environmentBuilderRef}
                             scene={scene}
+                            projectId={projectId}
                             currentBlockType={currentBlockType}
                             onTotalObjectsChange={setTotalEnvironmentObjects}
                             placementSize={placementSize}
