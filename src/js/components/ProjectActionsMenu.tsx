@@ -278,10 +278,12 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
                     onClose={() => setMoveOpen(false)}
                     onMove={async (folderId) => {
                         try {
-                            const ids = multi ? selected : [id];
-                            console.log('[MoveTo] moving', ids, 'to', folderId);
-                            for (const pid of ids) await DatabaseManager.updateProjectFolder(pid, folderId);
-                            setProjects((prev: any) => prev.map((p: any) => ids.includes(p.id) ? { ...p, folderId: folderId } : p));
+                            const currentSelected = (typeof window !== 'undefined' && (window as any).__PH_SELECTED__ ? (window as any).__PH_SELECTED__ : []) as string[];
+                            const ids = Array.isArray(currentSelected) && currentSelected.length > 1 ? currentSelected : [id];
+                            console.log('[MoveTo] begin', { targetFolderId: folderId, count: ids.length, ids });
+                            await Promise.all(ids.map((pid) => DatabaseManager.updateProjectFolder(pid, folderId)));
+                            setProjects((prev: any) => prev.map((p: any) => ids.includes(p.id) ? { ...p, folderId } : p));
+                            console.log('[MoveTo] updated state', { ids, to: folderId });
                         } finally {
                             setMoveOpen(false);
                             closeAllMenus();

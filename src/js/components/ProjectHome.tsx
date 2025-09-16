@@ -202,9 +202,8 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
         }
     };
 
-    const filtered = projects.filter(
-        (p) => !query || (p.name || "").toLowerCase().includes(query.toLowerCase())
-    );
+    // Apply name filter first, then root/folder filtering at render time.
+    const filtered = projects.filter((p) => !query || (p.name || "").toLowerCase().includes(query.toLowerCase()));
 
     const refresh = async () => {
         setLoading(true);
@@ -336,11 +335,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         ))}
                         {loading ? (
                             <div style={{ opacity: 0.7 }}>Loading...</div>
-                        ) : filtered.length === 0 ? (
+                        ) : filtered.filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId)).length === 0 ? (
                             <div style={{ opacity: 0.7 }}>No projects found.</div>
                         ) : (
                             filtered
-                                .filter((p) => !activeFolderId || p.folderId === activeFolderId)
+                                .filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId))
                                 .map((p, index) => (
                                     <ProjectGridCard
                                         key={p.id}
@@ -377,11 +376,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     >
                         {loading ? (
                             <div style={{ opacity: 0.7 }}>Loading...</div>
-                        ) : filtered.length === 0 ? (
+                        ) : filtered.filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId)).length === 0 ? (
                             <div style={{ opacity: 0.7 }}>No projects found.</div>
                         ) : (
                             filtered
-                                .filter((p) => !activeFolderId || p.folderId === activeFolderId)
+                                .filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId))
                                 .map((p, index) => (
                                     <ProjectListCard
                                         key={p.id}
