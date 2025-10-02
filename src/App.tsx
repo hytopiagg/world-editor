@@ -14,6 +14,7 @@ import BlockToolsSidebar, {
 } from "./js/components/BlockToolsSidebar";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
+import SelectionDimensionsTip from "./js/components/SelectionDimensionsTip";
 import ToolBar from "./js/components/ToolBar";
 import UnderConstruction from "./js/components/UnderConstruction";
 import {
@@ -650,7 +651,8 @@ function App() {
 
                 <GlobalLoadingScreen />
 
-                {/* QuickTips removed per UX update */}
+                {/* Live selection dimensions tip */}
+                <SelectionDimensionsTip />
 
                 <UndoRedoManager
                     ref={undoRedoManagerRef}
