@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     FaCloud,
     FaCubes,
@@ -23,6 +23,8 @@ import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import MinecraftImportWizard from "./MinecraftImportWizard";
 import Tooltip from "./Tooltip";
+import { getBlockTypes } from "../managers/BlockTypesManager";
+import "../../css/AxiomBlockRemapper.css";
 
 // Enum to track which submenu is currently open
 enum SubMenuType {
@@ -86,10 +88,76 @@ const ToolBar = ({
 
     const [showMinecraftImportModal, setShowMinecraftImportModal] =
         useState(false);
+    const [showGlobalRemapModal, setShowGlobalRemapModal] = useState(false);
+    const [usedBlockCounts, setUsedBlockCounts] = useState<Record<number, number>>({});
+    const [globalRemapTargets, setGlobalRemapTargets] = useState<Record<number, number>>({});
+    const [openSelectorFor, setOpenSelectorFor] = useState<number | null>(null);
+    const [remapSearchTerms, setRemapSearchTerms] = useState<Record<number, string>>({});
+
+    const availableBlocks = useMemo(() => {
+        try {
+            return getBlockTypes() || [];
+        } catch (_) {
+            return [] as any[];
+        }
+    }, []);
     let startPos = {
         x: 0,
         y: 0,
         z: 0,
+    };
+
+    // Helper for picking a representative texture for a block
+    const pickBlockTexture = (block: any) => {
+        if (!block) return "./assets/blocks/error.png";
+        const st = (block.sideTextures || {}) as Record<string, string>;
+        const candidates = [
+            st["+y"],
+            st["-y"],
+            st["+x"],
+            st["-x"],
+            st["+z"],
+            st["-z"],
+            (block as any).textureUri,
+        ].filter(Boolean) as string[];
+        return candidates.length > 0 ? candidates[0] : "./assets/blocks/error.png";
+    };
+
+    const openGlobalRemap = () => {
+        try {
+            const data = terrainBuilderRef?.current?.getCurrentTerrainData?.();
+            if (!data) {
+                alert("Terrain data not available.");
+                return;
+            }
+            const counts: Record<number, number> = {};
+            Object.values(data).forEach((id: any) => {
+                if (typeof id === "number") {
+                    counts[id] = (counts[id] || 0) + 1;
+                }
+            });
+            const initialTargets: Record<number, number> = {};
+            Object.keys(counts).forEach((idStr) => {
+                const id = parseInt(idStr);
+                initialTargets[id] = id; // default to identity mapping
+            });
+            setUsedBlockCounts(counts);
+            setGlobalRemapTargets(initialTargets);
+            setOpenSelectorFor(null);
+            setRemapSearchTerms({});
+            setShowGlobalRemapModal(true);
+            setActiveSubmenu(SubMenuType.NONE);
+        } catch (e) {
+            console.error("Error preparing global remap modal:", e);
+            alert("Failed to prepare global remap. Check console for details.");
+        }
+    };
+
+    const getFilteredBlocksFor = (srcId: number) => {
+        const term = (remapSearchTerms[srcId] || "").toLowerCase();
+        const base = (availableBlocks as any[]).filter((b: any) => !b.isVariant);
+        if (!term) return base;
+        return base.filter((b: any) => (b.name || "").toLowerCase().includes(term));
     };
 
     // Helper function to toggle submenus - closes current if same, opens new one if different
@@ -715,6 +783,26 @@ const ToolBar = ({
                                             </svg>
                                         </button>
                                     </Tooltip>
+                                    <Tooltip text="Global Remap (replace blocks across entire map)">
+                                        <button
+                                            className={`w-fit flex items-center justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up ${showGlobalRemapModal ? 'bg-white/90 text-black' : ''}`}
+                                            style={{ animationDelay: '0.1s' }}
+                                            onClick={() => openGlobalRemap()}
+                                        >
+                                            <svg width="21" height="22" viewBox="0 0 21 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M18.9849 10.5202C19.0906 8.69823 18.6399 6.88721 17.6925 5.32732C16.7452 3.76744 15.3461 2.53241 13.6806 1.78606C12.0152 1.0397 10.1623 0.81729 8.36752 1.14832C6.57278 1.47936 4.92109 2.34819 3.63153 3.63959C2.34197 4.93098 1.47548 6.5839 1.14699 8.3791C0.818506 10.1743 1.04355 12.027 1.79226 13.6913C2.54098 15.3557 3.77799 16.7531 5.33922 17.6982C6.90045 18.6433 8.71211 19.0914 10.5339 18.9832M1.5999 7.00018H18.3999M1.5999 13.0002H12.4999" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                <path d="M9.49967 1C7.81501 3.69961 6.92188 6.81787 6.92188 10C6.92188 13.1821 7.81501 16.3004 9.49967 19M10.4997 1C12.6405 4.4308 13.4883 8.51242 12.8907 12.512" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                <g clipPath="url(#clip0_3578_19110)">
+                                                    <path d="M20.8528 15.6466L19.3528 17.3341C19.1575 17.5539 18.8403 17.5539 18.645 17.3341C18.4497 17.1144 18.4497 16.7576 18.645 16.5378L19.2919 15.8119H13.4997C13.2231 15.8119 12.9997 15.5605 12.9997 15.2494C12.9997 14.9382 13.2231 14.6869 13.4997 14.6869H19.2919L18.645 13.9591C18.4497 13.7394 18.4497 13.3826 18.645 13.1628C18.8403 12.9431 19.1575 12.9431 19.3528 13.1628L20.8528 14.8503C21.0481 15.0701 21.0481 15.4269 20.8528 15.6466ZM14.645 21.8341L13.145 20.1466C12.9497 19.9269 12.9497 19.5701 13.145 19.3503L14.645 17.6628C14.8403 17.4431 15.1575 17.4431 15.3528 17.6628C15.5481 17.8826 15.5481 18.2394 15.3528 18.4591L14.7075 19.1869H20.4997C20.7763 19.1869 20.9997 19.4382 20.9997 19.7494C20.9997 20.0605 20.7763 20.3119 20.4997 20.3119H14.7075L15.3544 21.0396C15.5497 21.2593 15.5497 21.6162 15.3544 21.8359C15.1591 22.0556 14.8419 22.0556 14.6466 21.8359L14.645 21.8341Z" fill="white" />
+                                                </g>
+                                                <defs>
+                                                    <clipPath id="clip0_3578_19110">
+                                                        <rect width="8" height="9" fill="white" transform="translate(13 13)" />
+                                                    </clipPath>
+                                                </defs>
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
                                 </div>
                             )}
                         </div>
@@ -1273,6 +1361,126 @@ const ToolBar = ({
                     }}
                     terrainBuilderRef={terrainBuilderRef}
                 />
+            )}
+            {showGlobalRemapModal && (
+                <div
+                    className="axiom-remapper-overlay"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setShowGlobalRemapModal(false);
+                    }}
+                    onWheel={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                >
+                    <div className="axiom-remapper-modal" onMouseDown={(e) => e.stopPropagation()}>
+                        <div className="axiom-remapper-header">
+                            <h2>Global Block Remap</h2>
+                            <p className="axiom-remapper-subtitle">
+                                Found {Object.keys(usedBlockCounts).length} unique block types in this map
+                            </p>
+                        </div>
+                        <div
+                            className="axiom-remapper-list"
+                            onWheel={(e) => e.stopPropagation()}
+                            onTouchMove={(e) => e.stopPropagation()}
+                        >
+                            {Object.keys(usedBlockCounts)
+                                .map((k) => parseInt(k))
+                                .sort((a, b) => (usedBlockCounts[b] || 0) - (usedBlockCounts[a] || 0))
+                                .map((srcId) => {
+                                    const srcBlock = availableBlocks.find((b: any) => b.id === srcId);
+                                    const tgtId = globalRemapTargets[srcId] ?? srcId;
+                                    const tgtBlock = availableBlocks.find((b: any) => b.id === tgtId);
+                                    return (
+                                        <div key={srcId} className="axiom-remapper-item">
+                                            <div
+                                                className="remapper-item-header"
+                                                onClick={() => setOpenSelectorFor(openSelectorFor === srcId ? null : srcId)}
+                                            >
+                                                <div className="source-block">
+                                                    <span className="block-name">{srcBlock?.name || `ID ${srcId}`}</span>
+                                                    <span className="block-count">({usedBlockCounts[srcId] || 0} blocks)</span>
+                                                    <div
+                                                        className="current-mapping"
+                                                        title="Click to change target"
+                                                    >
+                                                        <span className="arrow-sep">→</span>
+                                                        <img
+                                                            className="mapping-icon"
+                                                            src={pickBlockTexture(tgtBlock)}
+                                                            alt={tgtBlock?.name || `ID ${tgtId}`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {openSelectorFor === srcId && (
+                                                <div className="remapper-item-content">
+                                                    <input
+                                                        type="text"
+                                                        className="block-search"
+                                                        placeholder="Search blocks..."
+                                                        value={remapSearchTerms[srcId] || ""}
+                                                        onChange={(e) => setRemapSearchTerms((prev) => ({ ...prev, [srcId]: e.target.value }))}
+                                                        onKeyDown={(e) => e.stopPropagation()}
+                                                    />
+                                                    <div className="selector-grid icon-only">
+                                                        {getFilteredBlocksFor(srcId).map((blk: any) => (
+                                                            <button
+                                                                key={blk.id}
+                                                                className={`selector-tile ${tgtId === blk.id ? 'selected' : ''}`}
+                                                                title={blk.name}
+                                                                onClick={() => {
+                                                                    setGlobalRemapTargets((prev) => ({ ...prev, [srcId]: blk.id }));
+                                                                    setOpenSelectorFor(null);
+                                                                }}
+                                                            >
+                                                                <img className="selector-icon" src={pickBlockTexture(blk)} alt={blk.name} />
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                        <div className="axiom-remapper-actions">
+                            <button className="btn-cancel" onClick={() => setShowGlobalRemapModal(false)}>Cancel</button>
+                            <button
+                                className="btn-confirm"
+                                onClick={() => {
+                                    try {
+                                        const data = terrainBuilderRef?.current?.getCurrentTerrainData?.();
+                                        if (!data) {
+                                            alert("Terrain data not available.");
+                                            return;
+                                        }
+                                        const added: Record<string, number> = {};
+                                        const removed: Record<string, number> = {};
+                                        for (const [posKey, id] of Object.entries(data as Record<string, number>)) {
+                                            const srcId = id as number;
+                                            const tgtId = globalRemapTargets[srcId];
+                                            if (typeof tgtId === 'number' && tgtId !== srcId) {
+                                                added[posKey] = tgtId;
+                                                removed[posKey] = srcId;
+                                            }
+                                        }
+                                        if (Object.keys(added).length === 0 && Object.keys(removed).length === 0) {
+                                            setShowGlobalRemapModal(false);
+                                            return;
+                                        }
+                                        terrainBuilderRef?.current?.updateTerrainBlocks?.(added, removed, { syncPendingChanges: true });
+                                        setShowGlobalRemapModal(false);
+                                    } catch (e) {
+                                        console.error("Error applying global remap:", e);
+                                        alert("Failed to apply remap. See console for details.");
+                                    }
+                                }}
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );
