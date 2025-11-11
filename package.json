@@ -61,5 +61,9 @@
         "eslint": "^8",
         "postcss": "^8.5.6",
         "tailwindcss": "^3.4.17"
+    },
+    "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=9.0.0"
     }
 }
