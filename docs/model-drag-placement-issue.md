@@ -230,5 +230,29 @@ if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
 
 **Result**: Models now placed one at a time on click, not during drag.
 
-### [Date] [Add findings here as you investigate]
+### [Date] RESOLVED - Async Promise Not Awaited
+**Final Root Cause**: `placeEnvironmentModel()` returns a Promise but was not being awaited, causing state variables to not update in time.
+
+**The Problem**:
+1. `placeEnvironmentModel()` is async and returns a Promise
+2. Code checked `result?.length` immediately without awaiting the promise
+3. `placedEnvironmentCountRef.current` never incremented because promise hadn't resolved
+4. `isFirstBlockRef.current` stayed `true`, allowing repeated placement attempts during drag
+5. `handleBlockPlacement()` was called repeatedly during drag, each time thinking it's the first placement
+
+**The Fix**:
+1. **Awaited the Promise**: Changed `placeEnvironmentModel()` call to `await placeEnvironmentModel()` so state updates happen synchronously
+2. **Set Flag After Placement**: Set `isFirstBlockRef.current = false` immediately after successful model placement
+3. **Prevented Drag Placement**: Added guard in `updatePreviewPosition()` to skip `handleBlockPlacement()` for environment models during drag:
+
+```javascript
+if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
+    // Don't place models during drag - only blocks
+    if (!currentBlockTypeRef.current?.isEnvironment) {
+        handleBlockPlacement();
+    }
+}
+```
+
+**Result**: ✅ Models are now placed one at a time on click, not during drag. The async promise is properly awaited, ensuring state variables update correctly and preventing multiple placements during a single drag operation.
 

@@ -227,5 +227,34 @@ When entering a pre-existing build and adding models, after saving and leaving a
 
 **Expected Result**: Models should persist across scene changes and be properly rendered.
 
-### [Date] [Add findings here as you investigate]
+### [Date] RESOLVED - Race Condition Between Save and Refresh
+**Final Root Cause**: Race condition between `updateLocalStorage()` (async save) and `refreshEnvironmentFromDB()` (load).
+
+**The Problem**:
+1. User places models → instances exist in memory
+2. `updateLocalStorage()` starts async save to IndexedDB
+3. `refreshEnvironmentFromDB()` runs before save completes
+4. Reads empty database → calls `clearEnvironments()`
+5. `clearEnvironments()` clears all instances from memory
+6. Save completes, but instances are already gone
+7. On next refresh, database is empty because instances were cleared before save completed
+
+**The Fix**:
+Added a guard in `refreshEnvironmentFromDB()` to prevent clearing instances when they exist in memory but the database is empty:
+
+```typescript
+if (instancesInMemory > 0) {
+    console.warn("⚠️ DB is empty but instances exist in memory - likely a race condition. NOT clearing instances.");
+    // Don't clear - instances will be saved when updateLocalStorage completes
+} else {
+    clearEnvironments(); // Only clear if truly no instances exist
+}
+```
+
+**Additional Fixes Applied**:
+1. **Scene UUID Change Handling**: Updated `ensureInstancedMeshesAdded()` to check if meshes are actually in the scene (not just a flag), and re-add them when scene UUID changes
+2. **Concurrent Call Prevention**: Enhanced guard to check `refreshInProgressRef` first, preventing multiple simultaneous refresh calls
+3. **Comprehensive Logging**: Added detailed logging throughout the instance lifecycle to track when instances are added/removed and why
+
+**Result**: ✅ Models now persist correctly across save/load cycles. The race condition is detected and prevented, allowing saves to complete before instances are cleared.
 
