@@ -47,6 +47,7 @@ import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
 import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
 import { playPlaceSound } from "./Sound";
+import { performanceLogger } from "./utils/PerformanceLogger";
 import {
     GroundTool,
     SchematicPlacementTool,
@@ -829,12 +830,40 @@ function TerrainBuilder(
         [threeRaycaster.ray, gl, cameraManager]
     );
     const handleBlockPlacement = async () => {
-        console.log("********handleBlockPlacement********");
-        console.log("currentBlockTypeRef.current", currentBlockTypeRef.current);
+        const { performanceLogger } = require("./utils/PerformanceLogger");
+        performanceLogger.markStart("Block Placement");
+        
+        console.log("[BLOCK_PLACE] ********handleBlockPlacement********");
+        console.log("[BLOCK_PLACE] currentBlockTypeRef.current", currentBlockTypeRef.current);
 
         if (!currentBlockTypeRef.current) {
-            console.log("currentBlockTypeRef.current is undefined");
+            console.log("[BLOCK_PLACE] currentBlockTypeRef.current is undefined");
+            performanceLogger.markEnd("Block Placement", { skipped: true, reason: "no block type" });
             return;
+        }
+        
+        const blockType = currentBlockTypeRef.current;
+        console.log(`[BLOCK_PLACE] Placing block: ${blockType.name} (ID: ${blockType.id})`);
+        
+        // Ensure textures are loaded before placement
+        try {
+            if (BlockTypeRegistry && BlockTypeRegistry.instance) {
+                const blockTypeInstance = BlockTypeRegistry.instance.getBlockType(blockType.id);
+                if (blockTypeInstance) {
+                    // Check if textures are loaded, if not, load them immediately
+                    const needsPreload = blockTypeInstance.needsTexturePreload?.();
+                    if (needsPreload) {
+                        console.log(`[BLOCK_PLACE] Textures need preload, loading now...`);
+                        await BlockTypeRegistry.instance.preloadBlockTypeTextures(blockType.id);
+                        console.log(`[BLOCK_PLACE] ✓ Textures loaded before placement`);
+                    } else {
+                        console.log(`[BLOCK_PLACE] Textures already loaded`);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error(`[BLOCK_PLACE] ✗ Failed to ensure textures loaded:`, error);
+            // Continue with placement anyway - error texture will be used
         }
 
         if (toolManagerRef.current && toolManagerRef.current.getActiveTool()) {
@@ -1140,6 +1169,11 @@ function TerrainBuilder(
             }
             isFirstBlockRef.current = false;
         }
+        
+        performanceLogger.markEnd("Block Placement", { 
+            blockId: blockType?.id,
+            blockName: blockType?.name 
+        });
     };
     const getRaycastIntersection = useCallback(() => {
         const ptr =
@@ -1832,11 +1866,13 @@ function TerrainBuilder(
                 }
             }
             meshesInitializedRef.current = true;
+            performanceLogger.markStart("TerrainBuilder.loadTerrainData");
             console.info(
                 "[TerrainBuilder] loading custom blocks and terrain for project",
                 DatabaseManager.getCurrentProjectId &&
                     DatabaseManager.getCurrentProjectId()
             );
+            performanceLogger.markStart("Load Custom Blocks");
             await DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
                 .then((customBlocksData) => {
                     if (customBlocksData && customBlocksData.length > 0) {
@@ -1849,16 +1885,22 @@ function TerrainBuilder(
                             })
                         );
                     }
+                    performanceLogger.markEnd("Load Custom Blocks", {
+                        customBlockCount: customBlocksData?.length || 0
+                    });
                     console.log("Loading terrain...");
+                    performanceLogger.markStart("Load Terrain Data from DB");
                     return DatabaseManager.getData(STORES.TERRAIN, "current");
                 })
                 .then((savedTerrain) => {
                     if (!mounted) return;
+                    const terrainBlockCount = savedTerrain ? Object.keys(savedTerrain).length : 0;
+                    performanceLogger.markEnd("Load Terrain Data from DB", {
+                        blockCount: terrainBlockCount
+                    });
                     console.info("[TerrainBuilder] terrain fetched", {
                         hasTerrain: !!savedTerrain,
-                        count: savedTerrain
-                            ? Object.keys(savedTerrain).length
-                            : 0,
+                        count: terrainBlockCount,
                     });
                     if (savedTerrain) {
                         terrainRef.current = savedTerrain;
@@ -1874,6 +1916,7 @@ function TerrainBuilder(
                         );
                         setTimeout(async () => {
                             try {
+                                performanceLogger.markStart("Mark Essential Block Types");
                                 const usedBlockIds = new Set();
                                 Object.values(terrainRef.current).forEach(
                                     (blockId) => {
@@ -1890,11 +1933,22 @@ function TerrainBuilder(
                                         );
                                     }
                                 });
+                                performanceLogger.markEnd("Mark Essential Block Types", {
+                                    uniqueBlockTypes: usedBlockIds.size
+                                });
+                                
+                                // Only preload textures if there are blocks in the terrain
+                                // For empty worlds, skip preload entirely (saves ~18 seconds)
+                                const terrainBlockCount = Object.keys(terrainRef.current).length;
                                 if (
                                     BlockTypeRegistry &&
-                                    BlockTypeRegistry.instance
+                                    BlockTypeRegistry.instance &&
+                                    terrainBlockCount > 0
                                 ) {
-                                    await BlockTypeRegistry.instance.preload();
+                                    // Only preload essential block types (those actually used)
+                                    await BlockTypeRegistry.instance.preload({ onlyEssential: true });
+                                } else if (terrainBlockCount === 0) {
+                                    performanceLogger.checkpoint("Skipping texture preload for empty world");
                                 }
                                 await rebuildTextureAtlas();
                                 if (!getChunkSystem()) {
@@ -1942,7 +1996,14 @@ function TerrainBuilder(
                                 } catch (_) {}
                                 window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();
+                                performanceLogger.markEnd("TerrainBuilder.loadTerrainData", {
+                                    totalBlocks: totalBlocksRef.current
+                                });
                                 setPageIsLoaded(true);
+                                // Print performance summary after loading completes
+                                setTimeout(() => {
+                                    performanceLogger.printSummary();
+                                }, 1000);
                             } catch (error) {
                                 console.error(
                                     "Error preloading textures:",
@@ -1950,15 +2011,19 @@ function TerrainBuilder(
                                 );
                                 console.warn(
                                     "[Load] Error during texture preload, proceeding with terrain update."
-                                ); // <<< Add log
+                                );
                                 updateTerrainChunks(terrainRef.current);
                                 loadingManager.hideLoading();
+                                performanceLogger.markEnd("TerrainBuilder.loadTerrainData");
                                 setPageIsLoaded(true);
                             }
                         }, 100);
                     } else {
                         terrainRef.current = {};
                         totalBlocksRef.current = 0;
+                        performanceLogger.markEnd("TerrainBuilder.loadTerrainData", {
+                            totalBlocks: 0
+                        });
                     }
                     loadingManager.hideLoading();
                     setPageIsLoaded(true);
@@ -1970,6 +2035,7 @@ function TerrainBuilder(
                     );
                     meshesInitializedRef.current = true;
                     loadingManager.hideLoading();
+                    performanceLogger.markEnd("TerrainBuilder.loadTerrainData");
                     setPageIsLoaded(true);
                 });
         }

@@ -14,6 +14,7 @@ import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constant
 import { CustomModel } from "./types/DatabaseTypes";
 import { getViewDistance } from "./constants/terrain";
 import { getVector3, releaseVector3, getMatrix4, releaseMatrix4, getEuler, releaseEuler, getQuaternion, releaseQuaternion, ObjectPoolManager } from "./utils/ObjectPool";
+import { performanceLogger } from "./utils/PerformanceLogger";
 export const environmentModels = (() => {
     try {
         const fetchModelList = () => {
@@ -521,11 +522,16 @@ const EnvironmentBuilder = (
     };
 
     const preloadModels = async () => {
+        performanceLogger.markStart("EnvironmentBuilder.preloadModels");
         try {
+            performanceLogger.markStart("Load Custom Models from DB");
             const customModels = await DatabaseManager.getData(
                 STORES.CUSTOM_MODELS,
                 "models"
             ) as CustomModel[];
+            performanceLogger.markEnd("Load Custom Models from DB", {
+                customModelCount: customModels?.length || 0
+            });
             if (customModels) {
                 const customModelIndices = environmentModels
                     .filter((model) => model.isCustom)
@@ -596,9 +602,15 @@ const EnvironmentBuilder = (
             console.log(`[EnvironmentBuilder] Skipping model preload - using lazy loading instead. ${environmentModels.length} models available.`);
             
             // Only refresh environment from DB (this will trigger lazy loading for existing instances)
+            performanceLogger.markStart("Refresh Environment from DB");
             await refreshEnvironmentFromDB();
+            performanceLogger.markEnd("Refresh Environment from DB");
+            performanceLogger.markEnd("EnvironmentBuilder.preloadModels", {
+                totalModels: environmentModels.length
+            });
         } catch (error) {
             console.error("Error loading custom models from DB:", error);
+            performanceLogger.markEnd("EnvironmentBuilder.preloadModels");
         }
     };
     const setupInstancedMesh = (modelType, gltf) => {

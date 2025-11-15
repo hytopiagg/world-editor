@@ -817,8 +817,11 @@ const BlockToolsSidebar = ({
         selectedBlockID = envType.id;
     };
 
-    const handleBlockSelect = (blockType) => {
-        console.log("Block selected:", blockType);
+    const handleBlockSelect = async (blockType) => {
+        console.log("[BLOCK_SELECT] Block selected:", blockType);
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        performanceLogger.markStart("Block Selection", { blockId: blockType.id, blockName: blockType.name });
+        
         // Keep Terrain tool active while changing blocks; deactivate others
         try {
             const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
@@ -830,11 +833,27 @@ const BlockToolsSidebar = ({
         } catch (_) {
             terrainBuilderRef?.current?.activateTool(null);
         }
+        
         setCurrentBlockType({
             ...blockType,
             isEnvironment: false,
         });
         selectedBlockID = blockType.id;
+        
+        // Preload textures immediately when block is selected
+        try {
+            console.log(`[BLOCK_SELECT] Preloading textures for block ${blockType.id} (${blockType.name})...`);
+            if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
+                await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockType.id);
+                console.log(`[BLOCK_SELECT] ✓ Textures preloaded for block ${blockType.id}`);
+            } else {
+                console.warn("[BLOCK_SELECT] BlockTypeRegistry not available");
+            }
+        } catch (error) {
+            console.error(`[BLOCK_SELECT] ✗ Failed to preload textures for block ${blockType.id}:`, error);
+        }
+        
+        performanceLogger.markEnd("Block Selection");
     };
 
     /** @param {import("./AIAssistantPanel").SchematicHistoryEntry} schematicEntry */

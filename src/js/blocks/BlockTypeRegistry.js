@@ -1,6 +1,7 @@
 import BlockType from "./BlockType";
 import { getBlockTypes } from "../managers/BlockTypesManager";
 import BlockTextureAtlas from "./BlockTextureAtlas";
+import BlockMaterial from "./BlockMaterial";
 
 // Utility to translate side texture keys from coordinate notation ("+x", "-y", etc.)
 // to human-readable face names ("right", "bottom", etc.) expected by BlockType.
@@ -73,6 +74,8 @@ class BlockTypeRegistry {
         if (this._initialized) {
             return;
         }
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        performanceLogger.markStart("BlockTypeRegistry.initialize");
         console.time("BlockTypeRegistry.initialize");
 
         try {
@@ -86,6 +89,9 @@ class BlockTypeRegistry {
             console.warn("Failed to load error texture:", error);
         }
         const blockTypes = getBlockTypes();
+        performanceLogger.checkpoint("BlockTypesManager scan complete", { 
+            blockCount: blockTypes.length 
+        });
 
         for (const blockTypeData of blockTypes) {
             const isLiquid = false;
@@ -110,6 +116,9 @@ class BlockTypeRegistry {
             } block types`
         );
         console.timeEnd("BlockTypeRegistry.initialize");
+        performanceLogger.markEnd("BlockTypeRegistry.initialize", {
+            blockCount: Object.keys(this._blockTypes).length
+        });
     }
     /**
      * Register a block type
@@ -332,32 +341,65 @@ class BlockTypeRegistry {
         }
     }
     /**
-     * Preload all textures for all block types
+     * Preload textures for block types
+     * @param {Object} options - Preload options
+     * @param {boolean} options.onlyEssential - If true, only preload essential block types (default: false)
      * @returns {Promise<void>}
      */
-    async preload() {
+    async preload(options = {}) {
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        performanceLogger.markStart("BlockTypeRegistry.preload");
         console.time("BlockTypeRegistry.preload");
 
-        Object.values(this._blockTypes).forEach((blockType) => {
-            this._essentialBlockTypes.add(blockType.id);
-        });
+        const { onlyEssential = false } = options;
 
-        const allBlockTypes = Object.values(this._blockTypes);
-        const blockTypesToPreload = allBlockTypes.filter(
-            (blockType) => blockType.needsTexturePreload?.() ?? true
-        );
+        // If onlyEssential is false, mark all block types as essential (backward compatibility)
+        if (!onlyEssential) {
+            Object.values(this._blockTypes).forEach((blockType) => {
+                this._essentialBlockTypes.add(blockType.id);
+            });
+        }
+
+        // Filter block types to preload
+        let blockTypesToPreload;
+        if (onlyEssential) {
+            // Only preload essential block types (those actually used in terrain)
+            blockTypesToPreload = Object.values(this._blockTypes).filter(
+                (blockType) => 
+                    this._essentialBlockTypes.has(blockType.id) &&
+                    (blockType.needsTexturePreload?.() ?? true)
+            );
+        } else {
+            // Preload all block types (original behavior)
+            blockTypesToPreload = Object.values(this._blockTypes).filter(
+                (blockType) => blockType.needsTexturePreload?.() ?? true
+            );
+        }
+
         if (blockTypesToPreload.length === 0) {
             console.log("No block types need texture preloading, skipping.");
             console.timeEnd("BlockTypeRegistry.preload");
+            performanceLogger.markEnd("BlockTypeRegistry.preload", { 
+                preloadedCount: 0,
+                onlyEssential
+            });
             return;
         }
         console.log(
-            `Preloading textures for ${blockTypesToPreload.length} block types...`
+            `Preloading textures for ${blockTypesToPreload.length} block types${onlyEssential ? ' (essential only)' : ''}...`
         );
+        performanceLogger.checkpoint("Starting texture preload", {
+            blockTypesToPreload: blockTypesToPreload.length,
+            onlyEssential
+        });
         await Promise.all(
             blockTypesToPreload.map((blockType) => blockType.preloadTextures())
         );
         console.timeEnd("BlockTypeRegistry.preload");
+        performanceLogger.markEnd("BlockTypeRegistry.preload", {
+            preloadedCount: blockTypesToPreload.length,
+            onlyEssential
+        });
     }
     /**
      * Add a block type ID to the essential block types set
@@ -365,6 +407,84 @@ class BlockTypeRegistry {
      */
     markBlockTypeAsEssential(id) {
         this._essentialBlockTypes.add(id);
+    }
+    /**
+     * Preload textures for a specific block type immediately
+     * Used when a block is selected to ensure textures are ready
+     * @param {number} blockId - The block type ID to preload
+     * @returns {Promise<void>}
+     */
+    async preloadBlockTypeTextures(blockId) {
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        const logKey = `BlockTypeRegistry.preloadBlockTypeTextures(${blockId})`;
+        performanceLogger.markStart(logKey);
+        
+        const blockType = this.getBlockType(blockId);
+        if (!blockType) {
+            console.warn(`[TEXTURE] Block type ${blockId} not found for preload`);
+            performanceLogger.markEnd(logKey, { skipped: true, reason: "blockType not found" });
+            return;
+        }
+        
+        console.log(`[TEXTURE] Preloading textures for block type: ${blockType.name} (ID: ${blockId})`);
+        this.markBlockTypeAsEssential(blockId);
+        
+        try {
+            await blockType.preloadTextures();
+            console.log(`[TEXTURE] ✓ Successfully preloaded textures for: ${blockType.name}`);
+            
+            // Immediately rebuild atlas to ensure textures are available
+            await BlockTextureAtlas.instance.rebuildTextureAtlas();
+            
+            // Retry any missing textures immediately
+            await this._retryMissingTextures();
+            
+            performanceLogger.markEnd(logKey, { success: true, blockName: blockType.name });
+        } catch (error) {
+            console.error(`[TEXTURE] ✗ Failed to preload textures for ${blockType.name}:`, error);
+            performanceLogger.markEnd(logKey, { success: false, error: error.message });
+            throw error;
+        }
+    }
+    /**
+     * Retry loading missing textures immediately
+     * @private
+     * @returns {Promise<void>}
+     */
+    async _retryMissingTextures() {
+        const atlas = BlockTextureAtlas.instance;
+        if (!atlas._missingTextureWarnings || atlas._missingTextureWarnings.size === 0) {
+            return;
+        }
+        
+        const missingTextures = Array.from(atlas._missingTextureWarnings);
+        console.log(`[TEXTURE] Retrying ${missingTextures.length} missing textures...`);
+        
+        // Clear the warnings set so we can track new failures
+        atlas._missingTextureWarnings.clear();
+        
+        const results = await Promise.allSettled(
+            missingTextures.map(async (uri) => {
+                try {
+                    await atlas.loadTexture(uri);
+                    console.log(`[TEXTURE] ✓ Retry successful: ${uri}`);
+                    return { uri, success: true };
+                } catch (error) {
+                    console.warn(`[TEXTURE] ✗ Retry failed: ${uri}`, error);
+                    return { uri, success: false, error };
+                }
+            })
+        );
+        
+        const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+        const failed = results.length - successful;
+        
+        console.log(`[TEXTURE] Retry complete: ${successful} succeeded, ${failed} failed`);
+        
+        // Update material if any textures were loaded
+        if (successful > 0) {
+            BlockMaterial.instance.setTextureAtlas(atlas.textureAtlas);
+        }
     }
     /**
      * Register a custom texture for a specific block ID

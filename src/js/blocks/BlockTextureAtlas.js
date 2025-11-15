@@ -238,10 +238,19 @@ class BlockTextureAtlas {
      * @returns {Promise<void>}
      */
     async loadTexture(textureUri) {
-        if (!textureUri) return;
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        const logKey = `BlockTextureAtlas.loadTexture(${textureUri})`;
+        performanceLogger.markStart(logKey);
+        
+        if (!textureUri) {
+            performanceLogger.markEnd(logKey, { skipped: true, reason: "empty URI" });
+            return;
+        }
         const isDataUri = textureUri.startsWith("data:image/");
         if (isDataUri) {
+            console.log(`[TEXTURE] Loading data URI texture: ${textureUri.substring(0, 50)}...`);
             await this.loadTextureFromDataURI(textureUri, textureUri);
+            performanceLogger.markEnd(logKey, { type: "dataUri" });
             return;
         }
         const normalizedPath = textureUri.startsWith("./assets")
@@ -255,31 +264,52 @@ class BlockTextureAtlas {
             this._textureAtlasMetadata.has(normalizedPath) ||
             this._textureAtlasMetadata.has(alternativePath)
         ) {
+            console.log(`[TEXTURE] Texture already loaded: ${textureUri}`);
+            performanceLogger.markEnd(logKey, { skipped: true, reason: "already loaded" });
             return;
         }
+        
+        console.log(`[TEXTURE] Starting load: ${textureUri}`);
         const isSingleTextureFile = textureUri.match(
             /\/blocks\/([^\/]+\.(png|jpe?g))$/
         );
         const multiSidedBlockMatch = textureUri.match(
             /\/blocks\/([^\/]+)(?:\/|$)/
         );
-        if (isSingleTextureFile) {
-            await this._loadTextureDirectly(textureUri);
-        } else if (
-            multiSidedBlockMatch &&
-            !textureUri.match(/[\+\-][xyz]\.png$/)
-        ) {
-            const blockType = multiSidedBlockMatch[1];
-            await this.preloadMultiSidedTextures(blockType);
-        } else {
-            if (!textureUri.match(/\.(png|jpe?g)$/i) && !isDataUri) {
-                const fallbackPath = `${textureUri}.png`;
-                try {
-                    await this._loadTextureDirectly(fallbackPath);
-                    return;
-                } catch (error) {}
+        try {
+            if (isSingleTextureFile) {
+                await this._loadTextureDirectly(textureUri);
+                console.log(`[TEXTURE] ✓ Successfully loaded: ${textureUri}`);
+            } else if (
+                multiSidedBlockMatch &&
+                !textureUri.match(/[\+\-][xyz]\.png$/)
+            ) {
+                const blockType = multiSidedBlockMatch[1];
+                console.log(`[TEXTURE] Loading multi-sided textures for: ${blockType}`);
+                await this.preloadMultiSidedTextures(blockType);
+                console.log(`[TEXTURE] ✓ Successfully loaded multi-sided textures for: ${blockType}`);
+            } else {
+                if (!textureUri.match(/\.(png|jpe?g)$/i) && !isDataUri) {
+                    const fallbackPath = `${textureUri}.png`;
+                    try {
+                        console.log(`[TEXTURE] Trying fallback path: ${fallbackPath}`);
+                        await this._loadTextureDirectly(fallbackPath);
+                        console.log(`[TEXTURE] ✓ Successfully loaded via fallback: ${fallbackPath}`);
+                        performanceLogger.markEnd(logKey, { usedFallback: true });
+                        return;
+                    } catch (error) {
+                        console.warn(`[TEXTURE] Fallback failed for ${fallbackPath}:`, error);
+                    }
+                }
+                await this._loadTextureDirectly(textureUri);
+                console.log(`[TEXTURE] ✓ Successfully loaded: ${textureUri}`);
             }
-            await this._loadTextureDirectly(textureUri);
+            performanceLogger.markEnd(logKey, { success: true });
+        } catch (error) {
+            console.error(`[TEXTURE] ✗ Failed to load: ${textureUri}`, error);
+            this._missingTextureWarnings.add(textureUri);
+            performanceLogger.markEnd(logKey, { success: false, error: error.message });
+            throw error;
         }
     }
     /**
@@ -819,10 +849,21 @@ class BlockTextureAtlas {
      * @private
      */
     async _loadTextureDirectly(textureUri) {
-        if (this._textureLoadLocks[textureUri])
-            return await this._textureLoadLocks[textureUri];
-        if (this._textureLoadFailures.has(textureUri))
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        const logKey = `BlockTextureAtlas._loadTextureDirectly(${textureUri})`;
+        performanceLogger.markStart(logKey);
+        
+        if (this._textureLoadLocks[textureUri]) {
+            console.log(`[TEXTURE] Waiting for in-progress load: ${textureUri}`);
+            const result = await this._textureLoadLocks[textureUri];
+            performanceLogger.markEnd(logKey, { waitedForLock: true });
+            return result;
+        }
+        if (this._textureLoadFailures.has(textureUri)) {
+            console.warn(`[TEXTURE] Texture previously failed: ${textureUri}`);
+            performanceLogger.markEnd(logKey, { skipped: true, reason: "previous failure" });
             throw new Error(`Texture previously failed to load: ${textureUri}`);
+        }
 
         if (
             textureUri.includes("/Untitled/") ||
@@ -891,28 +932,34 @@ class BlockTextureAtlas {
                         );
                     }
                     this._scheduleAtlasUpdate();
+                    console.log(`[TEXTURE] ✓ Direct load successful: ${textureUri}`);
+                    performanceLogger.markEnd(logKey, { success: true });
                     resolve(texture);
                 },
                 undefined,
                 (error) => {
                     console.error(
-                        `Failed to load texture: ${this._normalizePath(
+                        `[TEXTURE] ✗ Failed to load texture: ${this._normalizePath(
                             textureUri
                         )}`,
                         error
                     );
+                    this._missingTextureWarnings.add(textureUri);
                     const errorMetadata = this._textureAtlasMetadata.get(
                         "./assets/blocks/error.png"
                     );
                     if (errorMetadata) {
+                        console.log(`[TEXTURE] Using error texture fallback for: ${textureUri}`);
                         this._textureAtlasMetadata.set(
                             textureUri,
                             errorMetadata
                         );
                         this._scheduleAtlasUpdate();
+                        performanceLogger.markEnd(logKey, { success: false, usedErrorFallback: true });
                         resolve();
                     } else {
                         this._textureLoadFailures.add(textureUri);
+                        performanceLogger.markEnd(logKey, { success: false, error: error.message });
                         reject(error);
                     }
                 }

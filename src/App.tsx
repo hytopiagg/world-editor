@@ -2,7 +2,7 @@ import { defaultTheme, Provider } from "@adobe/react-spectrum";
 import { Canvas } from "@react-three/fiber";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Vector3 } from 'three';
 import "./css/App.css";
 import { cameraManager } from "./js/Camera";
@@ -36,16 +36,29 @@ import { updateChunkSystemCamera, processChunkRenderQueue, getChunkSystem } from
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { isElectronRuntime } from './js/utils/env';
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { performanceLogger } from "./js/utils/PerformanceLogger";
 
 function App() {
     // Project state
     // Always start at Project Home; don't auto-open last project
     const [projectId, setProjectId] = useState<string | null>(null);
+
+    // Log initialization only once
+    useEffect(() => {
+        performanceLogger.markStart("App Component Initialization");
+        return () => {
+            // Only mark end if we're actually unmounting (not just StrictMode re-render)
+            // We'll mark end when pageIsLoaded is set instead
+        };
+    }, []); // Empty deps - only run once
+
     useEffect(() => {
         console.log('[App] projectId effect', { projectId });
         if (projectId) {
+            performanceLogger.markStart("Project Selection", { projectId });
             console.log('[App] setCurrentProjectId', { projectId });
             DatabaseManager.setCurrentProjectId(projectId);
+            performanceLogger.markEnd("Project Selection");
         }
     }, [projectId]);
     const handleSwitchProject = async () => {
@@ -111,9 +124,15 @@ function App() {
     const cameraAngle = 0;
     const gridSize = 5000;
 
-    // Initialize GPU detection and optimized context attributes
-    const gpuInfo = detectGPU();
-    const contextAttributes = getOptimalContextAttributes(gpuInfo);
+    // Initialize GPU detection and optimized context attributes (only log once)
+    const gpuInfo = useMemo(() => {
+        performanceLogger.checkpoint("GPU detection starting");
+        const info = detectGPU();
+        performanceLogger.checkpoint("GPU detection complete", { gpu: info?.vendor || 'unknown' });
+        return info;
+    }, []); // Only compute once
+
+    const contextAttributes = useMemo(() => getOptimalContextAttributes(gpuInfo), [gpuInfo]);
 
     useEffect(() => {
         if (terrainBuilderRef.current) {
@@ -265,6 +284,10 @@ function App() {
 
         if (pageIsLoaded) {
             loadAppSettings();
+            // Mark App Component Initialization as complete when page is loaded
+            if (performanceLogger.markers.has("App Component Initialization")) {
+                performanceLogger.markEnd("App Component Initialization");
+            }
         }
     }, [pageIsLoaded, projectId]);
 
@@ -890,6 +913,9 @@ function App() {
                         className="canvas-container"
                         gl={contextAttributes}
                         camera={{ fov: 75, near: 0.1, far: 1000 }}
+                        onCreated={() => {
+                            performanceLogger.checkpoint("Canvas WebGL context created");
+                        }}
                     >
                         <TerrainBuilder
                             key={`tb-${projectId}`}

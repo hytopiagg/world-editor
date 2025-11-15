@@ -1,5 +1,6 @@
 import { DB_VERSION } from "../Constants";
 import { loadingManager } from "./LoadingManager";
+import { performanceLogger } from "../utils/PerformanceLogger";
 export const STORES = {
     TERRAIN: "terrain",
     ENVIRONMENT: "environment",
@@ -57,9 +58,13 @@ export class DatabaseManager {
         if (this.dbConnection) {
             return Promise.resolve(this.dbConnection);
         }
+        performanceLogger.markStart("DatabaseManager.openDB");
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.DB_NAME, DB_VERSION);
-            request.onerror = () => reject(request.error);
+            request.onerror = () => {
+                performanceLogger.markEnd("DatabaseManager.openDB");
+                reject(request.error);
+            };
             request.onupgradeneeded = (event) => {
                 const db = (event.target as IDBOpenDBRequest).result;
                 Object.values(STORES).forEach((storeName) => {
@@ -75,6 +80,7 @@ export class DatabaseManager {
                 } catch (e) {
                     console.warn("[DB] Migration check failed:", e);
                 }
+                performanceLogger.markEnd("DatabaseManager.openDB");
                 resolve(request.result);
             };
         });
@@ -215,28 +221,81 @@ export class DatabaseManager {
                         // No active project: return empty result
                         return resolve(storeName === STORES.TERRAIN ? {} : []);
                     }
+                    const logKey = `DatabaseManager.getData(${storeName})`;
+                    performanceLogger.markStart(logKey);
                     const prefix = this.prefixForProject(projectId);
                     const range = this.makePrefixRange(prefix);
-                    const data: any = {};
-                    const cursorReq = store.openCursor(range);
-                    let count = 0;
-                    cursorReq.onsuccess = (e) => {
-                        const cursor = (e.target as any).result as IDBCursorWithValue | null;
-                        if (cursor) {
-                            const fullKey = String(cursor.key);
-                            const localKey = fullKey.substring(prefix.length);
-                            data[localKey] = cursor.value;
-                            count++;
-                            if (count % 10000 === 0 && loadingManager.isLoading) {
-                                loadingManager.updateLoading(`Loading ${storeName}... ${count}`);
-                            }
-                            cursor.continue();
-                        } else {
-                                    resolve(data);
+                    
+                    // Fast-path: Try to count first to detect empty queries quickly
+                    // Use count() if available, otherwise fall back to cursor
+                    const countReq = store.count(range);
+                    countReq.onsuccess = () => {
+                        const count = countReq.result;
+                        if (count === 0) {
+                            // Empty query - return immediately without cursor iteration
+                            performanceLogger.markEnd(logKey, { itemCount: 0, fastPath: true });
+                            resolve(storeName === STORES.TERRAIN ? {} : []);
+                            return;
                         }
+                        
+                        // Non-empty: proceed with cursor iteration
+                        const data: any = storeName === STORES.TERRAIN ? {} : [];
+                        const cursorReq = store.openCursor(range);
+                        let processedCount = 0;
+                        cursorReq.onsuccess = (e) => {
+                            const cursor = (e.target as any).result as IDBCursorWithValue | null;
+                            if (cursor) {
+                                const fullKey = String(cursor.key);
+                                const localKey = fullKey.substring(prefix.length);
+                                if (storeName === STORES.TERRAIN) {
+                                    (data as any)[localKey] = cursor.value;
+                                } else {
+                                    (data as any[]).push(cursor.value);
+                                }
+                                processedCount++;
+                                if (processedCount % 10000 === 0 && loadingManager.isLoading) {
+                                    loadingManager.updateLoading(`Loading ${storeName}... ${processedCount}`);
+                                }
+                                cursor.continue();
+                            } else {
+                                performanceLogger.markEnd(logKey, { itemCount: processedCount });
+                                resolve(data);
+                            }
+                        };
+                        cursorReq.onerror = (e) => {
+                            performanceLogger.markEnd(logKey);
+                            reject((e.target as any).error);
+                        };
                     };
-                    cursorReq.onerror = (e) => {
-                        reject((e.target as any).error);
+                    countReq.onerror = () => {
+                        // count() not supported or failed - fall back to cursor method
+                        const data: any = storeName === STORES.TERRAIN ? {} : [];
+                        const cursorReq = store.openCursor(range);
+                        let count = 0;
+                        cursorReq.onsuccess = (e) => {
+                            const cursor = (e.target as any).result as IDBCursorWithValue | null;
+                            if (cursor) {
+                                const fullKey = String(cursor.key);
+                                const localKey = fullKey.substring(prefix.length);
+                                if (storeName === STORES.TERRAIN) {
+                                    data[localKey] = cursor.value;
+                                } else {
+                                    data.push(cursor.value);
+                                }
+                                count++;
+                                if (count % 10000 === 0 && loadingManager.isLoading) {
+                                    loadingManager.updateLoading(`Loading ${storeName}... ${count}`);
+                                }
+                                cursor.continue();
+                            } else {
+                                performanceLogger.markEnd(logKey, { itemCount: count });
+                                resolve(data);
+                            }
+                        };
+                        cursorReq.onerror = (e) => {
+                            performanceLogger.markEnd(logKey);
+                            reject((e.target as any).error);
+                        };
                     };
                 } else {
                     let targetKey: string = key;

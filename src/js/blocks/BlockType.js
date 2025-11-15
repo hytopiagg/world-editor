@@ -258,23 +258,40 @@ class BlockType {
      * @returns {Promise<void>}
      */
     async preloadTextures() {
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        const logKey = `BlockType.preloadTextures(${this.id}-${this.name})`;
+        performanceLogger.markStart(logKey);
+        
+        console.log(`[TEXTURE] Preloading textures for BlockType: ${this.name} (ID: ${this.id})`);
+        console.log(`[TEXTURE] Texture URIs:`, this._textureUris);
+        
         const loadPromises = Object.entries(this._textureUris).map(
             async ([face, textureUri]) => {
-                if (!textureUri) return;
+                if (!textureUri) {
+                    console.log(`[TEXTURE] Skipping empty texture URI for face: ${face}`);
+                    return;
+                }
                 try {
+                    console.log(`[TEXTURE] Loading texture for face ${face}: ${textureUri}`);
                     if (textureUri.startsWith("data:image/")) {
                         await BlockTextureAtlas.instance.loadTexture(
                             textureUri
                         );
+                        console.log(`[TEXTURE] ✓ Loaded data URI texture for face ${face}`);
                         return;
                     }
 
                     if (!textureUri.match(/\.(png|jpe?g)$/i)) {
                         try {
+                            console.log(`[TEXTURE] Trying texture with .png extension: ${textureUri}.png`);
                             await BlockTextureAtlas.instance.loadTexture(
                                 `${textureUri}.png`
                             );
-                        } catch (error) {}
+                            console.log(`[TEXTURE] ✓ Loaded texture with extension for face ${face}`);
+                            return;
+                        } catch (error) {
+                            console.warn(`[TEXTURE] Failed to load with extension: ${textureUri}.png`, error);
+                        }
 
                         const faceMap = {
                             top: "+y.png",
@@ -287,23 +304,32 @@ class BlockType {
 
                         if (faceMap[face]) {
                             try {
-                                await BlockTextureAtlas.instance.loadTexture(
-                                    `${textureUri}/${faceMap[face]}`
-                                );
-                            } catch (error) {}
+                                const facePath = `${textureUri}/${faceMap[face]}`;
+                                console.log(`[TEXTURE] Trying face-specific texture: ${facePath}`);
+                                await BlockTextureAtlas.instance.loadTexture(facePath);
+                                console.log(`[TEXTURE] ✓ Loaded face-specific texture for ${face}`);
+                                return;
+                            } catch (error) {
+                                console.warn(`[TEXTURE] Failed to load face-specific texture for ${face}:`, error);
+                            }
                         }
                     }
 
                     await BlockTextureAtlas.instance.loadTexture(textureUri);
+                    console.log(`[TEXTURE] ✓ Loaded texture for face ${face}: ${textureUri}`);
                 } catch (error) {
-                    console.warn(
-                        `Failed to preload texture for face ${face}: ${textureUri}`,
+                    console.error(
+                        `[TEXTURE] ✗ Failed to preload texture for face ${face}: ${textureUri}`,
                         error
                     );
                 }
             }
         );
         await Promise.all(loadPromises);
+        
+        const loadedCount = loadPromises.filter(p => p !== null).length;
+        console.log(`[TEXTURE] Completed preloading for ${this.name}: ${loadedCount} textures`);
+        performanceLogger.markEnd(logKey, { textureCount: Object.keys(this._textureUris).length });
     }
     /**
      * Check if this block type's textures need to be preloaded

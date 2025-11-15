@@ -4,6 +4,7 @@ import BlockMaterial from "../blocks/BlockMaterial";
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
 import ChunkSystem from "./ChunkSystem";
 import { CHUNK_SIZE } from "./ChunkConstants";
+import { performanceLogger } from "../utils/PerformanceLogger";
 
 let chunkSystem = null;
 /**
@@ -14,11 +15,14 @@ let chunkSystem = null;
  */
 export const initChunkSystem = async (scene, options = {}) => {
     if (!chunkSystem) {
+        performanceLogger.markStart("initChunkSystem");
         chunkSystem = new ChunkSystem(scene, options);
 
         await chunkSystem.initialize();
 
+        performanceLogger.markStart("rebuildTextureAtlas (initial)");
         await rebuildTextureAtlas();
+        performanceLogger.markEnd("rebuildTextureAtlas (initial)");
 
         const verifyTextures = async (attempt = 1) => {
             console.log(`Texture verification check #${attempt}`);
@@ -42,6 +46,7 @@ export const initChunkSystem = async (scene, options = {}) => {
         setTimeout(() => verifyTextures(), 1000);
 
         console.log("Chunk system initialized with options:", options);
+        performanceLogger.markEnd("initChunkSystem", { options });
     }
     return chunkSystem;
 };
@@ -112,6 +117,22 @@ export const updateTerrainChunks = (
         );
         return { totalBlocks: 0, visibleBlocks: 0 };
     }
+    const blockCount = Object.keys(terrainData).length;
+    performanceLogger.markStart("updateTerrainChunks", {
+        blockCount,
+        onlyVisibleChunks
+    });
+    
+    // Fast-path for empty terrain - skip expensive chunk operations
+    if (blockCount === 0) {
+        performanceLogger.checkpoint("Skipping chunk update for empty terrain");
+        performanceLogger.markEnd("updateTerrainChunks", {
+            totalBlocks: 0,
+            skipped: true
+        });
+        return { totalBlocks: 0, visibleBlocks: 0 };
+    }
+    
     if (onlyVisibleChunks && chunkSystem._scene.camera) {
         const viewDistance = chunkSystem._viewDistance || 96; // Default 6 chunks
         const priorityDistance = viewDistance * 0.5;
@@ -183,6 +204,9 @@ export const updateTerrainChunks = (
                 chunkSystem.setBulkLoadingMode(false);
 
                 chunkSystem._chunkManager.processRenderQueue(true);
+                performanceLogger.markEnd("updateTerrainChunks", {
+                    totalBlocks: Object.keys(terrainData).length
+                });
             }, 2000);
         }
     }, 100);
@@ -429,14 +453,23 @@ export const refreshChunkMaterials = () => {
  * @returns {Promise<boolean>} True if the rebuild was successful
  */
 export const rebuildTextureAtlas = async () => {
+    // Only track if not already tracking
+    const isInitialRebuild = !performanceLogger.markers.has("rebuildTextureAtlas");
+    if (isInitialRebuild) {
+        performanceLogger.markStart("rebuildTextureAtlas");
+    }
     console.log("Rebuilding texture atlas and refreshing all materials...");
 
     THREE.Texture.DEFAULT_FILTER = THREE.NearestFilter;
     try {
+        performanceLogger.markStart("BlockTextureAtlas.rebuildTextureAtlas");
         const atlasTexture =
             await BlockTextureAtlas.instance.rebuildTextureAtlas();
+        performanceLogger.markEnd("BlockTextureAtlas.rebuildTextureAtlas");
 
-        await BlockTypeRegistry.instance.preload();
+        // Only preload essential block types (those actually used in terrain)
+        // This avoids loading all 167 textures when only a few are needed
+        await BlockTypeRegistry.instance.preload({ onlyEssential: true });
 
         const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
 
@@ -497,9 +530,15 @@ export const rebuildTextureAtlas = async () => {
 
         setTimeout(() => retryMissingTextures(), retryDelay);
         console.log("Texture atlas rebuild completed successfully");
+        if (isInitialRebuild) {
+            performanceLogger.markEnd("rebuildTextureAtlas");
+        }
         return true;
     } catch (error) {
         console.error("Error during texture atlas rebuild:", error);
+        if (isInitialRebuild) {
+            performanceLogger.markEnd("rebuildTextureAtlas");
+        }
         return false;
     }
 };
