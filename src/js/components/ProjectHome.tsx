@@ -8,6 +8,7 @@ import { useProjectSelection } from "./useProjectSelection";
 import ProjectListCard from "./ProjectListCard";
 import { DatabaseManager as DB } from "../managers/DatabaseManager";
 import ProjectFolderCard from "./ProjectFolderCard";
+import ModalContainer from "./ModalContainer";
 
 type Project = {
     id: string;
@@ -19,6 +20,48 @@ type Project = {
     thumbnailDataUrl?: string;
     type?: string;
     folderId?: string | null;
+};
+
+interface InputModalProps {
+    isOpen: boolean;
+    title: string;
+    placeholder?: string;
+    defaultValue?: string;
+    onCancel: () => void;
+    onConfirm: (value: string) => void;
+}
+
+const InputModal: React.FC<InputModalProps> = ({ isOpen, title, placeholder = "", defaultValue = "", onCancel, onConfirm }) => {
+    const [value, setValue] = useState(defaultValue);
+    useEffect(() => { if (isOpen) setValue(defaultValue); }, [isOpen, defaultValue]);
+    
+    if (!isOpen) return null;
+    
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const trimmed = (value || '').trim();
+        if (trimmed) {
+            onConfirm(trimmed);
+        }
+    };
+    
+    return (
+        <ModalContainer isOpen={isOpen} onClose={onCancel} title={title} className="min-w-[480px]">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                <input 
+                    value={value} 
+                    onChange={(e) => setValue(e.target.value)} 
+                    className="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none" 
+                    placeholder={placeholder}
+                    autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                    <button type="button" onClick={onCancel} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15">Cancel</button>
+                    <button type="submit" className="px-3 py-2 rounded-xl bg-[#2b6aff] hover:bg-[#2560e6] text-white">Create</button>
+                </div>
+            </form>
+        </ModalContainer>
+    );
 };
 
 export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) => void }) {
@@ -44,6 +87,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     // inline menu state is now self-contained in card components
     const [folders, setFolders] = useState<any[]>([]);
     const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+    const [inputModal, setInputModal] = useState<{ open: boolean; type: 'project' | 'folder'; onConfirm: (name: string) => void }>({ open: false, type: 'project', onConfirm: () => {} });
 
     // Using shared ProjectActionsMenu component
 
@@ -283,16 +327,25 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     onImport={handleImport}
                     onCreateFolder={async () => {
                         if (activeNav !== 'my-files' || activeFolderId) return; // Only show on My files root
-                        const raw = window.prompt('Folder name');
-                        if (raw === null) return;
-                        const name = (raw || '').trim() || 'New Folder';
-                        const folder = await DB.createFolder(name);
-                        if (folder) setFolders((prev) => [folder, ...prev]);
+                        setInputModal({
+                            open: true,
+                            type: 'folder',
+                            onConfirm: async (name: string) => {
+                                const folder = await DB.createFolder(name || 'New Folder');
+                                if (folder) setFolders((prev) => [folder, ...prev]);
+                                setInputModal({ open: false, type: 'folder', onConfirm: () => {} });
+                            }
+                        });
                     }}
                     onCreate={async () => {
-                        const name = window.prompt("Project name", newName || "Untitled Project");
-                        if (!name) return;
-                        await handleCreate(name);
+                        setInputModal({
+                            open: true,
+                            type: 'project',
+                            onConfirm: async (name: string) => {
+                                await handleCreate(name);
+                                setInputModal({ open: false, type: 'project', onConfirm: () => {} });
+                            }
+                        });
                     }}
                     title={titleForNav()}
                     breadcrumbs={activeFolderId ? [{ label: 'My files', onClick: () => setActiveFolderId(null) }, { label: folders.find((f) => f.id === activeFolderId)?.name || 'Folder' }] : []}
@@ -518,6 +571,14 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     }} />
                 )}
             </main>
+            <InputModal
+                isOpen={inputModal.open}
+                title={inputModal.type === 'project' ? 'Create Project' : 'Create Folder'}
+                placeholder={inputModal.type === 'project' ? 'Project name' : 'Folder name'}
+                defaultValue={inputModal.type === 'project' ? (newName || 'Untitled Project') : ''}
+                onCancel={() => setInputModal({ open: false, type: inputModal.type, onConfirm: () => {} })}
+                onConfirm={inputModal.onConfirm}
+            />
         </div>
     );
 }
