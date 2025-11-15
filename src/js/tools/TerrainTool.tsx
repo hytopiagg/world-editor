@@ -307,7 +307,32 @@ export class TerrainTool extends BaseTool {
     }
 
     modifyTerrain() {
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        performanceLogger.markStart("TerrainTool.modifyTerrain");
+        
         const radius = this.settings.radius;
+        
+        // Get the selected block type and ensure its textures are loaded
+        const currentBlockType = (this.terrainBuilderProps as any).currentBlockTypeRef?.current;
+        const selectedBlockId = currentBlockType?.id || 1;
+        
+        console.log(`[TERRAIN_TOOL] Modifying terrain with block ${selectedBlockId}`);
+        
+        // Ensure textures are loaded for the selected block
+        try {
+            const blockTypeRegistry = (window as any).BlockTypeRegistry;
+            if (blockTypeRegistry && blockTypeRegistry.instance) {
+                const blockType = blockTypeRegistry.instance.getBlockType(selectedBlockId);
+                if (blockType && blockType.needsTexturePreload?.()) {
+                    // Fire and forget - textures will load in background
+                    blockTypeRegistry.instance.preloadBlockTypeTextures(selectedBlockId).catch(err => {
+                        console.warn(`[TERRAIN_TOOL] Background texture preload failed for block ${selectedBlockId}:`, err);
+                    });
+                }
+            }
+        } catch (error) {
+            console.warn("[TERRAIN_TOOL] Error ensuring textures before terrain modification:", error);
+        }
         const centerX = Math.round(this.currentPosition.x);
         const centerZ = Math.round(this.currentPosition.z);
         const centerY = this.placementHeight;
@@ -491,6 +516,12 @@ export class TerrainTool extends BaseTool {
                 this.lastMeshUpdate = nowFlush;
             }
         }
+        
+        performanceLogger.markEnd("TerrainTool.modifyTerrain", {
+            blocksAdded: Object.keys(addedBlocks).length,
+            blocksRemoved: Object.keys(removedBlocks).length,
+            blockId: selectedBlockId
+        });
     }
 
     calculateFalloff(distance, radius) {

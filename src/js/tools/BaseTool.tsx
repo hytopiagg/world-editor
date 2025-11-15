@@ -67,9 +67,9 @@ class BaseTool {
     /**
      * Called when the tool is activated (for subclass-specific logic)
      * @param {any} activationData - Optional data received from activate()
-     * @returns {boolean} - Return true if activation is successful, false otherwise.
+     * @returns {boolean | Promise<boolean>} - Return true if activation is successful, false otherwise. Can be async.
      */
-    onActivate(activationData = null) {
+    onActivate(activationData = null): boolean | Promise<boolean> {
 
         return true; // Default implementation assumes success
     }

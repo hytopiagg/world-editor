@@ -2829,8 +2829,14 @@ function TerrainBuilder(
         });
     };
 
-    const updateTerrainBlocks = (addedBlocks, removedBlocks, options = {}) => {
-        if (!addedBlocks && !removedBlocks) return;
+    const updateTerrainBlocks = async (addedBlocks, removedBlocks, options = {}) => {
+        const { performanceLogger } = require("./utils/PerformanceLogger");
+        performanceLogger.markStart("updateTerrainBlocks");
+        
+        if (!addedBlocks && !removedBlocks) {
+            performanceLogger.markEnd("updateTerrainBlocks", { skipped: true, reason: "no blocks" });
+            return;
+        }
         // Ensure objects
         addedBlocks = addedBlocks || {};
         removedBlocks = removedBlocks || {};
@@ -2852,8 +2858,46 @@ function TerrainBuilder(
         if (
             Object.keys(addedBlocks).length === 0 &&
             Object.keys(removedBlocks).length === 0
-        )
+        ) {
+            performanceLogger.markEnd("updateTerrainBlocks", { skipped: true, reason: "empty after filter" });
             return;
+        }
+        
+        // Extract unique block IDs and ensure textures are loaded before updating terrain
+        const uniqueBlockIds = new Set();
+        Object.values(addedBlocks).forEach(blockId => {
+            if (blockId && typeof blockId === 'number' && blockId > 0) {
+                uniqueBlockIds.add(blockId);
+            }
+        });
+        
+        console.log(`[UPDATE_TERRAIN] Updating terrain with ${Object.keys(addedBlocks).length} added, ${Object.keys(removedBlocks).length} removed`);
+        console.log(`[UPDATE_TERRAIN] Found ${uniqueBlockIds.size} unique block types:`, Array.from(uniqueBlockIds));
+        
+        // Preload textures for all blocks that will be placed
+        if (uniqueBlockIds.size > 0 && !options.skipTexturePreload) {
+            try {
+                const blockTypeRegistry = window.BlockTypeRegistry;
+                if (blockTypeRegistry && blockTypeRegistry.instance) {
+                    console.log(`[UPDATE_TERRAIN] Ensuring textures are loaded for ${uniqueBlockIds.size} block types...`);
+                    const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                        try {
+                            const blockType = blockTypeRegistry.instance.getBlockType(blockId);
+                            if (blockType && blockType.needsTexturePreload?.()) {
+                                await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                                console.log(`[UPDATE_TERRAIN] ✓ Ensured textures loaded for block ${blockId}`);
+                            }
+                        } catch (error) {
+                            console.warn(`[UPDATE_TERRAIN] ⚠ Failed to ensure textures for block ${blockId}:`, error);
+                        }
+                    });
+                    await Promise.allSettled(preloadPromises);
+                }
+            } catch (error) {
+                console.error("[UPDATE_TERRAIN] ✗ Error ensuring textures before terrain update:", error);
+                // Continue with update even if preloading fails
+            }
+        }
 
         // Re-order trackTerrainChanges call so it uses the filtered sets
         trackTerrainChanges(addedBlocks, removedBlocks);
@@ -2963,6 +3007,12 @@ function TerrainBuilder(
                 force: true,
             });
         }
+        
+        performanceLogger.markEnd("updateTerrainBlocks", {
+            blocksAdded: Object.keys(addedBlocks).length,
+            blocksRemoved: Object.keys(removedBlocks).length,
+            uniqueBlockTypes: uniqueBlockIds.size
+        });
     };
     const applyDeferredSpatialHashUpdates = async () => {
         return spatialHashUpdateManager.applyDeferredSpatialHashUpdates(

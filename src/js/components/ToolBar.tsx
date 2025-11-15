@@ -1702,7 +1702,7 @@ const ToolBar = ({
                             <button className="btn-cancel" onClick={() => setShowGlobalRemapModal(false)}>Cancel</button>
                             <button
                                 className="btn-confirm"
-                                onClick={() => {
+                                onClick={async () => {
                                     try {
                                         const data = terrainBuilderRef?.current?.getCurrentTerrainData?.();
                                         if (!data) {
@@ -1723,10 +1723,45 @@ const ToolBar = ({
                                             setShowGlobalRemapModal(false);
                                             return;
                                         }
+                                        
+                                        // Extract unique block IDs that will be placed
+                                        const uniqueBlockIds = new Set<number>();
+                                        Object.values(added).forEach(blockId => {
+                                            if (blockId && typeof blockId === 'number' && blockId > 0) {
+                                                uniqueBlockIds.add(blockId);
+                                            }
+                                        });
+                                        
+                                        console.log(`[GLOBAL_REMAP] Applying remap with ${Object.keys(added).length} blocks`);
+                                        console.log(`[GLOBAL_REMAP] Found ${uniqueBlockIds.size} unique block types to preload:`, Array.from(uniqueBlockIds));
+                                        
+                                        // Preload textures for all blocks that will be placed
+                                        try {
+                                            const blockTypeRegistry = (window as any).BlockTypeRegistry;
+                                            if (blockTypeRegistry && blockTypeRegistry.instance) {
+                                                console.log(`[GLOBAL_REMAP] Preloading textures for ${uniqueBlockIds.size} block types...`);
+                                                const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                                                    try {
+                                                        await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                                                        console.log(`[GLOBAL_REMAP] ✓ Preloaded textures for block ${blockId}`);
+                                                    } catch (error) {
+                                                        console.error(`[GLOBAL_REMAP] ✗ Failed to preload textures for block ${blockId}:`, error);
+                                                    }
+                                                });
+                                                await Promise.allSettled(preloadPromises);
+                                                console.log(`[GLOBAL_REMAP] ✓ Completed texture preloading`);
+                                            } else {
+                                                console.warn("[GLOBAL_REMAP] BlockTypeRegistry not available");
+                                            }
+                                        } catch (error) {
+                                            console.error("[GLOBAL_REMAP] ✗ Error during texture preloading:", error);
+                                            // Continue with remap even if preloading fails
+                                        }
+                                        
                                         terrainBuilderRef?.current?.updateTerrainBlocks?.(added, removed, { syncPendingChanges: true });
                                         setShowGlobalRemapModal(false);
                                     } catch (e) {
-                                        console.error("Error applying global remap:", e);
+                                        console.error("[GLOBAL_REMAP] Error applying global remap:", e);
                                         alert("Failed to apply remap. See console for details.");
                                     }
                                 }}

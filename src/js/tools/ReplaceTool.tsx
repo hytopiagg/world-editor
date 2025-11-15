@@ -109,12 +109,52 @@ export default class ReplaceTool extends BaseTool {
 
     /* =============================== BaseTool ============================ */
 
-    onActivate() {
+    async onActivate() {
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        performanceLogger.markStart("ReplaceTool.onActivate");
+        
+        console.log("[REPLACE_TOOL] ReplaceTool activated");
+        
+        // Preload textures for all blocks in blockWeights
+        const uniqueBlockIds = new Set<number>();
+        this.settings.blockWeights.forEach(bw => {
+            if (bw.id && typeof bw.id === 'number' && bw.id > 0) {
+                uniqueBlockIds.add(bw.id);
+            }
+        });
+        
+        console.log(`[REPLACE_TOOL] Found ${uniqueBlockIds.size} unique block types in blockWeights:`, Array.from(uniqueBlockIds));
+        
+        try {
+            const blockTypeRegistry = (window as any).BlockTypeRegistry;
+            if (blockTypeRegistry && blockTypeRegistry.instance) {
+                console.log(`[REPLACE_TOOL] Preloading textures for ${uniqueBlockIds.size} block types...`);
+                const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                    try {
+                        await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                        console.log(`[REPLACE_TOOL] ✓ Preloaded textures for block ${blockId}`);
+                    } catch (error) {
+                        console.error(`[REPLACE_TOOL] ✗ Failed to preload textures for block ${blockId}:`, error);
+                    }
+                });
+                await Promise.allSettled(preloadPromises);
+                console.log(`[REPLACE_TOOL] ✓ Completed texture preloading`);
+            } else {
+                console.warn("[REPLACE_TOOL] BlockTypeRegistry not available");
+            }
+        } catch (error) {
+            console.error("[REPLACE_TOOL] ✗ Error during texture preloading:", error);
+        }
+        
         if ((this.terrainBuilderProps as any).scene && this.previewGroup) {
             (this.terrainBuilderProps as any).scene.add(this.previewGroup);
             this.previewGroup.visible = true;
         }
         this.isPlacing = false;
+        
+        performanceLogger.markEnd("ReplaceTool.onActivate", { 
+            uniqueBlockTypes: uniqueBlockIds.size 
+        });
         return true;
     }
 
@@ -241,8 +281,34 @@ export default class ReplaceTool extends BaseTool {
         // Get fresh terrain data reference each time to ensure we see latest changes
         const terrainRef = (this.terrainBuilderProps as any).terrainRef;
         if (!terrainRef || !terrainRef.current) {
-            console.warn('ReplaceTool: No terrain reference available');
+            console.warn('[REPLACE_TOOL] No terrain reference available');
             return;
+        }
+        
+        // Ensure textures are loaded for all blocks in blockWeights before replacement
+        const uniqueBlockIds = new Set<number>();
+        blockWeights.forEach(bw => {
+            if (bw.id && typeof bw.id === 'number' && bw.id > 0) {
+                uniqueBlockIds.add(bw.id);
+            }
+        });
+        
+        // Preload textures if needed (async but don't wait - textures will load in background)
+        try {
+            const blockTypeRegistry = (window as any).BlockTypeRegistry;
+            if (blockTypeRegistry && blockTypeRegistry.instance) {
+                uniqueBlockIds.forEach(blockId => {
+                    const blockType = blockTypeRegistry.instance.getBlockType(blockId);
+                    if (blockType && blockType.needsTexturePreload?.()) {
+                        // Fire and forget - textures will load in background
+                        blockTypeRegistry.instance.preloadBlockTypeTextures(blockId).catch(err => {
+                            console.warn(`[REPLACE_TOOL] Background texture preload failed for block ${blockId}:`, err);
+                        });
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn("[REPLACE_TOOL] Error ensuring textures before replacement:", error);
         }
 
 
@@ -390,10 +456,46 @@ export default class ReplaceTool extends BaseTool {
 
     /* ============================ Settings ============================== */
 
-    updateSettings(newSettings: Partial<typeof this.settings>) {
+    async updateSettings(newSettings: Partial<typeof this.settings>) {
+        const oldBlockWeights = [...this.settings.blockWeights];
         this.settings = { ...this.settings, ...newSettings } as any;
         if (newSettings.radius || newSettings.shape) {
             this._rebuildPreviewGeometry();
+        }
+        
+        // If blockWeights changed, preload textures for new blocks
+        if (newSettings.blockWeights) {
+            console.log("[REPLACE_TOOL] Block weights updated, preloading textures for new blocks...");
+            const uniqueBlockIds = new Set<number>();
+            this.settings.blockWeights.forEach(bw => {
+                if (bw.id && typeof bw.id === 'number' && bw.id > 0) {
+                    uniqueBlockIds.add(bw.id);
+                }
+            });
+            
+            // Only preload blocks that weren't in the old weights
+            const oldBlockIds = new Set(oldBlockWeights.map(bw => bw.id));
+            const newBlockIds = Array.from(uniqueBlockIds).filter(id => !oldBlockIds.has(id));
+            
+            if (newBlockIds.length > 0) {
+                console.log(`[REPLACE_TOOL] Found ${newBlockIds.length} new block types to preload:`, newBlockIds);
+                try {
+                    const blockTypeRegistry = (window as any).BlockTypeRegistry;
+                    if (blockTypeRegistry && blockTypeRegistry.instance) {
+                        const preloadPromises = newBlockIds.map(async (blockId) => {
+                            try {
+                                await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                                console.log(`[REPLACE_TOOL] ✓ Preloaded textures for new block ${blockId}`);
+                            } catch (error) {
+                                console.error(`[REPLACE_TOOL] ✗ Failed to preload textures for block ${blockId}:`, error);
+                            }
+                        });
+                        await Promise.allSettled(preloadPromises);
+                    }
+                } catch (error) {
+                    console.error("[REPLACE_TOOL] ✗ Error preloading textures for new blocks:", error);
+                }
+            }
         }
     }
 
