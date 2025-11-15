@@ -839,7 +839,12 @@ const EnvironmentBuilder = (
     };
 
     const updateEnvironmentToMatch = async (targetState) => {
-        console.log("updateEnvironmentToMatch", targetState);
+        console.log('[MODEL_PERSISTENCE] ========== updateEnvironmentToMatch START ==========');
+        console.log('[MODEL_PERSISTENCE] targetState:', targetState);
+        console.log('[MODEL_PERSISTENCE] targetState type:', typeof targetState);
+        console.log('[MODEL_PERSISTENCE] targetState isArray:', Array.isArray(targetState));
+        console.log('[MODEL_PERSISTENCE] targetState length:', targetState?.length);
+        
         try {
             isUndoRedoOperation.current = true;
 
@@ -897,45 +902,83 @@ const EnvironmentBuilder = (
             });
 
 
+            console.log('[MODEL_PERSISTENCE] Current objects count:', currentObjects.size);
+            console.log('[MODEL_PERSISTENCE] Target objects count:', targetObjects.size);
+            
             // Remove objects that are no longer in the target state
+            let removedCount = 0;
             for (const [compositeKey, obj] of currentObjects) {
                 if (!targetObjects.has(compositeKey)) {
+                    console.log('[MODEL_PERSISTENCE] Removing object:', compositeKey);
                     removeInstance(obj.modelUrl, obj.instanceId);
+                    removedCount++;
                 }
             }
+            console.log('[MODEL_PERSISTENCE] Removed', removedCount, 'objects');
 
             // Add new objects from the target state
+            let addedCount = 0;
+            let failedCount = 0;
             for (const [compositeKey, obj] of targetObjects) {
                 if (!currentObjects.has(compositeKey)) {
+                    console.log('[MODEL_PERSISTENCE] Adding object:', compositeKey, obj);
                     const modelType = environmentModels.find(
                         (model) =>
                             model.modelUrl === obj.modelUrl ||
                             model.name === obj.name
                     );
                     if (modelType) {
+                        console.log('[MODEL_PERSISTENCE] Found model type:', modelType.name);
                         // Ensure model is loaded before placing
-                        await ensureModelLoaded(modelType);
-                        const tempMesh = new THREE.Object3D();
-                        tempMesh.position.copy(obj.position);
-                        tempMesh.rotation.copy(obj.rotation);
-                        tempMesh.scale.copy(obj.scale);
-                        placeEnvironmentModelWithoutSaving(
-                            modelType,
-                            tempMesh,
-                            obj.instanceId
-                        );
+                        const loaded = await ensureModelLoaded(modelType);
+                        console.log('[MODEL_PERSISTENCE] Model loaded:', modelType.name, '->', loaded);
+                        if (loaded) {
+                            const tempMesh = new THREE.Object3D();
+                            tempMesh.position.copy(obj.position);
+                            tempMesh.rotation.copy(obj.rotation);
+                            tempMesh.scale.copy(obj.scale);
+                            const result = placeEnvironmentModelWithoutSaving(
+                                modelType,
+                                tempMesh,
+                                obj.instanceId
+                            );
+                            if (result) {
+                                addedCount++;
+                                console.log('[MODEL_PERSISTENCE] ✓ Successfully placed:', compositeKey);
+                            } else {
+                                failedCount++;
+                                console.warn('[MODEL_PERSISTENCE] ✗ Failed to place:', compositeKey);
+                            }
+                        } else {
+                            failedCount++;
+                            console.warn('[MODEL_PERSISTENCE] ✗ Model failed to load:', modelType.name);
+                        }
+                    } else {
+                        failedCount++;
+                        console.warn('[MODEL_PERSISTENCE] ✗ Model type not found for:', obj.name || obj.modelUrl);
                     }
+                } else {
+                    console.log('[MODEL_PERSISTENCE] Object already exists:', compositeKey);
                 }
             }
+            console.log('[MODEL_PERSISTENCE] Added', addedCount, 'objects');
+            console.log('[MODEL_PERSISTENCE] Failed', failedCount, 'objects');
 
             setTotalEnvironmentObjects(targetObjects.size);
 
             // Rebuild all visible instances after updating environment
             rebuildAllVisibleInstances(cameraPosition);
+            
+            // Final verification
+            const finalCount = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+            console.log('[MODEL_PERSISTENCE] Final object count in memory:', finalCount);
+            console.log('[MODEL_PERSISTENCE] Expected count:', targetObjects.size);
         } catch (error) {
-            console.error("Error updating environment:", error);
+            console.error("[MODEL_PERSISTENCE] ✗ Error updating environment:", error);
+            console.error("[MODEL_PERSISTENCE] Error stack:", error.stack);
         } finally {
             isUndoRedoOperation.current = false;
+            console.log('[MODEL_PERSISTENCE] ========== updateEnvironmentToMatch END ==========');
         }
     };
 
@@ -1444,12 +1487,19 @@ const EnvironmentBuilder = (
     };
 
     const updateLocalStorage = () => {
+        console.log('[MODEL_PERSISTENCE] ========== updateLocalStorage START ==========');
+        console.log('[MODEL_PERSISTENCE] Current projectId:', DatabaseManager.getCurrentProjectId());
         const allObjects = [];
+        let totalInstancesCount = 0;
 
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
             const modelData = environmentModels.find(
                 (model) => model.modelUrl === modelUrl
             );
+            const instanceCount = instancedData.instances.size;
+            totalInstancesCount += instanceCount;
+            console.log(`[MODEL_PERSISTENCE] Model ${modelData?.name || 'unknown'} (${modelUrl}): ${instanceCount} instances`);
+            
             instancedData.instances.forEach((data, instanceId) => {
 
                 const serializablePosition = {
@@ -1483,10 +1533,36 @@ const EnvironmentBuilder = (
             });
         }
 
-        console.log("allObjects", allObjects);
-        console.log("getAllEnvironmentObjects", getAllEnvironmentObjects());
-        DatabaseManager.saveData(STORES.ENVIRONMENT, "current", allObjects);
+        console.log('[MODEL_PERSISTENCE] Total instances in memory:', totalInstancesCount);
+        console.log('[MODEL_PERSISTENCE] Total objects to save:', allObjects.length);
+        console.log('[MODEL_PERSISTENCE] allObjects array:', allObjects);
+        console.log('[MODEL_PERSISTENCE] getAllEnvironmentObjects() result:', getAllEnvironmentObjects());
+        
+        const savePromise = DatabaseManager.saveData(STORES.ENVIRONMENT, "current", allObjects);
+        console.log('[MODEL_PERSISTENCE] Database save initiated, promise:', savePromise);
+        
+        savePromise.then(() => {
+            console.log('[MODEL_PERSISTENCE] ✓ Database save completed successfully');
+            // Verify what was saved
+            DatabaseManager.getData(STORES.ENVIRONMENT, "current").then((saved) => {
+                console.log('[MODEL_PERSISTENCE] Verification - saved data from DB:', saved);
+                console.log('[MODEL_PERSISTENCE] Verification - saved data type:', typeof saved);
+                console.log('[MODEL_PERSISTENCE] Verification - saved data isArray:', Array.isArray(saved));
+                if (saved && typeof saved === 'object') {
+                    console.log('[MODEL_PERSISTENCE] Verification - saved data keys:', Object.keys(saved));
+                    if (Array.isArray(saved)) {
+                        console.log('[MODEL_PERSISTENCE] Verification - saved array length:', saved.length);
+                    }
+                }
+            }).catch((err) => {
+                console.error('[MODEL_PERSISTENCE] ✗ Error verifying saved data:', err);
+            });
+        }).catch((err) => {
+            console.error('[MODEL_PERSISTENCE] ✗ Database save failed:', err);
+        });
+        
         setTotalEnvironmentObjects(allObjects.length);
+        console.log('[MODEL_PERSISTENCE] ========== updateLocalStorage END ==========');
     };
 
     const getPlacementPositions = (centerPos, placementSize) => {
@@ -1622,50 +1698,101 @@ const EnvironmentBuilder = (
     };
 
     const refreshEnvironmentFromDB = async () => {
-        console.log('[Env] refreshEnvironmentFromDB start', { currentProjectId: DatabaseManager.getCurrentProjectId() });
+        console.log('[MODEL_PERSISTENCE] ========== refreshEnvironmentFromDB START ==========');
+        console.log('[MODEL_PERSISTENCE] Current projectId:', DatabaseManager.getCurrentProjectId());
+        console.log('[MODEL_PERSISTENCE] Current scene state:', { 
+            hasScene: !!scene, 
+            instancedMeshesCount: instancedMeshes.current.size,
+            totalObjectsInMemory: Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0)
+        });
+        
         try {
             const savedEnv = await DatabaseManager.getData(
                 STORES.ENVIRONMENT,
                 "current"
             );
-            console.log('[Env] savedEnv type/len', { type: typeof savedEnv, isArray: Array.isArray(savedEnv), keys: savedEnv && typeof savedEnv === 'object' ? Object.keys(savedEnv).length : 'n/a' });
+            
+            console.log('[MODEL_PERSISTENCE] Raw savedEnv from DB:', savedEnv);
+            console.log('[MODEL_PERSISTENCE] savedEnv type:', typeof savedEnv);
+            console.log('[MODEL_PERSISTENCE] savedEnv isArray:', Array.isArray(savedEnv));
+            console.log('[MODEL_PERSISTENCE] savedEnv is null:', savedEnv === null);
+            console.log('[MODEL_PERSISTENCE] savedEnv is undefined:', savedEnv === undefined);
+            
+            if (savedEnv && typeof savedEnv === 'object') {
+                const keys = Object.keys(savedEnv);
+                console.log('[MODEL_PERSISTENCE] savedEnv keys count:', keys.length);
+                console.log('[MODEL_PERSISTENCE] savedEnv keys:', keys);
+            }
+            
             if (savedEnv && Object.keys(savedEnv).length > 0) {
-                console.log(`[Env] Loading ${Object.keys(savedEnv).length} environment objects from database`);
+                const envArray = Array.isArray(savedEnv) ? savedEnv : Object.values(savedEnv);
+                console.log(`[MODEL_PERSISTENCE] Loading ${envArray.length} environment objects from database`);
+                console.log('[MODEL_PERSISTENCE] Environment objects to load:', envArray);
 
                 // Lazy load models for all unique model URLs in saved environment
                 const uniqueModelUrls = new Set<string>();
-                Object.values(savedEnv).forEach((obj: any) => {
+                envArray.forEach((obj: any) => {
+                    console.log('[MODEL_PERSISTENCE] Processing object:', { 
+                        modelUrl: obj.modelUrl, 
+                        name: obj.name, 
+                        instanceId: obj.instanceId 
+                    });
                     if (obj.modelUrl) {
                         uniqueModelUrls.add(obj.modelUrl);
                     } else if (obj.name) {
                         // Find model by name
                         const model = environmentModels.find(m => m.name === obj.name);
                         if (model) {
+                            console.log('[MODEL_PERSISTENCE] Found model by name:', model.name, '->', model.modelUrl);
                             uniqueModelUrls.add(model.modelUrl);
+                        } else {
+                            console.warn('[MODEL_PERSISTENCE] Could not find model by name:', obj.name);
                         }
                     }
                 });
+
+                console.log('[MODEL_PERSISTENCE] Unique model URLs to load:', Array.from(uniqueModelUrls));
 
                 // Load all required models in parallel
                 const loadPromises = Array.from(uniqueModelUrls).map(async (modelUrl) => {
                     const model = environmentModels.find(m => m.modelUrl === modelUrl);
                     if (model) {
-                        return ensureModelLoaded(model);
-                    }
+                        console.log('[MODEL_PERSISTENCE] Loading model:', model.name);
+                        const loaded = await ensureModelLoaded(model);
+                        console.log('[MODEL_PERSISTENCE] Model loaded:', model.name, '->', loaded);
+                        return loaded;
+                    } else {
+                        console.warn('[MODEL_PERSISTENCE] Model not found in environmentModels for URL:', modelUrl);
                     return false;
+                    }
                 });
-                await Promise.all(loadPromises);
+                const loadResults = await Promise.all(loadPromises);
+                console.log('[MODEL_PERSISTENCE] Model loading results:', loadResults);
+                const failedLoads = loadResults.filter(r => !r).length;
+                if (failedLoads > 0) {
+                    console.warn(`[MODEL_PERSISTENCE] ${failedLoads} models failed to load`);
+                }
 
-                await updateEnvironmentToMatch(Object.values(savedEnv));
+                console.log('[MODEL_PERSISTENCE] Calling updateEnvironmentToMatch with', envArray.length, 'objects');
+                await updateEnvironmentToMatch(envArray);
+                
+                // Verify what was loaded
+                const currentObjects = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+                console.log('[MODEL_PERSISTENCE] After updateEnvironmentToMatch - objects in memory:', currentObjects);
+                console.log('[MODEL_PERSISTENCE] Expected objects:', envArray.length);
+                
                 // Rebuild all visible instances after loading from database
                 rebuildAllVisibleInstances(cameraPosition);
+                console.log('[MODEL_PERSISTENCE] ✓ Environment refresh completed');
             } else {
-                console.log("[Env] No environment objects found in database; clearing local env");
+                console.log("[MODEL_PERSISTENCE] No environment objects found in database; clearing local env");
                 clearEnvironments();
             }
         } catch (error) {
-            console.error("[Env] Error refreshing environment:", error);
+            console.error("[MODEL_PERSISTENCE] ✗ Error refreshing environment:", error);
+            console.error("[MODEL_PERSISTENCE] Error stack:", error.stack);
         }
+        console.log('[MODEL_PERSISTENCE] ========== refreshEnvironmentFromDB END ==========');
     };
     const updatePreviewPosition = (position) => {
         if (placeholderMeshRef.current && position) {

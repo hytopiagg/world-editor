@@ -190,9 +190,15 @@ function handleTerrainMouseDown(
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
             };
+            console.log("[MODEL_DRAG] MouseDown - Reset state:", {
+                isFirstBlock: isFirstBlockRef.current,
+                placedEnvironmentCount: placedEnvironmentCountRef.current,
+                currentBlockType: currentBlockTypeRef?.current?.name,
+                isEnvironment: currentBlockTypeRef?.current?.isEnvironment
+            });
             updatePreviewPosition();
             if (isFirstBlockRef.current) {
-                console.log("isFirstBlockRef.current");
+                console.log("[MODEL_DRAG] MouseDown - isFirstBlockRef is true, calling handleBlockPlacement");
                 handleBlockPlacement();
             }
             playPlaceSound(); // Play sound on initial click

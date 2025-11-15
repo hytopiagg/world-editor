@@ -874,49 +874,74 @@ function TerrainBuilder(
             currentBlockTypeRef.current?.isEnvironment &&
             placedEnvironmentCountRef.current < 1
         ) {
-            console.log(
-                "currentBlockTypeRef.current?.isEnvironment && placedEnvironmentCountRef.current < 1"
-            );
+            console.log("[MODEL_DRAG] ========== MODEL PLACEMENT ATTEMPT ==========");
+            console.log("[MODEL_DRAG] isEnvironment:", currentBlockTypeRef.current?.isEnvironment);
+            console.log("[MODEL_DRAG] placedEnvironmentCountRef.current:", placedEnvironmentCountRef.current);
+            console.log("[MODEL_DRAG] isFirstBlockRef.current:", isFirstBlockRef.current);
+            console.log("[MODEL_DRAG] isPlacingRef.current:", isPlacingRef.current);
+            console.log("[MODEL_DRAG] modeRef.current:", modeRef.current);
+            console.log("[MODEL_DRAG] Condition check: isEnvironment && placedCount < 1:", 
+                currentBlockTypeRef.current?.isEnvironment && placedEnvironmentCountRef.current < 1);
+            
             if (isFirstBlockRef.current) {
-                console.log("isFirstBlockRef.current");
+                console.log("[MODEL_DRAG] ✓ isFirstBlockRef is true - proceeding with placement");
                 if (
                     environmentBuilderRef.current &&
                     typeof environmentBuilderRef.current
                         .placeEnvironmentModel === "function"
                 ) {
                     try {
-                        console.log("handleBlockPlacement - ENVIRONMENT");
-                        const result =
-                            environmentBuilderRef.current.placeEnvironmentModel(
-                                modeRef.current,
-                                true
-                            );
+                        console.log("[MODEL_DRAG] Calling placeEnvironmentModel with mode:", modeRef.current);
+                        const result = await environmentBuilderRef.current.placeEnvironmentModel(
+                            modeRef.current,
+                            true
+                        );
+                        console.log("[MODEL_DRAG] placeEnvironmentModel result:", result);
+                        console.log("[MODEL_DRAG] Result length:", result?.length);
+                        
                         if (result?.length > 0) {
+                            const oldCount = placedEnvironmentCountRef.current;
                             placedEnvironmentCountRef.current += result.length;
+                            console.log("[MODEL_DRAG] Updated placedEnvironmentCountRef:", oldCount, "->", placedEnvironmentCountRef.current);
+                            // Set isFirstBlockRef to false after successful model placement to prevent drag placement
+                            isFirstBlockRef.current = false;
+                            console.log("[MODEL_DRAG] Set isFirstBlockRef to false after model placement");
+                        } else {
+                            console.log("[MODEL_DRAG] No objects placed (result empty or null)");
                         }
+                        
                         if (modeRef.current === "add" && result?.length > 0) {
                             if (placementChangesRef.current) {
+                                const oldAdded = placementChangesRef.current.environment.added.length;
                                 placementChangesRef.current.environment.added =
                                     [
                                         ...placementChangesRef.current
                                             .environment.added,
                                         ...result,
                                     ];
+                                console.log("[MODEL_DRAG] Updated placementChanges.environment.added:", oldAdded, "->", placementChangesRef.current.environment.added.length);
                             }
                         }
                     } catch (error) {
                         console.error(
-                            "Error handling environment object:",
+                            "[MODEL_DRAG] ✗ Error handling environment object:",
                             error
                         );
+                        console.error("[MODEL_DRAG] Error stack:", error.stack);
                     }
                 } else {
                     console.error(
-                        "Environment builder reference or placeEnvironmentModel function not available"
+                        "[MODEL_DRAG] ✗ Environment builder reference or placeEnvironmentModel function not available"
                     );
                 }
+            } else {
+                console.log("[MODEL_DRAG] ✗ BLOCKED: isFirstBlockRef is false - should not place during drag");
             }
+            console.log("[MODEL_DRAG] ========== MODEL PLACEMENT ATTEMPT END ==========");
         } else {
+            if (currentBlockTypeRef.current?.isEnvironment) {
+                console.log("[MODEL_DRAG] Model placement blocked - placedEnvironmentCountRef.current >= 1:", placedEnvironmentCountRef.current);
+            }
             if (
                 modeRef.current === "add" &&
                 !currentBlockTypeRef?.current?.isEnvironment
@@ -1410,8 +1435,14 @@ function TerrainBuilder(
                 }
             }
             if (isPlacingRef.current && !isToolActive && shouldUpdatePreview) {
-                console.log("updatePreviewPosition - handleBlockPlacement");
-                handleBlockPlacement();
+                // Don't place models during drag - only blocks
+                // Models should be placed one at a time on click, not during drag
+                if (!currentBlockTypeRef.current?.isEnvironment) {
+                    console.log("[MODEL_DRAG] updatePreviewPosition calling handleBlockPlacement for blocks");
+                    handleBlockPlacement();
+                } else {
+                    console.log("[MODEL_DRAG] updatePreviewPosition skipping handleBlockPlacement for models (drag placement disabled)");
+                }
             }
         }
         updatePreviewPosition.isProcessing = false;
