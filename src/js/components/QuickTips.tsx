@@ -9,6 +9,13 @@ const QuickTips = () => {
     const [isFading, setIsFading] = useState(false);
     const [isDownloadCTA, setIsDownloadCTA] = useState(false);
     const fadeTimeoutRef = useRef(null);
+    const isDownloadCTARef = useRef(false);
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        isDownloadCTARef.current = isDownloadCTA;
+    }, [isDownloadCTA]);
+    
     const startFadeTimer = (ms = 10000) => {
         if (fadeTimeoutRef.current) {
             clearTimeout(fadeTimeoutRef.current);
@@ -52,7 +59,7 @@ const QuickTips = () => {
         }
 
         const handleTipChange = (newTip) => {
-            if (isDownloadCTA) return; // ignore updates while CTA is showing
+            if (isDownloadCTARef.current) return; // ignore updates while CTA is showing
             setTipText(newTip);
             setIsVisible(true);
             startFadeTimer();
@@ -64,7 +71,7 @@ const QuickTips = () => {
             }
             QuickTipsManager.removeListener(handleTipChange);
         };
-    }, [tipText, isDownloadCTA]);
+    }, []); // Empty dependency array - only run once on mount
     const toggleVisibility = () => {
         if (fadeTimeoutRef.current) {
             clearTimeout(fadeTimeoutRef.current);
