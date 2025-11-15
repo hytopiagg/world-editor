@@ -767,7 +767,7 @@ function App() {
 
                 {/* Live selection dimensions tip */}
                 <SelectionDimensionsTip />
-                
+
                 {/* Show QuickTips only on web (not Electron) and after initial load */}
                 {!isElectronRuntime() && pageIsLoaded && <QuickTips />}
 
