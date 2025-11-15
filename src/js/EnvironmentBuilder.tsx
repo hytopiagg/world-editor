@@ -31,7 +31,15 @@ export const environmentModels = (() => {
         const result = [];
 
         const modelList = fetchModelList();
-        modelList.forEach((fileName) => {
+        
+        // Handle both old format (array of strings) and new format (array of objects with path/thumbnail)
+        const isEnhancedFormat = Array.isArray(modelList) && modelList.length > 0 && typeof modelList[0] === 'object' && 'path' in modelList[0];
+        
+        modelList.forEach((entry) => {
+            // Extract path and thumbnail from entry (handles both formats)
+            const fileName = isEnhancedFormat ? entry.path : entry;
+            const thumbnailPath = isEnhancedFormat ? entry.thumbnail : null;
+            
             // Derive category (first folder) and base filename for display name
             const parts = fileName.split("/");
             const baseName = parts.pop().replace(".gltf", "");
@@ -41,6 +49,7 @@ export const environmentModels = (() => {
                 id: idCounter++,
                 name: baseName,
                 modelUrl: `assets/models/environment/${fileName}`,
+                thumbnailUrl: thumbnailPath ? `assets/models/environment/${thumbnailPath}` : null,
                 category,
                 isEnvironment: true,
                 animations: ["idle"],
@@ -483,6 +492,34 @@ const EnvironmentBuilder = (
             return null;
         }
     };
+    // Lazy load a model when it's actually needed (for placement or rendering)
+    const ensureModelLoaded = async (model: typeof environmentModels[0]): Promise<boolean> => {
+        const modelUrl = model.modelUrl;
+        
+        // Check if model is already loaded
+        if (loadedModels.current.has(modelUrl)) {
+            const instancedData = instancedMeshes.current.get(modelUrl);
+            if (instancedData && instancedData.meshes && instancedData.meshes.length > 0) {
+                return true; // Already loaded and ready
+            }
+        }
+        
+        // Load the model
+        try {
+            console.log(`[EnvironmentBuilder] Lazy loading model: ${model.name}`);
+            const gltf = await loadModel(modelUrl);
+            if (gltf) {
+                gltf.scene.updateMatrixWorld(true);
+                await new Promise((r) => setTimeout(r, 0));
+                setupInstancedMesh(model, gltf);
+                return true;
+            }
+        } catch (error) {
+            console.error(`Error lazy loading model ${model.name}:`, error);
+        }
+        return false;
+    };
+
     const preloadModels = async () => {
         try {
             const customModels = await DatabaseManager.getData(
@@ -514,6 +551,7 @@ const EnvironmentBuilder = (
                             ) + 1,
                         name: model.name,
                         modelUrl: fileUrl,
+                        thumbnailUrl: null, // Custom models don't have pre-generated thumbnails
                         isEnvironment: true,
                         isCustom: true,
                         category: "Custom",
@@ -548,26 +586,16 @@ const EnvironmentBuilder = (
                 });
             }
 
-            await Promise.all(
-                environmentModels.map(async (model) => {
-                    try {
-                        const gltf = await loadModel(model.modelUrl);
-                        if (gltf) {
-                            gltf.scene.updateMatrixWorld(true);
-
-                            await new Promise((r) => setTimeout(r, 0));
-
-                            setupInstancedMesh(model, gltf);
-                        }
-                    } catch (error) {
-                        console.error(
-                            `Error preloading model ${model.name}:`,
-                            error
-                        );
-                    }
-                })
-            );
-
+            // OPTIMIZATION: Don't preload all models - load them lazily when needed
+            // This eliminates the 5-30 second loading bottleneck
+            // Models will be loaded on-demand when:
+            // 1. User selects a model for placement
+            // 2. Camera approaches existing instances that need rendering
+            // 3. Environment objects need to be refreshed from DB
+            
+            console.log(`[EnvironmentBuilder] Skipping model preload - using lazy loading instead. ${environmentModels.length} models available.`);
+            
+            // Only refresh environment from DB (this will trigger lazy loading for existing instances)
             await refreshEnvironmentFromDB();
         } catch (error) {
             console.error("Error loading custom models from DB:", error);
@@ -798,7 +826,7 @@ const EnvironmentBuilder = (
         }
     };
 
-    const updateEnvironmentToMatch = (targetState) => {
+    const updateEnvironmentToMatch = async (targetState) => {
         console.log("updateEnvironmentToMatch", targetState);
         try {
             isUndoRedoOperation.current = true;
@@ -873,6 +901,8 @@ const EnvironmentBuilder = (
                             model.name === obj.name
                     );
                     if (modelType) {
+                        // Ensure model is loaded before placing
+                        await ensureModelLoaded(modelType);
                         const tempMesh = new THREE.Object3D();
                         tempMesh.position.copy(obj.position);
                         tempMesh.rotation.copy(obj.rotation);
@@ -1119,7 +1149,7 @@ const EnvironmentBuilder = (
         return collidingInstances;
     };
 
-    const placeEnvironmentModel = (mode = "add", saveUndo = true) => {
+    const placeEnvironmentModel = async (mode = "add", saveUndo = true) => {
         console.log("placeEnvironmentModel", mode);
         if (!scene || !placeholderMeshRef.current) return;
 
@@ -1213,6 +1243,14 @@ const EnvironmentBuilder = (
             console.warn(`Could not find model with ID ${currentBlockType.id}`);
             return [];
         }
+        
+        // Ensure model is loaded before placing
+        const modelLoaded = await ensureModelLoaded(modelData);
+        if (!modelLoaded) {
+            console.warn(`Failed to load model ${modelData.name} for placement`);
+            return [];
+        }
+        
         const modelUrl = modelData.modelUrl;
         let instancedData = instancedMeshes.current.get(modelUrl);
         if (!instancedData) {
@@ -1565,10 +1603,10 @@ const EnvironmentBuilder = (
             blockId: 1000,
         }], { force: true });
     };
-    const refreshEnvironment = () => {
+    const refreshEnvironment = async () => {
         const savedEnv = getAllEnvironmentObjects();
         console.log("savedEnv", savedEnv);
-        updateEnvironmentToMatch(savedEnv);
+        await updateEnvironmentToMatch(savedEnv);
     };
 
     const refreshEnvironmentFromDB = async () => {
@@ -1582,7 +1620,31 @@ const EnvironmentBuilder = (
             if (savedEnv && Object.keys(savedEnv).length > 0) {
                 console.log(`[Env] Loading ${Object.keys(savedEnv).length} environment objects from database`);
 
-                updateEnvironmentToMatch(Object.values(savedEnv));
+                // Lazy load models for all unique model URLs in saved environment
+                const uniqueModelUrls = new Set<string>();
+                Object.values(savedEnv).forEach((obj: any) => {
+                    if (obj.modelUrl) {
+                        uniqueModelUrls.add(obj.modelUrl);
+                    } else if (obj.name) {
+                        // Find model by name
+                        const model = environmentModels.find(m => m.name === obj.name);
+                        if (model) {
+                            uniqueModelUrls.add(model.modelUrl);
+                        }
+                    }
+                });
+
+                // Load all required models in parallel
+                const loadPromises = Array.from(uniqueModelUrls).map(async (modelUrl) => {
+                    const model = environmentModels.find(m => m.modelUrl === modelUrl);
+                    if (model) {
+                        return ensureModelLoaded(model);
+                    }
+                    return false;
+                });
+                await Promise.all(loadPromises);
+
+                await updateEnvironmentToMatch(Object.values(savedEnv));
                 // Rebuild all visible instances after loading from database
                 rebuildAllVisibleInstances(cameraPosition);
             } else {

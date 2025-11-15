@@ -43,6 +43,8 @@
         "eject": "react-scripts eject",
         "prebuild": "node scripts/generate-model-manifest.js",
         "prestart": "node scripts/generate-model-manifest.js",
+        "build:thumbnails": "node scripts/generate-model-thumbnails.js && node scripts/generate-model-manifest.js",
+        "build:thumbnails:skip-existing": "SKIP_THUMBNAILS=false node scripts/generate-model-thumbnails.js",
         "parse:bp": "node scripts/parse-axiom-bp.js",
         "convert:bp": "node scripts/convert-axiom-bp-to-editor.js",
         "clean:dist": "rimraf dist",
@@ -86,7 +88,8 @@
         "electron": "^31.3.1",
         "electron-builder": "^25.1.8",
         "electron-is-dev": "^3.0.1",
-        "wait-on": "^7.2.0"
+        "wait-on": "^7.2.0",
+        "puppeteer": "^23.11.1"
     },
     "engines": {
         "node": ">=18.0.0",

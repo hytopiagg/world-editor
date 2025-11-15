@@ -121,8 +121,36 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
 
         mountedRef.current = true;
 
-        const loadCachedImage = async () => {
-            console.log(`[EnvButton] (${envType.name}) Checking cache…`);
+        const loadThumbnail = async () => {
+            console.log(`[EnvButton] (${envType.name}) Loading thumbnail…`);
+            
+            // OPTIMIZATION: Use pre-generated thumbnail if available
+            if (envType.thumbnailUrl) {
+                const thumbnailPath = envType.thumbnailUrl.startsWith('assets/') 
+                    ? `/${envType.thumbnailUrl}` 
+                    : envType.thumbnailUrl;
+                
+                // Try loading the pre-generated thumbnail
+                try {
+                    const img = new Image();
+                    await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                        img.src = thumbnailPath;
+                    });
+                    
+                    if (mountedRef.current) {
+                        setImageUrl(thumbnailPath);
+                        setIsLoading(false);
+                        setRetryCount(0);
+                        console.log(`[EnvButton] (${envType.name}) Using pre-generated thumbnail`);
+                        return true;
+                    }
+                } catch (error) {
+                    console.warn(`[EnvButton] (${envType.name}) Failed to load thumbnail, falling back to cache/render:`, error);
+                }
+            }
+
             const cacheKey = getCacheKey();
 
             // First check in-memory cache
@@ -184,10 +212,11 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
         // Only load/render if we don't have an image already
         if (!imageUrl && !showCanvas && !isQueued && !hasError) {
             setIsLoading(true);
-            loadCachedImage().then((hasCache) => {
+            loadThumbnail().then((hasImage) => {
                 if (!mountedRef.current) return; // Check if still mounted
 
-                if (!hasCache) {
+                if (!hasImage) {
+                    // Fallback to rendering model if no thumbnail available
                     setIsQueued(true);
                     if (activeRenders < MAX_SIMULTANEOUS_RENDERS) {
                         activeRenders++;
