@@ -72,7 +72,7 @@ class ToolManager {
      * @param {string | null} toolName - Name of the tool to activate, or null to deactivate
      * @param {any} activationData - Optional data to pass to the tool's activate method
      */
-    activateTool(toolName, activationData) {
+    async activateTool(toolName, activationData) {
 
         if (this.activeTool) {
             this.activeTool.deactivate();
@@ -102,7 +102,7 @@ class ToolManager {
         if (this.tools[toolName]) {
             this.activeTool = this.tools[toolName];
             const activationSuccessful =
-                this.activeTool.activate(activationData);
+                await this.activeTool.activate(activationData);
 
             if (!activationSuccessful) {
                 console.warn(`Activation failed for tool: ${toolName}`);

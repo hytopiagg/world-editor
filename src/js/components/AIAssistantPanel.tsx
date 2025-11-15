@@ -303,6 +303,37 @@ const AIAssistantPanel = ({
                     schematic: schematicData,
                     timestamp: Date.now(),
                 };
+                
+                // Preload textures for all blocks in the generated component
+                console.log("[AI_BUILDER] Generated component with blocks:", Object.keys(schematicData).length);
+                const blocks = schematicData.blocks || schematicData;
+                const uniqueBlockIds = new Set<number>();
+                for (const blockId of Object.values(blocks)) {
+                    if (blockId && typeof blockId === 'number' && blockId > 0) {
+                        uniqueBlockIds.add(blockId);
+                    }
+                }
+                
+                console.log(`[AI_BUILDER] Found ${uniqueBlockIds.size} unique block types, preloading textures...`);
+                try {
+                    const blockTypeRegistry = (window as any).BlockTypeRegistry;
+                    if (blockTypeRegistry && blockTypeRegistry.instance) {
+                        const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                            try {
+                                await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                                console.log(`[AI_BUILDER] ✓ Preloaded textures for block ${blockId}`);
+                            } catch (error) {
+                                console.error(`[AI_BUILDER] ✗ Failed to preload textures for block ${blockId}:`, error);
+                            }
+                        });
+                        await Promise.allSettled(preloadPromises);
+                        console.log(`[AI_BUILDER] ✓ Completed texture preloading for generated component`);
+                    }
+                } catch (error) {
+                    console.error("[AI_BUILDER] ✗ Error during texture preloading:", error);
+                    // Continue with loading even if preloading fails
+                }
+                
                 loadAISchematic(schematicData); // loadAISchematic expects the raw schematic
 
                 try {

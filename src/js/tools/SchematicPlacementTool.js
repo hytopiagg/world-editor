@@ -60,15 +60,19 @@ class SchematicPlacementTool extends BaseTool {
         this.mouseMoveDelay = 0; // ms, adjust as needed
     }
 
-    onActivate(schematicData) {
+    async onActivate(schematicData) {
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        performanceLogger.markStart("SchematicPlacementTool.onActivate");
+        
         if (!schematicData) {
             console.warn(
-                "SchematicPlacementTool activated without valid schematic data."
+                "[SCHEMATIC] SchematicPlacementTool activated without valid schematic data."
             );
+            performanceLogger.markEnd("SchematicPlacementTool.onActivate", { skipped: true, reason: "no data" });
             return false;
         }
 
-        this.schematicData = schematicData.blocks;
+        this.schematicData = schematicData.blocks || schematicData;
         this.schematicEntities = schematicData.entities || [];
 
         if (
@@ -76,9 +80,45 @@ class SchematicPlacementTool extends BaseTool {
             this.schematicEntities.length === 0
         ) {
             console.warn(
-                "SchematicPlacementTool activated with empty schematic data."
+                "[SCHEMATIC] SchematicPlacementTool activated with empty schematic data."
             );
+            performanceLogger.markEnd("SchematicPlacementTool.onActivate", { skipped: true, reason: "empty data" });
             return false;
+        }
+
+        console.log("[SCHEMATIC] Activating schematic tool with blocks:", Object.keys(this.schematicData).length);
+        
+        // Extract all unique block IDs from the schematic
+        const uniqueBlockIds = new Set();
+        for (const blockId of Object.values(this.schematicData)) {
+            if (blockId && typeof blockId === 'number' && blockId > 0) {
+                uniqueBlockIds.add(blockId);
+            }
+        }
+        
+        console.log(`[SCHEMATIC] Found ${uniqueBlockIds.size} unique block types in schematic:`, Array.from(uniqueBlockIds));
+        
+        // Preload textures for all blocks in the schematic
+        try {
+            if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
+                console.log(`[SCHEMATIC] Preloading textures for ${uniqueBlockIds.size} block types...`);
+                const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                    try {
+                        await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                        console.log(`[SCHEMATIC] ✓ Preloaded textures for block ${blockId}`);
+                    } catch (error) {
+                        console.error(`[SCHEMATIC] ✗ Failed to preload textures for block ${blockId}:`, error);
+                    }
+                });
+                
+                await Promise.allSettled(preloadPromises);
+                console.log(`[SCHEMATIC] ✓ Completed texture preloading for schematic`);
+            } else {
+                console.warn("[SCHEMATIC] BlockTypeRegistry not available for texture preloading");
+            }
+        } catch (error) {
+            console.error("[SCHEMATIC] ✗ Error during texture preloading:", error);
+            // Continue with activation even if preloading fails
         }
 
         this.currentRotation = 0; // Reset rotation on new schematic activation
@@ -88,12 +128,16 @@ class SchematicPlacementTool extends BaseTool {
         this._updatePreviewAnchorPosition(); // Position the group
         this.previewGroup.visible = true;
         console.log(
-            "SchematicPlacementTool specific activation with data:",
+            "[SCHEMATIC] SchematicPlacementTool activated with data:",
             this.schematicData,
             "entities:",
             this.schematicEntities
         );
 
+        performanceLogger.markEnd("SchematicPlacementTool.onActivate", { 
+            blockCount: Object.keys(this.schematicData).length,
+            uniqueBlockTypes: uniqueBlockIds.size
+        });
         return true; // Indicate activation succeeded
     }
 
@@ -277,9 +321,13 @@ class SchematicPlacementTool extends BaseTool {
         }
     }
 
-    placeSchematic() {
+    async placeSchematic() {
+        const { performanceLogger } = require("../utils/PerformanceLogger");
+        performanceLogger.markStart("SchematicPlacementTool.placeSchematic");
+        
         if (!this.schematicData || !this.previewPositionRef.current) {
-            console.error("Cannot place schematic: data or position missing.");
+            console.error("[SCHEMATIC] Cannot place schematic: data or position missing.");
+            performanceLogger.markEnd("SchematicPlacementTool.placeSchematic", { skipped: true, reason: "missing data" });
             return;
         }
         const basePosition = this.previewPositionRef.current;
@@ -292,12 +340,39 @@ class SchematicPlacementTool extends BaseTool {
             terrain: { added: {}, removed: {} },
             environment: { added: [], removed: [] },
         };
-        console.log("original pendingChanges", JSON.stringify(pendingChanges));
-        console.log("terrain", terrain);
-        console.log("this.terrainBuilderProps", this.terrainBuilderProps);
-        console.log(
-            `Placing schematic at base position: ${basePosition.x},${basePosition.y},${basePosition.z}`
-        );
+        
+        console.log("[SCHEMATIC] Placing schematic at base position:", basePosition.x, basePosition.y, basePosition.z);
+        console.log("[SCHEMATIC] Schematic contains", Object.keys(this.schematicData).length, "blocks");
+        
+        // Extract unique block IDs and ensure textures are loaded before placement
+        const uniqueBlockIds = new Set();
+        for (const blockId of Object.values(this.schematicData)) {
+            if (blockId && typeof blockId === 'number' && blockId > 0) {
+                uniqueBlockIds.add(blockId);
+            }
+        }
+        
+        console.log(`[SCHEMATIC] Ensuring textures are loaded for ${uniqueBlockIds.size} block types before placement...`);
+        try {
+            if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
+                const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                    try {
+                        const blockType = window.BlockTypeRegistry.instance.getBlockType(blockId);
+                        if (blockType && blockType.needsTexturePreload?.()) {
+                            await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                            console.log(`[SCHEMATIC] ✓ Ensured textures loaded for block ${blockId}`);
+                        }
+                    } catch (error) {
+                        console.warn(`[SCHEMATIC] ⚠ Failed to ensure textures for block ${blockId}:`, error);
+                    }
+                });
+                await Promise.allSettled(preloadPromises);
+            }
+        } catch (error) {
+            console.error("[SCHEMATIC] ✗ Error ensuring textures before placement:", error);
+            // Continue with placement anyway
+        }
+        
         for (const [relPosStr, blockId] of Object.entries(this.schematicData)) {
             const [relX, relY, relZ] = relPosStr.split(",").map(Number);
             const rotatedRel = this.getRotatedRelativePosition(
@@ -439,12 +514,18 @@ class SchematicPlacementTool extends BaseTool {
                 }
             } else {
                 console.warn(
-                    "Environment builder not available for entity placement"
+                    "[SCHEMATIC] Environment builder not available for entity placement"
                 );
             }
         }
 
-        console.log("pendingChanges", pendingChanges);
+        console.log("[SCHEMATIC] pendingChanges", pendingChanges);
+        console.log(`[SCHEMATIC] ✓ Schematic placement complete: ${Object.keys(addedBlocks).length} blocks placed`);
+        performanceLogger.markEnd("SchematicPlacementTool.placeSchematic", {
+            blocksPlaced: Object.keys(addedBlocks).length,
+            blocksRemoved: Object.keys(removedBlocks).length,
+            entitiesPlaced: placedEntities.length
+        });
 
         if (pendingChanges) {
             pendingChanges.terrain.added = {

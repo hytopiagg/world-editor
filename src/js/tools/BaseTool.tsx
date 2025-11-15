@@ -27,7 +27,7 @@ class BaseTool {
      * It handles setting the active flag and calls the specific onActivate logic.
      * @param {any} activationData - Optional data passed during activation (e.g., schematic data)
      */
-    activate(activationData) {
+    async activate(activationData) {
         this.active = true;
         console.log(`${this.name} activated`);
 
@@ -35,7 +35,7 @@ class BaseTool {
         let activationSuccessful = false;
         try {
 
-            const result = this.onActivate(activationData);
+            const result = await this.onActivate(activationData);
 
             activationSuccessful = result === true;
         } catch (error) {
