@@ -305,7 +305,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             <ProjectSidebar activeNav={activeNav} setActiveNav={setActiveNav} hoverNav={hoverNav} setHoverNav={setHoverNav} />
 
             {/* Main area */}
-            <main className="flex flex-col p-5 gap-4 select-none" onMouseDown={beginDragSelect}
+            <main className="flex flex-col p-5 gap-4 select-none overflow-y-auto" onMouseDown={beginDragSelect}
                 onContextMenu={(e) => {
                     // Capture right-clicks at main level as a fallback to ensure consistency
                     const target = e.target as HTMLElement;

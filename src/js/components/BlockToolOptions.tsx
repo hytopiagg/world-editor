@@ -137,7 +137,6 @@ export function BlockToolOptions({
             width: "100%",
         }}>
             <div
-                onScroll={(e) => e.stopPropagation()}
                 onWheel={(e) => e.stopPropagation()}
                 className="block-tools-options-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg" style={{
                     padding: "12px 0px",
@@ -145,7 +144,6 @@ export function BlockToolOptions({
                     flexDirection: 'column',
                     gap: '1rem',
                     width: isCompactMode ? "205px" : "295px",
-                    overflowY: 'auto',
                 }}>
                 {activeTab === 'blocks' && selectedBlock && (
                     <CollapsibleSection title="Block Options">

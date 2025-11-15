@@ -150,7 +150,7 @@ class CameraManager {
                 if ((window as any).__WE_PHYSICS__) return;
             } catch (_) { }
             const isUIElement = event.target.closest(
-                ".block-tools-sidebar, .controls-container, .debug-info, .modal-overlay"
+                ".block-tools-sidebar, .block-tools-options-sidebar, .controls-container, .debug-info, .modal-overlay"
             );
             if (isUIElement) return;
             const moveAmount = 3;

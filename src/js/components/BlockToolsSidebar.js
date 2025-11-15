@@ -2113,6 +2113,7 @@ const BlockToolsSidebar = ({
                 }}
             >
                 <div
+                    onWheel={(e) => e.stopPropagation()}
                     className="block-tools-sidebar transition-all ease-in-out duration-500 bg-[#0d0d0d]/70 backdrop-filter backdrop-blur-lg"
                     style={{
                         width: isCompactMode ? "205px" : "295px",
