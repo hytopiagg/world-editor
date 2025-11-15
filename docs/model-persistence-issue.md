@@ -149,5 +149,83 @@ When entering a pre-existing build and adding models, after saving and leaving a
 - Added extensive logging to track save/load flow
 - Need to reproduce issue and analyze logs
 
+### [Date] Multiple Refresh Calls Issue Identified
+**Issue Found**: `refreshEnvironmentFromDB()` is being called multiple times (4+ times) when entering a project.
+
+**Symptoms from logs**:
+- `refreshEnvironmentFromDB` called multiple times in quick succession
+- First call successfully places all 7 models
+- Subsequent calls see "Object already exists" for construction-barrier
+- Final count shows 7 objects in memory (correct)
+- But user reports only 6 models visible
+
+**Root Cause**:
+1. `useEffect` with dependencies `[projectId, scene]` fires multiple times
+2. React Strict Mode or re-renders trigger multiple calls
+3. Race condition: models placed but rendering not complete before next call
+4. "Object already exists" check prevents re-placement, but model might not be visible
+
+**Fix Applied**:
+1. Added `refreshInProgressRef` guard to prevent concurrent calls
+2. Enhanced logging to show model breakdown and visibility status
+3. Added detailed logging for "already exists" case to check if object is actually visible
+
+**Next Steps**:
+- Test if guard prevents multiple calls
+- Check if construction-barrier is in memory but not visible
+- Verify `rebuildAllVisibleInstances` is working correctly
+- Check if there's a rendering/visibility issue specific to construction-barrier
+
+### [Date] Further Investigation - All Models in Memory but Not All Visible
+**Findings from logs**:
+- All 7 models successfully placed and in memory
+- All 7 models marked as "1 instances, 1 visible"
+- `refreshEnvironmentFromDB` still called 3 times (sequentially, not concurrently)
+- Construction-barrier placed first, then skipped as "already exists" in subsequent calls
+- User reports only 6 models visible despite all being marked visible
+
+**Possible Issues**:
+1. Multiple refresh calls might be interfering with rendering
+2. Construction-barrier might be rendered but hidden/occluded
+3. Rendering order issue - construction-barrier placed first might get overwritten
+4. Matrix update issue - construction-barrier matrix might not be properly set
+
+**Fixes Applied**:
+1. Added `lastLoadedProjectIdRef` to prevent duplicate calls for same projectId
+2. Enhanced "Existing object details" logging to show position, visibility, mesh count, and addedToScene status
+3. This will help identify if construction-barrier is actually rendered but not visible
+
+**Next Steps**:
+- Check the "Existing object details" log for construction-barrier to see its state
+- Verify if meshes are properly added to scene
+- Check if there's a distance culling issue specific to construction-barrier
+
+### [Date] Root Cause Found - Scene UUID Changing
+**Critical Discovery**: The Scene UUID is changing between calls!
+
+**Evidence from logs**:
+- First call: `Scene UUID: adac6bd0-041a-4e57-8d1a-32e0149d7a3d`
+- Third call: `Scene UUID: 5ac53a41-ac60-4575-b7fd-b9a86645416e`
+- Different UUIDs = different scene objects = scene is being recreated
+
+**Impact**:
+- When scene changes, meshes are removed from old scene
+- `instancedMeshes.current` still has model data, but instances are lost
+- `ensureInstancedMeshesAdded` checks `addedToScene` flag and returns early
+- Meshes never get added to new scene
+- Instances exist in memory but aren't rendered
+
+**Also Found**:
+- `updateLocalStorage` saves 3 objects, but verification shows `[]` (empty)
+- This suggests a race condition or the save is being overwritten
+
+**Fixes Applied**:
+1. Updated `ensureInstancedMeshesAdded` to check if meshes are actually in scene (not just flag)
+2. Reset `addedToScene` flags when scene UUID changes
+3. Updated guard to use scene UUID instead of scene object reference
+4. Re-add meshes to new scene when scene changes
+
+**Expected Result**: Models should persist across scene changes and be properly rendered.
+
 ### [Date] [Add findings here as you investigate]
 

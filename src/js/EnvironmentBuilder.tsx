@@ -297,13 +297,32 @@ const EnvironmentBuilder = (
 
     const ensureInstancedMeshesAdded = (modelUrl: string) => {
         const data = instancedMeshes.current.get(modelUrl);
-        if (!scene || !data || data.addedToScene) return;
-        data.meshes.forEach((mesh: THREE.InstancedMesh) => {
-            // Ensure frustum culling is disabled - we handle our own distance culling
-            mesh.frustumCulled = false;
-            scene.add(mesh);
-        });
-        data.addedToScene = true;
+        if (!scene || !data) return;
+        
+        // Check if meshes are actually in the current scene
+        // Scene can change (new UUID), so we need to re-add meshes even if addedToScene was true
+        const meshesInScene = data.meshes.every(mesh => scene.children.includes(mesh));
+        
+        if (!meshesInScene) {
+            console.log(`[MODEL_PERSISTENCE] Meshes not in scene for ${modelUrl}, re-adding to scene`);
+            data.meshes.forEach((mesh: THREE.InstancedMesh) => {
+                // Remove from old scene if it exists
+                if (mesh.parent) {
+                    mesh.parent.remove(mesh);
+                }
+                // Ensure frustum culling is disabled - we handle our own distance culling
+                mesh.frustumCulled = false;
+                scene.add(mesh);
+            });
+            data.addedToScene = true;
+        } else if (!data.addedToScene) {
+            // First time adding
+            data.meshes.forEach((mesh: THREE.InstancedMesh) => {
+                mesh.frustumCulled = false;
+                scene.add(mesh);
+            });
+            data.addedToScene = true;
+        }
     };
 
 
@@ -844,6 +863,9 @@ const EnvironmentBuilder = (
         console.log('[MODEL_PERSISTENCE] targetState type:', typeof targetState);
         console.log('[MODEL_PERSISTENCE] targetState isArray:', Array.isArray(targetState));
         console.log('[MODEL_PERSISTENCE] targetState length:', targetState?.length);
+        console.log('[MODEL_PERSISTENCE] instancedMeshes.current size:', instancedMeshes.current.size);
+        console.log('[MODEL_PERSISTENCE] Scene UUID:', scene?.uuid);
+        console.log('[MODEL_PERSISTENCE] ProjectId:', projectId);
         
         try {
             isUndoRedoOperation.current = true;
@@ -852,7 +874,13 @@ const EnvironmentBuilder = (
             const targetObjects = new Map();
             const createCompositeKey = (modelUrl, instanceId) => `${modelUrl}:${instanceId}`;
 
+            // Log all models in instancedMeshes before processing
+            console.log('[MODEL_PERSISTENCE] Models in instancedMeshes:', Array.from(instancedMeshes.current.keys()));
+            const totalInstancesBefore = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+            console.log('[MODEL_PERSISTENCE] Total instances in memory BEFORE updateEnvironmentToMatch:', totalInstancesBefore);
             for (const [modelUrl, instancedData] of instancedMeshes.current) {
+                const instanceIds = Array.from(instancedData.instances.keys());
+                console.log(`[MODEL_PERSISTENCE] Model ${modelUrl}: ${instancedData.instances.size} instances, IDs: [${instanceIds.join(', ')}]`);
                 instancedData.instances.forEach((data, instanceId) => {
                     const compositeKey = createCompositeKey(modelUrl, instanceId);
                     currentObjects.set(compositeKey, {
@@ -944,10 +972,10 @@ const EnvironmentBuilder = (
                             );
                             if (result) {
                                 addedCount++;
-                                console.log('[MODEL_PERSISTENCE] ✓ Successfully placed:', compositeKey);
+                                console.log('[MODEL_PERSISTENCE] ✓ Successfully placed:', compositeKey, 'at position:', obj.position);
                             } else {
                                 failedCount++;
-                                console.warn('[MODEL_PERSISTENCE] ✗ Failed to place:', compositeKey);
+                                console.warn('[MODEL_PERSISTENCE] ✗ Failed to place:', compositeKey, 'model:', modelType.name);
                             }
                         } else {
                             failedCount++;
@@ -955,10 +983,35 @@ const EnvironmentBuilder = (
                         }
                     } else {
                         failedCount++;
-                        console.warn('[MODEL_PERSISTENCE] ✗ Model type not found for:', obj.name || obj.modelUrl);
+                        console.warn('[MODEL_PERSISTENCE] ✗ Model type not found for:', obj.name || obj.modelUrl, 'compositeKey:', compositeKey);
                     }
                 } else {
-                    console.log('[MODEL_PERSISTENCE] Object already exists:', compositeKey);
+                    console.log('[MODEL_PERSISTENCE] Object already exists:', compositeKey, 'model:', obj.name || obj.modelUrl);
+                    // Check if it's actually visible - might be a rendering issue
+                    const existingModelUrl = compositeKey.split(':')[0];
+                    const existingInstanceId = parseInt(compositeKey.split(':')[1]);
+                    const instancedData = instancedMeshes.current.get(existingModelUrl);
+                    if (instancedData && instancedData.instances.has(existingInstanceId)) {
+                        const instanceData = instancedData.instances.get(existingInstanceId);
+                        const position = instanceData.position;
+                        const modelName = obj.name || existingModelUrl.split('/').pop()?.split('.')[0] || 'unknown';
+                        console.log('[MODEL_PERSISTENCE] Existing object details:', {
+                            compositeKey,
+                            modelName,
+                            position: { x: position.x, y: position.y, z: position.z },
+                            isVisible: instanceData.isVisible,
+                            modelUrl: existingModelUrl,
+                            instanceId: existingInstanceId,
+                            addedToScene: instancedData.addedToScene,
+                            meshCount: instancedData.meshes?.length || 0,
+                            hasMatrix: !!instanceData.matrix,
+                            matrixNeedsUpdate: instancedData.meshes?.[0]?.instanceMatrix?.needsUpdate
+                        });
+                        // Also log the actual position values separately for clarity
+                        console.log(`[MODEL_PERSISTENCE] ${modelName} position:`, position.x, position.y, position.z);
+                    } else {
+                        console.warn('[MODEL_PERSISTENCE] ⚠️ Object marked as existing but not found in instances! compositeKey:', compositeKey);
+                    }
                 }
             }
             console.log('[MODEL_PERSISTENCE] Added', addedCount, 'objects');
@@ -967,12 +1020,23 @@ const EnvironmentBuilder = (
             setTotalEnvironmentObjects(targetObjects.size);
 
             // Rebuild all visible instances after updating environment
+            console.log('[MODEL_PERSISTENCE] Calling rebuildAllVisibleInstances with cameraPosition:', cameraPosition);
             rebuildAllVisibleInstances(cameraPosition);
             
-            // Final verification
+            // Final verification - check each model type
             const finalCount = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
             console.log('[MODEL_PERSISTENCE] Final object count in memory:', finalCount);
             console.log('[MODEL_PERSISTENCE] Expected count:', targetObjects.size);
+            console.log('[MODEL_PERSISTENCE] Instance count change:', totalInstancesBefore, '->', finalCount);
+            
+            // Log breakdown by model type with instance IDs
+            for (const [modelUrl, instancedData] of instancedMeshes.current) {
+                const modelData = environmentModels.find(m => m.modelUrl === modelUrl);
+                const instanceCount = instancedData.instances.size;
+                const instanceIds = Array.from(instancedData.instances.keys());
+                const visibleCount = Array.from((instancedData.instances as Map<number, any>).values()).filter((i: any) => i.isVisible).length;
+                console.log(`[MODEL_PERSISTENCE] Model ${modelData?.name || 'unknown'}: ${instanceCount} instances (IDs: [${instanceIds.join(', ')}]), ${visibleCount} visible`);
+            }
         } catch (error) {
             console.error("[MODEL_PERSISTENCE] ✗ Error updating environment:", error);
             console.error("[MODEL_PERSISTENCE] Error stack:", error.stack);
@@ -1053,6 +1117,7 @@ const EnvironmentBuilder = (
             );
             return null;
         }
+        const instanceCountBefore = instancedData.instances.size;
         instancedData.instances.set(instanceId, {
             position,
             rotation,
@@ -1060,6 +1125,8 @@ const EnvironmentBuilder = (
             matrix,
             isVisible: true,
         });
+        const instanceCountAfter = instancedData.instances.size;
+        console.log(`[MODEL_PERSISTENCE] ✓ Instance added: ${modelUrl}:${instanceId}, count: ${instanceCountBefore} -> ${instanceCountAfter}`);
 
         // Track this as a recently placed instance
         const instanceKey = `${modelUrl}:${instanceId}`;
@@ -1104,7 +1171,14 @@ const EnvironmentBuilder = (
     };
 
     const clearEnvironments = () => {
+        console.log('[MODEL_PERSISTENCE] clearEnvironments called - clearing all instances');
+        const totalBefore = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+        console.log('[MODEL_PERSISTENCE] Total instances before clear:', totalBefore);
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            const instanceCount = instancedData.instances.size;
+            if (instanceCount > 0) {
+                console.log(`[MODEL_PERSISTENCE] Clearing ${instanceCount} instances for ${modelUrl}`);
+            }
             // Release all pooled objects before clearing
             instancedData.instances.forEach((data) => {
                 releaseVector3(data.position);
@@ -1120,6 +1194,7 @@ const EnvironmentBuilder = (
             });
         }
         updateLocalStorage();
+        console.log('[MODEL_PERSISTENCE] clearEnvironments completed');
     };
     const getRandomValue = (min, max) => {
         return Math.random() * (max - min) + min;
@@ -1631,10 +1706,12 @@ const EnvironmentBuilder = (
 
     const removeInstance = (modelUrl, instanceId, updateUndoRedo = true) => {
         const instancedData = instancedMeshes.current.get(modelUrl);
+        const instanceCountBefore = instancedData?.instances.size || 0;
         if (!instancedData || !instancedData.instances.has(instanceId)) {
-            console.warn(`[REMOVE_INSTANCE] Instance ${instanceId} not found for removal in model ${modelUrl}`);
+            console.warn(`[MODEL_PERSISTENCE] removeInstance: Instance ${instanceId} not found for removal in model ${modelUrl}, count: ${instanceCountBefore}`);
             return;
         }
+        console.log(`[MODEL_PERSISTENCE] removeInstance called: ${modelUrl}:${instanceId}, count before: ${instanceCountBefore}`);
 
         const objectData = instancedData.instances.get(instanceId);
 
@@ -1666,6 +1743,8 @@ const EnvironmentBuilder = (
         releaseMatrix4(objectData.matrix);
 
         instancedData.instances.delete(instanceId);
+        const instanceCountAfter = instancedData.instances.size;
+        console.log(`[MODEL_PERSISTENCE] ✓ Instance removed: ${modelUrl}:${instanceId}, count: ${instanceCountBefore} -> ${instanceCountAfter}`);
 
         // Rebuild visible instances to exclude this removed instance
         rebuildVisibleInstances(modelUrl, cameraPosition);
@@ -1700,11 +1779,18 @@ const EnvironmentBuilder = (
     const refreshEnvironmentFromDB = async () => {
         console.log('[MODEL_PERSISTENCE] ========== refreshEnvironmentFromDB START ==========');
         console.log('[MODEL_PERSISTENCE] Current projectId:', DatabaseManager.getCurrentProjectId());
+        const totalInstancesAtStart = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
         console.log('[MODEL_PERSISTENCE] Current scene state:', { 
             hasScene: !!scene, 
+            sceneUUID: scene?.uuid,
             instancedMeshesCount: instancedMeshes.current.size,
-            totalObjectsInMemory: Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0)
+            totalObjectsInMemory: totalInstancesAtStart
         });
+        // Log instance counts per model at start
+        for (const [modelUrl, instancedData] of instancedMeshes.current) {
+            const instanceIds = Array.from(instancedData.instances.keys());
+            console.log(`[MODEL_PERSISTENCE] At START - ${modelUrl}: ${instancedData.instances.size} instances (IDs: [${instanceIds.join(', ')}])`);
+        }
         
         try {
             const savedEnv = await DatabaseManager.getData(
@@ -1780,13 +1866,27 @@ const EnvironmentBuilder = (
                 const currentObjects = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
                 console.log('[MODEL_PERSISTENCE] After updateEnvironmentToMatch - objects in memory:', currentObjects);
                 console.log('[MODEL_PERSISTENCE] Expected objects:', envArray.length);
+                console.log('[MODEL_PERSISTENCE] Instance count change during refresh:', totalInstancesAtStart, '->', currentObjects);
+                // Log instance counts per model at end
+                for (const [modelUrl, instancedData] of instancedMeshes.current) {
+                    const instanceIds = Array.from(instancedData.instances.keys());
+                    console.log(`[MODEL_PERSISTENCE] At END - ${modelUrl}: ${instancedData.instances.size} instances (IDs: [${instanceIds.join(', ')}])`);
+                }
                 
                 // Rebuild all visible instances after loading from database
                 rebuildAllVisibleInstances(cameraPosition);
                 console.log('[MODEL_PERSISTENCE] ✓ Environment refresh completed');
             } else {
-                console.log("[MODEL_PERSISTENCE] No environment objects found in database; clearing local env");
-                clearEnvironments();
+                const instancesInMemory = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+                console.log("[MODEL_PERSISTENCE] No environment objects found in database");
+                console.log("[MODEL_PERSISTENCE] Instances in memory:", instancesInMemory);
+                if (instancesInMemory > 0) {
+                    console.warn("[MODEL_PERSISTENCE] ⚠️ DB is empty but instances exist in memory - likely a race condition. NOT clearing instances.");
+                    console.warn("[MODEL_PERSISTENCE] This can happen if refreshEnvironmentFromDB runs before updateLocalStorage completes.");
+                } else {
+                    console.log("[MODEL_PERSISTENCE] No instances in memory, clearing local env");
+                    clearEnvironments();
+                }
             }
         } catch (error) {
             console.error("[MODEL_PERSISTENCE] ✗ Error refreshing environment:", error);
@@ -1842,13 +1942,82 @@ const EnvironmentBuilder = (
     }, [scene, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Reload environment whenever projectId changes (after models have been preloaded once)
+    const refreshInProgressRef = useRef(false);
+    const lastLoadedProjectIdRef = useRef<string | null>(null);
+    const lastLoadedSceneRef = useRef<THREE.Scene | null>(null);
+    const lastLoadedSceneUUIDRef = useRef<string | null>(null);
+    
+    // Reset addedToScene flags when scene UUID changes (scene recreated)
     useEffect(() => {
-        console.log('[Env] projectId/scene effect', { hasScene: !!scene, projectId });
+        if (scene && lastLoadedSceneUUIDRef.current && lastLoadedSceneUUIDRef.current !== scene.uuid) {
+            console.log('[MODEL_PERSISTENCE] ========== SCENE UUID CHANGED ==========');
+            console.log('[MODEL_PERSISTENCE] Old scene UUID:', lastLoadedSceneUUIDRef.current);
+            console.log('[MODEL_PERSISTENCE] New scene UUID:', scene.uuid);
+            const totalInstances = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+            console.log('[MODEL_PERSISTENCE] Total instances before scene change:', totalInstances);
+            // Log each model's instance count
+            for (const [modelUrl, instancedData] of instancedMeshes.current) {
+                const instanceCount = instancedData.instances.size;
+                console.log(`[MODEL_PERSISTENCE] Model ${modelUrl}: ${instanceCount} instances before scene change`);
+            }
+            // Reset addedToScene flags so meshes get re-added to new scene
+            // IMPORTANT: Do NOT clear instances - they should persist across scene changes
+            for (const [modelUrl, instancedData] of instancedMeshes.current) {
+                const instanceCount = instancedData.instances.size;
+                instancedData.addedToScene = false;
+                if (instanceCount > 0) {
+                    console.log(`[MODEL_PERSISTENCE] Preserving ${instanceCount} instances for ${modelUrl} across scene change`);
+                }
+            }
+            const totalAfter = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
+            console.log('[MODEL_PERSISTENCE] Total instances after scene change:', totalAfter);
+            // Log each model's instance count after
+            for (const [modelUrl, instancedData] of instancedMeshes.current) {
+                const instanceCount = instancedData.instances.size;
+                console.log(`[MODEL_PERSISTENCE] Model ${modelUrl}: ${instanceCount} instances after scene change`);
+            }
+            console.log('[MODEL_PERSISTENCE] ========== SCENE UUID CHANGE END ==========');
+        }
+        if (scene) {
+            lastLoadedSceneUUIDRef.current = scene.uuid;
+        }
+    }, [scene]);
+    
+    useEffect(() => {
+        console.log('[Env] projectId/scene effect', { 
+            hasScene: !!scene, 
+            projectId, 
+            lastLoadedProjectId: lastLoadedProjectIdRef.current,
+            sceneChanged: lastLoadedSceneRef.current !== scene,
+            sceneId: scene?.uuid,
+            lastSceneUUID: lastLoadedSceneUUIDRef.current,
+            refreshInProgress: refreshInProgressRef.current
+        });
         if (!projectId) return;
         // If scene is ready and models likely loaded, refresh entities for this project
         if (scene && typeof refreshEnvironmentFromDB === 'function') {
-            console.log('[Env] refreshing from DB for project', projectId);
-            refreshEnvironmentFromDB();
+            // Prevent multiple simultaneous calls FIRST (before checking projectId/scene)
+            if (refreshInProgressRef.current) {
+                console.log('[Env] ⚠️ Refresh already in progress, skipping duplicate call');
+                console.log('[Env] Current projectId:', projectId, 'lastLoaded:', lastLoadedProjectIdRef.current);
+                console.log('[Env] Current scene UUID:', scene.uuid, 'lastLoaded:', lastLoadedSceneUUIDRef.current);
+                return;
+            }
+            // Prevent multiple calls for the same projectId AND scene UUID
+            // Scene object reference can change even with same UUID, so check UUID instead
+            if (lastLoadedProjectIdRef.current === projectId && lastLoadedSceneUUIDRef.current === scene.uuid) {
+                console.log('[Env] Already loaded for this projectId and scene UUID, skipping duplicate call');
+                return;
+            }
+            console.log('[Env] ✓ Starting refresh from DB for project', projectId, 'scene UUID:', scene.uuid);
+            refreshInProgressRef.current = true;
+            lastLoadedProjectIdRef.current = projectId;
+            lastLoadedSceneRef.current = scene;
+            lastLoadedSceneUUIDRef.current = scene.uuid;
+            refreshEnvironmentFromDB().finally(() => {
+                console.log('[Env] Refresh completed, resetting refreshInProgress flag');
+                refreshInProgressRef.current = false;
+            });
         }
     }, [projectId, scene]); // eslint-disable-line react-hooks/exhaustive-deps
 

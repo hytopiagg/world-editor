@@ -893,9 +893,9 @@ function TerrainBuilder(
                     try {
                         console.log("[MODEL_DRAG] Calling placeEnvironmentModel with mode:", modeRef.current);
                         const result = await environmentBuilderRef.current.placeEnvironmentModel(
-                            modeRef.current,
-                            true
-                        );
+                                modeRef.current,
+                                true
+                            );
                         console.log("[MODEL_DRAG] placeEnvironmentModel result:", result);
                         console.log("[MODEL_DRAG] Result length:", result?.length);
                         
@@ -1439,7 +1439,7 @@ function TerrainBuilder(
                 // Models should be placed one at a time on click, not during drag
                 if (!currentBlockTypeRef.current?.isEnvironment) {
                     console.log("[MODEL_DRAG] updatePreviewPosition calling handleBlockPlacement for blocks");
-                    handleBlockPlacement();
+                handleBlockPlacement();
                 } else {
                     console.log("[MODEL_DRAG] updatePreviewPosition skipping handleBlockPlacement for models (drag placement disabled)");
                 }
