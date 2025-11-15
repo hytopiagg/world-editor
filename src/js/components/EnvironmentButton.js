@@ -123,13 +123,13 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
 
         const loadThumbnail = async () => {
             console.log(`[EnvButton] (${envType.name}) Loading thumbnail…`);
-            
+
             // OPTIMIZATION: Use pre-generated thumbnail if available
             if (envType.thumbnailUrl) {
-                const thumbnailPath = envType.thumbnailUrl.startsWith('assets/') 
-                    ? `/${envType.thumbnailUrl}` 
+                const thumbnailPath = envType.thumbnailUrl.startsWith("assets/")
+                    ? `/${envType.thumbnailUrl}`
                     : envType.thumbnailUrl;
-                
+
                 // Try loading the pre-generated thumbnail
                 try {
                     const img = new Image();
@@ -138,16 +138,21 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                         img.onerror = reject;
                         img.src = thumbnailPath;
                     });
-                    
+
                     if (mountedRef.current) {
                         setImageUrl(thumbnailPath);
                         setIsLoading(false);
                         setRetryCount(0);
-                        console.log(`[EnvButton] (${envType.name}) Using pre-generated thumbnail`);
+                        console.log(
+                            `[EnvButton] (${envType.name}) Using pre-generated thumbnail`
+                        );
                         return true;
                     }
                 } catch (error) {
-                    console.warn(`[EnvButton] (${envType.name}) Failed to load thumbnail, falling back to cache/render:`, error);
+                    console.warn(
+                        `[EnvButton] (${envType.name}) Failed to load thumbnail, falling back to cache/render:`,
+                        error
+                    );
                 }
             }
 

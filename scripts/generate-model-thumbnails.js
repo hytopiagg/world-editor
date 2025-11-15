@@ -18,7 +18,9 @@ fs.mkdirSync(thumbnailsDir, { recursive: true });
 
 if (!fs.existsSync(manifestPath)) {
     console.error(`❌ Model manifest not found at ${manifestPath}`);
-    console.error("   Please run 'npm run prebuild' first to generate the manifest");
+    console.error(
+        "   Please run 'npm run prebuild' first to generate the manifest"
+    );
     process.exit(1);
 }
 
@@ -213,7 +215,9 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
 
     try {
         console.log(`   Loading page for ${modelPath}...`);
-        const thumbnailUrl = `${baseUrl}/thumbnail.html?model=${encodeURIComponent(modelPath)}`;
+        const thumbnailUrl = `${baseUrl}/thumbnail.html?model=${encodeURIComponent(
+            modelPath
+        )}`;
         await page.goto(thumbnailUrl, {
             waitUntil: "domcontentloaded",
             timeout: 30000,
@@ -235,7 +239,8 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
         if (scriptsLoaded.thumbnailError) {
             const errorMsg =
                 (await page.evaluate(
-                    () => window.__consoleMessages?.join("; ") || "Unknown error"
+                    () =>
+                        window.__consoleMessages?.join("; ") || "Unknown error"
                 )) || "Unknown error";
             throw new Error(`Thumbnail error: ${errorMsg}`);
         }
@@ -293,7 +298,9 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
         }
     } catch (error) {
         const errorMsg = error?.message || String(error);
-        console.error(`❌ Failed to generate thumbnail for ${modelPath}: ${errorMsg}`);
+        console.error(
+            `❌ Failed to generate thumbnail for ${modelPath}: ${errorMsg}`
+        );
         if (page) {
             try {
                 const pageMessages = await page.evaluate(
@@ -334,7 +341,9 @@ async function findAvailablePort(startPort = 3001, maxAttempts = 10) {
             return port;
         }
     }
-    throw new Error(`Could not find an available port starting from ${startPort}`);
+    throw new Error(
+        `Could not find an available port starting from ${startPort}`
+    );
 }
 
 async function main() {
@@ -407,7 +416,9 @@ async function main() {
                 "Content-Type": "text/html",
                 "Access-Control-Allow-Origin": "*",
             });
-            res.end(getThumbnailHTML(decodeURIComponent(modelPath), requestBaseUrl));
+            res.end(
+                getThumbnailHTML(decodeURIComponent(modelPath), requestBaseUrl)
+            );
             return;
         }
 
@@ -550,4 +561,3 @@ main().catch((error) => {
     console.error("Fatal error:", error);
     process.exit(1);
 });
-

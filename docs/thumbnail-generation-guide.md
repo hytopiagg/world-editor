@@ -27,9 +27,10 @@ npm run build:thumbnails
 ```
 
 This will:
-- Generate 256×256 PNG thumbnails for all environment models
-- Store them in `public/assets/models/environment/thumbnails/`
-- Update the manifest file with thumbnail paths
+
+-   Generate 256×256 PNG thumbnails for all environment models
+-   Store them in `public/assets/models/environment/thumbnails/`
+-   Update the manifest file with thumbnail paths
 
 ### 3. Verify Generation
 
@@ -46,19 +47,21 @@ You should see thumbnails organized by category (City, Desert, etc.).
 ### Scripts
 
 1. **`scripts/generate-model-thumbnails.js`**
-   - Uses Puppeteer to render each GLTF model
-   - Generates 256×256 PNG screenshots
-   - Processes models in parallel batches (6 at a time)
-   - Skips existing thumbnails automatically
+
+    - Uses Puppeteer to render each GLTF model
+    - Generates 256×256 PNG screenshots
+    - Processes models in parallel batches (6 at a time)
+    - Skips existing thumbnails automatically
 
 2. **`scripts/generate-model-manifest.js`** (updated)
-   - Generates model manifest with thumbnail paths
-   - Falls back to simple array format if thumbnails don't exist
-   - Automatically detects and includes thumbnail paths when available
+    - Generates model manifest with thumbnail paths
+    - Falls back to simple array format if thumbnails don't exist
+    - Automatically detects and includes thumbnail paths when available
 
 ### Manifest Format
 
 **Before thumbnails** (simple array):
+
 ```json
 [
   "City/barrel-wood-1.gltf",
@@ -68,6 +71,7 @@ You should see thumbnails organized by category (City, Desert, etc.).
 ```
 
 **After thumbnails** (enhanced format):
+
 ```json
 [
   {
@@ -109,9 +113,9 @@ SKIP_THUMBNAILS=true npm run build:thumbnails
 
 ## Performance Impact
 
-- **Before**: 5-30 seconds loading all models during initialization
-- **After**: < 100ms loading thumbnail paths from manifest
-- **Savings**: 5-30 seconds eliminated from critical loading path
+-   **Before**: 5-30 seconds loading all models during initialization
+-   **After**: < 100ms loading thumbnail paths from manifest
+-   **Savings**: 5-30 seconds eliminated from critical loading path
 
 ## File Structure
 
@@ -156,21 +160,21 @@ If port 3001 is already in use, the script will automatically find the next avai
 ### Model Loading Errors
 
 If some models fail to generate thumbnails:
-- Check console output for specific error messages
-- Verify GLTF files are valid
-- Ensure models are accessible from the local server
+
+-   Check console output for specific error messages
+-   Verify GLTF files are valid
+-   Ensure models are accessible from the local server
 
 ### Thumbnails Not Showing
 
-- Verify thumbnails were generated successfully
-- Check that manifest was updated with thumbnail paths
-- Ensure thumbnail paths are correct relative to `public/assets/models/environment/`
+-   Verify thumbnails were generated successfully
+-   Check that manifest was updated with thumbnail paths
+-   Ensure thumbnail paths are correct relative to `public/assets/models/environment/`
 
 ## Notes
 
-- Thumbnails are generated once at build time
-- Thumbnails can be committed to the repository
-- Regenerate thumbnails when models are updated
-- Thumbnail generation can take 10-30 minutes for all ~915 models
-- Consider running thumbnail generation in CI/CD pipeline
-
+-   Thumbnails are generated once at build time
+-   Thumbnails can be committed to the repository
+-   Regenerate thumbnails when models are updated
+-   Thumbnail generation can take 10-30 minutes for all ~915 models
+-   Consider running thumbnail generation in CI/CD pipeline
