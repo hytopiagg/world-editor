@@ -790,19 +790,25 @@ function TerrainBuilder(
             }
 
             // Low-res sculpting: temporarily drop pixel ratio
+            // Only reduce if low-res drag is enabled AND we're about to start placing
             if (
-                !isPlacingRef.current &&
                 gl &&
                 typeof gl.getPixelRatio === "function"
             ) {
                 const lowResEnabled = window.lowResDragEnabled === true;
-                if (lowResEnabled) {
+                if (lowResEnabled && !originalPixelRatioRef.current) {
                     try {
-                        originalPixelRatioRef.current = gl.getPixelRatio();
+                        const currentRatio = gl.getPixelRatio();
+                        // Only reduce if we haven't already reduced it
+                        // Store original ratio before reducing
+                        originalPixelRatioRef.current = currentRatio;
                         gl.setPixelRatio(
-                            Math.max(0.3, originalPixelRatioRef.current * 0.5)
+                            Math.max(0.3, currentRatio * 0.5)
                         );
-                    } catch (_) {}
+                        console.log(`[QUALITY] Reduced pixel ratio from ${currentRatio} to ${gl.getPixelRatio()} for low-res sculpt`);
+                    } catch (err) {
+                        console.warn("[QUALITY] Failed to reduce pixel ratio:", err);
+                    }
                 }
             }
 
@@ -1465,16 +1471,23 @@ function TerrainBuilder(
             );
 
             // Restore pixel ratio after drag if it was lowered
+            // Always restore if we have a stored original ratio, regardless of isPlacing state
             if (
-                !isPlacingRef.current &&
                 originalPixelRatioRef.current &&
                 gl &&
                 typeof gl.setPixelRatio === "function"
             ) {
                 try {
-                    gl.setPixelRatio(originalPixelRatioRef.current);
+                    const currentRatio = gl.getPixelRatio();
+                    const originalRatio = originalPixelRatioRef.current;
+                    gl.setPixelRatio(originalRatio);
+                    console.log(`[QUALITY] Restored pixel ratio from ${currentRatio} to ${originalRatio}`);
                     originalPixelRatioRef.current = null;
-                } catch (_) {}
+                } catch (err) {
+                    console.warn("[QUALITY] Failed to restore pixel ratio:", err);
+                    // Clear the ref even if restoration failed to prevent stuck state
+                    originalPixelRatioRef.current = null;
+                }
             }
         },
         [getRaycastIntersection, undoRedoManager, ref]
@@ -3282,6 +3295,25 @@ function TerrainBuilder(
                     handleMouseUp({ button: 0 });
                 }
             }
+            
+            // Safety check: Restore pixel ratio if we're not placing but still have a stored original ratio
+            // This catches edge cases where mouse up didn't fire properly
+            if (!isPlacingRef.current && originalPixelRatioRef.current && gl && typeof gl.setPixelRatio === "function" && frameCount % 60 === 0) {
+                try {
+                    const currentRatio = gl.getPixelRatio();
+                    const originalRatio = originalPixelRatioRef.current;
+                    // Only restore if current ratio is significantly lower than original (indicating it was reduced)
+                    if (currentRatio < originalRatio * 0.8) {
+                        gl.setPixelRatio(originalRatio);
+                        console.log(`[QUALITY] Auto-restored pixel ratio from ${currentRatio} to ${originalRatio} (safety check)`);
+                        originalPixelRatioRef.current = null;
+                    }
+                } catch (err) {
+                    console.warn("[QUALITY] Failed to auto-restore pixel ratio:", err);
+                    // Clear the ref even if restoration failed to prevent stuck state
+                    originalPixelRatioRef.current = null;
+                }
+            }
             if (isPlacingRef.current) {
                 updatePreviewPosition();
             }
@@ -4048,6 +4080,17 @@ function TerrainBuilder(
             window.removeEventListener("mousemove", onMouseMoveRMB);
             window.removeEventListener("wheel", onWheelZoom);
             window.removeEventListener("contextmenu", onContextMenu, true);
+            
+            // Safety: Restore pixel ratio on cleanup if it was lowered
+            if (originalPixelRatioRef.current && gl && typeof gl.setPixelRatio === "function") {
+                try {
+                    gl.setPixelRatio(originalPixelRatioRef.current);
+                    console.log(`[QUALITY] Restored pixel ratio to ${originalPixelRatioRef.current} on cleanup`);
+                    originalPixelRatioRef.current = null;
+                } catch (err) {
+                    console.warn("[QUALITY] Failed to restore pixel ratio on cleanup:", err);
+                }
+            }
         };
     }, [gl]);
 
