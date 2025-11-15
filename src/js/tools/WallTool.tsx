@@ -5,6 +5,7 @@
  */
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
+import SelectionDimensionsManager from "../components/SelectionDimensionsManager";
 class WallTool extends BaseTool {
 
     wallHeight: number;
@@ -306,6 +307,7 @@ class WallTool extends BaseTool {
         } else if (event.key === "Escape") {
             this.removeWallPreview();
             this.wallStartPosition = null;
+            SelectionDimensionsManager.clear();
         }
     }
     /**
@@ -564,6 +566,16 @@ class WallTool extends BaseTool {
 
         const totalBlocks = points.length * this.wallHeight;
 
+        // Publish live dimensions for wall: width = wall length in blocks, length = 1, height = wallHeight
+        const width = Math.max(0, points.length);
+        const height = Math.max(1, this.wallHeight);
+        SelectionDimensionsManager.setDimensions({
+            kind: "wall",
+            width,
+            length: 1,
+            height,
+        });
+
         if (totalBlocks > 0) {
 
             const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -655,6 +667,7 @@ class WallTool extends BaseTool {
 
             this.wallPreview = null;
         }
+        SelectionDimensionsManager.clear();
     }
     /**
      * Cleans up resources when the tool is disposed

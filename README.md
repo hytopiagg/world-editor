@@ -101,6 +101,56 @@ The HYTOPIA World Editor is also available as a desktop app powered by Electron 
 -   The desktop build sets `PUBLIC_URL=./` so assets resolve under `file://`.
 -   Web Workers created via `new URL('...worker.js', import.meta.url)` continue to function under Electron.
 -   External links open in your default browser from the Electron app.
+## Block Manifest System
+
+The editor uses a block manifest system to ensure stable block IDs across deployments. This prevents existing builds from breaking when new blocks are added.
+
+### How It Works
+
+- **Block Manifest File**: Located at `src/js/blocks/block-manifest.json`, this file maps block names to their stable IDs
+- **Stable IDs**: Default blocks maintain their IDs even when new blocks are added
+- **Baseline Commit**: The manifest is based on commit `0a88ccc511213ad550d47d915b0bf71acdfed1a7` to ensure all blocks that existed at that point have stable IDs
+- **New Blocks**: When new blocks are discovered, they're assigned IDs starting from the highest ID in the manifest + 1
+- **Warnings**: The system will warn you in the console if new blocks are found that aren't in the manifest
+
+### Initial Setup
+
+The manifest was generated from commit `0a88ccc511213ad550d47d915b0bf71acdfed1a7` to establish the baseline. To regenerate from a different commit:
+
+```bash
+node scripts/generate-manifest-from-commit.js <commit-hash>
+```
+
+This script will:
+- Checkout blocks from the specified commit
+- Generate manifest with IDs 1-N for those blocks
+- Restore current blocks
+- Extend the manifest with any new blocks found in current state
+
+### Updating the Manifest
+
+When you add new block textures to `public/assets/blocks/`, run:
+
+```bash
+node scripts/update-block-manifest.js
+```
+
+This script will:
+- Discover all blocks in the assets directory
+- Add any new blocks to the manifest with appropriate IDs (starting from the highest existing ID + 1)
+- Remove blocks that no longer exist
+- Sort the manifest by ID for readability
+
+### Adding New Blocks
+
+1. Add your block texture files to `public/assets/blocks/`
+2. Run `node scripts/update-block-manifest.js` to update the manifest
+3. Commit both the new block files and the updated manifest
+
+This ensures that:
+- Existing builds continue to work (their block IDs don't change)
+- New blocks get stable IDs that won't shift
+- The manifest serves as documentation of all available blocks
 
 ## Related Links
 

@@ -16,6 +16,7 @@ import BlockToolsSidebar, {
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import QuickTips from './js/components/QuickTips';
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
+import SelectionDimensionsTip from "./js/components/SelectionDimensionsTip";
 import ToolBar from "./js/components/ToolBar";
 import UnderConstruction from "./js/components/UnderConstruction";
 import ProjectHome from "./js/components/ProjectHome";
@@ -764,6 +765,8 @@ function App() {
 
                 <GlobalLoadingScreen />
 
+                {/* Live selection dimensions tip */}
+                <SelectionDimensionsTip />
                 {/* Show QuickTips only on web (not Electron) and after initial load */}
                 {!isElectronRuntime() && pageIsLoaded && <QuickTips />}
 

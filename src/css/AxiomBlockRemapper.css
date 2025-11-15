@@ -10,6 +10,7 @@
     justify-content: center;
     z-index: 10000;
     backdrop-filter: blur(4px);
+    overscroll-behavior: contain; /* prevent scroll chaining */
 }
 
 .axiom-remapper-modal {
@@ -72,6 +73,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 16px 24px;
+    overscroll-behavior: contain; /* prevent scroll chaining */
 }
 
 .axiom-remapper-item {

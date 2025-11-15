@@ -5,6 +5,7 @@
  */
 import * as THREE from "three";
 import BaseTool from "./BaseTool";
+import SelectionDimensionsManager from "../components/SelectionDimensionsManager";
 class GroundTool extends BaseTool {
     /**
      * Creates a new GroundTool instance
@@ -252,6 +253,7 @@ class GroundTool extends BaseTool {
         } else if (event.key === "Escape") {
             this.removeGroundPreview();
             this.groundStartPosition = null;
+            SelectionDimensionsManager.clear();
         }
     }
     /**
@@ -641,6 +643,21 @@ class GroundTool extends BaseTool {
             }
         }
 
+        // Publish live dimensions
+        const width = Math.max(0, maxX - minX + 1);
+        const length = Math.max(0, maxZ - minZ + 1);
+        const height = Math.max(1, this.groundHeight);
+        const metaParts: string[] = [];
+        if (this.isCircleShape) metaParts.push("circle");
+        if (this.groundEdgeDepth > 0) metaParts.push(`hollow:${this.groundEdgeDepth}`);
+        SelectionDimensionsManager.setDimensions({
+            kind: "ground",
+            width,
+            length,
+            height,
+            meta: metaParts.join("  •  ") || undefined,
+        });
+
         if (totalBlocks > 0) {
             const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
 
@@ -715,6 +732,7 @@ class GroundTool extends BaseTool {
             this.scene.remove(this.groundPreview);
             this.groundPreview = null;
         }
+        SelectionDimensionsManager.clear();
     }
     /**
      * Cleans up resources when the tool is disposed

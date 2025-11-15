@@ -752,6 +752,7 @@ const EnvironmentBuilder = (
             lastPreviewTransform.current.rotation.copy(transform.rotation);
 
             previewModel.scale.copy(lastPreviewTransform.current.scale);
+            // Respect randomized rotation from placement settings
             previewModel.rotation.copy(lastPreviewTransform.current.rotation);
 
             if (position) {
@@ -1266,12 +1267,8 @@ const EnvironmentBuilder = (
             );
             const matrix = getMatrix4();
             const quaternion = getQuaternion();
+            // Use rotation computed from placement settings (supports randomRotation)
             const rotationWithOffset = getEuler().copy(transform.rotation);
-            // If random rotation is disabled, force yaw from placement settings; otherwise keep random yaw
-            if (!placementSettingsRef.current?.randomRotation) {
-                const yawDegForPlacement = (placementSettingsRef.current?.rotation ?? 0) % 360;
-                rotationWithOffset.y = (yawDegForPlacement * Math.PI) / 180;
-            }
             quaternion.setFromEuler(rotationWithOffset);
             matrix.compose(position, quaternion, transform.scale);
 
@@ -1674,6 +1671,7 @@ const EnvironmentBuilder = (
             const transform = getPlacementTransform();
 
             placeholderMeshRef.current.scale.copy(transform.scale);
+            // Apply rotation directly from transform to honor randomRotation
             placeholderMeshRef.current.rotation.copy(transform.rotation);
         }
     }, [placementSettings]);

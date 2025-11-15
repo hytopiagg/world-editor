@@ -1,0 +1,211 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "normalized": false,
+      "count": 44,
+      "type": "VEC3",
+      "max": [
+        0.9375,
+        0.5,
+        0.5
+      ],
+      "min": [
+        -0.0625,
+        -0.5,
+        -0.5
+      ]
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "normalized": false,
+      "count": 44,
+      "type": "VEC3",
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ]
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "normalized": false,
+      "count": 44,
+      "type": "VEC2",
+      "max": [
+        0.75,
+        0.75
+      ],
+      "min": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "bufferView": 3,
+      "byteOffset": 0,
+      "componentType": 5123,
+      "normalized": false,
+      "count": 66,
+      "type": "SCALAR",
+      "max": [
+        43.0
+      ],
+      "min": [
+        0.0
+      ]
+    }
+  ],
+  "asset": {
+    "generator": "pygltflib@v1.16.5",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 528,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 528,
+      "byteLength": 528,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1056,
+      "byteLength": 352,
+      "byteStride": 8,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1408,
+      "byteLength": 132,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,AABwPwAAAD8AAAAAAABwPwAAAD8AAAA/AABwPwAAAAAAAAAAAABwPwAAAAAAAAA/AACAvQAAAD8AAAA/AACAvQAAAD8AAAAAAACAvQAAAAAAAAA/AACAvQAAAAAAAAAAAABwPwAAAD8AAAAAAACAvQAAAD8AAAAAAABwPwAAAD8AAAA/AACAvQAAAD8AAAA/AABwPwAAAD8AAAA/AACAvQAAAD8AAAA/AABwPwAAAAAAAAA/AACAvQAAAAAAAAA/AACAvQAAAD8AAAAAAABwPwAAAD8AAAAAAACAvQAAAAAAAAAAAABwPwAAAAAAAAAAAACAvQAAAAAAAAC/AABwPwAAAAAAAAAAAACAvQAAAAAAAAAAAABwPwAAAAAAAAC/AABwPwAAAL8AAAA/AACAvQAAAL8AAAA/AABwPwAAAL8AAAC/AACAvQAAAL8AAAC/AABwPwAAAL8AAAC/AACAvQAAAL8AAAC/AABwPwAAAAAAAAC/AACAvQAAAAAAAAC/AABwPwAAAAAAAAA/AABwPwAAAL8AAAA/AABwPwAAAL8AAAC/AABwPwAAAAAAAAC/AACAvQAAAL8AAAA/AABwPwAAAL8AAAA/AACAvQAAAAAAAAA/AABwPwAAAAAAAAA/AACAvQAAAAAAAAC/AACAvQAAAL8AAAC/AACAvQAAAAAAAAA/AACAvQAAAL8AAAA/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAADAPgAAAAAAAAAAAAAAAAAAwD4AAMA+AAAAAAAAwD4AAEA/AAAAAAAAwD4AAAAAAABAPwAAwD4AAMA+AADAPgAAAAAAAMA+AABAPwAAwD4AAAAAAAAAAAAAQD8AAAAAAABAPwAAAAAAAAAAAAAAAAAAQD8AAMA+AAAAAAAAwD4AAEA/AAAAAAAAAAAAAAAAAABAPwAAwD4AAAAAAADAPgAAAAAAAAAAAABAPwAAwD4AAAAAAADAPgAAQD8AAAAAAAAAAAAAAAAAAEA/AAAAAAAAAAAAAEA/AABAPwAAQD8AAAAAAABAPwAAQD8AAEA/AAAAAAAAwD4AAEA/AADAPgAAAAAAAMA+AAAAAAAAQD8AAEA/AABAPwAAQD8AAMA+AAAAAAAAQD8AAEA/AABAPwAAAAAAAMA+AABAPwAAwD4AAAAAAADAPgAAAAAAAEA/AABAPwAAwD4AAEA/AABAPwIAAAABAAIAAQADAAYABAAFAAYABQAHAAoACAAJAAoACQALAA4ADAANAA4ADQAPABIAEAARABIAEQATABQAFgAVABQAFQAXABoAGAAZABoAGQAbAB4AHAAdAB4AHQAfACAAIQAiACAAIgAjACYAJAAlACYAJQAnACoAKAApACoAKQArAA==",
+      "byteLength": 1540
+    }
+  ],
+  "images": [
+    {
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAm1JREFUWEftVrGtwjAUNA0dAglBRQULIBpaKjJANmAblmADFqBiBBaAigoUCURHw9dZ/6zjyYlNQ4UbTGy/d3m+u5fWdDp9zWYzd7/fHcfj8Qjz0WgU5rqnqirX7/f9GvY/n8/wn8/wu9vtWiFAZNICgMlkEk2OoOPx+A0cNwJAu90O5whAwWcBWCwWL0bBGzEAAmLwLRX88Xh0vV7Pg+M4nU5+qqAul4s7HA7NFVitVi+UFm+EcbvdfHAm53MCQXIMXJsOxsB5jKIo3PV6dZvNJg8ADiEZAejbITgT1yXXq8HZwWCQB6AsS38FWnqbnMFJNl0/n8+hEJ1OxwNldQB8u902VwAAlDi4Nw2g4DAn2brdrtPkRIHzSuokgOVyGUiIwxh1quA69oAnSjg84zrWyJkkAFSAd8/Ayn5WR4OTrNxP4llguJIkAFaAspvP5548GJbZVno0JiWvlWLSiAAASBEEyTkAQuWpzCY4VofnbXL8TwKgCgCA7FbLpTxjyqAqwAVW8OMKUAVN7K9bi7kljQugsjmQw36rjDqrVkfFmSQJ0Yxy2W+7n6qFV2UVst/v00akhzVAYOS/7mNr7Bu6F7JEL8BYr9d5ALBZScWAynA8o1IoVXZB9QImz2pG1or1TTAHAFUCmwylyP30AmvjSQ5YKx4Oh28YLAAuxqQKjqBH6Fo2gJgSFAm6nCqBa2rV2gN4pUkjQgWsz9uvICTBnlgCAtEY2qSSAPBJBgLp3amZIIHtgtbtNLltTEkZAoDarJLLmkqTXClHtXOc/wiAJVZTH+BXcYykH5HQyu7b/xtd6htgfgB+FfhV4A+qCTc/IG0+BgAAAABJRU5ErkJggg==",
+      "mimeType": "image/png"
+    }
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 1.0,
+        "baseColorTexture": {
+          "index": 0,
+          "texCoord": 0
+        }
+      },
+      "emissiveFactor": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.05,
+      "doubleSided": true
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "mode": 4,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "translation": [
+        -0.4375,
+        0.5,
+        0.0
+      ],
+      "name": "cube"
+    },
+    {
+      "children": [
+        0
+      ]
+    },
+    {
+      "extras": {
+        "addedBy": "rotate_gltf_180Y"
+      },
+      "rotation": [
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "children": [
+        1
+      ],
+      "name": "RotationWrapper_180deg_Y"
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9728,
+      "minFilter": 9728,
+      "wrapS": 33071,
+      "wrapT": 33071
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "blockbench_export",
+      "nodes": [
+        2
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    }
+  ]
+}

@@ -3,6 +3,18 @@
  * Manages block types, custom blocks, and block operations for the terrain builder
  */
 
+// Load block manifest for stable ID assignments
+let blockManifest = {};
+try {
+    // Try to load the manifest file
+    blockManifest = require("../blocks/block-manifest.json");
+} catch (error) {
+    console.warn(
+        "Block manifest not found. Block IDs may shift when new blocks are added.",
+        error
+    );
+}
+
 let blockTypesArray = (() => {
     const textureContext = require.context(
         "../../../public/assets/blocks",
@@ -11,7 +23,15 @@ let blockTypesArray = (() => {
     );
     const texturePaths = textureContext.keys();
     const blockMap = new Map();
-    let idCounter = 1;
+    
+    // Find the highest ID in the manifest to assign new blocks IDs starting from there
+    const manifestIds = Object.values(blockManifest);
+    const maxManifestId = manifestIds.length > 0 ? Math.max(...manifestIds) : 0;
+    let nextNewBlockId = maxManifestId + 1;
+    
+    // Track new blocks that aren't in the manifest
+    const newBlocks = [];
+    
     texturePaths.forEach((path) => {
         if (path.includes("environment") || path.includes("error")) {
             return;
@@ -23,8 +43,21 @@ let blockTypesArray = (() => {
             const blockName =
                 parts.length > 1 ? parts[0] : fullName.replace(/\.[^/.]+$/, "");
             if (!blockMap.has(blockName)) {
+                // Use manifest ID if available, otherwise assign a new ID
+                let blockId;
+                if (blockManifest[blockName]) {
+                    blockId = blockManifest[blockName];
+                } else {
+                    blockId = nextNewBlockId++;
+                    newBlocks.push(blockName);
+                    console.warn(
+                        `Block "${blockName}" not found in manifest. Assigned ID ${blockId}. ` +
+                        `Please add it to block-manifest.json to ensure stable IDs.`
+                    );
+                }
+                
                 blockMap.set(blockName, {
-                    id: idCounter++,
+                    id: blockId,
                     name: blockName,
                     textureUri: `./assets/blocks/${blockName}.png`,
                     sideTextures: {},
@@ -38,6 +71,16 @@ let blockTypesArray = (() => {
             }
         }
     });
+    
+    // Log warning if new blocks were discovered
+    if (newBlocks.length > 0) {
+        console.warn(
+            `Found ${newBlocks.length} new block(s) not in manifest: ${newBlocks.join(", ")}. ` +
+            `These blocks have been assigned IDs starting from ${maxManifestId + 1}. ` +
+            `To ensure stable IDs, add these blocks to src/js/blocks/block-manifest.json`
+        );
+    }
+    
     return Array.from(blockMap.values()).map((block) => ({
         ...block,
         isMultiTexture: Object.keys(block.sideTextures).length > 0,
