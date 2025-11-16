@@ -1,6 +1,6 @@
 import { OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import {
+import React, {
     forwardRef,
     useCallback,
     useEffect,
@@ -75,7 +75,129 @@ import {
 } from "./utils/TerrainMouseUtils";
 import { getTerrainRaycastIntersection } from "./utils/TerrainRaycastUtils";
 
-function optimizeRenderer(gl) {
+// Extend Window interface for custom properties
+declare global {
+    interface Window {
+        __WE_CAM_OFFSET__?: THREE.Vector3;
+        __WE_FACE_YAW__?: number;
+        __WE_TP_YAW__?: number;
+        __WE_PLAYER_MIXER__?: THREE.AnimationMixer;
+        __WE_INPUT_STATE__?: { state?: any };
+        __WE_PLAYER_ANIMS__?: Record<string, THREE.AnimationAction>;
+        __WE_PHYSICS__?: {
+            getPlayerHalfHeight?: () => number;
+            getPlayerPosition?: () => THREE.Vector3;
+            step?: (dt: number, state: any, yaw: number) => void;
+            setIsSolidQuery?: (fn: (x: number, y: number, z: number) => boolean) => void;
+        };
+        __WE_IS_SOLID__?: (x: number, y: number, z: number) => boolean;
+        __WE_SOLID_BOUND__?: boolean;
+        __WE_LAST_POS__?: THREE.Vector3 | { x: number; y: number; z: number };
+        __WE_AIRBORNE__?: boolean;
+        __WE_AIRBORNE_SEQ__?: number;
+        __WE_AIRBORNE_SINCE__?: number;
+        __WE_LAST_LANDED_SEQ__?: number;
+        __WE_LANDING_UNTIL__?: number;
+        __WE_LANDING_ACTION__?: THREE.AnimationAction;
+        __WE_PLAYER_ACTIVE_TAG__?: string;
+        __WE_PLAYER_ACTIVE__?: THREE.AnimationAction;
+        __WE_PLAYER_ACTIVE_UPPER__?: THREE.AnimationAction;
+        __WE_PLAYER_ACTIVE_LOWER__?: THREE.AnimationAction;
+        __WE_PLAYER_MESH__?: THREE.Object3D;
+        __WE_PLAYER_MESH_LOADING__?: boolean;
+        __WE_DEBUG_JUMP__?: boolean;
+        __WE_PM_PLANE_TOP_Y__?: number;
+        __WE_PREVIEW_VISIBLE__?: boolean;
+        __WE_CAM_KEYS__?: { left?: boolean; right?: boolean; up?: boolean; down?: boolean };
+        __WE_CAM_TARGET_RADIUS__?: number;
+        __WE_CAM_OFFSET_YAW__?: number;
+        __WE_CAM_OFFSET_RADIUS__?: number;
+        __WE_CAM_OFFSET_HEIGHT__?: number;
+        __WE_WORLD_Y_OFFSET__?: number;
+        __WE_WORLD_X_OFFSET__?: number;
+        __WE_WORLD_Z_OFFSET__?: number;
+        __WE_LAST_PHYSICS_TS__?: number;
+        BlockTypeRegistry?: any;
+        fullTerrainDataRef?: Record<string, number>;
+        chunkLoadCheckInterval?: NodeJS.Timeout;
+        lastKeyMoveTime?: number;
+        lowResDragEnabled?: boolean;
+        variantCache?: Map<string, any>;
+        pendingVariantKeys?: Set<string>;
+        refreshBlockTools?: () => void;
+        __variantCache?: Map<string, any>;
+        __pendingVariantKeys?: Set<string>;
+        __WE_SCENE__?: THREE.Scene;
+        __WE_CAM_DRAG_RMB__?: boolean;
+        __WE_CAM_DRAG_LAST_X__?: number;
+        __WE_CAM_DRAG_LAST_Y__?: number;
+        __WE_CAM_WHEEL_SENS__?: number;
+        __WE_CAM_LIMIT_PAD__?: number;
+        mouseButtons?: any;
+    }
+}
+
+// Type definitions
+interface TerrainBuilderProps {
+    onSceneReady?: (scene: THREE.Scene) => void;
+    previewPositionToAppJS?: (position: THREE.Vector3) => void;
+    currentBlockType?: any;
+    setCurrentBlockType?: (blockType: any) => void;
+    undoRedoManager?: React.MutableRefObject<any>;
+    mode?: string;
+    axisLockEnabled?: boolean;
+    gridSize?: number;
+    cameraReset?: boolean;
+    cameraAngle?: number;
+    placementSize?: string;
+    setPageIsLoaded?: (loaded: boolean) => void;
+    customBlocks?: any[];
+    environmentBuilderRef?: React.MutableRefObject<any>;
+    isInputDisabled?: boolean;
+    snapToGrid?: boolean;
+    onCameraPositionChange?: (position: THREE.Vector3) => void;
+}
+
+interface TerrainBuilderRef {
+    buildUpdateTerrain: (options?: any) => Promise<void>;
+    updateTerrainFromToolBar: (terrainData: Record<string, number>) => void;
+    getCurrentTerrainData: () => Record<string, number>;
+    clearMap: () => Promise<void>;
+    saveTerrainManually: () => void;
+    updateTerrainBlocks: (addedBlocks?: Record<string, number>, removedBlocks?: Record<string, number>, options?: any) => Promise<void>;
+    updateTerrainForUndoRedo: (addedBlocks?: Record<string, number>, removedBlocks?: Record<string, number>, options?: any) => Promise<void>;
+    syncEnvironmentChangesToPending: (addedEnvironment?: any[], removedEnvironment?: any[]) => void;
+    updateSpatialHashForBlocks: (addedBlocks?: any[], removedBlocks?: any[], options?: any) => void;
+    fastUpdateBlock: (position: THREE.Vector3 | [number, number, number] | { x: number; y: number; z: number }, blockId: number) => void;
+    forceChunkUpdate: (chunkKeys?: string[], options?: any) => void;
+    forceRefreshAllChunks: () => boolean;
+    updateGridSize: (newGridSize?: number) => Promise<void>;
+    changeSkybox: (skyboxName: string) => void;
+    setAmbientLight: (opts?: { color?: string | number; intensity?: number }) => boolean;
+    getAmbientLight: () => { color: string; intensity: number } | null;
+    setDirectionalLight: (opts?: { color?: string | number; intensity?: number }) => boolean;
+    getDirectionalLight: () => { color: string; intensity: number } | null;
+    activateTool: (toolName: string, activationData?: any) => boolean;
+    toolManagerRef: { current: any };
+    previewPositionRef: THREE.Vector3;
+    totalBlocksRef: number;
+    setDeferredChunkMeshing: (defer: boolean) => void;
+    deferSpatialHashUpdates: (defer: boolean) => void;
+    applyDeferredSpatialHashUpdates: () => void;
+    isPendingSpatialHashUpdates: () => boolean;
+    setViewDistance: (distance: number) => boolean;
+    getSelectionDistance: () => number;
+    getViewDistance: () => number;
+    setAutoSaveInterval: (intervalMs: number) => boolean;
+    toggleAutoSave: (enabled: boolean) => boolean;
+    isAutoSaveEnabled: () => boolean;
+    isPlacing: () => boolean;
+    refreshTerrainFromDB: () => Promise<boolean>;
+    forceRebuildSpatialHash: (options?: { showLoadingScreen?: boolean }) => Promise<void>;
+    setGridVisible: (visible: boolean) => void;
+}
+
+function optimizeRenderer(gl: THREE.WebGLRenderer | null) {
     if (gl) {
         // Detect GPU and apply optimized settings automatically
         const gpuInfo = detectGPU();
@@ -93,8 +215,8 @@ function optimizeRenderer(gl) {
 
         // Apply GPU-specific shadow map size to directional lights
         // This will be picked up by lights that check renderer settings
-        gl.userData = gl.userData || {};
-        gl.userData.recommendedShadowMapSize = settings.shadowMapSize;
+        (gl as any).userData = (gl as any).userData || {};
+        (gl as any).userData.recommendedShadowMapSize = settings.shadowMapSize;
 
         // Note: powerPreference must be set at context creation time, not here
         // It's now properly configured in the Canvas component gl prop
@@ -109,7 +231,8 @@ function optimizeRenderer(gl) {
         );
     }
 }
-function TerrainBuilder(
+const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
+    (
     {
         onSceneReady,
         previewPositionToAppJS,
@@ -130,7 +253,7 @@ function TerrainBuilder(
         onCameraPositionChange,
     },
     ref
-) {
+    ) => {
     const spatialGridManagerRef = useRef(
         new SpatialGridManager(loadingManager)
     );
@@ -178,8 +301,7 @@ function TerrainBuilder(
 
             if (isAutoSaveEnabledRef.current) {
                 console.log(
-                    `Auto-save enabled with interval: ${
-                        AUTO_SAVE_INTERVAL / 1000
+                        `Auto-save enabled with interval: ${AUTO_SAVE_INTERVAL / 1000
                     } seconds`
                 );
                 autoSaveIntervalRef.current = setInterval(() => {
@@ -399,7 +521,10 @@ function TerrainBuilder(
 
         initialSaveCompleteRef.current = false;
 
-        pendingChangesRef.current = { added: {}, removed: {} };
+            pendingChangesRef.current = {
+                terrain: { added: {}, removed: {} },
+                environment: { added: [], removed: [] },
+            };
 
         lastSaveTimeRef.current = Date.now();
         console.log(
@@ -415,8 +540,7 @@ function TerrainBuilder(
                 );
                 if (terrain && Object.keys(terrain).length > 0) {
                     console.log(
-                        `Loaded existing terrain with ${
-                            Object.keys(terrain).length
+                            `Loaded existing terrain with ${Object.keys(terrain).length
                         } blocks`
                     );
 
@@ -492,7 +616,7 @@ function TerrainBuilder(
                         amb.color,
                         amb.intensity
                     );
-                } catch (e) {}
+                    } catch (e) { }
             }
         }, 100);
         return () => clearInterval(id);
@@ -533,11 +657,11 @@ function TerrainBuilder(
         environment: { added: [], removed: [] },
     });
     const instancedMeshRef = useRef({});
-    const shadowPlaneRef = useRef();
-    const directionalLightRef = useRef();
-    const directionalFillLightRef = useRef();
-    const terrainRef = useRef({});
-    const gridRef = useRef();
+        const shadowPlaneRef = useRef<THREE.Mesh>(null);
+        const directionalLightRef = useRef<THREE.DirectionalLight>(null);
+        const directionalFillLightRef = useRef<THREE.DirectionalLight>(null);
+        const terrainRef = useRef<Record<string, number>>({});
+        const gridRef = useRef<THREE.GridHelper>(null);
     const mouseMoveAnimationRef = useRef(null);
     const isPlacingRef = useRef(false);
     const currentPlacingYRef = useRef(0);
@@ -581,7 +705,7 @@ function TerrainBuilder(
         customBlocks,
         BlockTextureAtlas,
         undoRedoManager,
-    });
+        } as any);
     const updateTerrainForUndoRedo =
         terrainUndoRedoManager.updateTerrainForUndoRedo.bind(
             terrainUndoRedoManager
@@ -592,7 +716,12 @@ function TerrainBuilder(
     const resetPendingChanges = terrainUndoRedoManager.resetPendingChanges.bind(
         terrainUndoRedoManager
     );
-    const buildUpdateTerrain = async (options = {}) => {
+        const buildUpdateTerrain = async (options: {
+            blocks?: Record<string, number>;
+            deferMeshBuilding?: boolean;
+            priorityDistance?: number;
+            deferredBuildDelay?: number;
+        } = {}) => {
         console.time("buildUpdateTerrain");
         const useProvidedBlocks =
             options.blocks && Object.keys(options.blocks).length > 0;
@@ -637,14 +766,14 @@ function TerrainBuilder(
                     if (Object.keys(terrainRef.current).length === 0) {
                         const blockEntries = Object.entries(terrainBlocks);
                         const BATCH_SIZE = 10000;
-                        const processBlockBatch = (startIdx, batchNum) => {
+                            const processBlockBatch = (startIdx: number, batchNum: number) => {
                             const endIdx = Math.min(
                                 startIdx + BATCH_SIZE,
                                 blockEntries.length
                             );
                             const batch = blockEntries.slice(startIdx, endIdx);
                             batch.forEach(([posKey, blockId]) => {
-                                terrainRef.current[posKey] = blockId;
+                                    terrainRef.current[posKey] = blockId as number;
                                 pendingChangesRef.current.terrain.added[
                                     posKey
                                 ] = blockId;
@@ -1115,7 +1244,7 @@ function TerrainBuilder(
                                             String(variant.id)
                                         );
                                     }
-                                } catch (_) {}
+                                    } catch (_) { }
                                 try {
                                     // Update the sidebar's selectedBlockID immediately
                                     if (
@@ -1130,8 +1259,8 @@ function TerrainBuilder(
                                             new Event("refreshBlockTools")
                                         );
                                     }
-                                } catch (_) {}
-                            } catch (_) {}
+                                    } catch (_) { }
+                                } catch (_) { }
                             // Cache it globally for session
                             try {
                                 window.__variantCache =
@@ -1140,7 +1269,7 @@ function TerrainBuilder(
                                     `${baseId}:${desiredLevel}`,
                                     variant
                                 );
-                            } catch (_) {}
+                                } catch (_) { }
                         }
                     }
                 } catch (e) {
@@ -1301,11 +1430,12 @@ function TerrainBuilder(
             modeRef
         );
     }, [pointer, scene, threeCamera, threeRaycaster, cameraManager]);
-    const updatePreviewPosition = () => {
-        if (updatePreviewPosition.isProcessing) {
+        const updatePreviewPosition = (() => {
+            const fn = () => {
+                if ((fn as any).isProcessing) {
             return;
         }
-        updatePreviewPosition.isProcessing = true;
+                (fn as any).isProcessing = true;
         if (!canvasRectRef.current) {
             canvasRectRef.current = gl.domElement.getBoundingClientRect();
         }
@@ -1530,8 +1660,10 @@ function TerrainBuilder(
                 }
             }
         }
-        updatePreviewPosition.isProcessing = false;
+                (fn as any).isProcessing = false;
     };
+            return fn;
+        })();
     const handleMouseUp = useCallback(
         (e) => {
             handleTerrainMouseUp(
@@ -1820,12 +1952,12 @@ function TerrainBuilder(
         }
         if (visibleOnly && terrainRef.current) {
             const chunkSystem = getChunkSystem();
-            if (chunkSystem && chunkSystem._scene.camera) {
-                const camera = chunkSystem._scene.camera;
+                if (chunkSystem && (chunkSystem._scene as any).camera) {
+                    const camera = (chunkSystem._scene as any).camera;
                 const cameraPos = camera.position;
                 const viewDistance = getViewDistance() || 64;
                 const visibleBlocks = {};
-                const getChunkOrigin = (pos) => {
+                    const getChunkOrigin = (pos: string) => {
                     const [x, y, z] = pos.split(",").map(Number);
                     const chunkSize = CHUNK_SIZE;
                     return {
@@ -1913,11 +2045,11 @@ function TerrainBuilder(
         if (scene) {
             try {
                 scene.traverse((object) => {
-                    if (object.isMesh || object.isInstancedMesh) {
+                        if ((object as any).isMesh || (object as any).isInstancedMesh) {
                         object.frustumCulled = false;
                     }
                 });
-            } catch (_) {}
+                } catch (_) { }
         }
     }, [threeCamera, scene]);
     useEffect(() => {
@@ -1983,7 +2115,7 @@ function TerrainBuilder(
                     console.info(
                         "[TerrainBuilder] camera bound to chunk system",
                         {
-                            hasCamera: !!(cs && cs._scene && cs._scene.camera),
+                                hasCamera: !!(cs && cs._scene && (cs._scene as any).camera),
                         }
                     );
                 } catch (e) {
@@ -2002,8 +2134,8 @@ function TerrainBuilder(
             );
             performanceLogger.markStart("Load Custom Blocks");
             await DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
-                .then((customBlocksData) => {
-                    if (customBlocksData && customBlocksData.length > 0) {
+                    .then((customBlocksData: any) => {
+                        if (customBlocksData && Array.isArray(customBlocksData) && customBlocksData.length > 0) {
                         for (const block of customBlocksData) {
                             processCustomBlock(block);
                         }
@@ -2020,7 +2152,7 @@ function TerrainBuilder(
                     performanceLogger.markStart("Load Terrain Data from DB");
                     return DatabaseManager.getData(STORES.TERRAIN, "current");
                 })
-                .then((savedTerrain) => {
+                    .then((savedTerrain: any) => {
                     if (!mounted) return;
                     const terrainBlockCount = savedTerrain
                         ? Object.keys(savedTerrain).length
@@ -2033,7 +2165,7 @@ function TerrainBuilder(
                         count: terrainBlockCount,
                     });
                     if (savedTerrain) {
-                        terrainRef.current = savedTerrain;
+                            terrainRef.current = savedTerrain as Record<string, number>;
                         totalBlocksRef.current = Object.keys(
                             terrainRef.current
                         ).length;
@@ -2049,10 +2181,10 @@ function TerrainBuilder(
                                 performanceLogger.markStart(
                                     "Mark Essential Block Types"
                                 );
-                                const usedBlockIds = new Set();
+                                    const usedBlockIds = new Set<number>();
                                 Object.values(terrainRef.current).forEach(
                                     (blockId) => {
-                                        usedBlockIds.add(parseInt(blockId));
+                                            usedBlockIds.add(typeof blockId === 'number' ? blockId : parseInt(String(blockId)));
                                     }
                                 );
                                 usedBlockIds.forEach((blockId) => {
@@ -2107,9 +2239,9 @@ function TerrainBuilder(
                                                 updateChunkSystemCamera(
                                                     threeCamera
                                                 );
-                                            } catch (_) {}
+                                                } catch (_) { }
                                             processChunkRenderQueue();
-                                        } catch (_) {}
+                                            } catch (_) { }
                                     }, 100);
                                 } else {
                                     updateTerrainChunks(
@@ -2119,7 +2251,7 @@ function TerrainBuilder(
                                     );
                                     try {
                                         updateChunkSystemCamera(threeCamera);
-                                    } catch (_) {}
+                                        } catch (_) { }
                                     processChunkRenderQueue();
                                 }
                                 try {
@@ -2130,11 +2262,11 @@ function TerrainBuilder(
                                             hasCamera: !!(
                                                 cs &&
                                                 cs._scene &&
-                                                cs._scene.camera
+                                    (cs._scene as any).camera
                                             ),
                                         }
                                     );
-                                } catch (_) {}
+                                    } catch (_) { }
                                 window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();
                                 performanceLogger.markEnd(
@@ -2329,28 +2461,28 @@ function TerrainBuilder(
                     "entity-hover-changed",
                     handleEntityStateChange
                 );
-            } catch (_) {}
+                } catch (_) { }
             // Explicitly clear large references to help next mount
             try {
                 terrainRef.current = {};
-            } catch (_) {}
+                } catch (_) { }
             try {
                 if (getChunkSystem()) {
                     getChunkSystem().reset?.();
                 }
-            } catch (_) {}
+                } catch (_) { }
             try {
                 spatialGridManagerRef.current?.clear?.();
-            } catch (_) {}
+                } catch (_) { }
             try {
                 resetChunkSystem();
-            } catch (_) {}
+                } catch (_) { }
         };
     }, [threeCamera, scene]);
     useEffect(() => {
         if (undoRedoManager?.current && toolManagerRef.current) {
             try {
-                Object.values(toolManagerRef.current.tools).forEach((tool) => {
+                    Object.values(toolManagerRef.current.tools).forEach((tool: any) => {
                     if (tool) {
                         tool.undoRedoManager = undoRedoManager;
                     }
@@ -2378,12 +2510,12 @@ function TerrainBuilder(
         const currentInstancedMeshes = instancedMeshRef.current;
         return () => {
             if (currentInstancedMeshes) {
-                Object.values(currentInstancedMeshes).forEach((mesh) => {
+                    Object.values(currentInstancedMeshes).forEach((mesh: any) => {
                     if (mesh) {
                         scene.remove(mesh);
                         if (mesh.geometry) mesh.geometry.dispose();
                         if (Array.isArray(mesh.material)) {
-                            mesh.material.forEach((m) => m?.dispose());
+                                mesh.material.forEach((m: any) => m?.dispose());
                         } else if (mesh.material) {
                             mesh.material.dispose();
                         }
@@ -2393,11 +2525,11 @@ function TerrainBuilder(
         };
     }, [scene]); // Can't include safeRemoveFromScene due to function order
     useEffect(() => {
-        if (meshesNeedsRefresh.value) {
+        if ((meshesNeedsRefresh as any).value) {
             buildUpdateTerrain();
-            meshesNeedsRefresh.value = false;
+            (meshesNeedsRefresh as any).value = false;
         }
-    }, [meshesNeedsRefresh.value]); // Use meshesNeedsRefresh.value in the dependency array
+    }, [(meshesNeedsRefresh as any).value]); // Use meshesNeedsRefresh.value in the dependency array
     useEffect(() => {
         currentBlockTypeRef.current = currentBlockType;
     }, [currentBlockType]);
@@ -2409,22 +2541,23 @@ function TerrainBuilder(
     }, [placementSize]);
     useEffect(() => {
         if (!scene || !gl) return;
-        const handleTextureAtlasUpdate = (event) => {
+            const handleTextureAtlasUpdate = (event: any) => {
             scene.traverse((object) => {
-                if (object.isMesh && object.material) {
-                    if (Array.isArray(object.material)) {
-                        object.material.forEach((mat) => {
+                    const obj = object as any;
+                    if (obj.isMesh && obj.material) {
+                        if (Array.isArray(obj.material)) {
+                            obj.material.forEach((mat: any) => {
                             if (mat.map) mat.needsUpdate = true;
                         });
-                    } else if (object.material.map) {
-                        object.material.needsUpdate = true;
+                        } else if (obj.material.map) {
+                            obj.material.needsUpdate = true;
                     }
                 }
             });
             gl.render(scene, threeCamera);
             if (getChunkSystem()) {
                 getChunkSystem().forceUpdateChunkVisibility(); // Changed from forceUpdateAllChunkVisibility
-                getChunkSystem().processRenderQueue(true);
+                    (getChunkSystem() as any).processRenderQueue(true);
             }
             totalBlocksRef.current = Object.keys(terrainRef.current).length;
         };
@@ -2450,7 +2583,7 @@ function TerrainBuilder(
             if (toolManagerRef.current?.tools?.["terrain"]?.flushPending) {
                 toolManagerRef.current.tools["terrain"].flushPending();
             }
-        } catch (_) {}
+            } catch (_) { }
         return efficientTerrainSave();
     };
     const setAutoSaveEnabled = (enabled) => {
@@ -2579,7 +2712,7 @@ function TerrainBuilder(
             if (opts.color !== undefined) {
                 try {
                     amb.color.set(opts.color);
-                } catch (_) {}
+                    } catch (_) { }
             }
             if (opts.intensity !== undefined) {
                 amb.intensity = opts.intensity;
@@ -2608,7 +2741,7 @@ function TerrainBuilder(
                 if (opts.color !== undefined) {
                     try {
                         light.color.set(opts.color);
-                    } catch (_) {}
+                        } catch (_) { }
                 }
                 if (opts.intensity !== undefined) {
                     light.intensity = opts.intensity;
@@ -2842,8 +2975,8 @@ function TerrainBuilder(
                 const totalBatches = Math.ceil(
                     chunkKeys.length / MAX_CHUNKS_PER_BATCH
                 );
-                const processBatch = (batchIndex) => {
-                    return new Promise((resolve) => {
+                    const processBatch = (batchIndex: number) => {
+                        return new Promise<void>((resolve) => {
                         const startIdx = batchIndex * MAX_CHUNKS_PER_BATCH;
                         const endIdx = Math.min(
                             startIdx + MAX_CHUNKS_PER_BATCH,
@@ -2855,7 +2988,7 @@ function TerrainBuilder(
                             batchBlocks.push(...blocksByChunk[chunkKey]);
                         });
                         if (batchBlocks.length === 0) {
-                            resolve();
+                                resolve(undefined);
                             return;
                         }
                         if (showLoading) {
@@ -2863,8 +2996,7 @@ function TerrainBuilder(
                                 (batchIndex / totalBatches) * 100
                             );
                             loadingManager.updateLoading(
-                                `Processing batch ${
-                                    batchIndex + 1
+                                    `Processing batch ${batchIndex + 1
                                 }/${totalBatches}`,
                                 progress
                             );
@@ -2881,10 +3013,10 @@ function TerrainBuilder(
 
                         environmentBuilderRef.current.forceRebuildSpatialHash();
 
-                        setTimeout(() => resolve(), 0);
+                            setTimeout(() => resolve(undefined), 0);
                     });
                 };
-                return new Promise(async (resolve) => {
+                    return new Promise<void>(async (resolve) => {
                     for (let i = 0; i < totalBatches; i++) {
                         await processBatch(i);
                     }
@@ -3025,9 +3157,14 @@ function TerrainBuilder(
     };
 
     const updateTerrainBlocks = async (
-        addedBlocks,
-        removedBlocks,
-        options = {}
+            addedBlocks?: Record<string, number>,
+            removedBlocks?: Record<string, number>,
+            options: {
+                skipTexturePreload?: boolean;
+                syncPendingChanges?: boolean;
+                skipUndoSave?: boolean;
+                skipSpatialHash?: boolean;
+            } = {}
     ) => {
         const { performanceLogger } = require("./utils/PerformanceLogger");
         performanceLogger.markStart("updateTerrainBlocks");
@@ -3077,8 +3214,7 @@ function TerrainBuilder(
         });
 
         console.log(
-            `[UPDATE_TERRAIN] Updating terrain with ${
-                Object.keys(addedBlocks).length
+                `[UPDATE_TERRAIN] Updating terrain with ${Object.keys(addedBlocks).length
             } added, ${Object.keys(removedBlocks).length} removed`
         );
         console.log(
@@ -3161,16 +3297,17 @@ function TerrainBuilder(
             });
         }
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-            if (!isNaN(parseInt(blockId))) {
+                const blockIdNum = typeof blockId === 'number' ? blockId : parseInt(String(blockId));
+                if (!isNaN(blockIdNum)) {
                 let dataUri = null;
-                if (customBlocks && customBlocks[blockId]) {
-                    dataUri = customBlocks[blockId].dataUri;
+                    if (customBlocks && customBlocks[blockIdNum]) {
+                        dataUri = customBlocks[blockIdNum].dataUri;
                 }
                 if (!dataUri && typeof localStorage !== "undefined") {
                     const storageKeys = [
-                        `block-texture-${blockId}`,
-                        `custom-block-${blockId}`,
-                        `datauri-${blockId}`,
+                            `block-texture-${blockIdNum}`,
+                            `custom-block-${blockIdNum}`,
+                            `datauri-${blockIdNum}`,
                     ];
                     for (const key of storageKeys) {
                         const storedUri = localStorage.getItem(key);
@@ -3181,10 +3318,10 @@ function TerrainBuilder(
                     }
                 }
                 if (dataUri && dataUri.startsWith("data:image/")) {
-                    localStorage.setItem(`block-texture-${blockId}`, dataUri);
+                        localStorage.setItem(`block-texture-${blockIdNum}`, dataUri);
                     if (BlockTextureAtlas && BlockTextureAtlas.instance) {
                         BlockTextureAtlas.instance
-                            .applyDataUriToAllFaces(blockId, dataUri)
+                                .applyDataUriToAllFaces(String(blockIdNum), dataUri)
                             .catch((err) =>
                                 console.error(
                                     `Error applying data URI to block ${blockId}:`,
@@ -3208,7 +3345,7 @@ function TerrainBuilder(
             }
         }
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
-            terrainRef.current[posKey] = blockId;
+                terrainRef.current[posKey] = typeof blockId === 'number' ? blockId : parseInt(String(blockId));
         });
 
         Object.entries(removedBlocks).forEach(([posKey]) => {
@@ -3312,7 +3449,7 @@ function TerrainBuilder(
                 window.__WE_CAM_OFFSET_HEIGHT__ ?? 3.0;
             window.__WE_CAM_OFFSET_YAW__ =
                 window.__WE_CAM_OFFSET_YAW__ ?? threeCamera.rotation.y;
-        } catch (_) {}
+            } catch (_) { }
 
         // Allow adjusting third-person camera offset with arrow keys while in Player Mode
         const onArrowKeyDown = (e) => {
@@ -3354,7 +3491,7 @@ function TerrainBuilder(
                     window.__WE_CAM_KEYS__.down = true;
                     e.preventDefault();
                 }
-            } catch (_) {}
+                } catch (_) { }
         };
         const onArrowKeyUp = (e) => {
             if (!window.__WE_PHYSICS__) return;
@@ -3609,14 +3746,14 @@ function TerrainBuilder(
                                     // Environment entities with colliders: approximate by checking an occupancy flag in spatial hash
                                     // We already write env objects into spatial hash using updateSpatialHashForBlocks with model add/remove.
                                     // So sgm.hasBlock covers them too when addCollider is enabled.
-                                } catch (_) {}
+                                    } catch (_) { }
                                 return false;
                             };
                             physics.setIsSolidQuery(solidFn);
                             // Also expose to window for fallback path inside physics
                             window.__WE_IS_SOLID__ = solidFn;
                         }
-                    } catch (_) {}
+                        } catch (_) { }
 
                     physics.step(
                         dt,
@@ -3638,7 +3775,7 @@ function TerrainBuilder(
                                 (gltf) => {
                                     const obj = gltf.scene || gltf.scenes?.[0];
                                     if (obj) {
-                                        obj.traverse((child) => {
+                                            obj.traverse((child: any) => {
                                             if (child.isMesh) {
                                                 child.castShadow = true;
                                                 child.receiveShadow = true;
@@ -3762,9 +3899,9 @@ function TerrainBuilder(
                                                 actions["idle-upper"] &&
                                                 actions["idle-lower"]
                                                     ? undefined
-                                                    : actions.idle ||
-                                                      actions.walk ||
-                                                      actions.run;
+                                                        : (actions as any).idle ||
+                                                        (actions as any).walk ||
+                                                        (actions as any).run;
                                             if (start) {
                                                 start
                                                     .reset()
@@ -4073,7 +4210,7 @@ function TerrainBuilder(
                                                 performance.now() + dur * 1000;
                                             window.__WE_LANDING_ACTION__ =
                                                 landingAction;
-                                        } catch {}
+                                            } catch { }
                                     }
                                 } else if (seq !== lastLandedSeq) {
                                     // Consume landing sequence even if thresholds not met to avoid repeated handling
@@ -4109,7 +4246,7 @@ function TerrainBuilder(
                                             )} seq=${seqDbg} last=${lastDbg} planeY=${planeTop}`
                                         );
                                     }
-                                } catch {}
+                                    } catch { }
                             }
 
                             // Choose tag with jump priority
@@ -4135,7 +4272,7 @@ function TerrainBuilder(
                                         );
                                         window.__WE_LANDING_ACTION__.stop();
                                     }
-                                } catch (_) {}
+                                    } catch (_) { }
                                 window.__WE_LANDING_ACTION__ = undefined;
                                 landingJustEnded = true;
                                 window.__WE_PLAYER_ACTIVE_TAG__ = undefined;
@@ -4276,11 +4413,11 @@ function TerrainBuilder(
                     if (window.__WE_PLAYER_MESH__) {
                         try {
                             scene && scene.remove(window.__WE_PLAYER_MESH__);
-                        } catch (_) {}
+                            } catch (_) { }
                         window.__WE_PLAYER_MESH__ = undefined;
                     }
                 }
-            } catch (_) {}
+                } catch (_) { }
         };
         frameId = requestAnimationFrame(animate);
         return () => {
@@ -4315,9 +4452,9 @@ function TerrainBuilder(
         };
     }, [gl]);
 
-    function setGridVisible(visible) {
+        function setGridVisible(visible: boolean) {
         if (gridRef.current) {
-            gridRef.current.visible = visible;
+                (gridRef.current as any).visible = visible;
         }
     }
 
@@ -4392,6 +4529,7 @@ function TerrainBuilder(
                 enabled={!isInputDisabled} // Keep this for OrbitControls mouse input
             />
             {/* Shadow directional light */}
+            {/* @ts-expect-error - React Three Fiber JSX elements */}
             <directionalLight
                 ref={directionalLightRef}
                 position={[10, 20, 10]}
@@ -4410,6 +4548,7 @@ function TerrainBuilder(
                 shadow-normalBias={0.1}
             />
             {/* Non shadow directional light */}
+            {/* @ts-expect-error - React Three Fiber JSX elements */}
             <directionalLight
                 position={[10, 20, 10]}
                 intensity={1}
@@ -4418,8 +4557,10 @@ function TerrainBuilder(
                 ref={directionalFillLightRef}
             />
             {/* Ambient light (lower intensity so emissive blocks are visible) */}
+            {/* @ts-expect-error - React Three Fiber JSX elements */}
             <ambientLight ref={ambientRef} intensity={0.25} />
             {/* mesh of invisible plane to receive shadows, and grid helper to display grid */}
+            {/* @ts-expect-error - React Three Fiber JSX elements */}
             <mesh
                 ref={shadowPlaneRef}
                 position={[0.5, -0.51, 0.5]}
@@ -4429,22 +4570,31 @@ function TerrainBuilder(
                 castShadow={false}
                 frustumCulled={false}
             >
+                {/* @ts-expect-error - React Three Fiber JSX elements */}
                 <planeGeometry args={[gridSize, gridSize]} />
+                {/* @ts-expect-error - React Three Fiber JSX elements */}
                 <meshPhongMaterial transparent opacity={0} />
+                {/* @ts-ignore - React Three Fiber JSX closing tag */}
             </mesh>
+            {/* @ts-expect-error - React Three Fiber JSX elements */}
             <gridHelper position={[0.5, -0.5, 0.5]} ref={gridRef} />
             {window.__WE_PREVIEW_VISIBLE__ !== false &&
                 previewPosition &&
                 (modeRef.current === "add" || modeRef.current === "remove") &&
                 !shouldHidePreviewBlock && (
+                    /* @ts-expect-error - React Three Fiber JSX elements */
                     <group>
                         {getPlacementPositions(
                             previewPosition,
                             placementSizeRef.current
                         ).map((pos, index) => (
+                            /* @ts-expect-error - React Three Fiber JSX elements */
                             <group key={index} position={[pos.x, pos.y, pos.z]}>
+                                {/* @ts-expect-error - React Three Fiber JSX elements */}
                                 <mesh renderOrder={2}>
+                                    {/* @ts-expect-error - React Three Fiber JSX elements */}
                                     <boxGeometry args={[1.02, 1.02, 1.02]} />
+                                    {/* @ts-expect-error - React Three Fiber JSX elements */}
                                     <meshPhongMaterial
                                         color={
                                             modeRef.current === "add"
@@ -4457,24 +4607,33 @@ function TerrainBuilder(
                                         depthTest={true}
                                         alphaTest={0.1}
                                     />
+                                {/* @ts-ignore - React Three Fiber JSX closing tag */}
                                 </mesh>
+                                {/* @ts-expect-error - React Three Fiber JSX elements */}
                                 <lineSegments renderOrder={3}>
+                                    {/* @ts-expect-error - React Three Fiber JSX elements */}
                                     <edgesGeometry
                                         args={[new THREE.BoxGeometry(1, 1, 1)]}
                                     />
+                                    {/* @ts-expect-error - React Three Fiber JSX elements */}
                                     <lineBasicMaterial
                                         color="darkgreen"
                                         linewidth={2}
                                     />
+                                {/* @ts-ignore - React Three Fiber JSX closing tag */}
                                 </lineSegments>
+                            {/* @ts-ignore - React Three Fiber JSX closing tag */}
                             </group>
                         ))}
+                    {/* @ts-ignore - React Three Fiber JSX closing tag */}
                     </group>
                 )}
         </>
     );
 }
-export default forwardRef(TerrainBuilder);
+);
+
+export default TerrainBuilder;
 export {
     blockTypes,
     getBlockTypes,
