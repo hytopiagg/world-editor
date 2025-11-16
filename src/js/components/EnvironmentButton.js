@@ -87,6 +87,17 @@ const startNextRender = () => {
         }
     }, 100); // 200ms delay between renders
 };
+
+const formatModelName = (name) => {
+    if (!name) return name;
+    return name
+        .split("-")
+        .map(
+            (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        )
+        .join(" ");
+};
+
 const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [imageUrl, setImageUrl] = useState(null);
@@ -351,7 +362,7 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
     };
 
     return (
-        <Tooltip text={envType.name}>
+        <Tooltip text={formatModelName(envType.name)}>
             <button
                 className={`border transition-all duration-150 environment-button border-white/0 hover:border-white/20 active:border-white`}
                 style={{
@@ -416,7 +427,7 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                 </div>
                 <div className="environment-label-wrapper">
                     <div className="environment-button-label text-[#F1F1F1]">
-                        {envType.name}
+                        {formatModelName(envType.name)}
                     </div>
                 </div>
             </button>
