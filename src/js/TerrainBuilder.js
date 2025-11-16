@@ -554,6 +554,7 @@ function TerrainBuilder(
     const lastDeletionTimeRef = useRef(0); // Add this ref to track the last deletion time
     const lastPlacementTimeRef = useRef(0); // Add this ref to track the last placement time
     const [previewPosition, setPreviewPosition] = useState(new THREE.Vector3());
+    const [shouldHidePreviewBlock, setShouldHidePreviewBlock] = useState(false);
     const recentlyPlacedBlocksRef = useRef(new Set());
     const canvasRectRef = useRef(null);
     const tempVectorRef = useRef(new THREE.Vector3());
@@ -2204,6 +2205,10 @@ function TerrainBuilder(
             updateSpatialHashForBlocks, // Direct access to spatial hash update function
             updateTerrainForUndoRedo, // <<< Add this function explicitly
             updateTerrainBlocks, // Add the updateTerrainBlocks function for terrain modifications
+            threeRaycaster: threeRaycaster, // Add raycaster for entity detection
+            threeCamera: threeCamera, // Add camera for entity detection
+            pointer: pointer, // Add pointer for entity detection
+            gl: gl, // Add renderer for gizmo controls
             totalBlocksRef, // Provide access to the total block count ref
             activateTool: (toolName, activationData) =>
                 toolManagerRef.current?.activateTool(toolName, activationData),
@@ -2223,6 +2228,33 @@ function TerrainBuilder(
         );
         const selectionTool = new SelectionTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("selection", selectionTool);
+
+        // Listen for entity selection/hover changes to update preview visibility
+        const handleEntityStateChange = () => {
+            const activeTool = toolManagerRef.current?.getActiveTool?.();
+            const shouldHide =
+                activeTool?.name === "selection" &&
+                activeTool?.shouldHidePreviewBlock?.();
+            setShouldHidePreviewBlock(shouldHide || false);
+        };
+        window.addEventListener("entity-selected", handleEntityStateChange);
+        window.addEventListener("entity-deselected", handleEntityStateChange);
+        window.addEventListener(
+            "entity-hover-changed",
+            handleEntityStateChange
+        );
+
+        // Also check periodically when SelectionTool is active
+        const checkPreviewVisibility = () => {
+            const activeTool = toolManagerRef.current?.getActiveTool?.();
+            if (activeTool?.name === "selection") {
+                const shouldHide = activeTool?.shouldHidePreviewBlock?.();
+                setShouldHidePreviewBlock(shouldHide || false);
+            } else {
+                setShouldHidePreviewBlock(false);
+            }
+        };
+        const previewCheckInterval = setInterval(checkPreviewVisibility, 100);
 
         const terrainTool = new TerrainTool(terrainBuilderProps);
         toolManagerRef.current.registerTool("terrain", terrainTool);
@@ -2280,8 +2312,23 @@ function TerrainBuilder(
                 clearInterval(window.chunkLoadCheckInterval);
                 window.chunkLoadCheckInterval = null;
             }
+            if (previewCheckInterval) {
+                clearInterval(previewCheckInterval);
+            }
             try {
                 window.removeEventListener("keydown", onKeyDownOnce);
+                window.removeEventListener(
+                    "entity-selected",
+                    handleEntityStateChange
+                );
+                window.removeEventListener(
+                    "entity-deselected",
+                    handleEntityStateChange
+                );
+                window.removeEventListener(
+                    "entity-hover-changed",
+                    handleEntityStateChange
+                );
             } catch (_) {}
             // Explicitly clear large references to help next mount
             try {
@@ -3494,6 +3541,19 @@ function TerrainBuilder(
                 onCameraPositionChange(threeCamera.position.clone());
             }
 
+            // Update TransformControls if SelectionTool has an active gizmo
+            if (toolManagerRef.current) {
+                const activeTool = toolManagerRef.current.getActiveTool();
+                if (
+                    activeTool?.name === "selection" &&
+                    activeTool?.transformControls
+                ) {
+                    // TransformControls needs to be updated each frame
+                    // It handles its own rendering, but needs camera updates
+                    activeTool.transformControls.update();
+                }
+            }
+
             // Step player physics if available
             try {
                 const physics = window.__WE_PHYSICS__;
@@ -4375,7 +4435,8 @@ function TerrainBuilder(
             <gridHelper position={[0.5, -0.5, 0.5]} ref={gridRef} />
             {window.__WE_PREVIEW_VISIBLE__ !== false &&
                 previewPosition &&
-                (modeRef.current === "add" || modeRef.current === "remove") && (
+                (modeRef.current === "add" || modeRef.current === "remove") &&
+                !shouldHidePreviewBlock && (
                     <group>
                         {getPlacementPositions(
                             previewPosition,

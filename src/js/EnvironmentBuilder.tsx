@@ -2193,7 +2193,77 @@ const EnvironmentBuilder = (
                     }
                 }
             },
-            getObjectPoolStats: () => ObjectPoolManager.getInstance().getAllStats()
+            getObjectPoolStats: () => ObjectPoolManager.getInstance().getAllStats(),
+            updateEntityInstance: (
+                modelUrl: string,
+                instanceId: number,
+                position: THREE.Vector3,
+                rotation: THREE.Euler,
+                scale: THREE.Vector3,
+                cameraPos?: THREE.Vector3
+            ) => {
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData || !instancedData.instances.has(instanceId)) {
+                    console.warn(`[EnvironmentBuilder] Cannot update entity: ${modelUrl}:${instanceId} not found`);
+                    return false;
+                }
+
+                const instanceData = instancedData.instances.get(instanceId);
+                if (!instanceData) return false;
+
+                // Update position, rotation, scale
+                instanceData.position.copy(position);
+                instanceData.rotation.copy(rotation);
+                instanceData.scale.copy(scale);
+
+                // Recompute matrix
+                const quaternion = getQuaternion().setFromEuler(rotation);
+                instanceData.matrix.compose(position, quaternion, scale);
+                releaseQuaternion(quaternion);
+
+                // Force instance to be visible during manipulation
+                instanceData.isVisible = true;
+
+                // Directly update the matrix in all instanced meshes for this model
+                // This ensures immediate visual update without waiting for rebuildVisibleInstances
+                if (instancedData.meshes && instancedData.meshes.length > 0) {
+                    console.log(`[EnvironmentBuilder] Updating instance ${instanceId} matrix directly`, {
+                        position: position.toArray(),
+                        instanceId,
+                        meshCount: instancedData.meshes.length
+                    });
+                    
+                    instancedData.meshes.forEach((mesh, meshIndex) => {
+                        if (mesh && instanceId < mesh.count) {
+                            // Update the matrix directly - this should immediately update the visual position
+                            mesh.setMatrixAt(instanceId, instanceData.matrix);
+                            console.log(`[EnvironmentBuilder] Updated mesh ${meshIndex} instance ${instanceId} matrix`);
+                        } else {
+                            console.warn(`[EnvironmentBuilder] Cannot update mesh ${meshIndex}: instanceId ${instanceId} >= mesh.count ${mesh?.count}`);
+                        }
+                    });
+                    
+                    // Mark instance matrix as needing update - this is critical for Three.js to upload changes
+                    instancedData.meshes.forEach((mesh, meshIndex) => {
+                        if (mesh) {
+                            mesh.instanceMatrix.needsUpdate = true;
+                            // Force bounding sphere recomputation to ensure proper rendering
+                            mesh.computeBoundingSphere();
+                            console.log(`[EnvironmentBuilder] Marked mesh ${meshIndex} instanceMatrix.needsUpdate = true`);
+                        }
+                    });
+                    
+                    // IMPORTANT: Don't call rebuildVisibleInstances here as it might overwrite
+                    // the direct matrix update we just made. The direct update is sufficient
+                    // for immediate visual feedback during manipulation.
+                    // rebuildVisibleInstances will be called when manipulation ends to ensure
+                    // proper culling state.
+                } else {
+                    console.warn(`[EnvironmentBuilder] No meshes found for model ${modelUrl}`);
+                }
+
+                return true;
+            }
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
     );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { FaAngleUp } from "react-icons/fa";
 import "../../css/BlockToolsOptions.css";
 import "../../css/BlockToolsSidebar.css";
@@ -15,6 +15,7 @@ import TerrainToolOptionsSection from "./TerrainToolOptionsSection";
 import ReplaceToolOptionsSection from "./ReplaceToolOptionsSection";
 import SkyboxOptionsSection from "./SkyboxOptionsSection";
 import LightingOptionsSection from "./LightingOptionsSection";
+import EntityOptionsSection from "./EntityOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -129,6 +130,28 @@ export function BlockToolOptions({
         return () => window.removeEventListener("activeToolChanged", handler);
     }, []);
 
+    // Ref for Selection Tool section to enable auto-scroll
+    const selectionToolSectionRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll to Selection Tool section when entity is selected
+    useEffect(() => {
+        const handleEntitySelected = () => {
+            // Only scroll if Selection Tool is active and section exists
+            if (activeTool === "selection" && selectionToolSectionRef.current) {
+                // Small delay to ensure DOM has updated
+                setTimeout(() => {
+                    selectionToolSectionRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                    });
+                }, 100);
+            }
+        };
+
+        window.addEventListener("entity-selected", handleEntitySelected);
+        return () => window.removeEventListener("entity-selected", handleEntitySelected);
+    }, [activeTool]);
+
     return (
         <div className="block-tool-options-container" style={{
             display: "flex",
@@ -219,12 +242,25 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTool === "selection" && (
-                    <CollapsibleSection title="Selection Tool" animationDelay="0.09s">
-                        <SelectionToolOptionsSection
-                            selectionTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]}
-                            isCompactMode={isCompactMode}
-                        />
-                    </CollapsibleSection>
+                    <>
+                        <div ref={selectionToolSectionRef}>
+                            <CollapsibleSection title="Selection Tool" animationDelay="0.09s">
+                                <SelectionToolOptionsSection
+                                    selectionTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]}
+                                    isCompactMode={isCompactMode}
+                                />
+                            </CollapsibleSection>
+                        </div>
+                        {/* Entity Options - Only show when entity is selected */}
+                        {terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]?.selectedEntity && (
+                            <CollapsibleSection title="Entity Options" animationDelay="0.12s">
+                                <EntityOptionsSection
+                                    selectedEntity={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]?.selectedEntity}
+                                    isCompactMode={isCompactMode}
+                                />
+                            </CollapsibleSection>
+                        )}
+                    </>
                 )}
                 {activeTool === "terrain" && (
                     <CollapsibleSection title="Terrain Tool" animationDelay="0.09s">

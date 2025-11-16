@@ -5,6 +5,12 @@ import QuickTipsManager from "../components/QuickTipsManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { SchematicData } from "../utils/SchematicPreviewRenderer";
 import { generateUniqueId } from "../components/AIAssistantPanel";
+import {
+    raycastEntities,
+    EntityRaycastResult,
+} from "../utils/EntityRaycastUtils";
+import { environmentModels } from "../EnvironmentBuilder";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 
 type SelectionMode = "move" | "copy" | "delete";
 
@@ -44,6 +50,53 @@ class SelectionTool extends BaseTool {
     originalTooltip = null;
     tooltip = null;
 
+    // Entity selection properties
+    hoveredEntity: EntityRaycastResult | null = null;
+    hoveredEntityBoundingBox: THREE.Group | null = null;
+    selectedEntity: {
+        modelUrl: string;
+        instanceId: number;
+        name: string;
+        originalPosition: THREE.Vector3;
+        originalRotation: THREE.Euler;
+        originalScale: THREE.Vector3;
+        currentPosition: THREE.Vector3;
+        currentRotation: THREE.Euler;
+        currentScale: THREE.Vector3;
+    } | null = null;
+    selectedEntityBoundingBox: THREE.Group | null = null;
+
+    // Raycaster and camera references for entity detection
+    threeRaycaster: THREE.Raycaster | null = null;
+    threeCamera: THREE.Camera | null = null;
+    pointer: THREE.Vector2 | null = null;
+    gl: THREE.WebGLRenderer | null = null;
+
+    // Gizmo system properties
+    transformControls: TransformControls | null = null;
+    gizmoMode: "translate" | "rotate" | "scale" = "translate";
+    gizmoObject: THREE.Object3D | null = null; // Helper object for gizmo attachment
+    isManipulating: boolean = false;
+    manipulationStartTransform: {
+        position: THREE.Vector3;
+        rotation: THREE.Euler;
+        scale: THREE.Vector3;
+    } | null = null;
+    // Bound event handlers for proper cleanup
+    onGizmoChangeBound: (() => void) | null = null;
+    onDraggingChangedBound: ((event: any) => void) | null = null;
+    onGizmoMouseDownBound: (() => void) | null = null;
+    onGizmoMouseUpBound: (() => void) | null = null;
+    // Sidebar event handlers
+    handleSidebarPositionChange: ((e: CustomEvent) => void) | null = null;
+    handleSidebarRotationChange: ((e: CustomEvent) => void) | null = null;
+    handleSidebarScaleChange: ((e: CustomEvent) => void) | null = null;
+
+    // Flag to indicate if we should hide the preview block
+    shouldHidePreviewBlock(): boolean {
+        return !!(this.hoveredEntity || this.selectedEntity);
+    }
+
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
         this.name = "SelectionTool";
@@ -61,7 +114,85 @@ class SelectionTool extends BaseTool {
                 terrainBuilderProps.environmentBuilderRef;
             this.pendingChangesRef = terrainBuilderProps.pendingChangesRef;
             this.undoRedoManager = terrainBuilderProps.undoRedoManager;
+            this.threeRaycaster = terrainBuilderProps.threeRaycaster;
+            this.threeCamera = terrainBuilderProps.threeCamera;
+            this.pointer = terrainBuilderProps.pointer;
+            this.gl = terrainBuilderProps.gl;
         }
+
+        // Initialize gizmo mode
+        this.gizmoMode = "translate";
+
+        // Listen for sidebar changes (when user edits values in EntityOptionsSection)
+        this.handleSidebarPositionChange = (e: CustomEvent) => {
+            if (this.selectedEntity && e.detail.position) {
+                // Store original transform for undo if not already stored
+                if (!this.manipulationStartTransform) {
+                    this.manipulationStartTransform = {
+                        position: this.selectedEntity.currentPosition.clone(),
+                        rotation: this.selectedEntity.currentRotation.clone(),
+                        scale: this.selectedEntity.currentScale.clone(),
+                    };
+                }
+                this.selectedEntity.currentPosition.copy(e.detail.position);
+                this.updateGizmoPosition();
+                this.updateEntityInstanceTransform();
+                this.updateSelectedEntityBoundingBox();
+                // Commit changes immediately when sidebar value changes
+                this.commitEntityChanges();
+            }
+        };
+
+        this.handleSidebarRotationChange = (e: CustomEvent) => {
+            if (this.selectedEntity && e.detail.rotation) {
+                // Store original transform for undo if not already stored
+                if (!this.manipulationStartTransform) {
+                    this.manipulationStartTransform = {
+                        position: this.selectedEntity.currentPosition.clone(),
+                        rotation: this.selectedEntity.currentRotation.clone(),
+                        scale: this.selectedEntity.currentScale.clone(),
+                    };
+                }
+                this.selectedEntity.currentRotation.copy(e.detail.rotation);
+                this.updateGizmoPosition();
+                this.updateEntityInstanceTransform();
+                this.updateSelectedEntityBoundingBox();
+                // Commit changes immediately when sidebar value changes
+                this.commitEntityChanges();
+            }
+        };
+
+        this.handleSidebarScaleChange = (e: CustomEvent) => {
+            if (this.selectedEntity && e.detail.scale) {
+                // Store original transform for undo if not already stored
+                if (!this.manipulationStartTransform) {
+                    this.manipulationStartTransform = {
+                        position: this.selectedEntity.currentPosition.clone(),
+                        rotation: this.selectedEntity.currentRotation.clone(),
+                        scale: this.selectedEntity.currentScale.clone(),
+                    };
+                }
+                this.selectedEntity.currentScale.copy(e.detail.scale);
+                this.updateGizmoPosition();
+                this.updateEntityInstanceTransform();
+                this.updateSelectedEntityBoundingBox();
+                // Commit changes immediately when sidebar value changes
+                this.commitEntityChanges();
+            }
+        };
+
+        window.addEventListener(
+            "entity-position-changed",
+            this.handleSidebarPositionChange
+        );
+        window.addEventListener(
+            "entity-rotation-changed",
+            this.handleSidebarRotationChange
+        );
+        window.addEventListener(
+            "entity-scale-changed",
+            this.handleSidebarScaleChange
+        );
     }
 
     onActivate(activationData) {
@@ -74,12 +205,15 @@ class SelectionTool extends BaseTool {
         this.selectionHeight = 1;
         this.verticalOffset = 0;
         this.rotation = 0;
+        // Don't dispose gizmo here - keep it if entity is still selected
         return true;
     }
 
     onDeactivate() {
         super.onDeactivate();
         this.removeSelectionPreview();
+        this.disposeGizmo();
+        this.deselectEntity();
         this.selectionStartPosition = null;
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
@@ -95,6 +229,56 @@ class SelectionTool extends BaseTool {
         const currentPosition = this.previewPositionRef.current;
 
         if (button === 0) {
+            // IMPORTANT: Don't process mouse events if TransformControls is active
+            // TransformControls handles its own mouse interaction
+            if (this.transformControls && this.isManipulating) {
+                // Let TransformControls handle this
+                return;
+            }
+
+            // Check if mouse is over TransformControls gizmo
+            // TransformControls uses its own raycasting, so we need to check if it's being dragged
+            if (this.transformControls && this.selectedEntity) {
+                // If TransformControls exists and entity is selected, let it handle the interaction
+                // We'll only deselect if clicking truly empty space (not on gizmo)
+                // TransformControls will set isManipulating when dragging starts
+                // For now, skip deselection when gizmo is active - let TransformControls handle it
+                // The dragging-changed event will tell us when manipulation starts/ends
+            }
+
+            // Check for entity selection first (if hovering over an entity)
+            if (
+                this.hoveredEntity &&
+                !this.selectedEntity &&
+                !this.selectionStartPosition
+            ) {
+                // Select the hovered entity
+                this.selectEntity(this.hoveredEntity);
+                return;
+            }
+
+            // Deselect entity if clicking empty space
+            // BUT: Don't deselect if we're currently manipulating the gizmo
+            // TransformControls handles its own pointer events, so if isManipulating is false
+            // and we click empty space, it means TransformControls didn't intercept the click
+            if (this.selectedEntity && !this.hoveredEntity) {
+                // Only deselect if we're not currently manipulating
+                // If TransformControls intercepts the click, isManipulating will be true
+                if (!this.isManipulating) {
+                    console.log(
+                        "[SelectionTool] Clicking empty space - deselecting entity"
+                    );
+                    this.deselectEntity();
+                    // Don't start area selection when deselecting entity
+                    return;
+                }
+                // If we're manipulating, let TransformControls handle it
+                console.log(
+                    "[SelectionTool] Click during manipulation - letting TransformControls handle"
+                );
+                return;
+            }
+
             if (
                 (this.selectedBlocks || this.selectedEnvironments) &&
                 this.selectionActive
@@ -106,8 +290,8 @@ class SelectionTool extends BaseTool {
             } else if (this.selectionStartPosition) {
                 // Complete the selection
                 this.completeSelection(currentPosition);
-            } else {
-                // Start new selection
+            } else if (!this.selectedEntity) {
+                // Start new selection (only if no entity is selected)
                 this.selectionStartPosition = currentPosition.clone();
                 this.updateSelectionPreview(
                     this.selectionStartPosition,
@@ -117,10 +301,80 @@ class SelectionTool extends BaseTool {
         }
     }
 
+    selectEntity(entityResult: EntityRaycastResult) {
+        // Store entity selection
+        this.selectedEntity = {
+            modelUrl: entityResult.entity.modelUrl,
+            instanceId: entityResult.entity.instanceId,
+            name: entityResult.entity.name,
+            originalPosition: entityResult.entity.position.clone(),
+            originalRotation: entityResult.entity.rotation.clone(),
+            originalScale: entityResult.entity.scale.clone(),
+            currentPosition: entityResult.entity.position.clone(),
+            currentRotation: entityResult.entity.rotation.clone(),
+            currentScale: entityResult.entity.scale.clone(),
+        };
+
+        // Remove hover bounding box and show selected bounding box
+        this.removeHoveredEntityBoundingBox();
+        this.updateSelectedEntityBoundingBox();
+
+        // Clear hover state
+        this.hoveredEntity = null;
+
+        // Setup gizmo for the selected entity
+        this.setupGizmo();
+
+        // Update tooltip
+        this.tooltip = `Entity Selected: ${this.selectedEntity.name}. Use gizmo to manipulate or edit in sidebar. Press G/R/S to switch modes.`;
+        QuickTipsManager.setToolTip(this.tooltip);
+
+        // Dispatch event for sidebar to update
+        window.dispatchEvent(
+            new CustomEvent("entity-selected", {
+                detail: { entity: this.selectedEntity },
+            })
+        );
+    }
+
+    deselectEntity() {
+        if (this.selectedEntity) {
+            // Commit any pending changes before deselecting
+            if (this.isManipulating) {
+                this.commitEntityChanges();
+            }
+
+            this.removeSelectedEntityBoundingBox();
+            this.disposeGizmo();
+            this.selectedEntity = null;
+            this.tooltip = this.originalTooltip;
+            QuickTipsManager.setToolTip(this.tooltip);
+
+            // Dispatch event for sidebar to update
+            window.dispatchEvent(new CustomEvent("entity-deselected"));
+        }
+    }
+
     handleMouseMove(event, position) {
         if (!this.previewPositionRef?.current) return;
 
         const currentPosition = this.previewPositionRef.current;
+
+        // First, check for entity hover (if no area selection is active)
+        if (
+            !this.selectionStartPosition &&
+            !this.selectedBlocks &&
+            !this.selectedEnvironments &&
+            !this.selectedEntity
+        ) {
+            const hadHover = !!this.hoveredEntity;
+            this.updateEntityHover();
+            const hasHover = !!this.hoveredEntity;
+            // Dispatch event if hover state changed
+            if (hadHover !== hasHover) {
+                window.dispatchEvent(new CustomEvent("entity-hover-changed"));
+            }
+        }
 
         if (this.selectionStartPosition && !this.selectedBlocks) {
             // Update selection preview
@@ -138,6 +392,34 @@ class SelectionTool extends BaseTool {
     }
 
     handleKeyDown(event) {
+        // Handle gizmo mode switching when entity is selected
+        if (this.selectedEntity) {
+            // Use Ctrl (or Cmd on Mac) alone to cycle through gizmo modes
+            // Check if Ctrl/Cmd is pressed and the key itself is Control/Meta (not a character key)
+            if (
+                (event.ctrlKey || event.metaKey) &&
+                (event.key === "Control" || event.key === "Meta") &&
+                !event.shiftKey &&
+                !event.altKey
+            ) {
+                event.preventDefault();
+                // Cycle through gizmo modes: translate -> rotate -> scale -> translate
+                const modes: ("translate" | "rotate" | "scale")[] = [
+                    "translate",
+                    "rotate",
+                    "scale",
+                ];
+                const currentIndex = modes.indexOf(this.gizmoMode);
+                const nextIndex = (currentIndex + 1) % modes.length;
+                this.setGizmoMode(modes[nextIndex]);
+                return;
+            } else if (event.key === "Escape") {
+                // Deselect entity on Escape
+                this.deselectEntity();
+                return;
+            }
+        }
+
         if (event.key === "Escape") {
             if (this.selectedBlocks || this.selectedEnvironments) {
                 this.resetSelectionState();
@@ -656,11 +938,279 @@ class SelectionTool extends BaseTool {
 
     dispose() {
         this.removeSelectionPreview();
+        this.removeHoveredEntityBoundingBox();
+        this.removeSelectedEntityBoundingBox();
+        this.disposeGizmo();
+
+        // Remove sidebar event listeners
+        if (this.handleSidebarPositionChange) {
+            window.removeEventListener(
+                "entity-position-changed",
+                this.handleSidebarPositionChange
+            );
+        }
+        if (this.handleSidebarRotationChange) {
+            window.removeEventListener(
+                "entity-rotation-changed",
+                this.handleSidebarRotationChange
+            );
+        }
+        if (this.handleSidebarScaleChange) {
+            window.removeEventListener(
+                "entity-scale-changed",
+                this.handleSidebarScaleChange
+            );
+        }
+
         this.selectionStartPosition = null;
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
         this.selectionActive = false;
+        this.hoveredEntity = null;
+        this.selectedEntity = null;
         super.dispose();
+    }
+
+    // Entity hover detection
+    updateEntityHover() {
+        if (
+            !this.threeRaycaster ||
+            !this.environmentBuilderRef?.current ||
+            !this.scene ||
+            !this.threeCamera ||
+            !this.pointer
+        ) {
+            return;
+        }
+
+        // Update raycaster with current pointer position
+        this.threeRaycaster.setFromCamera(this.pointer, this.threeCamera);
+
+        // Perform entity raycast
+        const result = raycastEntities(
+            this.threeRaycaster,
+            this.environmentBuilderRef,
+            100 // max distance
+        );
+
+        // Update hovered entity
+        if (result && result.entity) {
+            // Only update if it's a different entity
+            if (
+                !this.hoveredEntity ||
+                this.hoveredEntity.entity.instanceId !==
+                    result.entity.instanceId ||
+                this.hoveredEntity.entity.modelUrl !== result.entity.modelUrl
+            ) {
+                this.hoveredEntity = result;
+                this.updateHoveredEntityBoundingBox(result);
+            }
+        } else {
+            // No entity hovered
+            if (this.hoveredEntity) {
+                this.hoveredEntity = null;
+                this.removeHoveredEntityBoundingBox();
+            }
+        }
+    }
+
+    // Create bounding box for hovered entity
+    createEntityBoundingBox(
+        entity: EntityRaycastResult,
+        color: number = 0x00ffff
+    ): THREE.Group {
+        const group = new THREE.Group();
+        const model = environmentModels.find(
+            (m) => m.modelUrl === entity.entity.modelUrl
+        );
+
+        if (!model) return group;
+
+        // Get bounding box dimensions
+        const baseBboxWidth = model.boundingBoxWidth || 1;
+        const baseBboxHeight = model.boundingBoxHeight || 1;
+        const baseBboxDepth = model.boundingBoxDepth || 1;
+        const bboxCenter =
+            model.boundingBoxCenter || new THREE.Vector3(0, 0, 0);
+
+        // Apply entity scale to bounding box dimensions
+        const entityScale = entity.entity.scale || new THREE.Vector3(1, 1, 1);
+        const bboxWidth = baseBboxWidth * entityScale.x;
+        const bboxHeight = baseBboxHeight * entityScale.y;
+        const bboxDepth = baseBboxDepth * entityScale.z;
+
+        // Create box geometry with scaled dimensions
+        const geometry = new THREE.BoxGeometry(
+            bboxWidth,
+            bboxHeight,
+            bboxDepth
+        );
+
+        // Create wireframe edges with thicker appearance using cylindrical tubes
+        // Since WebGL doesn't support linewidth, we render edges as small cylinders
+        const edges = new THREE.EdgesGeometry(geometry);
+        const edgePositions = edges.attributes.position;
+        const tubeRadius = 0.08; // Thickness of the edge tubes
+        const tubeSegments = 8; // Number of segments around the tube
+
+        // Create reusable tube geometry for thick edges
+        const tubeGeometry = new THREE.CylinderGeometry(
+            tubeRadius,
+            tubeRadius,
+            1,
+            tubeSegments
+        );
+        const edgeMaterial = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.95,
+        });
+
+        // Render each edge as a cylinder
+        for (let i = 0; i < edgePositions.count; i += 2) {
+            const start = new THREE.Vector3(
+                edgePositions.getX(i),
+                edgePositions.getY(i),
+                edgePositions.getZ(i)
+            );
+            const end = new THREE.Vector3(
+                edgePositions.getX(i + 1),
+                edgePositions.getY(i + 1),
+                edgePositions.getZ(i + 1)
+            );
+
+            const direction = new THREE.Vector3().subVectors(end, start);
+            const length = direction.length();
+            if (length < 0.001) continue; // Skip zero-length edges
+
+            const center = new THREE.Vector3()
+                .addVectors(start, end)
+                .multiplyScalar(0.5);
+            const normalizedDirection = direction.clone().normalize();
+
+            const tube = new THREE.Mesh(tubeGeometry, edgeMaterial);
+            tube.position.copy(center);
+            tube.scale.set(1, length, 1); // Scale along Y axis (cylinder's default orientation)
+
+            // Rotate to align with edge direction
+            const up = new THREE.Vector3(0, 1, 0);
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(
+                up,
+                normalizedDirection
+            );
+            tube.setRotationFromQuaternion(quaternion);
+
+            group.add(tube);
+        }
+
+        // Also add traditional line segments for better edge definition
+        const lineMaterial = new THREE.LineBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 1.0,
+        });
+        const wireframe = new THREE.LineSegments(edges, lineMaterial);
+        group.add(wireframe);
+
+        // Position the bounding box group at entity position + scaled center offset
+        // Scale the center offset by the entity scale to maintain correct positioning
+        const scaledBboxCenter = bboxCenter.clone().multiply(entityScale);
+        const worldPos = entity.entity.position.clone().add(scaledBboxCenter);
+        group.position.copy(worldPos);
+        group.rotation.copy(entity.entity.rotation);
+
+        return group;
+    }
+
+    updateHoveredEntityBoundingBox(entity: EntityRaycastResult) {
+        this.removeHoveredEntityBoundingBox();
+        this.hoveredEntityBoundingBox = this.createEntityBoundingBox(
+            entity,
+            0x00ffff
+        ); // Cyan for hover
+        if (this.hoveredEntityBoundingBox && this.scene) {
+            this.scene.add(this.hoveredEntityBoundingBox);
+        }
+    }
+
+    removeHoveredEntityBoundingBox() {
+        if (this.hoveredEntityBoundingBox && this.scene) {
+            this.scene.remove(this.hoveredEntityBoundingBox);
+            // Dispose geometry and material
+            this.hoveredEntityBoundingBox.traverse((child) => {
+                if (child instanceof THREE.LineSegments) {
+                    child.geometry.dispose();
+                    if (child.material instanceof THREE.Material) {
+                        child.material.dispose();
+                    }
+                }
+            });
+            this.hoveredEntityBoundingBox = null;
+        }
+    }
+
+    // Helper to position bounding box group
+    positionBoundingBoxGroup(group: THREE.Group, entity: EntityRaycastResult) {
+        const model = environmentModels.find(
+            (m) => m.modelUrl === entity.entity.modelUrl
+        );
+        if (!model) return;
+
+        const bboxCenter =
+            model.boundingBoxCenter || new THREE.Vector3(0, 0, 0);
+        const worldPos = entity.entity.position.clone().add(bboxCenter);
+        group.position.copy(worldPos);
+        group.rotation.copy(entity.entity.rotation);
+    }
+
+    updateSelectedEntityBoundingBox() {
+        if (!this.selectedEntity) {
+            this.removeSelectedEntityBoundingBox();
+            return;
+        }
+
+        this.removeSelectedEntityBoundingBox();
+
+        // Create EntityRaycastResult-like object for bounding box creation
+        const entityResult: EntityRaycastResult = {
+            entity: {
+                modelUrl: this.selectedEntity.modelUrl,
+                instanceId: this.selectedEntity.instanceId,
+                name: this.selectedEntity.name,
+                position: this.selectedEntity.currentPosition,
+                rotation: this.selectedEntity.currentRotation,
+                scale: this.selectedEntity.currentScale,
+            },
+            distance: 0,
+            point: this.selectedEntity.currentPosition.clone(),
+        };
+
+        this.selectedEntityBoundingBox = this.createEntityBoundingBox(
+            entityResult,
+            0xffff00
+        ); // Yellow for selected
+        if (this.selectedEntityBoundingBox && this.scene) {
+            this.scene.add(this.selectedEntityBoundingBox);
+        }
+    }
+
+    removeSelectedEntityBoundingBox() {
+        if (this.selectedEntityBoundingBox && this.scene) {
+            this.scene.remove(this.selectedEntityBoundingBox);
+            // Dispose geometry and material
+            this.selectedEntityBoundingBox.traverse((child) => {
+                if (
+                    child instanceof THREE.Mesh ||
+                    child instanceof THREE.LineSegments
+                ) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material instanceof THREE.Material) {
+                        child.material.dispose();
+                    }
+                }
+            });
+            this.selectedEntityBoundingBox = null;
+        }
     }
 
     // Helper method to rotate a position around the center point
@@ -883,6 +1433,390 @@ class SelectionTool extends BaseTool {
             QuickTipsManager.setToolTip("Error saving. See console.");
             setTimeout(() => QuickTipsManager.setToolTip(this.tooltip), 3000);
         }
+    }
+
+    // ========== Gizmo System Methods ==========
+
+    setupGizmo() {
+        if (!this.selectedEntity || !this.scene || !this.threeCamera) {
+            return;
+        }
+
+        // Dispose existing gizmo if any
+        this.disposeGizmo();
+
+        // Create helper object at entity position
+        this.gizmoObject = new THREE.Object3D();
+        this.gizmoObject.position.copy(this.selectedEntity.currentPosition);
+        this.gizmoObject.rotation.copy(this.selectedEntity.currentRotation);
+        this.gizmoObject.scale.copy(this.selectedEntity.currentScale);
+
+        // IMPORTANT: Add gizmoObject to scene BEFORE attaching TransformControls
+        // TransformControls requires the attached object to be in the scene graph
+        this.scene.add(this.gizmoObject);
+
+        // Get renderer domElement for TransformControls
+        // TransformControls needs access to the canvas for mouse events
+        let domElement = null;
+        if (this.gl?.domElement) {
+            domElement = this.gl.domElement;
+        } else if (this.terrainBuilderRef?.current?.gl?.domElement) {
+            domElement = this.terrainBuilderRef.current.gl.domElement;
+        } else if (
+            this.scene &&
+            (this.scene as any).userData?.renderer?.domElement
+        ) {
+            domElement = (this.scene as any).userData.renderer.domElement;
+        }
+
+        if (!domElement) {
+            console.warn(
+                "[SelectionTool] Cannot setup gizmo: no DOM element found"
+            );
+            // Clean up gizmoObject if we can't proceed
+            this.scene.remove(this.gizmoObject);
+            this.gizmoObject = null;
+            return;
+        }
+
+        // Create TransformControls
+        this.transformControls = new TransformControls(
+            this.threeCamera,
+            domElement
+        );
+        this.transformControls.attach(this.gizmoObject);
+        this.transformControls.setMode(this.gizmoMode);
+        this.transformControls.setSpace("world"); // Use world space by default
+
+        // Configure gizmo appearance
+        this.transformControls.setSize(1.0);
+        this.transformControls.showX = true;
+        this.transformControls.showY = true;
+        this.transformControls.showZ = true;
+
+        // Add TransformControls to scene
+        // Note: TransformControls manages its own rendering, but needs to be in scene
+        this.scene.add(this.transformControls);
+
+        // Set up event listeners with bound methods
+        this.transformControls.addEventListener(
+            "change",
+            (this.onGizmoChangeBound = () => {
+                console.log(
+                    "[SelectionTool] TransformControls change event fired"
+                );
+                this.onGizmoChange();
+            })
+        );
+        this.transformControls.addEventListener(
+            "dragging-changed",
+            (this.onDraggingChangedBound = (event: any) => {
+                this.onDraggingChanged(event.value);
+            })
+        );
+        this.transformControls.addEventListener(
+            "mouseDown",
+            (this.onGizmoMouseDownBound = () => {
+                console.log(
+                    "[SelectionTool] Gizmo mouseDown - preventing deselection"
+                );
+                this.onGizmoMouseDown();
+            })
+        );
+        this.transformControls.addEventListener(
+            "mouseUp",
+            (this.onGizmoMouseUpBound = () => {
+                console.log("[SelectionTool] Gizmo mouseUp");
+                this.onGizmoMouseUp();
+            })
+        );
+
+        // Track if TransformControls is handling pointer events
+        // This helps us know when to skip deselection
+        this.transformControls.addEventListener("objectChange", () => {
+            // This fires when TransformControls starts interacting
+            console.log(
+                "[SelectionTool] TransformControls objectChange - interaction started"
+            );
+        });
+    }
+
+    disposeGizmo() {
+        if (this.transformControls && this.scene) {
+            // Remove event listeners using bound handlers
+            if (this.onGizmoChangeBound) {
+                this.transformControls.removeEventListener(
+                    "change",
+                    this.onGizmoChangeBound
+                );
+            }
+            if (this.onDraggingChangedBound) {
+                this.transformControls.removeEventListener(
+                    "dragging-changed",
+                    this.onDraggingChangedBound
+                );
+            }
+            if (this.onGizmoMouseDownBound) {
+                this.transformControls.removeEventListener(
+                    "mouseDown",
+                    this.onGizmoMouseDownBound
+                );
+            }
+            if (this.onGizmoMouseUpBound) {
+                this.transformControls.removeEventListener(
+                    "mouseUp",
+                    this.onGizmoMouseUpBound
+                );
+            }
+
+            // Remove from scene
+            this.scene.remove(this.transformControls);
+            this.transformControls.dispose();
+            this.transformControls = null;
+        }
+
+        if (this.gizmoObject && this.scene) {
+            this.scene.remove(this.gizmoObject);
+            this.gizmoObject = null;
+        }
+
+        // Clear bound handlers
+        this.onGizmoChangeBound = null;
+        this.onDraggingChangedBound = null;
+        this.onGizmoMouseDownBound = null;
+        this.onGizmoMouseUpBound = null;
+
+        this.isManipulating = false;
+        this.manipulationStartTransform = null;
+    }
+
+    setGizmoMode(mode: "translate" | "rotate" | "scale") {
+        if (this.gizmoMode === mode) return;
+
+        this.gizmoMode = mode;
+
+        if (this.transformControls) {
+            this.transformControls.setMode(mode);
+        } else if (this.selectedEntity) {
+            // If gizmo doesn't exist yet, recreate it with new mode
+            this.setupGizmo();
+        }
+
+        // Update tooltip
+        const modeNames = {
+            translate: "Move",
+            rotate: "Rotate",
+            scale: "Scale",
+        };
+        QuickTipsManager.setToolTip(`Gizmo Mode: ${modeNames[mode]}`);
+
+        // Dispatch event for UI updates
+        window.dispatchEvent(
+            new CustomEvent("gizmo-mode-changed", {
+                detail: { mode },
+            })
+        );
+    }
+
+    updateGizmoPosition() {
+        if (!this.selectedEntity || !this.gizmoObject) {
+            return;
+        }
+
+        // Sync gizmo helper object with entity transform
+        this.gizmoObject.position.copy(this.selectedEntity.currentPosition);
+        this.gizmoObject.rotation.copy(this.selectedEntity.currentRotation);
+        this.gizmoObject.scale.copy(this.selectedEntity.currentScale);
+    }
+
+    onGizmoChange() {
+        console.log("[SelectionTool] onGizmoChange called");
+        if (!this.gizmoObject || !this.selectedEntity) {
+            console.warn(
+                "[SelectionTool] onGizmoChange: Missing gizmoObject or selectedEntity",
+                {
+                    hasGizmoObject: !!this.gizmoObject,
+                    hasSelectedEntity: !!this.selectedEntity,
+                }
+            );
+            return;
+        }
+
+        // Update entity transform from gizmo helper object
+        // Ensure matrix is up to date
+        this.gizmoObject.updateMatrixWorld(false);
+
+        this.selectedEntity.currentPosition.copy(this.gizmoObject.position);
+        this.selectedEntity.currentRotation.copy(this.gizmoObject.rotation);
+        this.selectedEntity.currentScale.copy(this.gizmoObject.scale);
+
+        console.log("[SelectionTool] Updated entity transform:", {
+            position: this.selectedEntity.currentPosition.toArray(),
+            rotation: this.selectedEntity.currentRotation.toArray(),
+            scale: this.selectedEntity.currentScale.toArray(),
+        });
+
+        // Update entity instance in EnvironmentBuilder (without saving yet)
+        this.updateEntityInstanceTransform();
+
+        // Update bounding box visualization to match new position
+        // This ensures the bounding box moves with the entity
+        this.updateSelectedEntityBoundingBox();
+
+        // Dispatch event for sidebar to update
+        window.dispatchEvent(
+            new CustomEvent("entity-transform-changed", {
+                detail: {
+                    position: this.selectedEntity.currentPosition.clone(),
+                    rotation: this.selectedEntity.currentRotation.clone(),
+                    scale: this.selectedEntity.currentScale.clone(),
+                },
+            })
+        );
+    }
+
+    onDraggingChanged(isDragging: boolean) {
+        console.log("[SelectionTool] Dragging changed:", isDragging);
+        this.isManipulating = isDragging;
+
+        // Disable camera controls while dragging gizmo
+        if (this.terrainBuilderRef?.current?.orbitControlsRef?.current) {
+            const controls =
+                this.terrainBuilderRef.current.orbitControlsRef.current;
+            controls.enabled = !isDragging;
+        }
+
+        // Prevent deselection while manipulating
+        // The entity should stay selected during gizmo manipulation
+    }
+
+    onGizmoMouseDown() {
+        if (!this.selectedEntity) return;
+
+        // Store original transform for undo
+        this.manipulationStartTransform = {
+            position: this.selectedEntity.currentPosition.clone(),
+            rotation: this.selectedEntity.currentRotation.clone(),
+            scale: this.selectedEntity.currentScale.clone(),
+        };
+    }
+
+    onGizmoMouseUp() {
+        if (this.isManipulating && this.selectedEntity) {
+            // Commit changes to database
+            this.commitEntityChanges();
+        }
+        this.isManipulating = false;
+    }
+
+    updateEntityInstanceTransform() {
+        if (
+            !this.selectedEntity ||
+            !this.environmentBuilderRef?.current ||
+            !this.threeCamera
+        ) {
+            console.warn(
+                "[SelectionTool] Cannot update entity instance transform: missing dependencies",
+                {
+                    hasSelectedEntity: !!this.selectedEntity,
+                    hasEnvBuilder: !!this.environmentBuilderRef?.current,
+                    hasCamera: !!this.threeCamera,
+                }
+            );
+            return;
+        }
+
+        // Update the entity instance in EnvironmentBuilder
+        const envBuilder = this.environmentBuilderRef.current;
+
+        // Get camera position for rebuilding visible instances
+        const cameraPosition = this.threeCamera.position.clone();
+
+        // Update the entity instance transform
+        if (envBuilder.updateEntityInstance) {
+            console.log("[SelectionTool] Calling updateEntityInstance with:", {
+                modelUrl: this.selectedEntity.modelUrl,
+                instanceId: this.selectedEntity.instanceId,
+                position: this.selectedEntity.currentPosition.toArray(),
+                rotation: this.selectedEntity.currentRotation.toArray(),
+                scale: this.selectedEntity.currentScale.toArray(),
+            });
+
+            const success = envBuilder.updateEntityInstance(
+                this.selectedEntity.modelUrl,
+                this.selectedEntity.instanceId,
+                this.selectedEntity.currentPosition,
+                this.selectedEntity.currentRotation,
+                this.selectedEntity.currentScale,
+                cameraPosition // Pass camera position for efficient rebuilding
+            );
+            console.log(
+                "[SelectionTool] updateEntityInstance result:",
+                success
+            );
+        } else {
+            console.warn(
+                "[SelectionTool] EnvironmentBuilder.updateEntityInstance method not found"
+            );
+        }
+    }
+
+    commitEntityChanges() {
+        if (!this.selectedEntity || !this.environmentBuilderRef?.current) {
+            return;
+        }
+
+        // Update entity instance in EnvironmentBuilder
+        this.updateEntityInstanceTransform();
+
+        // Update bounding box to reflect final scale (especially important for scale changes)
+        this.updateSelectedEntityBoundingBox();
+
+        // After manipulation ends, rebuild visible instances to ensure proper culling state
+        const envBuilder = this.environmentBuilderRef.current;
+        if (envBuilder.rebuildVisibleInstances && this.threeCamera) {
+            const cameraPos = this.threeCamera.position.clone();
+            envBuilder.rebuildVisibleInstances(
+                this.selectedEntity.modelUrl,
+                cameraPos
+            );
+        }
+
+        // Save to database
+        if (envBuilder.updateLocalStorage) {
+            envBuilder.updateLocalStorage();
+        }
+
+        // Create undo/redo entry
+        if (this.undoRedoManager?.current && this.manipulationStartTransform) {
+            const changes = {
+                terrain: { added: {}, removed: {} },
+                environment: {
+                    added: [
+                        {
+                            modelUrl: this.selectedEntity.modelUrl,
+                            instanceId: this.selectedEntity.instanceId,
+                            position: this.selectedEntity.currentPosition,
+                            rotation: this.selectedEntity.currentRotation,
+                            scale: this.selectedEntity.currentScale,
+                        },
+                    ],
+                    removed: [
+                        {
+                            modelUrl: this.selectedEntity.modelUrl,
+                            instanceId: this.selectedEntity.instanceId,
+                            position: this.manipulationStartTransform.position,
+                            rotation: this.manipulationStartTransform.rotation,
+                            scale: this.manipulationStartTransform.scale,
+                        },
+                    ],
+                },
+            };
+            this.undoRedoManager.current.saveUndo(changes);
+        }
+
+        // Clear manipulation state
+        this.manipulationStartTransform = null;
     }
 }
 
