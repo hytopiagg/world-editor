@@ -24,6 +24,7 @@
     right: 1vh;
     transform: translateY(-50%);
     gap: 16px;
+    box-sizing: border-box; /* Ensure consistent sizing across platforms */
 }
 
 .settings-menu {

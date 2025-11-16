@@ -12,7 +12,7 @@
 
 .block-tools-sidebar {
     position: absolute;
-    width: 300px;
+    width: 300px; /* Default, overridden by inline styles in component */
     margin-left: 1vh;
     border-radius: 12px;
     border: none;
@@ -24,6 +24,7 @@
     pointer-events: all;
     top: 50%;
     transform: translateY(-50%);
+    box-sizing: border-box; /* Ensure consistent sizing across platforms */
 }
 
 /* Block Buttons Grid */
@@ -39,6 +40,7 @@
     scroll-padding: 0px;
     overflow-x: hidden;
     align-content: flex-start;
+    box-sizing: border-box; /* Ensure consistent sizing across platforms */
 }
 
 /* Custom Scrollbar Styles */
@@ -69,6 +71,8 @@ button.block-button {
     flex-shrink: 0;
     cursor: pointer;
     transition: all 0.2s ease;
+    /* Ensure exactly 4 blocks per row: (100% width - 3 gaps of 6px) / 4 */
+    flex-basis: calc((100% - 18px) / 4);
 }
 
 .block-button:hover {

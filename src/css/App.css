@@ -378,3 +378,20 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield; /* Firefox */
 }
+
+/* ==========================================================================
+   Hide Scrollbars - Keep Scrolling Functionality
+   ========================================================================== */
+
+/* Firefox - hide scrollbar */
+* {
+  scrollbar-width: none;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) - hide scrollbar */
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+}
