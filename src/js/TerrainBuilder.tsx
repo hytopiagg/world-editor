@@ -3771,7 +3771,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             window.__WE_PLAYER_MESH_LOADING__ = true;
                             const loader = new GLTFLoader();
                             loader.load(
-                                "./assets/models/player/player.gltf",
+                                "./assets/models/players/player.gltf",
                                 (gltf) => {
                                     const obj = gltf.scene || gltf.scenes?.[0];
                                     if (obj) {

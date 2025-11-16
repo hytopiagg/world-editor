@@ -741,7 +741,7 @@ const ParticleEmitterRenderer = ({
 
 ```typescript
 const PlayerModel = () => {
-    const { scene } = useGLTF("./assets/models/player/player.gltf");
+    const { scene } = useGLTF("./assets/models/players/player.gltf");
     const modelRef = useRef<THREE.Group>(null);
 
     useEffect(() => {
