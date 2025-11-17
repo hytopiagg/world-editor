@@ -35,9 +35,10 @@ export default function ParticleViewerSidebar({
         <aside className="bg-[#0e1117] border-r-0 p-5 flex flex-col gap-4 overflow-y-auto w-[280px]">
             {/* Target Object Selector */}
             <div className="flex flex-col gap-3">
-                <h2 className="text-white/60 text-sm font-semibold uppercase tracking-wide">
+                <h2 className="text-white/60 text-sm font-semibold uppercase tracking-wide text-left">
                     Target Object
                 </h2>
+                <div className="h-px bg-white/10"></div>
                 <TargetObjectSelector 
                     value={targetObject} 
                     onChange={(target) => {
@@ -93,6 +94,7 @@ export default function ParticleViewerSidebar({
                         New
                     </button>
                 </div>
+                <div className="h-px bg-white/10"></div>
 
                 <ParticleEmitterList
                     emitters={emitters}

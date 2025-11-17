@@ -51,7 +51,6 @@ function PlayModeController({
     const mouseSensitivity = 0.002;
     const cameraYawRef = useRef(0);
     const cameraPitchRef = useRef(0);
-    const isPointerLockedRef = useRef(false);
     const playerMixerRef = useRef<THREE.AnimationMixer | null>(null);
     const playerAnimationsRef = useRef<Record<string, THREE.AnimationAction>>({});
     const playerActiveTagRef = useRef<string | undefined>(undefined);
@@ -150,15 +149,28 @@ function PlayModeController({
         }
     }, [playModeEnabled, targetObject]);
 
-    // Mouse movement for camera rotation
+    // Mouse movement for camera rotation (no pointer lock)
     useEffect(() => {
         if (!playModeEnabled) return;
 
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        const handleMouseDown = (e: MouseEvent) => {
+            // Only start dragging if clicking on the canvas (not UI elements)
+            if ((e.target as HTMLElement)?.tagName === 'CANVAS') {
+                isDragging = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }
+        };
+
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isPointerLockedRef.current) return;
+            if (!isDragging) return;
             
-            const deltaX = e.movementX * mouseSensitivity;
-            const deltaY = e.movementY * mouseSensitivity;
+            const deltaX = (e.clientX - lastMouseX) * mouseSensitivity * 10; // Scale up since we're not using movementX
+            const deltaY = (e.clientY - lastMouseY) * mouseSensitivity * 10;
 
             cameraYawRef.current -= deltaX;
             cameraPitchRef.current -= deltaY;
@@ -171,32 +183,23 @@ function PlayModeController({
                 camera.rotation.y = cameraYawRef.current;
                 camera.rotation.x = cameraPitchRef.current;
             }
+
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
         };
 
-        const handlePointerLockChange = () => {
-            isPointerLockedRef.current = document.pointerLockElement !== null;
+        const handleMouseUp = () => {
+            isDragging = false;
         };
 
-        const canvas = document.querySelector('canvas');
-        if (canvas) {
-            canvas.addEventListener('click', () => {
-                if (playModeEnabled && !isPointerLockedRef.current) {
-                    canvas.requestPointerLock();
-                }
-            });
-        }
-
+        document.addEventListener('mousedown', handleMouseDown);
         document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('pointerlockchange', handlePointerLockChange);
-        document.addEventListener('pointerlockerror', handlePointerLockChange);
+        document.addEventListener('mouseup', handleMouseUp);
 
         return () => {
+            document.removeEventListener('mousedown', handleMouseDown);
             document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('pointerlockchange', handlePointerLockChange);
-            document.removeEventListener('pointerlockerror', handlePointerLockChange);
-            if (document.pointerLockElement) {
-                document.exitPointerLock();
-            }
+            document.removeEventListener('mouseup', handleMouseUp);
         };
     }, [playModeEnabled, camera, targetObject]);
 
@@ -580,7 +583,7 @@ export default function ParticleViewerCanvas({
             />
 
             {/* Grid Helper */}
-            <Grid args={[20, 20]} cellColor="#6f6f6f" sectionColor="#9d4b4b" fadeDistance={25} />
+            <Grid args={[100, 100]} cellColor="#ffffff" sectionColor="#ffffff" fadeDistance={25} />
 
             {/* Target Object */}
             <TargetObjectRenderer 

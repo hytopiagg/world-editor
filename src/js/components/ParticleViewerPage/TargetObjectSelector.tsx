@@ -52,14 +52,14 @@ export default function TargetObjectSelector({
     ];
 
     return (
-        <div className="flex flex-col gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
             {options.map((option) => (
                 <label
                     key={option.value}
-                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+                    className={`flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg cursor-pointer transition-colors ${
                         value === option.value
-                            ? "bg-white/10 text-white"
-                            : "bg-transparent text-white/60 hover:bg-white/5"
+                            ? "bg-white/10 text-white border border-white/20"
+                            : "bg-white/5 text-white/60 hover:bg-white/10 border border-transparent"
                     }`}
                 >
                     <input
@@ -70,8 +70,8 @@ export default function TargetObjectSelector({
                         onChange={() => onChange(option.value)}
                         className="sr-only"
                     />
-                    <div className="flex-shrink-0 text-white/60">{option.icon}</div>
-                    <span className="text-sm text-white/60">{option.label}</span>
+                    <div className={`${value === option.value ? "text-white" : "text-white/60"}`}>{option.icon}</div>
+                    <span className={`text-xs ${value === option.value ? "text-white" : "text-white/60"}`}>{option.label}</span>
                 </label>
             ))}
         </div>

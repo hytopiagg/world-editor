@@ -23,6 +23,8 @@ export default function ParticleEmitterRenderer({
   const emitterRef = useRef<ParticleEmitter | null>(null);
   const { scene } = useThree();
   const lastTimeRef = useRef<number>(0);
+  const lastAttachedObjectRef = useRef<THREE.Object3D | null>(null); // Track what we're currently attached to
+  const lastAttachmentNodeRef = useRef<string | undefined>(undefined); // Track attachment node
 
   // Convert config to ParticleEmitterCoreOptions
   const coreOptions = useMemo<ParticleEmitterCoreOptions>(() => {
@@ -110,7 +112,7 @@ export default function ParticleEmitterRenderer({
     return options;
   }, [config]);
 
-  // Create emitter instance
+  // Create emitter instance (only when ID changes, not texture)
   useEffect(() => {
     const emitter = new ParticleEmitter({
       id: config.id,
@@ -128,11 +130,15 @@ export default function ParticleEmitterRenderer({
       emitter.pause();
     }
 
+    // Reset attachment tracking when emitter is recreated
+    lastAttachedObjectRef.current = null;
+    lastAttachmentNodeRef.current = undefined;
+
     return () => {
       emitter.dispose();
       scene.remove(emitter.mesh);
     };
-  }, [config.id, config.textureUri, scene]); // Only recreate on id/texture change
+  }, [config.id, scene]); // Only recreate on id change, NOT texture change
 
   // Update emitter parameters when config changes
   useEffect(() => {
@@ -140,6 +146,12 @@ export default function ParticleEmitterRenderer({
 
     const emitter = emitterRef.current;
     const updates: Partial<ParticleEmitterCoreOptions> = {};
+
+    // Update texture URI if changed (without recreating emitter)
+    if (config.textureUri && emitterRef.current) {
+      emitterRef.current.setTextureUri(config.textureUri);
+      console.log(`[ParticleEmitter:${config.id}] Texture URI updated to: ${config.textureUri}`);
+    }
 
     // Update all parameters that might have changed
     if (config.alphaTest !== undefined) updates.alphaTest = config.alphaTest;
@@ -170,9 +182,12 @@ export default function ParticleEmitterRenderer({
       emitter.restart();
     }
 
-    // Update position/offset
-    if (config.position) {
-      emitter.setPosition(new THREE.Vector3(config.position.x, config.position.y, config.position.z));
+    // Update position/offset (only if not attached - attachment handles position)
+    // Don't update position if attached, as it will be handled by attachment
+    if (!config.attachedToTarget) {
+      if (config.position) {
+        emitter.setPosition(new THREE.Vector3(config.position.x, config.position.y, config.position.z));
+      }
     }
     if (config.offset) {
       emitter.setOffset(new THREE.Vector3(config.offset.x, config.offset.y, config.offset.z));
@@ -190,6 +205,37 @@ export default function ParticleEmitterRenderer({
     const currentTargetObject = targetObjectRef?.current;
     const currentBoneMap = boneMapRef?.current;
 
+    // Check if attachment state has actually changed
+    const attachmentNodeChanged = lastAttachmentNodeRef.current !== config.attachmentNode;
+    const attachedToTargetChanged = (lastAttachedObjectRef.current === null) !== (!config.attachedToTarget);
+    
+    // Check if target object changed by comparing UUIDs (more reliable than object reference)
+    const currentTargetUuid = currentTargetObject?.uuid;
+    const lastAttachedUuid = lastAttachedObjectRef.current?.uuid;
+    const targetObjectChanged = currentTargetUuid !== lastAttachedUuid;
+    
+    // Also check if we're attached to a bone and need to verify it's still valid
+    let boneStillValid = true;
+    if (config.attachmentNode && lastAttachedObjectRef.current && currentBoneMap) {
+      const expectedBone = currentBoneMap.get(config.attachmentNode) || currentBoneMap.get(config.attachmentNode.toLowerCase());
+      if (expectedBone && lastAttachedObjectRef.current.uuid !== expectedBone.uuid) {
+        boneStillValid = false;
+        console.log(`[ParticleEmitter:${config.id}] Bone UUID mismatch - need to re-attach`);
+      }
+    }
+
+    // If we're already attached to the right object and config hasn't changed, don't re-attach
+    if (!attachmentNodeChanged && !attachedToTargetChanged && !targetObjectChanged && boneStillValid &&
+        config.attachedToTarget && lastAttachedObjectRef.current !== null) {
+      console.log(`[ParticleEmitter:${config.id}] Attachment state unchanged, skipping re-attachment`, {
+        lastAttachedUuid,
+        currentTargetUuid,
+        attachmentNode: config.attachmentNode,
+        boneStillValid,
+      });
+      return;
+    }
+
     console.log(`[ParticleEmitter:${config.id}] Attachment check:`, {
       attachedToTarget: config.attachedToTarget,
       attachmentNode: config.attachmentNode,
@@ -204,6 +250,7 @@ export default function ParticleEmitterRenderer({
       hasBoneMapRef: !!currentBoneMap,
       boneMapSize: currentBoneMap?.size || 0,
       boneMapKeys: currentBoneMap ? Array.from(currentBoneMap.keys()).slice(0, 10) : [], // Log first 10 keys
+      attachmentStateChanged: attachmentNodeChanged || attachedToTargetChanged || targetObjectChanged || !boneStillValid,
     });
 
     if (config.attachedToTarget && currentTargetObject) {
@@ -226,6 +273,8 @@ export default function ParticleEmitterRenderer({
           console.log(`[ParticleEmitter:${config.id}] Bone world position:`, worldPos.toArray());
           console.log(`[ParticleEmitter:${config.id}] Bone parent:`, bone.parent ? { name: bone.parent.name, type: bone.parent.type } : 'none');
           emitterRef.current.attachToObject(bone);
+          lastAttachedObjectRef.current = bone;
+          lastAttachmentNodeRef.current = config.attachmentNode;
           console.log(`[ParticleEmitter:${config.id}] ✓ Attached to bone`);
         } else {
           console.warn(`[ParticleEmitter:${config.id}] ✗ Bone "${config.attachmentNode}" not found in bone map! Falling back to root object.`);
@@ -235,6 +284,8 @@ export default function ParticleEmitterRenderer({
             position: currentTargetObject.position.toArray(),
           });
           emitterRef.current.attachToObject(currentTargetObject);
+          lastAttachedObjectRef.current = currentTargetObject;
+          lastAttachmentNodeRef.current = undefined;
           console.log(`[ParticleEmitter:${config.id}] ✓ Attached to root object (fallback)`);
         }
       } else {
@@ -249,19 +300,24 @@ export default function ParticleEmitterRenderer({
           position: currentTargetObject.position.toArray(),
         });
         emitterRef.current.attachToObject(currentTargetObject);
+        lastAttachedObjectRef.current = currentTargetObject;
+        lastAttachmentNodeRef.current = config.attachmentNode;
         console.log(`[ParticleEmitter:${config.id}] ✓ Attached to root object`);
       }
     } else {
       if (!config.attachedToTarget) {
         console.log(`[ParticleEmitter:${config.id}] Not attached to target (attachedToTarget=false)`);
+        emitterRef.current.attachToObject(null);
+        lastAttachedObjectRef.current = null;
+        lastAttachmentNodeRef.current = undefined;
+        console.log(`[ParticleEmitter:${config.id}] ✓ Detached from object`);
       } else {
         console.warn(`[ParticleEmitter:${config.id}] Want to attach but no target object ref available! Will retry when object becomes available.`);
         // Don't detach immediately - wait for object to become available
         // This handles the case where play mode starts but player mesh hasn't loaded yet
+        // Keep the last attached object reference so we don't lose track
         return;
       }
-      emitterRef.current.attachToObject(null);
-      console.log(`[ParticleEmitter:${config.id}] ✓ Detached from object`);
     }
   }, [config.attachedToTarget, config.attachmentNode, config.id, targetObject, targetObjectRef, boneMapRef]);
 
