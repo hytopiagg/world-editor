@@ -76,6 +76,16 @@ const NAV_ITEMS = [
             </svg>
         )
     },
+    {
+        key: 'particle-viewer', label: 'Particle Viewer', icon: (
+            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
+                <circle cx="8" cy="8" r="2" />
+                <circle cx="16" cy="8" r="2" />
+                <circle cx="8" cy="16" r="2" />
+                <circle cx="16" cy="16" r="2" />
+            </svg>
+        )
+    },
 ];
 
 const ProjectSidebar: React.FC<Props> = ({ activeNav, setActiveNav, hoverNav, setHoverNav }) => {

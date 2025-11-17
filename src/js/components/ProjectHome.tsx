@@ -9,6 +9,7 @@ import ProjectListCard from "./ProjectListCard";
 import { DatabaseManager as DB } from "../managers/DatabaseManager";
 import ProjectFolderCard from "./ProjectFolderCard";
 import ModalContainer from "./ModalContainer";
+import ParticleViewerPage from "./ParticleViewerPage";
 
 type Project = {
     id: string;
@@ -82,6 +83,20 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             return hash;
         } catch (_) { return 'my-files'; }
     });
+
+    // Listen for hash changes
+    useEffect(() => {
+        const handleHashChange = () => {
+            try {
+                const hash = window.location.hash.replace('#', '') || 'my-files';
+                setActiveNav(hash);
+            } catch (_) {
+                setActiveNav('my-files');
+            }
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
     const [hoverNav, setHoverNav] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     // inline menu state is now self-contained in card components
@@ -275,6 +290,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     useEffect(() => {
         try { (window as any).__PH_SELECTED__ = selectedIds || []; } catch (_) { }
     }, [selectedIds]);
+
+    // Handle particle-viewer route - must be after all hooks
+    if (activeNav === 'particle-viewer') {
+        return <ParticleViewerPage />;
+    }
 
     const titleForNav = () => {
         if (activeFolderId) return folders.find((f) => f.id === activeFolderId)?.name || 'Folder';

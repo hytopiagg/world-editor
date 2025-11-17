@@ -56,7 +56,7 @@ The particle system will be aligned with the HYTOPIA SDK's particle emitter syst
 4. **Particle Configuration UI**
 
     - Sidebar with controls for all particle emitter properties:
-        - Texture URI selection/upload
+        - Texture URI selection/upload (from `public/assets/particles/` folder)
         - Position and offset
         - Velocity and velocity variance
         - Gravity
@@ -790,13 +790,15 @@ const SimpleBlock = () => {
 **Option 2: Path Input**
 
 -   Text input for texture path
--   Support relative paths like `./assets/textures/particle.png`
+-   Support relative paths like `./assets/particles/particle.png`
+-   Default to `public/assets/particles/` folder
 -   Validate path exists
 
 **Option 3: Both**
 
 -   File upload for custom textures
--   Path input for existing assets
+-   Path input for existing assets in `public/assets/particles/`
+-   Browse/select from available particle textures
 
 **Implementation**:
 
@@ -820,12 +822,15 @@ const TextureSelector = ({ value, onChange }) => {
                 type="text"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                placeholder="Texture path or data URI"
+                placeholder="./assets/particles/particle.png"
             />
+            {/* Optional: Browse button to list available textures */}
         </div>
     );
 };
 ```
+
+**Note**: Particle textures are stored in `public/assets/particles/` folder. The texture selector should default to this location and allow users to browse available textures.
 
 ### 6. Animation Loop
 
@@ -905,6 +910,16 @@ src/js/
 src/css/
 └── ParticleViewerPage.css               # Styles for particle viewer
 ```
+
+**Assets**:
+
+```
+public/assets/
+└── particles/                            # Particle texture assets
+    └── [texture files: .png, .jpg, etc.]
+```
+
+**Note**: Particle textures should be placed in `public/assets/particles/` folder. The texture selector will default to this location.
 
 ---
 
@@ -1101,11 +1116,14 @@ src/css/
     - Should there be preset particle configurations (smoke, fire, sparkles, etc.)?
     - Should users be able to save/load custom presets?
 
-3. **Export Functionality**
+3. **Export Functionality** ⚠️ **DEFERRED**
 
-    - Should users be able to export particle configurations?
-    - Format: JSON matching SDK schema?
-    - Should it generate code snippets for SDK usage?
+    - **Current Status**: Export functionality is deferred for initial implementation
+    - **Future Plans**:
+        - Convert particle configurations to glTF format, OR
+        - Export as SDK-compatible code for direct use in HYTOPIA SDK
+    - Format: JSON matching SDK schema (`ParticleEmitterSchema`)
+    - Implementation will be added in a future phase
 
 4. **Player Model**
 
@@ -1140,7 +1158,8 @@ src/css/
 
     - The particle viewer uses a simplified version of the SDK system
     - Ensure configurations can be easily transferred to actual SDK usage
-    - Consider adding export functionality that generates SDK-compatible code
+    - **Future**: Export functionality will generate SDK-compatible code or glTF format
+    - Configurations stored in component state match SDK's `ParticleEmitterCoreOptions` interface
 
 2. **Memory Management**
 
@@ -1184,8 +1203,9 @@ src/css/
 
 4. **Integration with Main Editor**
 
-    - Export particle configs to projects
-    - Direct placement in world editor
+    - Export particle configs to projects (future)
+    - Direct placement in world editor (future)
+    - **Note**: Export functionality deferred - future plans include glTF conversion or SDK code generation
 
 5. **Advanced Features**
     - Particle trails
@@ -1196,7 +1216,14 @@ src/css/
 
 ## Conclusion
 
-This implementation plan provides a comprehensive roadmap for building the Particle Viewer feature. The plan is structured in phases to allow for iterative development and testing. Key decisions about texture storage, presets, and export functionality should be clarified before implementation begins.
+This implementation plan provides a comprehensive roadmap for building the Particle Viewer feature. The plan is structured in phases to allow for iterative development and testing.
+
+**Key Notes**:
+
+-   Particle textures are stored in `public/assets/particles/` folder
+-   Export functionality is deferred for initial implementation
+-   Future export plans: glTF conversion or SDK code generation
+-   Key decisions about texture storage and presets should be clarified before implementation begins
 
 The particle system will be closely aligned with the SDK's architecture, ensuring consistency and making it easy for users to transfer configurations between the viewer and actual game development.
 

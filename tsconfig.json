@@ -14,8 +14,9 @@
         "resolveJsonModule": true,
         "isolatedModules": true,
         "jsx": "react-jsx", // Use "react" if you're on React <17
-        "noFallthroughCasesInSwitch": true
+        "noFallthroughCasesInSwitch": true,
+        "typeRoots": ["./node_modules/@types", "./src"]
     },
-    "include": ["src"],
+    "include": ["src", "src/**/*.d.ts"],
     "exclude": ["node_modules"]
 }

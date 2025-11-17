@@ -529,8 +529,7 @@ const BlockToolsSidebar = ({
         fetchPreviews();
     }, [schematicList]);
 
-    const handleDragStart = (blockId) => {
-    };
+    const handleDragStart = (blockId) => {};
 
     const handleDownloadAllCustom = async () => {
         const zip = new JSZip();
@@ -770,7 +769,6 @@ const BlockToolsSidebar = ({
     };
 
     const handleBlockSelect = async (blockType) => {
-        
         // Keep Terrain tool active while changing blocks; deactivate others
         try {
             const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
@@ -782,24 +780,28 @@ const BlockToolsSidebar = ({
         } catch (_) {
             terrainBuilderRef?.current?.activateTool(null);
         }
-        
+
         setCurrentBlockType({
             ...blockType,
             isEnvironment: false,
         });
         selectedBlockID = blockType.id;
-        
+
         // Preload textures immediately when block is selected
         try {
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
-                await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockType.id);
+                await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(
+                    blockType.id
+                );
             } else {
                 console.warn("[BLOCK_SELECT] BlockTypeRegistry not available");
             }
         } catch (error) {
-            console.error(`[BLOCK_SELECT] ✗ Failed to preload textures for block ${blockType.id}:`, error);
+            console.error(
+                `[BLOCK_SELECT] ✗ Failed to preload textures for block ${blockType.id}:`,
+                error
+            );
         }
-        
     };
 
     /** @param {import("./AIAssistantPanel").SchematicHistoryEntry} schematicEntry */
