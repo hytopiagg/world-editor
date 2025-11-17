@@ -153,9 +153,8 @@ function App() {
             try { cameraManager.resetCamera?.(); } catch (_) { }
             try {
                 updateChunkSystemCamera((cameraManager as any).camera);
-                console.info('[Thumb] Camera reset + bound for thumbnail', { hasContainer: !!container, foundCanvas: !!canvas });
-            } catch (e) { console.warn('[Thumb] Failed to bind camera', e); }
-            try { if (getChunkSystem()) { processChunkRenderQueue(); } } catch (e) { console.warn('[Thumb] Failed to process render queue', e); }
+            } catch (e) { }
+            try { if (getChunkSystem()) { processChunkRenderQueue(); } } catch (e) { }
             await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
             const url = canvas.toDataURL('image/jpeg', 0.9);
             if (prevJson) {
@@ -183,7 +182,6 @@ function App() {
                 try {
                     const savedSkybox = await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:selectedSkybox`);
                     if (typeof savedSkybox === 'string') {
-                        console.log("Applying saved skybox on app startup:", savedSkybox);
                         terrainBuilderRef.current.changeSkybox(savedSkybox);
                     }
                     // Also apply saved lighting settings (ambient and directional)
@@ -212,7 +210,7 @@ function App() {
                         // noop
                     }
                 } catch (error) {
-                    console.error("Error loading saved skybox:", error);
+                    // Error loading saved skybox
                 }
             }
         };
@@ -238,9 +236,9 @@ function App() {
                 if (typeof savedSensitivity === "number") {
                     cameraManager.setPointerSensitivity(savedSensitivity);
                 }
-            } catch (error) {
-                console.error("Error loading app settings:", error);
-            }
+                } catch (error) {
+                    // Error loading app settings
+                }
 
             const savedBlockId = localStorage.getItem("selectedBlock");
             if (savedBlockId) {
@@ -505,12 +503,6 @@ function App() {
     );
 
     const handleTextureReady = async (faceTextures, textureName) => {
-        console.log(
-            "Texture ready:",
-            textureName,
-            "Face Count:",
-            Object.keys(faceTextures).length
-        );
         try {
             const faceMap = {
                 top: "+y",
@@ -558,10 +550,7 @@ function App() {
                 newBlockData.textureUri = newBlockData.sideTextures["+y"];
             }
 
-            console.log("Processing block data:", newBlockData);
-
             await processCustomBlock(newBlockData);
-            console.log("Custom block processed:", newBlockData.name);
 
             try {
                 const updatedCustomBlocks = getCustomBlocks();
@@ -570,19 +559,13 @@ function App() {
                     "blocks",
                     updatedCustomBlocks
                 );
-                console.log(
-                    "[App] Saved updated custom blocks to DB after texture generation."
-                );
             } catch (dbError) {
-                console.error(
-                    "[App] Error saving custom blocks after texture generation:",
-                    dbError
-                );
+                // Error saving custom blocks after texture generation
             }
 
             refreshBlockTools();
         } catch (error) {
-            console.error("Error processing generated texture:", error);
+            // Error processing generated texture
         }
     };
 
@@ -590,7 +573,6 @@ function App() {
         try {
             return getHytopiaBlocks();
         } catch (error) {
-            console.error("Error getting Hytopia blocks:", error);
             return [];
         }
     }, []);
@@ -606,18 +588,15 @@ function App() {
                 modelUrl: model.modelUrl
             }));
         } catch (error) {
-            console.error("Error getting available entities:", error);
             return [];
         }
     }, []);
 
     const handleLoadAISchematic = useCallback((schematic) => {
-        console.log("App: Loading AI schematic and activating tool", schematic);
         terrainBuilderRef.current?.activateTool("schematic", schematic);
     }, []);
 
     const handleUpdateBlockName = async (blockId: number, newName: string) => {
-        console.log(`App: Updating block ${blockId} name to ${newName}`);
         try {
             const success = await updateCustomBlockName(blockId, newName);
             if (!success) {
@@ -630,9 +609,7 @@ function App() {
                 setCurrentBlockType(prev => ({ ...prev, name: newName }));
             }
             refreshBlockTools();
-            console.log(`App: Block ${blockId} renamed successfully.`);
         } catch (error) {
-            console.error("App: Error updating block name:", error);
             alert(`Failed to rename block: ${error.message || "Unknown error"}`);
             throw error;
         }
@@ -640,7 +617,6 @@ function App() {
 
     const handleDownloadBlock = async (blockType: any) => {
         if (!blockType) return;
-        console.log("App: Downloading block:", blockType.name);
         const zip = new JSZip();
         const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
         const textures = blockType.sideTextures || {};
@@ -658,24 +634,19 @@ function App() {
                     const response = await fetch(dataUrl);
                     if (response.ok) {
                         blob = await response.blob();
-                    } else {
-                        console.warn(`Failed to fetch texture ${key} from path ${dataUrl}, status: ${response.status}`);
                     }
                 } catch (fetchError) {
-                    console.error(`Error fetching texture from ${dataUrl}:`, fetchError);
+                    // Error fetching texture
                 }
             }
 
             if (!blob) {
-                console.warn(`Missing texture ${key} for ${blockType.name}, using placeholder.`);
                 try {
                     blob = await createPlaceholderBlob();
                     if (!blob) {
-                        console.error(`Placeholder failed for ${key}, skipping.`);
                         hasError = true; continue;
                     }
                 } catch (placeholderError) {
-                    console.error(`Error creating placeholder for ${key}:`, placeholderError);
                     hasError = true; continue;
                 }
             }
@@ -686,10 +657,8 @@ function App() {
         try {
             const zipBlob = await zip.generateAsync({ type: "blob" });
             saveAs(zipBlob, `${blockType.name}.zip`);
-            console.log(`App: Downloaded ${blockType.name}.zip`);
         } catch (err) {
-            console.error("App: Error saving zip:", err);
-            alert("Failed to save zip. See console.");
+            alert("Failed to save zip.");
         }
     };
 
@@ -697,12 +666,10 @@ function App() {
         if (!blockType || !blockType.isCustom) return;
         const confirmMessage = `Deleting "${blockType.name}" (ID: ${blockType.id}) cannot be undone. Instances of this block in the world will be lost. Are you sure?`;
         if (window.confirm(confirmMessage)) {
-            console.log("App: Deleting block:", blockType.name);
             try {
                 removeCustomBlock(blockType.id);
                 const updatedBlocks = getCustomBlocks();
                 await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, 'blocks', updatedBlocks);
-                console.log("App: Updated custom blocks in DB after deletion.");
                 const errorId = 0;
                 const currentTerrain = await DatabaseManager.getData(STORES.TERRAIN, "current") || {};
                 let blocksReplaced = 0;
@@ -715,23 +682,16 @@ function App() {
                     return acc;
                 }, {});
                 if (blocksReplaced > 0) {
-                    console.log(`App: Replacing ${blocksReplaced} instances of deleted block ${blockType.id} with ID ${errorId}.`);
                     await DatabaseManager.saveData(STORES.TERRAIN, "current", newTerrain);
                     terrainBuilderRef.current?.buildUpdateTerrain();
-                    console.log("App: Triggered terrain update.");
-                } else {
-                    console.log("App: No instances found.");
                 }
                 refreshBlockTools();
                 if (currentBlockType?.id === blockType.id) {
-                    console.log("App: Resetting selected block type.");
                     setCurrentBlockType(blockTypes[0]);
                     setActiveTab('blocks');
                     localStorage.setItem("selectedBlock", blockTypes[0].id.toString());
                 }
-                console.log(`App: Block ${blockType.name} deleted.`);
             } catch (error) {
-                console.error("App: Error deleting block:", error);
                 alert(`Failed to delete block: ${error.message}`);
             }
         }

@@ -477,8 +477,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             lastSaveTimeRef.current = Date.now(); // Update last save time
             return true;
         } catch (error) {
-            console.error("Error during efficient terrain save:", error);
-
             pendingChangesRef.current.terrain = changesToSave;
             return false;
         }
@@ -506,7 +504,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     initialSaveCompleteRef.current = true;
                 }
             } catch (err) {
-                console.error("Error validating terrain data:", err);
+                // Error validating terrain data
             }
         };
 
@@ -529,17 +527,11 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     }, [threeCamera]);
     const updateChunkSystemWithCamera = () => {
         if (!currentCameraRef.current) {
-            console.error(
-                "[updateChunkSystemWithCamera] Camera reference not available"
-            );
             return false;
         }
         const camera = currentCameraRef.current;
         const chunkSystem = getChunkSystem();
         if (!chunkSystem) {
-            console.error(
-                "[updateChunkSystemWithCamera] Chunk system not available"
-            );
             return false;
         }
         camera.updateMatrixWorld(true);
@@ -579,12 +571,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     const forceRefreshAllChunks = () => {
         const camera = currentCameraRef.current;
         if (!camera) {
-            console.error("[Debug] No camera reference available");
             return;
         }
         const chunkSystem = getChunkSystem();
         if (!chunkSystem) {
-            console.error("[Debug] No chunk system available");
             return;
         }
         const { getViewDistance } = require("./constants/terrain");
@@ -677,14 +667,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             priorityDistance?: number;
             deferredBuildDelay?: number;
         } = {}) => {
-        console.time("buildUpdateTerrain");
         const useProvidedBlocks =
             options.blocks && Object.keys(options.blocks).length > 0;
         if (!useProvidedBlocks && !terrainRef.current) {
-            console.error(
-                "Terrain reference is not initialized and no blocks provided"
-            );
-            console.timeEnd("buildUpdateTerrain");
             return;
         }
         if (!pendingChangesRef.current) {
@@ -741,27 +726,17 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             processBlockBatch(0, 0);
                         }, 1000);
                     }
-                } else {
-                    console.warn(
-                        "Chunk system or updateTerrainChunks not available"
-                    );
                 }
             } else {
                 if (getChunkSystem() && updateTerrainChunks) {
                     updateTerrainChunks(terrainBlocks, deferMeshBuilding);
-                } else {
-                    console.warn(
-                        "Chunk system or updateTerrainChunks not available"
-                    );
                 }
             }
             if (processChunkRenderQueue) {
                 processChunkRenderQueue();
             }
-            console.timeEnd("buildUpdateTerrain");
         } catch (error) {
-            console.error("Error building terrain:", error);
-            console.timeEnd("buildUpdateTerrain");
+            // Error building terrain
         }
     };
     const fastUpdateBlock = (position, blockId) => {
@@ -840,10 +815,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             typeof lockResult.catch === "function"
                         ) {
                             lockResult.catch((err) => {
-                                console.warn(
-                                    "[TerrainBuilder] Pointer lock request was rejected:",
-                                    err
-                                );
                                 document.removeEventListener(
                                     "pointerlockchange",
                                     handleRelock
@@ -851,10 +822,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             });
                         }
                     } catch (err) {
-                        console.warn(
-                            "[TerrainBuilder] Pointer lock request threw an error:",
-                            err
-                        );
+                        // Pointer lock request error
                     }
                 }
                 return;
@@ -883,10 +851,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         originalPixelRatioRef.current = currentRatio;
                         gl.setPixelRatio(Math.max(0.3, currentRatio * 0.5));
                     } catch (err) {
-                        console.warn(
-                            "[QUALITY] Failed to reduce pixel ratio:",
-                            err
-                        );
+                        // Failed to reduce pixel ratio
                     }
                 }
             }
@@ -940,10 +905,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 }
             }
         } catch (error) {
-            console.error(
-                `[BLOCK_PLACE] ✗ Failed to ensure textures loaded:`,
-                error
-            );
             // Continue with placement anyway - error texture will be used
         }
 
@@ -990,16 +951,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             }
                         }
                     } catch (error) {
-                        console.error(
-                            "[MODEL_DRAG] ✗ Error handling environment object:",
-                            error
-                        );
-                        console.error("[MODEL_DRAG] Error stack:", error.stack);
+                        // Error handling environment object
                     }
-                } else {
-                    console.error(
-                        "[MODEL_DRAG] ✗ Environment builder reference or placeEnvironmentModel function not available"
-                    );
                 }
             }
         } else {
@@ -1118,7 +1071,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         }
                     }
                 } catch (e) {
-                    console.warn("Auto variant selection failed:", e);
+                    // Auto variant selection failed
                 }
                 const positions = getPlacementPositions(
                     previewPositionRef.current,
@@ -1462,9 +1415,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     }
                 } else {
                     shouldUpdatePreview = false;
-                    console.warn(
-                        "Missing raw ground anchor or ground intersection point for threshold check."
-                    );
                 }
             }
             if (
@@ -1528,10 +1478,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     gl.setPixelRatio(originalRatio);
                     originalPixelRatioRef.current = null;
                 } catch (err) {
-                    console.warn(
-                        "[QUALITY] Failed to restore pixel ratio:",
-                        err
-                    );
                     // Clear the ref even if restoration failed to prevent stuck state
                     originalPixelRatioRef.current = null;
                 }
@@ -1649,13 +1595,11 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 loadingManager.hideLoading();
                             }, 500);
                         } catch (error) {
-                            console.error("Error during map import:", error);
                             loadingManager.hideLoading();
                         }
                     }, 500);
                 })
                 .catch((error) => {
-                    console.error("Error saving imported terrain:", error);
                     loadingManager.hideLoading();
                 });
         } else {
@@ -1727,10 +1671,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             undoRedoManager.current.clearHistory();
                         }
                     } catch (error) {
-                        console.error(
-                            "Failed to clear undo/redo history:",
-                            error
-                        );
+                        // Failed to clear undo/redo history
                     }
                 };
                 clearUndoRedo(); // Call async clear
@@ -1741,10 +1682,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             lastSaveTimeRef.current = Date.now();
                         })
                         .catch((error) => {
-                            console.error(
-                                "Error clearing terrain keys for project:",
-                                error
-                            );
+                            // Error clearing terrain keys for project
                         });
                 } else {
                     DatabaseManager.clearStore(STORES.TERRAIN)
@@ -1753,19 +1691,16 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             lastSaveTimeRef.current = Date.now();
                         })
                         .catch((error) => {
-                            console.error(
-                                "Error clearing terrain store:",
-                                error
-                            );
+                            // Error clearing terrain store
                         });
                 }
             } catch (error) {
-                console.error("Error during clearMap operation:", error);
+                // Error during clearMap operation
             } finally {
                 localStorage.removeItem("IS_DATABASE_CLEARING");
             }
         } catch (error) {
-            console.error("Failed to clear map:", error);
+            // Failed to clear map
         }
     };
     const initializeSpatialHash = async (
@@ -1776,9 +1711,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             return Promise.resolve();
         }
         if (!spatialGridManagerRef.current) {
-            console.error(
-                "Cannot initialize spatial hash: manager not initialized"
-            );
             return Promise.resolve();
         }
         if (visibleOnly && terrainRef.current) {
@@ -1835,7 +1767,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 terrainRef.current
             );
         } catch (error) {
-            console.error("Error initializing spatial hash:", error);
+            // Error initializing spatial hash
         }
         firstLoadCompletedRef.current = true;
         return Promise.resolve();
@@ -1928,16 +1860,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         viewDistanceEnabled: true,
                     });
                 } catch (error) {
-                    console.error("Error initializing chunk system:", error);
+                    // Error initializing chunk system
                 }
                 try {
                     updateChunkSystemCamera(threeCamera);
                     const cs = getChunkSystem();
                 } catch (e) {
-                    console.warn(
-                        "[TerrainBuilder] failed to bind camera to chunk system",
-                        e
-                    );
+                    // Failed to bind camera to chunk system
                 }
             }
             meshesInitializedRef.current = true;
@@ -2008,9 +1937,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 }
                                 await rebuildTextureAtlas();
                                 if (!getChunkSystem()) {
-                                    console.warn(
-                                        "Chunk system not ready yet; retrying terrain update shortly"
-                                    );
                                     setTimeout(() => {
                                         try {
                                             updateTerrainChunks(
@@ -2041,13 +1967,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);
                             } catch (error) {
-                                console.error(
-                                    "Error preloading textures:",
-                                    error
-                                );
-                                console.warn(
-                                    "[Load] Error during texture preload, proceeding with terrain update."
-                                );
                                 updateTerrainChunks(terrainRef.current);
                                 loadingManager.hideLoading();
                                 setPageIsLoaded(true);
@@ -2061,10 +1980,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     setPageIsLoaded(true);
                 })
                 .catch((error) => {
-                    console.error(
-                        "Error loading terrain or custom blocks:",
-                        error
-                    );
                     meshesInitializedRef.current = true;
                     loadingManager.hideLoading();
                     setPageIsLoaded(true);
@@ -2238,21 +2153,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     }
                 });
             } catch (error) {
-                console.error(
-                    "TerrainBuilder: Error updating tools with undoRedoManager:",
-                    error
-                );
-            }
-        } else {
-            if (!undoRedoManager?.current) {
-                console.warn(
-                    "TerrainBuilder: undoRedoManager.current is not available yet"
-                );
-            }
-            if (!toolManagerRef.current) {
-                console.warn(
-                    "TerrainBuilder: toolManagerRef.current is not available yet"
-                );
+                // Error updating tools with undoRedoManager
             }
         }
     }, [undoRedoManager?.current]);
@@ -2514,9 +2415,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         },
         activateTool: (toolName, activationData) => {
             if (!toolManagerRef.current) {
-                console.error(
-                    "Cannot activate tool: tool manager not initialized"
-                );
                 return false;
             }
             return toolManagerRef.current.activateTool(
@@ -2656,7 +2554,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     }, 300);
                     resolve(true);
                 } catch (error) {
-                    console.error("Error in refreshTerrainFromDB:", error);
                     loadingManager.hideLoading();
                     resolve(false);
                 }
@@ -2664,9 +2561,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         },
         forceRebuildSpatialHash: (options = {}) => {
             if (!spatialGridManagerRef.current) {
-                console.warn(
-                    "TerrainBuilder: Cannot rebuild spatial hash - spatial grid manager not available"
-                );
                 return Promise.resolve();
             }
             disableSpatialHashUpdatesRef.current = false;
@@ -2675,9 +2569,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 spatialGridManagerRef.current.clear();
                 const terrainData = getCurrentTerrainData();
                 if (!terrainData || Object.keys(terrainData).length === 0) {
-                    console.warn(
-                        "TerrainBuilder: No terrain data available for spatial hash rebuild"
-                    );
                     return Promise.resolve();
                 }
                 const totalBlocks = Object.keys(terrainData).length;
@@ -2710,9 +2601,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 }
                 const chunkKeys = Object.keys(blocksByChunk);
                 if (chunkKeys.length === 0) {
-                    console.warn(
-                        "TerrainBuilder: No valid chunks found for spatial hash rebuild"
-                    );
                     if (showLoading) loadingManager.hideLoading();
                     return Promise.resolve();
                 }
@@ -2779,10 +2667,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     resolve();
                 });
             } catch (err) {
-                console.error(
-                    "TerrainBuilder: Error rebuilding spatial hash grid",
-                    err
-                );
                 if (options.showLoadingScreen) {
                     loadingManager.hideLoading();
                 }
@@ -2970,20 +2854,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                     );
                                 }
                             } catch (error) {
-                                console.warn(
-                                    `[UPDATE_TERRAIN] ⚠ Failed to ensure textures for block ${blockId}:`,
-                                    error
-                                );
+                                // Failed to ensure textures for block
                             }
                         }
                     );
                     await Promise.allSettled(preloadPromises);
                 }
             } catch (error) {
-                console.error(
-                    "[UPDATE_TERRAIN] ✗ Error ensuring textures before terrain update:",
-                    error
-                );
                 // Continue with update even if preloading fails
             }
         }
@@ -3043,12 +2920,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     if (BlockTextureAtlas && BlockTextureAtlas.instance) {
                         BlockTextureAtlas.instance
                                 .applyDataUriToAllFaces(String(blockIdNum), dataUri)
-                            .catch((err) =>
-                                console.error(
-                                    `Error applying data URI to block ${blockId}:`,
-                                    err
-                                )
-                            );
+                            .catch((err) => {
+                                // Error applying data URI to block
+                            });
                     }
                 }
             }
@@ -3330,9 +3204,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             }
             if (isPlacingRef.current && frameCount % 30 === 0) {
                 if (!window.mouseButtons || !(window.mouseButtons & 1)) {
-                    console.warn(
-                        "Detected mouse button up while still in placing mode - fixing state"
-                    );
                     handleMouseUp({ button: 0 });
                 }
             }
@@ -3355,10 +3226,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         originalPixelRatioRef.current = null;
                     }
                 } catch (err) {
-                    console.warn(
-                        "[QUALITY] Failed to auto-restore pixel ratio:",
-                        err
-                    );
                     // Clear the ref even if restoration failed to prevent stuck state
                     originalPixelRatioRef.current = null;
                 }
@@ -3368,11 +3235,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             }
             frameCount++;
             if (!threeCamera) {
-                console.warn("[Animation] Three camera is null or undefined");
                 return;
             }
             if (!currentCameraRef.current) {
-                console.warn("[Animation] Current camera reference is not set");
                 currentCameraRef.current = threeCamera;
             }
             cameraMovementTracker.updateCameraMovement(threeCamera);
@@ -4125,10 +3990,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     gl.setPixelRatio(originalPixelRatioRef.current);
                     originalPixelRatioRef.current = null;
                 } catch (err) {
-                    console.warn(
-                        "[QUALITY] Failed to restore pixel ratio on cleanup:",
-                        err
-                    );
+                    // Failed to restore pixel ratio on cleanup
                 }
             }
         };
@@ -4163,25 +4025,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
         setShadowMapSize(settings.shadowMapSize);
 
-        console.log(
-            `GPU-optimized settings initialized for ${gpuInfo.estimatedPerformanceClass} performance GPU:`,
-            {
-                gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
-                webgl2: gpuInfo.supportsWebGL2,
-                contextType: gpuInfo.contextType,
-                maxTextureSize: gpuInfo.maxTextureSize,
-                maxAnisotropy: gpuInfo.maxAnisotropy,
-                settings,
-            }
-        );
-
         // Set view distance based on GPU capability
         if (settings.viewDistance) {
             try {
                 const { setViewDistance } = require("./constants/terrain");
                 setViewDistance(settings.viewDistance * 8); // Convert chunks to blocks
             } catch (error) {
-                console.warn("Could not set view distance:", error);
+                // Could not set view distance
             }
         }
 

@@ -68,7 +68,6 @@ const getThumbnailHTML = (modelPath, baseUrl) => {
       originalError.apply(console, args);
     };
     
-    console.log('Script starting, loading Three.js...');
   </script>
   <script type="module">
     const baseUrl = '${safeBaseUrl}';
@@ -76,11 +75,8 @@ const getThumbnailHTML = (modelPath, baseUrl) => {
     
     (async () => {
       try {
-        console.log('Loading Three.js modules from:', baseUrl);
         const THREE = await import('three');
         const { GLTFLoader } = await import(baseUrl + '/three/examples/jsm/loaders/GLTFLoader.js');
-        
-        console.log('Three.js and GLTFLoader loaded');
         
         const container = document.getElementById('canvas-container');
         container.innerHTML = '';
@@ -206,7 +202,7 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
         : `thumbnails/${modelName}.png`;
 
     if (fs.existsSync(thumbnailPath)) {
-        console.log(`⏭️  Skipping ${modelPath} (thumbnail exists)`);
+        // Skipping (thumbnail exists)
         return relativeThumbnailPath;
     }
 
@@ -214,7 +210,6 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
     await page.setViewport({ width: 256, height: 256 });
 
     try {
-        console.log(`   Loading page for ${modelPath}...`);
         const thumbnailUrl = `${baseUrl}/thumbnail.html?model=${encodeURIComponent(
             modelPath
         )}`;
@@ -222,7 +217,6 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
             waitUntil: "domcontentloaded",
             timeout: 30000,
         });
-        console.log(`   Page loaded, checking if scripts loaded...`);
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -232,9 +226,6 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
                 thumbnailError: window.thumbnailError,
             };
         });
-        console.log(
-            `   Thumbnail status: ready=${scriptsLoaded.thumbnailReady}, error=${scriptsLoaded.thumbnailError}`
-        );
 
         if (scriptsLoaded.thumbnailError) {
             const errorMsg =
@@ -246,9 +237,7 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 500));
-        console.log(`   Scripts initialized, checking thumbnail status...`);
 
-        console.log(`   Waiting for thumbnail to be ready...`);
         await page.evaluate(() => {
             return new Promise((resolve, reject) => {
                 let attempts = 0;
@@ -256,7 +245,6 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
                 const checkReady = () => {
                     attempts++;
                     if (window.thumbnailReady) {
-                        console.log("Thumbnail ready!");
                         if (window.thumbnailError) {
                             const errorMsg =
                                 window.__consoleMessages?.join("; ") ||
@@ -271,18 +259,12 @@ async function generateThumbnail(modelPath, browser, baseUrl) {
                             "Timeout waiting for thumbnail";
                         reject(new Error(errorMsg));
                     } else {
-                        if (attempts % 20 === 0) {
-                            console.log(
-                                `Still waiting... attempt ${attempts}/${maxAttempts}, thumbnailReady=${window.thumbnailReady}`
-                            );
-                        }
                         setTimeout(checkReady, 100);
                     }
                 };
                 checkReady();
             });
         });
-        console.log(`   Thumbnail ready for ${modelPath}!`);
 
         const canvas = await page.$("canvas");
         if (canvas) {
@@ -500,7 +482,7 @@ async function main() {
             }
         });
         server.listen(port, () => {
-            console.log(`📡 Started local server on port ${port}`);
+            // Started local server
             resolve();
         });
     });
@@ -541,11 +523,7 @@ async function main() {
             })
         );
 
-        const progress = Math.min(i + batchSize, modelsToProcess.length);
-        const totalProgress = skipCount + progress;
-        console.log(
-            `📊 Progress: ${totalProgress}/${modelList.length} (${successCount} generated, ${skipCount} skipped, ${failCount} failed)`
-        );
+        // Progress tracking
     }
 
     await browser.close();

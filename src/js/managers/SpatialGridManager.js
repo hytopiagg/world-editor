@@ -38,7 +38,6 @@ class SpatialGridManager {
      */
     getChunksInFrustum(camera, maxDistance = 64) {
         if (!camera) {
-            console.warn("No camera provided for getChunksInFrustum");
             return new Set();
         }
         const start = performance.now();
@@ -149,11 +148,9 @@ class SpatialGridManager {
      */
     updateInFrustum(terrainBlocks, camera, options = {}) {
         if (!camera) {
-            console.warn("No camera provided for updateInFrustum");
             return Promise.resolve();
         }
         if (!terrainBlocks || typeof terrainBlocks !== "object") {
-            console.warn("Invalid terrain blocks provided for updateInFrustum");
             return Promise.resolve();
         }
         const start = performance.now();
@@ -196,13 +193,12 @@ class SpatialGridManager {
             return this.updateFromTerrain(frustumBlocks, options)
                 .then(() => {})
                 .catch((error) => {
-                    console.error("Error in updateInFrustum:", error);
+                    // Error handled silently
                 })
                 .finally(() => {
                     self.isProcessing = false;
                 });
         } catch (error) {
-            console.error("Exception in updateInFrustum:", error);
             this.isProcessing = false;
             return Promise.resolve();
         }
@@ -246,10 +242,7 @@ class SpatialGridManager {
         try {
             workerSuccess = await this.processWithWorker(blocks);
         } catch (error) {
-            console.error(
-                "SpatialGridManager: Worker error, falling back to direct processing",
-                error
-            );
+            // Worker error, falling back to direct processing
         }
 
         if (!workerSuccess) {
@@ -334,7 +327,6 @@ class SpatialGridManager {
         }
 
         if (!this.spatialHashGrid) {
-            console.warn("Creating new spatial hash grid");
             this.spatialHashGrid = new SpatialHashGrid();
         }
 
@@ -407,10 +399,6 @@ class SpatialGridManager {
         } = options;
 
         if (!this.spatialHashGrid) {
-            if (debug)
-                console.warn(
-                    "SpatialGridManager: No spatial hash grid for raycast"
-                );
             return null;
         }
 
@@ -998,8 +986,6 @@ class SpatialGridManager {
         } else if (typeof key === "string" && blockId !== undefined) {
             const [x, y, z] = key.split(",").map(Number);
             this.spatialHashGrid.set(x, y, z, blockId);
-        } else {
-            console.warn("Invalid parameters for setBlock");
         }
     }
     /**
@@ -1033,7 +1019,6 @@ class SpatialGridManager {
      */
     clear() {
         if (!this.spatialHashGrid) {
-            console.warn("SpatialGridManager: No spatial hash grid to clear");
             return;
         }
 
@@ -1069,10 +1054,6 @@ class SpatialGridManager {
             } = data;
 
             if (!blockIds || !coordinates || !hashTable || !collisionTable) {
-                console.error(
-                    "SpatialGridManager: Missing data in worker response",
-                    data
-                );
                 return false;
             }
 
@@ -1086,15 +1067,6 @@ class SpatialGridManager {
                 !(hashTable instanceof Uint32Array) ||
                 !(collisionTable instanceof Uint32Array)
             ) {
-                console.error(
-                    "SpatialGridManager: Arrays in worker response are not TypedArrays",
-                    {
-                        blockIds: blockIds?.constructor?.name,
-                        coordinates: coordinates?.constructor?.name,
-                        hashTable: hashTable?.constructor?.name,
-                        collisionTable: collisionTable?.constructor?.name,
-                    }
-                );
                 return false;
             }
 
@@ -1112,10 +1084,6 @@ class SpatialGridManager {
             });
             return true;
         } catch (error) {
-            console.error(
-                "SpatialGridManager: Error deserializing worker grid",
-                error
-            );
             return false;
         }
     }
@@ -1149,7 +1117,6 @@ class SpatialGridManager {
                 worker.onmessage = (event) => {
                     const data = event.data;
                     if (data.error) {
-                        console.error("Web worker error:", data.error);
                         worker.terminate();
                         resolve(false);
                         return;
@@ -1161,9 +1128,6 @@ class SpatialGridManager {
                         ).toFixed(2);
 
                         if (!this.spatialHashGrid) {
-                            console.warn(
-                                "SpatialHashGrid not initialized before worker completed"
-                            );
                             this.spatialHashGrid = new SpatialHashGrid();
                         }
                         try {
@@ -1174,18 +1138,11 @@ class SpatialGridManager {
                                     // Worker processed blocks
                                 }
                             } else {
-                                console.error(
-                                    "Failed to deserialize worker grid data"
-                                );
                                 worker.terminate();
                                 resolve(false);
                                 return;
                             }
                         } catch (error) {
-                            console.error(
-                                "Error deserializing worker grid:",
-                                error
-                            );
                             worker.terminate();
                             resolve(false);
                             return;
@@ -1197,7 +1154,6 @@ class SpatialGridManager {
                 };
 
                 worker.onerror = (error) => {
-                    console.error("Web worker error:", error);
                     worker.terminate();
                     resolve(false);
                 };
@@ -1208,7 +1164,6 @@ class SpatialGridManager {
                     chunkSize: 16,
                 });
             } catch (error) {
-                console.error("Error setting up worker:", error);
                 resolve(false);
             }
         });
