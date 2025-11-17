@@ -1728,7 +1728,7 @@ class SelectionTool extends BaseTool {
                     hasCamera: !!this.threeCamera,
                 }
             );
-            return;
+            return null;
         }
 
         // Update the entity instance in EnvironmentBuilder
@@ -1747,7 +1747,7 @@ class SelectionTool extends BaseTool {
                 scale: this.selectedEntity.currentScale.toArray(),
             });
 
-            const success = envBuilder.updateEntityInstance(
+            const result = envBuilder.updateEntityInstance(
                 this.selectedEntity.modelUrl,
                 this.selectedEntity.instanceId,
                 this.selectedEntity.currentPosition,
@@ -1755,14 +1755,13 @@ class SelectionTool extends BaseTool {
                 this.selectedEntity.currentScale,
                 cameraPosition // Pass camera position for efficient rebuilding
             );
-            console.log(
-                "[SelectionTool] updateEntityInstance result:",
-                success
-            );
+            console.log("[SelectionTool] updateEntityInstance result:", result);
+            return result;
         } else {
             console.warn(
                 "[SelectionTool] EnvironmentBuilder.updateEntityInstance method not found"
             );
+            return null;
         }
     }
 
@@ -1771,14 +1770,44 @@ class SelectionTool extends BaseTool {
             return;
         }
 
-        // Update entity instance in EnvironmentBuilder
-        this.updateEntityInstanceTransform();
+        const envBuilder = this.environmentBuilderRef.current;
+
+        // Update entity instance in EnvironmentBuilder and get old position
+        const updateResult = this.updateEntityInstanceTransform();
+
+        // Get the old position from the update result or from manipulationStartTransform
+        let oldPosition: THREE.Vector3 | null = null;
+        if (
+            updateResult &&
+            typeof updateResult === "object" &&
+            "success" in updateResult &&
+            updateResult.success &&
+            "oldPosition" in updateResult
+        ) {
+            oldPosition = updateResult.oldPosition;
+        } else if (this.manipulationStartTransform) {
+            // Fallback to manipulationStartTransform if updateResult doesn't have oldPosition
+            oldPosition = this.manipulationStartTransform.position;
+        }
+
+        // Update spatial grid if position changed
+        if (oldPosition && envBuilder.updateEntitySpatialGrid) {
+            const positionChanged = !oldPosition.equals(
+                this.selectedEntity.currentPosition
+            );
+            if (positionChanged) {
+                envBuilder.updateEntitySpatialGrid(
+                    this.selectedEntity.modelUrl,
+                    oldPosition,
+                    this.selectedEntity.currentPosition
+                );
+            }
+        }
 
         // Update bounding box to reflect final scale (especially important for scale changes)
         this.updateSelectedEntityBoundingBox();
 
         // After manipulation ends, rebuild visible instances to ensure proper culling state
-        const envBuilder = this.environmentBuilderRef.current;
         if (envBuilder.rebuildVisibleInstances && this.threeCamera) {
             const cameraPos = this.threeCamera.position.clone();
             envBuilder.rebuildVisibleInstances(

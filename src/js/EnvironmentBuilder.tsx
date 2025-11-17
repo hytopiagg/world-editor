@@ -2013,11 +2013,14 @@ const EnvironmentBuilder = (
                 const instancedData = instancedMeshes.current.get(modelUrl);
                 if (!instancedData || !instancedData.instances.has(instanceId)) {
                     console.warn(`[EnvironmentBuilder] Cannot update entity: ${modelUrl}:${instanceId} not found`);
-                    return false;
+                    return { success: false, oldPosition: null };
                 }
 
                 const instanceData = instancedData.instances.get(instanceId);
-                if (!instanceData) return false;
+                if (!instanceData) return { success: false, oldPosition: null };
+
+                // Store old position for spatial grid update
+                const oldPosition = instanceData.position.clone();
 
                 // Update position, rotation, scale
                 instanceData.position.copy(position);
@@ -2061,16 +2064,51 @@ const EnvironmentBuilder = (
                         }
                     });
                     
-                    // IMPORTANT: Don't call rebuildVisibleInstances here as it might overwrite
-                    // the direct matrix update we just made. The direct update is sufficient
-                    // for immediate visual feedback during manipulation.
-                    // rebuildVisibleInstances will be called when manipulation ends to ensure
-                    // proper culling state.
+                    // Rebuild visible instances to ensure old render is cleared and new position is properly rendered
+                    // This is necessary to prevent ghost renders at the old position
+                    if (cameraPos) {
+                        rebuildVisibleInstances(modelUrl, cameraPos);
+                    }
                 } else {
                     console.warn(`[EnvironmentBuilder] No meshes found for model ${modelUrl}`);
                 }
 
-                return true;
+                // Return old position so caller can update spatial grid
+                return { success: true, oldPosition };
+            },
+            updateEntitySpatialGrid: (
+                modelUrl: string,
+                oldPosition: THREE.Vector3,
+                newPosition: THREE.Vector3
+            ) => {
+                if (!terrainBuilderRef.current) {
+                    console.warn(`[EnvironmentBuilder] Cannot update spatial grid: terrainBuilderRef not available`);
+                    return;
+                }
+
+                const yOffset = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
+                
+                // Remove old position from spatial grid
+                terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
+                    x: oldPosition.x,
+                    y: oldPosition.y - yOffset,
+                    z: oldPosition.z,
+                    blockId: 1000,
+                }], { force: true });
+
+                // Add new position to spatial grid
+                terrainBuilderRef.current.updateSpatialHashForBlocks([{
+                    x: newPosition.x,
+                    y: newPosition.y - yOffset,
+                    z: newPosition.z,
+                    blockId: 1000,
+                }], [], { force: true });
+
+                console.log(`[EnvironmentBuilder] Updated spatial grid for moved entity`, {
+                    modelUrl,
+                    oldPosition: oldPosition.toArray(),
+                    newPosition: newPosition.toArray(),
+                });
             }
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
