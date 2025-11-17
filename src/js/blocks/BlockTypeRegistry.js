@@ -323,8 +323,6 @@ class BlockTypeRegistry {
      * @returns {Promise<void>}
      */
     async preload(options = {}) {
-        console.time("BlockTypeRegistry.preload");
-
         const { onlyEssential = false } = options;
 
         // If onlyEssential is false, mark all block types as essential (backward compatibility)

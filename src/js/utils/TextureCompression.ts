@@ -126,11 +126,6 @@ export class TextureCompression {
             this.supportedFormats.push(CompressionFormat.BPTC);
         }
 
-        console.log("Texture compression capabilities:", {
-            webgl2: gpuInfo.supportsWebGL2,
-            capabilities: this.capabilities,
-            supportedFormats: this.supportedFormats,
-        });
     }
 
     /**
@@ -328,7 +323,6 @@ export class TextureCompression {
         }
 
         optimizedTexture.needsUpdate = true;
-        console.log(`Applied ${format} compression optimizations to texture`);
 
         return optimizedTexture;
     }

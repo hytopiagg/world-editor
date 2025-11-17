@@ -20,6 +20,5 @@ export const getViewDistance = () => viewDistance;
 export const setViewDistance = (distance) => {
     const newDistance = Math.max(32, Math.min(256, distance)); // Clamp between 32 and 256
     viewDistance = newDistance;
-    console.log(`View distance set to ${newDistance} blocks`);
     return newDistance;
 };

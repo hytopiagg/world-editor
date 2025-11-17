@@ -258,7 +258,6 @@ class ChunkMeshManager {
                 (material as any).map.image !==
                 BlockTextureAtlas.instance.textureAtlas.image)
         ) {
-            console.log("Setting texture atlas for solid material");
             BlockMaterial.instance.setTextureAtlas(
                 BlockTextureAtlas.instance.textureAtlas
             );

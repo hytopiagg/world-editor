@@ -40,7 +40,6 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
 
   const cleanupModel = useCallback(() => {
     if (modelRef.current && sceneRef.current) {
-      console.log("Cleanup function called for model:", modelRef.current.uuid);
       sceneRef.current.remove(modelRef.current);
       disposeObject(modelRef.current); // Use recursive dispose
       modelRef.current = null;
@@ -54,10 +53,7 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
 
     if (!sceneRef.current) {
       sceneRef.current = new THREE.Scene();
-      console.log("--- Re-initializing THREE Scene due to StrictMode remount ---");
     }
-
-    console.log("--- Initializing THREE Scene --- (ModelPreview)");
     const currentMount = mountRef.current;
     const scene = sceneRef.current;
 
@@ -141,7 +137,6 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
     }
 
     return () => {
-      console.log("--- Cleaning up THREE Scene --- (ModelPreview)");
       cancelAnimationFrame(frameIdRef.current);
       if (resizeObserver && currentMount) {
         resizeObserver.unobserve(currentMount);
@@ -199,14 +194,11 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
 
     let modelLoadedInThisEffect = null;
     if (modelUrl) {
-      console.log("Attempting to load model:", modelUrl);
       const loader = loaderRef.current;
       const scene = sceneRef.current;
-      loader.load(
+        loader.load(
         modelUrl,
         (gltf) => {
-          console.log("Model loaded successfully:", modelUrl);
-
           if (modelRef.current) {
             cleanupModel();
           }
@@ -293,10 +285,7 @@ const ModelPreview = ({ modelUrl, skybox }: { modelUrl: string, skybox: THREE.Te
     }
 
     return () => {
-
-
       if (modelLoadedInThisEffect && sceneRef.current) {
-        console.log("Effect cleanup: Removing model tracked by effect run:", modelLoadedInThisEffect.uuid);
         sceneRef.current.remove(modelLoadedInThisEffect);
         disposeObject(modelLoadedInThisEffect);
 
