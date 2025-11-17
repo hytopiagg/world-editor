@@ -181,29 +181,89 @@ export default function ParticleEmitterRenderer({
 
   // Attach to target object if needed
   useEffect(() => {
-    if (!emitterRef.current) return;
+    if (!emitterRef.current) {
+      console.log(`[ParticleEmitter:${config.id}] No emitter ref, skipping attachment`);
+      return;
+    }
 
-    if (config.attachedToTarget && targetObjectRef?.current) {
+    // Get current values from refs
+    const currentTargetObject = targetObjectRef?.current;
+    const currentBoneMap = boneMapRef?.current;
+
+    console.log(`[ParticleEmitter:${config.id}] Attachment check:`, {
+      attachedToTarget: config.attachedToTarget,
+      attachmentNode: config.attachmentNode,
+      targetObject: targetObject,
+      hasTargetObjectRef: !!currentTargetObject,
+      targetObjectRefValue: currentTargetObject ? {
+        name: currentTargetObject.name,
+        type: currentTargetObject.type,
+        position: currentTargetObject.position.toArray(),
+        uuid: currentTargetObject.uuid,
+      } : null,
+      hasBoneMapRef: !!currentBoneMap,
+      boneMapSize: currentBoneMap?.size || 0,
+      boneMapKeys: currentBoneMap ? Array.from(currentBoneMap.keys()).slice(0, 10) : [], // Log first 10 keys
+    });
+
+    if (config.attachedToTarget && currentTargetObject) {
       // If attachmentNode is specified and we have a bone map, try to find the bone
-      if (config.attachmentNode && boneMapRef?.current) {
+      if (config.attachmentNode && currentBoneMap) {
+        console.log(`[ParticleEmitter:${config.id}] Looking for attachment node: "${config.attachmentNode}"`);
+        console.log(`[ParticleEmitter:${config.id}] Available bone map keys (first 20):`, Array.from(currentBoneMap.keys()).slice(0, 20));
+        
         // Try exact match first (case-sensitive), then lowercase match
-        let bone = boneMapRef.current.get(config.attachmentNode);
+        let bone = currentBoneMap.get(config.attachmentNode);
         if (!bone) {
-          bone = boneMapRef.current.get(config.attachmentNode.toLowerCase());
+          console.log(`[ParticleEmitter:${config.id}] Exact match failed, trying lowercase: "${config.attachmentNode.toLowerCase()}"`);
+          bone = currentBoneMap.get(config.attachmentNode.toLowerCase());
         }
+        
         if (bone) {
+          console.log(`[ParticleEmitter:${config.id}] ✓ Found bone "${config.attachmentNode}" (name: "${bone.name}", type: ${bone.type}, uuid: ${bone.uuid})`);
+          console.log(`[ParticleEmitter:${config.id}] Bone local position:`, bone.position.toArray());
+          const worldPos = bone.getWorldPosition(new THREE.Vector3());
+          console.log(`[ParticleEmitter:${config.id}] Bone world position:`, worldPos.toArray());
+          console.log(`[ParticleEmitter:${config.id}] Bone parent:`, bone.parent ? { name: bone.parent.name, type: bone.parent.type } : 'none');
           emitterRef.current.attachToObject(bone);
+          console.log(`[ParticleEmitter:${config.id}] ✓ Attached to bone`);
         } else {
-          // Fallback to root object if bone not found
-          emitterRef.current.attachToObject(targetObjectRef.current);
+          console.warn(`[ParticleEmitter:${config.id}] ✗ Bone "${config.attachmentNode}" not found in bone map! Falling back to root object.`);
+          console.log(`[ParticleEmitter:${config.id}] Root object:`, {
+            name: currentTargetObject.name,
+            type: currentTargetObject.type,
+            position: currentTargetObject.position.toArray(),
+          });
+          emitterRef.current.attachToObject(currentTargetObject);
+          console.log(`[ParticleEmitter:${config.id}] ✓ Attached to root object (fallback)`);
         }
       } else {
-        emitterRef.current.attachToObject(targetObjectRef.current);
+        if (!config.attachmentNode) {
+          console.log(`[ParticleEmitter:${config.id}] No attachment node specified, attaching to root object`);
+        } else {
+          console.warn(`[ParticleEmitter:${config.id}] Attachment node "${config.attachmentNode}" specified but no bone map available!`);
+        }
+        console.log(`[ParticleEmitter:${config.id}] Root object:`, {
+          name: currentTargetObject.name,
+          type: currentTargetObject.type,
+          position: currentTargetObject.position.toArray(),
+        });
+        emitterRef.current.attachToObject(currentTargetObject);
+        console.log(`[ParticleEmitter:${config.id}] ✓ Attached to root object`);
       }
     } else {
+      if (!config.attachedToTarget) {
+        console.log(`[ParticleEmitter:${config.id}] Not attached to target (attachedToTarget=false)`);
+      } else {
+        console.warn(`[ParticleEmitter:${config.id}] Want to attach but no target object ref available! Will retry when object becomes available.`);
+        // Don't detach immediately - wait for object to become available
+        // This handles the case where play mode starts but player mesh hasn't loaded yet
+        return;
+      }
       emitterRef.current.attachToObject(null);
+      console.log(`[ParticleEmitter:${config.id}] ✓ Detached from object`);
     }
-  }, [config.attachedToTarget, config.attachmentNode, targetObjectRef, boneMapRef]);
+  }, [config.attachedToTarget, config.attachmentNode, config.id, targetObject, targetObjectRef, boneMapRef]);
 
   // Animation loop
   useFrame((state, delta) => {

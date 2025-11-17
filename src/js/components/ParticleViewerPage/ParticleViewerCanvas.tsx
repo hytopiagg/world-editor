@@ -1,5 +1,5 @@
 // @ts-nocheck - React Three Fiber JSX elements are extended globally
-import React, { useMemo, useRef, useCallback, useEffect } from "react";
+import React, { useMemo, useRef, useCallback, useEffect, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
@@ -26,7 +26,9 @@ function PlayModeController({
     targetObjectRef,
     initialPositionsRef,
     playerMeshRef,
-    onPlayerMeshReady
+    boneMapRef,
+    onPlayerMeshReady,
+    onPlayerMeshReadyStateChange
 }: { 
     targetObject: TargetObjectType; 
     playModeEnabled: boolean;
@@ -37,8 +39,9 @@ function PlayModeController({
         emitters: Map<string, THREE.Vector3>;
     }>;
     playerMeshRef: React.MutableRefObject<THREE.Object3D | null>;
+    boneMapRef: React.MutableRefObject<Map<string, THREE.Object3D>>;
     onPlayerMeshReady?: (mesh: THREE.Object3D | null) => void;
-    onPlayerMeshBoneMapReady?: (boneMap: Map<string, THREE.Object3D>) => void;
+    onPlayerMeshReadyStateChange?: (ready: boolean) => void;
 }) {
     const { camera, scene } = useThree();
     const physicsRef = useRef<PhysicsManager | null>(null);
@@ -109,8 +112,9 @@ function PlayModeController({
             if (playerMeshRef.current) {
                 scene.remove(playerMeshRef.current);
                 playerMeshRef.current = null;
-                playerMeshBoneMapRef.current.clear();
-                (window as any).__WE_PLAYER_MESH_BONE_MAP__ = null;
+                if (onPlayerMeshReadyStateChange) {
+                    onPlayerMeshReadyStateChange(false);
+                }
                 if (onPlayerMeshReady) {
                     onPlayerMeshReady(null);
                 }
@@ -144,7 +148,7 @@ function PlayModeController({
             console.log('[PlayMode] Cleaning up physics');
             physicsRef.current = null;
         }
-    }, [playModeEnabled, targetObject, targetObjectRef]);
+    }, [playModeEnabled, targetObject]);
 
     // Mouse movement for camera rotation
     useEffect(() => {
@@ -277,26 +281,59 @@ function PlayModeController({
                                 scene.add(obj);
                                 playerMeshRef.current = obj;
                                 
-                                // Build bone map for play mode player mesh
+                                // Build and log bone map for play mode player mesh
+                                console.log('[PlayMode] Building bone map for play mode player mesh...');
                                 const playModeBoneMap = new Map<string, THREE.Object3D>();
                                 obj.traverse((child) => {
                                     if (child.name && child.name.trim() !== '') {
                                         const nameLower = child.name.toLowerCase();
                                         playModeBoneMap.set(nameLower, child);
                                         playModeBoneMap.set(child.name, child); // Store original name too
+                                        console.log(`[PlayMode] Found bone/node: "${child.name}" (type: ${child.type}, uuid: ${child.uuid})`);
                                     }
                                 });
-                                console.log('[PlayMode] Built bone map for play mode player mesh:', Array.from(playModeBoneMap.keys()));
+                                console.log(`[PlayMode] ✓ Built bone map with ${playModeBoneMap.size} entries`);
+                                console.log('[PlayMode] Bone map keys:', Array.from(playModeBoneMap.keys()));
+                                
+                                // Update boneMapRef with play mode player mesh bones
+                                // Note: This is a workaround - we need to update the ref that particle emitters use
+                                if (boneMapRef) {
+                                    // Clear old bones and add new ones
+                                    boneMapRef.current.clear();
+                                    playModeBoneMap.forEach((bone, key) => {
+                                        boneMapRef.current.set(key, bone);
+                                    });
+                                    console.log(`[PlayMode] ✓ Updated boneMapRef with ${boneMapRef.current.size} bones`);
+                                }
+                                
+                                console.log('[PlayMode] Player mesh added to scene:', {
+                                    name: obj.name,
+                                    type: obj.type,
+                                    position: obj.position.toArray(),
+                                    uuid: obj.uuid,
+                                    children: obj.children.length,
+                                });
                                 
                                 if (onPlayerMeshReady) {
                                     onPlayerMeshReady(obj);
                                 }
                                 
-                                // Store the bone map in a way that can be accessed by particle emitters
-                                (window as any).__WE_PLAYER_MESH_BONE_MAP__ = playModeBoneMap;
-                                if (onPlayerMeshBoneMapReady) {
-                                    onPlayerMeshBoneMapReady(playModeBoneMap);
+                                // Trigger state update to cause re-attachment of particle emitters
+                                if (onPlayerMeshReadyStateChange) {
+                                    onPlayerMeshReadyStateChange(true);
                                 }
+                                
+                                // Force a small delay then log to ensure everything is set up
+                                setTimeout(() => {
+                                    console.log('[PlayMode] Player mesh ready callback completed. Verifying setup:', {
+                                        playerMeshRefCurrent: playerMeshRef.current ? {
+                                            name: playerMeshRef.current.name,
+                                            uuid: playerMeshRef.current.uuid,
+                                        } : null,
+                                        boneMapSize: boneMapRef.current.size,
+                                        boneMapHasHead: boneMapRef.current.has('head'),
+                                    });
+                                }, 100);
 
                                 // Setup animations
                                 if (gltf.animations && gltf.animations.length) {
@@ -364,7 +401,18 @@ function PlayModeController({
                         playerPos.z
                     );
                     const meshAlpha = 1 - Math.exp(-30 * dtClamped);
+                    const oldPos = playerMeshRef.current.position.clone();
                     playerMeshRef.current.position.lerp(cur, meshAlpha);
+                    
+                    // Log position updates periodically (every ~1 second)
+                    if (Math.random() < 0.016) { // ~1% chance per frame at 60fps = ~1 per second
+                        console.log('[PlayMode] Player mesh position update:', {
+                            oldPos: oldPos.toArray(),
+                            newPos: playerMeshRef.current.position.toArray(),
+                            physicsPos: playerPos.toArray(),
+                            lerpAlpha: meshAlpha,
+                        });
+                    }
                     
                     // Update rotation based on movement
                     if (lastPosRef.current) {
@@ -376,6 +424,19 @@ function PlayModeController({
                             faceYawRef.current = faceYaw;
                             playerMeshRef.current.rotation.y = faceYaw;
                         }
+                    }
+                    
+                    // Log bone positions periodically to verify they're moving with the mesh
+                    if (boneMapRef && boneMapRef.current && Math.random() < 0.016) {
+                        console.log('[PlayMode] Sample bone positions (first 3):');
+                        let count = 0;
+                        boneMapRef.current.forEach((bone, key) => {
+                            if (count < 3) {
+                                const worldPos = bone.getWorldPosition(new THREE.Vector3());
+                                console.log(`  - "${key}": local=${bone.position.toArray()}, world=${worldPos.toArray()}`);
+                                count++;
+                            }
+                        });
                     }
                 }
 
@@ -469,7 +530,7 @@ export default function ParticleViewerCanvas({
     const targetObjectRef = useRef<THREE.Object3D | null>(null);
     const boneMapRef = useRef<Map<string, THREE.Object3D>>(new Map());
     const playerMeshRef = useRef<THREE.Object3D | null>(null);
-    const playerMeshBoneMapRef = useRef<Map<string, THREE.Object3D>>(new Map());
+    const [playerMeshReady, setPlayerMeshReady] = useState(false); // State to trigger re-attachment
     const initialPositionsRef = useRef<{
         object: THREE.Vector3 | null;
         camera: THREE.Vector3 | null;
@@ -536,15 +597,34 @@ export default function ParticleViewerCanvas({
             />
 
             {/* Particle Emitters */}
-            {emitters.map((emitterConfig) => (
-                <ParticleEmitterRenderer
-                    key={emitterConfig.id}
-                    config={emitterConfig}
-                    targetObject={targetObject}
-                    targetObjectRef={playModeEnabled && targetObject === "player" ? playerMeshRef : targetObjectRef}
-                    boneMapRef={playModeEnabled && targetObject === "player" ? playerMeshBoneMapRef : boneMapRef}
-                />
-            ))}
+            {emitters.map((emitterConfig) => {
+                const effectiveTargetRef = playModeEnabled && targetObject === "player" ? playerMeshRef : targetObjectRef;
+                // Include playerMeshReady in key to force re-render when mesh becomes available
+                const emitterKey = `${emitterConfig.id}-${playModeEnabled && targetObject === "player" ? `play-${playerMeshReady}` : 'static'}`;
+                console.log(`[ParticleViewerCanvas] Rendering emitter ${emitterConfig.id}:`, {
+                    playModeEnabled,
+                    targetObject,
+                    usingPlayerMeshRef: playModeEnabled && targetObject === "player",
+                    playerMeshReady,
+                    effectiveTargetRefValue: effectiveTargetRef?.current ? {
+                        name: effectiveTargetRef.current.name,
+                        type: effectiveTargetRef.current.type,
+                        uuid: effectiveTargetRef.current.uuid,
+                        position: effectiveTargetRef.current.position.toArray(),
+                    } : null,
+                    boneMapSize: boneMapRef?.current?.size || 0,
+                });
+                
+                return (
+                    <ParticleEmitterRenderer
+                        key={emitterKey}
+                        config={emitterConfig}
+                        targetObject={targetObject}
+                        targetObjectRef={effectiveTargetRef}
+                        boneMapRef={boneMapRef}
+                    />
+                );
+            })}
 
             {/* Camera Controls */}
             <OrbitControls
@@ -564,12 +644,12 @@ export default function ParticleViewerCanvas({
                 targetObjectRef={targetObjectRef}
                 initialPositionsRef={initialPositionsRef}
                 playerMeshRef={playerMeshRef}
+                boneMapRef={boneMapRef}
                 onPlayerMeshReady={(mesh) => {
                     playerMeshRef.current = mesh;
                 }}
-                onPlayerMeshBoneMapReady={(boneMap) => {
-                    playerMeshBoneMapRef.current = boneMap;
-                    console.log('[PlayMode] Player mesh bone map ready, size:', boneMap.size);
+                onPlayerMeshReadyStateChange={(ready) => {
+                    setPlayerMeshReady(ready);
                 }}
             />
         </Canvas>
