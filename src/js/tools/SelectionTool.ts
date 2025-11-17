@@ -270,17 +270,11 @@ class SelectionTool extends BaseTool {
                 // Only deselect if we're not currently manipulating
                 // If TransformControls intercepts the click, isManipulating will be true
                 if (!this.isManipulating) {
-                    console.log(
-                        "[SelectionTool] Clicking empty space - deselecting entity"
-                    );
                     this.deselectEntity();
                     // Don't start area selection when deselecting entity
                     return;
                 }
                 // If we're manipulating, let TransformControls handle it
-                console.log(
-                    "[SelectionTool] Click during manipulation - letting TransformControls handle"
-                );
                 return;
             }
 
@@ -488,7 +482,6 @@ class SelectionTool extends BaseTool {
     }
 
     setSelectionHeight(height) {
-        console.log("Setting selection height to:", height);
         this.selectionHeight = height;
 
         if (this.selectionStartPosition && this.previewPositionRef?.current) {
@@ -619,9 +612,6 @@ class SelectionTool extends BaseTool {
     }
 
     completeSelection(endPos) {
-        console.log("completeSelection", this.selectionStartPosition, endPos);
-        console.log("terrainBuilderRef", this.terrainBuilderRef);
-        console.log("environmentBuilderRef", this.environmentBuilderRef);
         if (
             !this.selectionStartPosition ||
             !this.terrainRef?.current ||
@@ -737,8 +727,6 @@ class SelectionTool extends BaseTool {
                 }
             }
         }
-
-        console.log("selectedEnvironments", this.selectedEnvironments);
 
         if (blockCount > 0 && this.selectionMode !== "delete") {
             this.selectionCenter = new THREE.Vector3(
@@ -1507,9 +1495,6 @@ class SelectionTool extends BaseTool {
         this.transformControls.addEventListener(
             "change",
             (this.onGizmoChangeBound = () => {
-                console.log(
-                    "[SelectionTool] TransformControls change event fired"
-                );
                 this.onGizmoChange();
             })
         );
@@ -1531,7 +1516,6 @@ class SelectionTool extends BaseTool {
         this.transformControls.addEventListener(
             "mouseUp",
             (this.onGizmoMouseUpBound = () => {
-                console.log("[SelectionTool] Gizmo mouseUp");
                 this.onGizmoMouseUp();
             })
         );
@@ -1540,9 +1524,6 @@ class SelectionTool extends BaseTool {
         // This helps us know when to skip deselection
         this.transformControls.addEventListener("objectChange", () => {
             // This fires when TransformControls starts interacting
-            console.log(
-                "[SelectionTool] TransformControls objectChange - interaction started"
-            );
         });
     }
 
@@ -1655,12 +1636,6 @@ class SelectionTool extends BaseTool {
         this.selectedEntity.currentRotation.copy(this.gizmoObject.rotation);
         this.selectedEntity.currentScale.copy(this.gizmoObject.scale);
 
-        console.log("[SelectionTool] Updated entity transform:", {
-            position: this.selectedEntity.currentPosition.toArray(),
-            rotation: this.selectedEntity.currentRotation.toArray(),
-            scale: this.selectedEntity.currentScale.toArray(),
-        });
-
         // Update entity instance in EnvironmentBuilder (without saving yet)
         this.updateEntityInstanceTransform();
 
@@ -1681,7 +1656,6 @@ class SelectionTool extends BaseTool {
     }
 
     onDraggingChanged(isDragging: boolean) {
-        console.log("[SelectionTool] Dragging changed:", isDragging);
         this.isManipulating = isDragging;
 
         // Disable camera controls while dragging gizmo
@@ -1755,7 +1729,6 @@ class SelectionTool extends BaseTool {
                 this.selectedEntity.currentScale,
                 cameraPosition // Pass camera position for efficient rebuilding
             );
-            console.log("[SelectionTool] updateEntityInstance result:", result);
             return result;
         } else {
             console.warn(

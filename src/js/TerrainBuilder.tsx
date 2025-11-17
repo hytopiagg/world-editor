@@ -790,12 +790,19 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     const handleMouseDown = useCallback(
         (e) => {
             // Set mode based on mouse button
+            // Right-click only removes blocks in crosshair mode
             if (e.button === 0) {
                 modeRef.current = "add";
                 mouseButtonDownRef.current = 0;
             } else if (e.button === 2) {
-                modeRef.current = "remove";
-                mouseButtonDownRef.current = 2;
+                // Only allow block removal in crosshair mode
+                if (!cameraManager.isPointerUnlockedMode) {
+                    modeRef.current = "remove";
+                    mouseButtonDownRef.current = 2;
+                } else {
+                    // In rotate mode, right-click is only for camera rotation
+                    return;
+                }
             }
 
             // Low-res sculpting: temporarily drop pixel ratio
@@ -2987,7 +2994,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         };
         const handleContextMenu = (event) => {
             // Prevent context menu in crosshair mode
-            event.preventDefault();
+                event.preventDefault();
         };
         // Global mouseup handler to catch mouse release outside canvas
         const handleGlobalMouseUp = (event) => {
@@ -3006,6 +3013,43 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             window.removeEventListener("mouseup", handleGlobalMouseUp);
         };
     }, [gl, handleMouseDown, handleMouseUp, cameraManager]); // Add dependencies
+    
+    // Update OrbitControls mouse buttons when crosshair mode changes
+    useEffect(() => {
+        const updateMouseButtons = () => {
+            if (orbitControlsRef.current) {
+                // When crosshair mode is ON: LEFT rotates, RIGHT rotates
+                // When crosshair mode is OFF: LEFT does nothing, RIGHT rotates
+                const mouseButtons: any = {
+                    MIDDLE: THREE.MOUSE.PAN,
+                    RIGHT: THREE.MOUSE.ROTATE,
+                };
+                
+                if (!cameraManager.isPointerUnlockedMode) {
+                    // Crosshair mode ON: enable left-click rotation
+                    mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+                } else {
+                    // Crosshair mode OFF: disable left-click (set to null to disable)
+                    mouseButtons.LEFT = null;
+                }
+                
+                orbitControlsRef.current.mouseButtons = mouseButtons;
+            }
+        };
+        
+        updateMouseButtons();
+        
+        // Listen for mode changes
+        const handleModeChange = () => {
+            updateMouseButtons();
+        };
+        window.addEventListener("pointerLockModeChanged", handleModeChange);
+        
+        return () => {
+            window.removeEventListener("pointerLockModeChanged", handleModeChange);
+        };
+    }, []);
+    
     useEffect(() => {
         optimizeRenderer(gl);
         try {
@@ -4028,7 +4072,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 enableZoom={false}
                 enableRotate={true}
                 mouseButtons={{
-                    LEFT: THREE.MOUSE.ROTATE,
+                    LEFT: !cameraManager.isPointerUnlockedMode ? THREE.MOUSE.ROTATE : null,
                     MIDDLE: THREE.MOUSE.PAN,
                     RIGHT: THREE.MOUSE.ROTATE,
                 }}

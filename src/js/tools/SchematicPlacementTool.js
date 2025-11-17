@@ -82,8 +82,6 @@ class SchematicPlacementTool extends BaseTool {
             return false;
         }
 
-        console.log("[SCHEMATIC] Activating schematic tool with blocks:", Object.keys(this.schematicData).length);
-        
         // Extract all unique block IDs from the schematic
         const uniqueBlockIds = new Set();
         for (const blockId of Object.values(this.schematicData)) {
@@ -92,25 +90,18 @@ class SchematicPlacementTool extends BaseTool {
             }
         }
         
-        console.log(`[SCHEMATIC] Found ${uniqueBlockIds.size} unique block types in schematic:`, Array.from(uniqueBlockIds));
-        
         // Preload textures for all blocks in the schematic
         try {
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
-                console.log(`[SCHEMATIC] Preloading textures for ${uniqueBlockIds.size} block types...`);
                 const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
                     try {
                         await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
-                        console.log(`[SCHEMATIC] ✓ Preloaded textures for block ${blockId}`);
                     } catch (error) {
                         console.error(`[SCHEMATIC] ✗ Failed to preload textures for block ${blockId}:`, error);
                     }
                 });
                 
                 await Promise.allSettled(preloadPromises);
-                console.log(`[SCHEMATIC] ✓ Completed texture preloading for schematic`);
-            } else {
-                console.warn("[SCHEMATIC] BlockTypeRegistry not available for texture preloading");
             }
         } catch (error) {
             console.error("[SCHEMATIC] ✗ Error during texture preloading:", error);
@@ -123,12 +114,6 @@ class SchematicPlacementTool extends BaseTool {
         this._rebuildPreviewInstancedMesh(); // Build/rebuild the InstancedMesh
         this._updatePreviewAnchorPosition(); // Position the group
         this.previewGroup.visible = true;
-        console.log(
-            "[SCHEMATIC] SchematicPlacementTool activated with data:",
-            this.schematicData,
-            "entities:",
-            this.schematicEntities
-        );
 
         return true; // Indicate activation succeeded
     }
@@ -141,7 +126,6 @@ class SchematicPlacementTool extends BaseTool {
         this.currentRotation = 0; // Reset rotation
         this.verticalOffset = 0;
         this.anchorOffset.set(0, 0, 0);
-        console.log("SchematicPlacementTool specific deactivation");
 
         if (this.terrainBuilderProps.clearAISchematic) {
             this.terrainBuilderProps.clearAISchematic();
@@ -330,9 +314,6 @@ class SchematicPlacementTool extends BaseTool {
             environment: { added: [], removed: [] },
         };
         
-        console.log("[SCHEMATIC] Placing schematic at base position:", basePosition.x, basePosition.y, basePosition.z);
-        console.log("[SCHEMATIC] Schematic contains", Object.keys(this.schematicData).length, "blocks");
-        
         // Extract unique block IDs and ensure textures are loaded before placement
         const uniqueBlockIds = new Set();
         for (const blockId of Object.values(this.schematicData)) {
@@ -341,7 +322,6 @@ class SchematicPlacementTool extends BaseTool {
             }
         }
         
-        console.log(`[SCHEMATIC] Ensuring textures are loaded for ${uniqueBlockIds.size} block types before placement...`);
         try {
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
                 const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
@@ -349,7 +329,6 @@ class SchematicPlacementTool extends BaseTool {
                         const blockType = window.BlockTypeRegistry.instance.getBlockType(blockId);
                         if (blockType && blockType.needsTexturePreload?.()) {
                             await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
-                            console.log(`[SCHEMATIC] ✓ Ensured textures loaded for block ${blockId}`);
                         }
                     } catch (error) {
                         console.warn(`[SCHEMATIC] ⚠ Failed to ensure textures for block ${blockId}:`, error);
@@ -473,13 +452,6 @@ class SchematicPlacementTool extends BaseTool {
                             modelType,
                             tempMesh
                         );
-                    console.log(
-                        `[SchematicTool] Placing entity ${entity.entityName} at (${worldX}, ${worldY}, ${worldZ})`
-                    );
-                    console.log(
-                        "[SchematicTool] placedInstance:",
-                        placedInstance
-                    );
 
                     if (placedInstance) {
                         const placedEntity = {
@@ -507,9 +479,6 @@ class SchematicPlacementTool extends BaseTool {
                 );
             }
         }
-
-        console.log("[SCHEMATIC] pendingChanges", pendingChanges);
-        console.log(`[SCHEMATIC] ✓ Schematic placement complete: ${Object.keys(addedBlocks).length} blocks placed`);
 
         if (pendingChanges) {
             pendingChanges.terrain.added = {

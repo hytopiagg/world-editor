@@ -263,11 +263,11 @@ class CameraManager {
         ) {
             const direction = new THREE.Vector3();
             this.camera.getWorldDirection(direction);
-            
+
             // In crosshair mode, move in full camera direction (including vertical)
             // In rotate mode, move only horizontally
             if (this.isPointerUnlockedMode) {
-                direction.y = 0;
+            direction.y = 0;
             }
             direction.normalize();
 

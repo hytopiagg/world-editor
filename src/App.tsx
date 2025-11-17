@@ -474,7 +474,6 @@ function App() {
         setIsCompactMode(newCompactValue);
         try {
             await DatabaseManager.saveData(STORES.SETTINGS, "compactMode", newCompactValue);
-            console.log("Compact mode setting saved:", newCompactValue);
         } catch (error) {
             console.error("Error saving compact mode setting:", error);
         }

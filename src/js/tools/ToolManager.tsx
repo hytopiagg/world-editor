@@ -24,12 +24,6 @@ class ToolManager {
         this.tools = {};
         this.activeTool = null;
         this.toolChangeListeners = []; // Add array for tool change listeners
-        console.log(
-            "ToolManager initialized with properties:",
-            Object.keys(terrainBuilderProps).filter(
-                (key) => terrainBuilderProps[key] !== undefined
-            )
-        );
 
         // Deactivate current tool when certain global editor events occur
         this._handleGlobalDeactivate = (_e?: Event) => {
@@ -65,7 +59,6 @@ class ToolManager {
             return;
         }
         this.tools[toolName] = tool;
-        console.log(`Registered tool: ${toolName}`);
     }
     /**
      * Activate a specific tool by name
@@ -92,7 +85,6 @@ class ToolManager {
 
         if (!toolName) {
             this.activeTool = null;
-            console.log("All tools deactivated");
 
             QuickTipsManager.setToDefaultTip();
             // Listeners already notified above
@@ -111,7 +103,6 @@ class ToolManager {
                 QuickTipsManager.setToDefaultTip();
                 return false;
             }
-            console.log(`Activated tool: ${toolName}`);
 
             if (this.activeTool.tooltip) {
                 QuickTipsManager.setToolTip(this.activeTool.tooltip);

@@ -27,7 +27,6 @@ class WallTool extends BaseTool {
     pendingChangesRef: React.RefObject<any>;
     environmentBuilderRef: React.RefObject<any>;
     constructor(terrainBuilderProps) {
-        console.log("WallTool initialized");
         super(terrainBuilderProps);
 
         this.name = "WallTool";
@@ -328,14 +327,6 @@ class WallTool extends BaseTool {
      * @returns {boolean} True if the wall was placed, false otherwise
      */
     placeWall(startPos, endPos, height) {
-        console.log(
-            "WallTool: Placing wall from",
-            startPos,
-            "to",
-            endPos,
-            "with height",
-            height
-        );
         if (!startPos || !endPos) {
             console.error("Invalid start or end position for wall placement");
             return false;
@@ -361,8 +352,6 @@ class WallTool extends BaseTool {
             Math.round(endPos.z)
         );
 
-        console.time("WallTool-placeWall");
-
         const addedBlocks = {};
         const baseY = Math.round(startPos.y);
 
@@ -385,10 +374,6 @@ class WallTool extends BaseTool {
             );
             return false;
         }
-        console.log(
-            `WallTool: Adding ${Object.keys(addedBlocks).length
-            } blocks in batch`
-        );
 
         Object.entries(addedBlocks).forEach(([posKey, blockId]) => {
             this.terrainRef.current[posKey] = blockId;
@@ -407,9 +392,6 @@ class WallTool extends BaseTool {
         );
 
         if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
-            console.log(
-                "WallTool: Explicitly updating spatial hash after placement"
-            );
             this.terrainBuilderRef.current.updateSpatialHashForBlocks(
                 addedBlocksArray,
                 [],
@@ -418,24 +400,10 @@ class WallTool extends BaseTool {
         }
 
         if (this.placementChangesRef) {
-            console.log(
-                "WallTool: Adding placed blocks to placementChangesRef"
-            );
             Object.entries(addedBlocks).forEach(([key, value]) => {
                 this.placementChangesRef.current.terrain.added[key] = value;
             });
-
-            const added = Object.keys(
-                this.placementChangesRef.current.terrain.added
-            ).length;
-            const removed = Object.keys(
-                this.placementChangesRef.current.terrain.removed
-            ).length;
-            console.log(
-                `WallTool: placementChangesRef now has ${added} added and ${removed} removed blocks`
-            );
         }
-        console.timeEnd("WallTool-placeWall");
         return true;
     }
     /**
@@ -478,8 +446,6 @@ class WallTool extends BaseTool {
             Math.round(endPos.z)
         );
 
-        console.time("WallTool-eraseWall");
-
         const removedBlocks = {};
         const baseY = Math.round(startPos.y);
 
@@ -500,10 +466,6 @@ class WallTool extends BaseTool {
             );
             return false;
         }
-        console.log(
-            `WallTool: Removing ${Object.keys(removedBlocks).length
-            } blocks in batch`
-        );
 
         Object.keys(removedBlocks).forEach((posKey) => {
             delete this.terrainRef.current[posKey];
@@ -522,9 +484,6 @@ class WallTool extends BaseTool {
         );
 
         if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
-            console.log(
-                "WallTool: Explicitly updating spatial hash after erasure"
-            );
             this.terrainBuilderRef.current.updateSpatialHashForBlocks(
                 [],
                 removedBlocksArray,
@@ -540,7 +499,6 @@ class WallTool extends BaseTool {
 
 
         }
-        console.timeEnd("WallTool-eraseWall");
         return true;
     }
     /**
@@ -555,7 +513,6 @@ class WallTool extends BaseTool {
         this.removeWallPreview();
 
         if (startPos.equals(endPos)) return;
-        console.time("WallTool-updateWallPreview");
 
         const points = this.getLinePoints(
             Math.round(startPos.x),

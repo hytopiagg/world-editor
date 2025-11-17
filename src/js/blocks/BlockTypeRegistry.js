@@ -74,8 +74,6 @@ class BlockTypeRegistry {
         if (this._initialized) {
             return;
         }
-        console.time("BlockTypeRegistry.initialize");
-
         try {
             BlockTextureAtlas.instance.markTextureAsEssential(
                 "./assets/blocks/error.png"
@@ -105,12 +103,6 @@ class BlockTypeRegistry {
             this._blockTypes[blockTypeData.id] = blockType;
         }
         this._initialized = true;
-        console.log(
-            `BlockTypeRegistry initialized with ${
-                Object.keys(this._blockTypes).length
-            } block types`
-        );
-        console.timeEnd("BlockTypeRegistry.initialize");
     }
     /**
      * Register a block type
@@ -316,14 +308,6 @@ class BlockTypeRegistry {
                                 (window.__LIGHT_DEBUG__?.refresh ||
                                     window.__LIGHT_DEBUG__ === true)
                             ) {
-                                console.log(
-                                    "[light-refresh][registry] type lightLevel change affecting chunk",
-                                    {
-                                        blockTypeId: blockTypeData.id,
-                                        chunkId,
-                                        marked,
-                                    }
-                                );
                             }
                         }
                         manager.processRenderQueue?.(true);
@@ -367,17 +351,11 @@ class BlockTypeRegistry {
         }
 
         if (blockTypesToPreload.length === 0) {
-            console.log("No block types need texture preloading, skipping.");
-            console.timeEnd("BlockTypeRegistry.preload");
             return;
         }
-        console.log(
-            `Preloading textures for ${blockTypesToPreload.length} block types${onlyEssential ? ' (essential only)' : ''}...`
-        );
         await Promise.all(
             blockTypesToPreload.map((blockType) => blockType.preloadTextures())
         );
-        console.timeEnd("BlockTypeRegistry.preload");
     }
     /**
      * Add a block type ID to the essential block types set
@@ -401,12 +379,10 @@ class BlockTypeRegistry {
             return;
         }
         
-        console.log(`[TEXTURE] Preloading textures for block type: ${blockType.name} (ID: ${blockId})`);
         this.markBlockTypeAsEssential(blockId);
         
         try {
             await blockType.preloadTextures();
-            console.log(`[TEXTURE] ✓ Successfully preloaded textures for: ${blockType.name}`);
             
             // Immediately rebuild atlas to ensure textures are available
             await BlockTextureAtlas.instance.rebuildTextureAtlas();
@@ -431,7 +407,6 @@ class BlockTypeRegistry {
         }
         
         const missingTextures = Array.from(atlas._missingTextureWarnings);
-        console.log(`[TEXTURE] Retrying ${missingTextures.length} missing textures...`);
         
         // Clear the warnings set so we can track new failures
         atlas._missingTextureWarnings.clear();
@@ -440,7 +415,6 @@ class BlockTypeRegistry {
             missingTextures.map(async (uri) => {
                 try {
                     await atlas.loadTexture(uri);
-                    console.log(`[TEXTURE] ✓ Retry successful: ${uri}`);
                     return { uri, success: true };
                 } catch (error) {
                     console.warn(`[TEXTURE] ✗ Retry failed: ${uri}`, error);
@@ -450,9 +424,6 @@ class BlockTypeRegistry {
         );
         
         const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
-        const failed = results.length - successful;
-        
-        console.log(`[TEXTURE] Retry complete: ${successful} succeeded, ${failed} failed`);
         
         // Update material if any textures were loaded
         if (successful > 0) {
@@ -722,7 +693,6 @@ class BlockTypeRegistry {
      * @returns {Promise<Object>} Results of the fix operation
      */
     async fixCustomTextures() {
-        console.log("🔧 Starting custom texture repair process...");
         const results = {
             fixed: 0,
             failed: 0,
@@ -733,17 +703,12 @@ class BlockTypeRegistry {
         const customBlockTypes = Object.values(this._blockTypes).filter(
             (blockType) => blockType.id > 50
         );
-        console.log(`Found ${customBlockTypes.length} potential custom blocks`);
         if (customBlockTypes.length === 0) {
-            console.log("No custom blocks found to fix");
             return results;
         }
 
         for (const blockType of customBlockTypes) {
             try {
-                console.log(
-                    `Attempting to fix textures for block ${blockType.id} (${blockType.name})`
-                );
 
                 const textureUris = blockType.textureUris;
 
@@ -757,10 +722,6 @@ class BlockTypeRegistry {
                 }
 
                 if (dataUri) {
-                    console.log(
-                        `Found data URI for block ${blockType.id}, reapplying to all faces`
-                    );
-
                     const textureAtlas = BlockTextureAtlas.instance;
                     if (!textureAtlas) {
                         throw new Error("BlockTextureAtlas not available");
@@ -777,8 +738,6 @@ class BlockTypeRegistry {
                     results.fixed++;
                     results.blockIdsFixed.push(blockType.id);
                 } else {
-                    console.log(`No data URI found for block ${blockType.id}`);
-
                     if (typeof window !== "undefined" && window.localStorage) {
                         const key = `block-texture-${blockType.id}`;
                         const storedDataUri = window.localStorage.getItem(key);
@@ -786,9 +745,6 @@ class BlockTypeRegistry {
                             storedDataUri &&
                             storedDataUri.startsWith("data:image/")
                         ) {
-                            console.log(
-                                `Found stored texture for block ${blockType.id} in localStorage`
-                            );
 
                             await blockType.applyCustomTextureDataUri(
                                 storedDataUri,
@@ -807,13 +763,9 @@ class BlockTypeRegistry {
                             results.fixed++;
                             results.blockIdsFixed.push(blockType.id);
                         } else {
-                            console.log(
-                                `No stored texture found for block ${blockType.id}`
-                            );
                             results.failed++;
                         }
                     } else {
-                        console.log(`localStorage not available`);
                         results.failed++;
                     }
                 }
@@ -831,9 +783,6 @@ class BlockTypeRegistry {
         }
 
         await BlockTextureAtlas.instance.rebuildTextureAtlas();
-        console.log(
-            `🔧 Custom texture repair complete: Fixed ${results.fixed} blocks, failed ${results.failed} blocks`
-        );
         return results;
     }
     /**

@@ -29,8 +29,6 @@ class BaseTool {
      */
     async activate(activationData) {
         this.active = true;
-        console.log(`${this.name} activated`);
-
 
         let activationSuccessful = false;
         try {
@@ -61,7 +59,6 @@ class BaseTool {
      */
     deactivate() {
         this.active = false;
-        console.log(`${this.name} deactivated`);
         this.onDeactivate(); // Call specific deactivation logic if needed
     }
     /**

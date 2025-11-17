@@ -1203,14 +1203,7 @@ class Chunk {
      * @param {ChunkManager} chunkManager - The chunk manager
      */
     setBlock(localCoordinate, blockTypeId, chunkManager) {
-        const shouldLogPerf = Math.random() < 0.01; // Only log 1% of operations
-        if (shouldLogPerf) {
-            console.time(`setBlock-${this.chunkId}`);
-        }
         if (!Chunk.isValidLocalCoordinate(localCoordinate)) {
-            if (shouldLogPerf) {
-                console.timeEnd(`setBlock-${this.chunkId}`);
-            }
             throw new Error(
                 "Chunk.setBlock(): Block coordinate is out of bounds"
             );
@@ -1219,9 +1212,6 @@ class Chunk {
         const oldBlockTypeId = this._blocks[blockIndex];
 
         if (oldBlockTypeId === blockTypeId) {
-            if (shouldLogPerf) {
-                console.timeEnd(`setBlock-${this.chunkId}`);
-            }
             return;
         }
 
@@ -1238,18 +1228,10 @@ class Chunk {
 
         if (isFirstBlockInChunk) {
             chunkManager.markChunkForRemesh(this.chunkId);
-            if (shouldLogPerf) {
-                console.timeEnd(`setBlock-${this.chunkId}`);
-            }
             return;
         }
 
         if (isBlockRemoval) {
-            if (Math.random() < 0.1) {
-                console.log(
-                    `Block removal at (${localCoordinate.x},${localCoordinate.y},${localCoordinate.z}) - doing full chunk rebuild`
-                );
-            }
 
             if (this._solidMesh) {
                 chunkManager.chunkMeshManager.removeSolidMesh(this);

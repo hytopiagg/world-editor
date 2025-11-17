@@ -71,9 +71,6 @@ export class EnhancedBlockTextureAtlas {
      */
     private _initializeTextureArray(): void {
         if (!TextureCompression.instance.supportsTextureArrays()) {
-            console.log(
-                "WebGL2 texture arrays not supported, using traditional atlas"
-            );
             this._useTextureArrays = false;
             return;
         }
@@ -92,7 +89,6 @@ export class EnhancedBlockTextureAtlas {
 
             if (this._textureArray) {
                 this._useTextureArrays = true;
-                console.log("✅ WebGL2 texture array initialized successfully");
             } else {
                 console.warn(
                     "Failed to create WebGL2 texture array, falling back to traditional atlas"
@@ -400,18 +396,11 @@ export class EnhancedBlockTextureAtlas {
      * Initialize essential textures
      */
     async initialize(): Promise<void> {
-        console.log("🧊 Initializing Enhanced BlockTextureAtlas...");
-
         try {
             // Load essential textures
             for (const textureUri of this._essentialTextures) {
                 await this.loadTexture(textureUri);
             }
-
-            console.log(
-                "✅ Enhanced BlockTextureAtlas initialization complete!"
-            );
-            console.log("📊 Optimization stats:", this.getOptimizationStats());
         } catch (error) {
             console.error(
                 "❌ Error initializing Enhanced BlockTextureAtlas:",

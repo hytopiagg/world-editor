@@ -198,7 +198,6 @@ class GroundTool extends BaseTool {
                     this.isPlacingRef.current = false;
                 }
             } else {
-                console.log("Setting ground start position:", currentPosition); // Use accurate position
                 this.groundStartPosition = currentPosition.clone();
 
                 if (this.placementChangesRef) {
@@ -445,9 +444,6 @@ class GroundTool extends BaseTool {
         );
 
         if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
-            console.log(
-                "GroundTool: Explicitly updating spatial hash after placement"
-            );
             this.terrainBuilderRef.current.updateSpatialHashForBlocks(
                 addedBlocksArray,
                 [],
@@ -456,24 +452,10 @@ class GroundTool extends BaseTool {
         }
 
         if (this.placementChangesRef) {
-            console.log(
-                "GroundTool: Adding placed blocks to placementChangesRef"
-            );
             Object.entries(addedBlocks).forEach(([key, value]) => {
                 this.placementChangesRef.current.terrain.added[key] = value;
             });
-
-            const added = Object.keys(
-                this.placementChangesRef.current.terrain.added
-            ).length;
-            const removed = Object.keys(
-                this.placementChangesRef.current.terrain.removed
-            ).length;
-            console.log(
-                `GroundTool: placementChangesRef now has ${added} added and ${removed} removed blocks`
-            );
         }
-        console.timeEnd("GroundTool-placeGround");
         return true;
     }
     /**
@@ -483,16 +465,6 @@ class GroundTool extends BaseTool {
      * @returns {boolean} True if the ground was erased, false otherwise
      */
     eraseGround(startPos, endPos) {
-        console.log(
-            "GroundTool: Erasing ground from",
-            startPos,
-            "to",
-            endPos,
-            "with height",
-            this.groundHeight,
-            "and sides",
-            this.isCircleShape
-        );
         if (!startPos || !endPos) {
             console.error("Invalid start or end position for erasing");
             return false;
@@ -573,9 +545,6 @@ class GroundTool extends BaseTool {
         );
 
         if (this.terrainBuilderRef.current.updateSpatialHashForBlocks) {
-            console.log(
-                "GroundTool: Explicitly updating spatial hash after erasure"
-            );
             this.terrainBuilderRef.current.updateSpatialHashForBlocks(
                 [],
                 removedBlocksArray,
@@ -584,24 +553,10 @@ class GroundTool extends BaseTool {
         }
 
         if (this.placementChangesRef) {
-            console.log(
-                "GroundTool: Adding removed blocks to placementChangesRef"
-            );
             Object.entries(removedBlocks).forEach(([key, value]) => {
                 this.placementChangesRef.current.terrain.removed[key] = value;
             });
-
-            const added = Object.keys(
-                this.placementChangesRef.current.terrain.added
-            ).length;
-            const removed = Object.keys(
-                this.placementChangesRef.current.terrain.removed
-            ).length;
-            console.log(
-                `GroundTool: placementChangesRef now has ${added} added and ${removed} removed blocks`
-            );
         }
-        console.timeEnd("GroundTool-eraseGround");
         return true;
     }
     /**

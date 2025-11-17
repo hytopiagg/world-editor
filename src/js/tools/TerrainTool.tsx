@@ -128,8 +128,6 @@ export class TerrainTool extends BaseTool {
     }
 
     onActivate() {
-        console.log("Terrain tool activated");
-
         // Add preview to scene
         if ((this.terrainBuilderProps as any).scene && this.previewGroup) {
             (this.terrainBuilderProps as any).scene.add(this.previewGroup);
@@ -146,8 +144,6 @@ export class TerrainTool extends BaseTool {
     }
 
     onDeactivate() {
-        console.log("Terrain tool deactivated");
-
         // Remove preview from scene
         if ((this.terrainBuilderProps as any).scene && this.previewGroup) {
             (this.terrainBuilderProps as any).scene.remove(this.previewGroup);
@@ -204,7 +200,6 @@ export class TerrainTool extends BaseTool {
         }
 
         this.isPlacing = true;
-        console.log("Terrain tool: Started terrain modification");
 
         // Reset per-stroke change trackers
         this.strokeAdded = {};
@@ -221,7 +216,6 @@ export class TerrainTool extends BaseTool {
         if (!this.active) return;
 
         this.isPlacing = false;
-        console.log("Terrain tool: Finished terrain modification");
 
         // Apply all height changes to terrain and spatial hash updates
         this.applyHeightChanges();
@@ -313,8 +307,6 @@ export class TerrainTool extends BaseTool {
         // Get the selected block type and ensure its textures are loaded
         const currentBlockType = (this.terrainBuilderProps as any).currentBlockTypeRef?.current;
         const selectedBlockId = currentBlockType?.id || 1;
-        
-        console.log(`[TERRAIN_TOOL] Modifying terrain with block ${selectedBlockId}`);
         
         // Ensure textures are loaded for the selected block
         try {
