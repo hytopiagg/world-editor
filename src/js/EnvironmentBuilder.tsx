@@ -825,6 +825,17 @@ const EnvironmentBuilder = (
             return;
         }
 
+        // Hide preview if SelectionTool is active and has a selected entity
+        const toolManager = terrainBuilderRef?.current?.toolManagerRef?.current;
+        const activeTool = toolManager?.getActiveTool?.();
+        const shouldHidePreview = activeTool?.name === "selection" && 
+                                  (activeTool?.selectedEntity || activeTool?.hoveredEntity);
+        
+        if (shouldHidePreview) {
+            removePreview();
+            return;
+        }
+
         if (!placeholderMeshRef.current || placeholderMeshRef.current.userData.modelId !== currentBlockType.id) {
             await setupPreview(position);
         } else if (position) {
@@ -1812,6 +1823,25 @@ const EnvironmentBuilder = (
             updateModelPreview(previewPositionFromAppJS);
         }
     }, [previewPositionFromAppJS, currentBlockType]);
+
+    // Listen for entity selection/hover changes to hide preview
+    useEffect(() => {
+        const handleEntityStateChange = () => {
+            if (currentBlockType?.isEnvironment && previewPositionFromAppJS) {
+                updateModelPreview(previewPositionFromAppJS);
+            }
+        };
+        
+        window.addEventListener("entity-selected", handleEntityStateChange);
+        window.addEventListener("entity-deselected", handleEntityStateChange);
+        window.addEventListener("entity-hover-changed", handleEntityStateChange);
+        
+        return () => {
+            window.removeEventListener("entity-selected", handleEntityStateChange);
+            window.removeEventListener("entity-deselected", handleEntityStateChange);
+            window.removeEventListener("entity-hover-changed", handleEntityStateChange);
+        };
+    }, [currentBlockType, previewPositionFromAppJS]);
 
     useEffect(() => {
         placementSettingsRef.current = placementSettings;
