@@ -3263,9 +3263,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     activeTool?.name === "selection" &&
                     activeTool?.transformControls
                 ) {
-                    // TransformControls needs to be updated each frame
-                    // It handles its own rendering, but needs camera updates
-                    activeTool.transformControls.update();
+                    // TransformControls handles its own rendering and updates automatically
+                    // No manual update() call needed - it updates based on camera and mouse events
                 }
             }
 

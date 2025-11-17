@@ -99,7 +99,7 @@ class SelectionTool extends BaseTool {
 
     constructor(terrainBuilderProps) {
         super(terrainBuilderProps);
-        this.name = "SelectionTool";
+        this.name = "selection";
         this.originalTooltip =
             "Selection Tool: Click to start selection, click again to confirm. Use 1 | 2 to adjust height. Press 3 to switch between move, copy and delete mode. Click and drag to move selection. Press Escape to cancel.";
         this.tooltip = this.originalTooltip;
@@ -206,6 +206,11 @@ class SelectionTool extends BaseTool {
         this.verticalOffset = 0;
         this.rotation = 0;
         // Don't dispose gizmo here - keep it if entity is still selected
+
+        // Trigger preview visibility update when tool activates
+        // This ensures preview is hidden if entity is already selected
+        window.dispatchEvent(new CustomEvent("entity-hover-changed"));
+
         return true;
     }
 
