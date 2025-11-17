@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import ParticleViewerSidebar from "./ParticleViewerSidebar";
 import ParticleViewerCanvas from "./ParticleViewerCanvas";
+import PlayButton from "./PlayButton";
 
 export type TargetObjectType = "player" | "block" | "entity" | "none";
 
@@ -52,6 +53,7 @@ export default function ParticleViewerPage() {
     const [emitters, setEmitters] = useState<ParticleEmitterConfig[]>([]);
     const [selectedEmitterId, setSelectedEmitterId] = useState<string | null>(null);
     const [availableBoneNames, setAvailableBoneNames] = useState<string[]>([]);
+    const [playModeEnabled, setPlayModeEnabled] = useState(false);
 
 
     const handleEmitterCreate = () => {
@@ -146,9 +148,18 @@ export default function ParticleViewerPage() {
                     targetObject={targetObject} 
                     entityTarget={entityTarget} 
                     emitters={emitters}
+                    playModeEnabled={playModeEnabled}
                     onBoneNamesChange={setAvailableBoneNames}
                 />
             </div>
+
+            {/* Play Button - only show for player and entity */}
+            {(targetObject === "player" || targetObject === "entity") && (
+                <PlayButton 
+                    enabled={playModeEnabled} 
+                    onToggle={() => setPlayModeEnabled(!playModeEnabled)} 
+                />
+            )}
         </div>
     );
 }

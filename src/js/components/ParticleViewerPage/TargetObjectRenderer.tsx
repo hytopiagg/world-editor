@@ -8,6 +8,7 @@ import type { TargetObjectType, EntityTarget } from "./index";
 interface TargetObjectRendererProps {
     type: TargetObjectType;
     entityTarget?: EntityTarget | null;
+    playModeEnabled?: boolean;
     onObjectReady?: (object: THREE.Object3D | null, boneMap?: Map<string, THREE.Object3D>) => void;
 }
 
@@ -197,7 +198,7 @@ function EntityModel({ entityTarget, onObjectReady }: { entityTarget: EntityTarg
     return <primitive object={clonedScene} ref={modelRef} />;
 }
 
-export default function TargetObjectRenderer({ type, entityTarget, onObjectReady }: TargetObjectRendererProps) {
+export default function TargetObjectRenderer({ type, entityTarget, playModeEnabled, onObjectReady }: TargetObjectRendererProps) {
     useEffect(() => {
         if (type === "none" && onObjectReady) {
             onObjectReady(null);
@@ -208,7 +209,11 @@ export default function TargetObjectRenderer({ type, entityTarget, onObjectReady
         return null;
     }
 
+    // Hide original player model when in play mode (we use a separate player mesh)
     if (type === "player") {
+        if (playModeEnabled) {
+            return null; // Player mesh is handled by PlayModeController
+        }
         return <PlayerModel onObjectReady={onObjectReady} />;
     }
 

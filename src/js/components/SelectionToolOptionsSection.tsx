@@ -91,14 +91,17 @@ export default function SelectionToolOptionsSection({ selectionTool, isCompactMo
 
     return (
         <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.05s" }}>
-                <div className="text-xs text-[#F1F1F1]/60 mb-1">Selection Mode</div>
-                <div className="flex gap-2">
-                    <button className={btnClass("move")} onClick={() => applyMode("move")}>Move</button>
-                    <button className={btnClass("copy")} onClick={() => applyMode("copy")}>Copy</button>
-                    <button className={btnClass("delete")} onClick={() => applyMode("delete")}>Delete</button>
+            {/* Selection Mode - Hide when entity is selected */}
+            {!selectedEntity && (
+                <div className="flex flex-col gap-2 fade-down opacity-0 duration-150" style={{ animationDelay: "0.05s" }}>
+                    <div className="text-xs text-[#F1F1F1]/60 mb-1">Selection Mode</div>
+                    <div className="flex gap-2">
+                        <button className={btnClass("move")} onClick={() => applyMode("move")}>Move</button>
+                        <button className={btnClass("copy")} onClick={() => applyMode("copy")}>Copy</button>
+                        <button className={btnClass("delete")} onClick={() => applyMode("delete")}>Delete</button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Gizmo Mode Buttons - Only show when entity is selected */}
             {selectedEntity && (

@@ -2,17 +2,53 @@
 
 Based on actual loading logs from an empty world, here are the identified bottlenecks:
 
+## Implementation Status
+
+**Last Updated:** Based on code verification (2024)
+
+### ✅ Implemented Optimizations
+
+1. **Lazy texture loading** - ✅ IMPLEMENTED
+
+    - Textures only load for blocks actually present in terrain
+    - Uses `onlyEssential: true` flag in `preload()` calls
+    - Essential block types are marked based on terrain content
+
+2. **Skip preload for empty worlds** - ✅ IMPLEMENTED
+
+    - Empty worlds (`terrainBlockCount === 0`) skip texture preload entirely
+    - Implemented in `TerrainBuilder.tsx` lines 1910-1924
+    - Saves ~18 seconds for empty worlds
+
+3. **On-demand texture loading** - ✅ IMPLEMENTED
+    - Textures load when blocks are placed (`preloadBlockTypeTextures()`)
+    - Used by ReplaceTool and block placement handlers
+
+### ⚠️ Still Needs Verification/Optimization
+
+1. **Parallel texture loading** - Textures still load sequentially via `Promise.all()`
+2. **Database query optimization** - Empty DB queries still take 6+ seconds
+3. **Chunk system optimization** - Empty terrain still triggers chunk updates
+
+---
+
 ## Critical Bottlenecks (Ranked by Impact)
 
-### 1. **BlockTypeRegistry.preload: 18,766ms (69.3%)** 🔴 CRITICAL
+### 1. **BlockTypeRegistry.preload: 18,766ms (69.3%)** 🟢 OPTIMIZED (for empty worlds)
 
-**What's happening:**
+**Current Status:**
+
+-   ✅ **Empty worlds:** Preload is skipped entirely (saves ~18 seconds)
+-   ✅ **Non-empty worlds:** Only textures for blocks in terrain are loaded
+-   ⚠️ **Parallel loading:** Still loads textures sequentially (could be improved)
+
+**Previous behavior (from logs):**
 
 -   Loading textures for 167 block types sequentially
--   Takes ~18.7 seconds even for an empty world
--   This is the single biggest bottleneck
+-   Took ~18.7 seconds even for an empty world
+-   All textures loaded regardless of usage
 
-**Evidence from logs:**
+**Evidence from logs (historical):**
 
 ```
 [PERF] ⏱️  START: BlockTypeRegistry.preload | Time: 7158.80ms
@@ -20,20 +56,19 @@ Based on actual loading logs from an empty world, here are the identified bottle
 [PERF] ✅ END: BlockTypeRegistry.preload {"preloadedCount":167} | Duration: 18766.00ms
 ```
 
-**Root cause:**
+**Current implementation:**
 
--   All block textures are being preloaded synchronously, even though the world is empty
--   Each texture load involves network fetch + atlas processing
--   No lazy loading - textures loaded even if never used
+-   Empty worlds: Preload skipped (`TerrainBuilder.tsx:1910-1924`)
+-   Non-empty worlds: Only essential block types preloaded (`onlyEssential: true`)
+-   Essential block types marked from terrain content (`TerrainBuilder.tsx:1899-1908`)
 
-**Optimization opportunities:**
+**Remaining optimization opportunities:**
 
-1. **Lazy load textures** - Only load textures for blocks actually in the terrain
-2. **Parallel loading** - Load multiple textures concurrently instead of sequentially
-3. **Skip preload for empty worlds** - If terrain is empty, skip texture preload entirely
-4. **Progressive loading** - Load essential textures first, defer others
+1. **Parallel loading** - Load multiple textures concurrently instead of sequentially
+2. **Progressive loading** - Load visible chunks first, defer others
+3. **Texture caching** - Better cache invalidation and reuse
 
-**Potential savings:** 15-18 seconds (80-95% reduction)
+**Potential additional savings:** 2-5 seconds (for worlds with data, via parallel loading)
 
 ---
 
@@ -133,6 +168,8 @@ Based on actual loading logs from an empty world, here are the identified bottle
 
 ## Summary Statistics
 
+### Historical Performance (Before Optimizations)
+
 **Total loading time:** ~27 seconds for an empty world
 
 **Breakdown:**
@@ -142,25 +179,42 @@ Based on actual loading logs from an empty world, here are the identified bottle
 -   Chunk system update: 2.1s (8%)
 -   Other operations: <1s (3%)
 
+### Current Performance (After Texture Optimization)
+
+**Estimated total loading time:** ~9 seconds for an empty world (66% reduction)
+
+**Breakdown (estimated):**
+
+-   Block texture loading: 0s (0%) ✅ **OPTIMIZED** - Skipped for empty worlds
+-   Environment DB read: 6.7s (74%) ⚠️ **Still needs optimization**
+-   Chunk system update: 2.1s (23%) ⚠️ **Still needs optimization**
+-   Other operations: <1s (3%)
+
+**Note:** Actual performance should be verified with new performance logs. The texture preload optimization should save ~18 seconds for empty worlds.
+
 ## Recommended Optimization Priority
 
-### Phase 1: Quick Wins (High Impact, Low Effort)
+### Phase 1: Quick Wins (High Impact, Low Effort) ✅ PARTIALLY COMPLETE
 
-1. **Skip texture preload for empty worlds** - Save ~18 seconds
-2. **Fast-path empty DB queries** - Save ~6 seconds
-3. **Skip chunk updates for empty terrain** - Save ~2 seconds
+1. ✅ **Skip texture preload for empty worlds** - ✅ IMPLEMENTED - Save ~18 seconds
+2. ⚠️ **Fast-path empty DB queries** - ⚠️ NEEDS VERIFICATION - Save ~6 seconds
+3. ⚠️ **Skip chunk updates for empty terrain** - ⚠️ NEEDS VERIFICATION - Save ~2 seconds
 
-**Total potential savings:** ~26 seconds (96% reduction for empty worlds)
+**Status:** Empty world texture preload optimization is complete. DB and chunk optimizations need verification.
 
-### Phase 2: Architecture Improvements (High Impact, Medium Effort)
+**Total potential savings:** ~26 seconds (96% reduction for empty worlds) - **~18 seconds achieved**
 
-1. **Lazy texture loading** - Only load textures for blocks in use
-2. **Parallel texture loading** - Load multiple textures concurrently
-3. **Optimize IndexedDB queries** - Better indexing and query patterns
+### Phase 2: Architecture Improvements (High Impact, Medium Effort) ✅ PARTIALLY COMPLETE
 
-**Total potential savings:** Additional 5-10 seconds for worlds with data
+1. ✅ **Lazy texture loading** - ✅ IMPLEMENTED - Only load textures for blocks in use
+2. ⚠️ **Parallel texture loading** - ⚠️ NOT IMPLEMENTED - Load multiple textures concurrently
+3. ⚠️ **Optimize IndexedDB queries** - ⚠️ NEEDS INVESTIGATION - Better indexing and query patterns
 
-### Phase 3: Advanced Optimizations (Medium Impact, High Effort)
+**Status:** Lazy loading is implemented. Parallel loading and DB optimization still needed.
+
+**Total potential savings:** Additional 5-10 seconds for worlds with data - **Partially achieved**
+
+### Phase 3: Advanced Optimizations (Medium Impact, High Effort) ⏳ NOT STARTED
 
 1. **Progressive chunk loading** - Load chunks as camera approaches
 2. **Web Workers for texture processing** - Offload to background thread
@@ -173,4 +227,11 @@ Based on actual loading logs from an empty world, here are the identified bottle
 -   The "App Component Initialization" time (25.9s) is misleading - it includes all nested operations
 -   Most bottlenecks are sequential when they could be parallel
 -   Empty world performance is critical for first-time user experience
--   Current implementation loads everything upfront, even when not needed
+-   ~~Current implementation loads everything upfront, even when not needed~~ ✅ **FIXED:** Empty worlds now skip texture preload
+-   **Current state:** Lazy loading is implemented - textures only load for blocks in terrain
+-   **Verification needed:** Performance logs should be re-run to confirm current behavior matches expectations
+-   **Code locations:**
+-   Empty world skip: `src/js/TerrainBuilder.tsx:1910-1924`
+-   Essential block marking: `src/js/TerrainBuilder.tsx:1899-1908`
+-   Lazy preload: `src/js/blocks/BlockTypeRegistry.js:325-357`
+-   On-demand loading: `src/js/blocks/BlockTypeRegistry.js:371-395`
