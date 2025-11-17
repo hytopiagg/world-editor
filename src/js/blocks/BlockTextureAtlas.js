@@ -238,19 +238,15 @@ class BlockTextureAtlas {
      * @returns {Promise<void>}
      */
     async loadTexture(textureUri) {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
         const logKey = `BlockTextureAtlas.loadTexture(${textureUri})`;
-        performanceLogger.markStart(logKey);
         
         if (!textureUri) {
-            performanceLogger.markEnd(logKey, { skipped: true, reason: "empty URI" });
             return;
         }
         const isDataUri = textureUri.startsWith("data:image/");
         if (isDataUri) {
             console.log(`[TEXTURE] Loading data URI texture: ${textureUri.substring(0, 50)}...`);
             await this.loadTextureFromDataURI(textureUri, textureUri);
-            performanceLogger.markEnd(logKey, { type: "dataUri" });
             return;
         }
         const normalizedPath = textureUri.startsWith("./assets")
@@ -265,7 +261,6 @@ class BlockTextureAtlas {
             this._textureAtlasMetadata.has(alternativePath)
         ) {
             console.log(`[TEXTURE] Texture already loaded: ${textureUri}`);
-            performanceLogger.markEnd(logKey, { skipped: true, reason: "already loaded" });
             return;
         }
         
@@ -295,7 +290,6 @@ class BlockTextureAtlas {
                         console.log(`[TEXTURE] Trying fallback path: ${fallbackPath}`);
                         await this._loadTextureDirectly(fallbackPath);
                         console.log(`[TEXTURE] ✓ Successfully loaded via fallback: ${fallbackPath}`);
-                        performanceLogger.markEnd(logKey, { usedFallback: true });
                         return;
                     } catch (error) {
                         console.warn(`[TEXTURE] Fallback failed for ${fallbackPath}:`, error);
@@ -304,11 +298,9 @@ class BlockTextureAtlas {
                 await this._loadTextureDirectly(textureUri);
                 console.log(`[TEXTURE] ✓ Successfully loaded: ${textureUri}`);
             }
-            performanceLogger.markEnd(logKey, { success: true });
         } catch (error) {
             console.error(`[TEXTURE] ✗ Failed to load: ${textureUri}`, error);
             this._missingTextureWarnings.add(textureUri);
-            performanceLogger.markEnd(logKey, { success: false, error: error.message });
             throw error;
         }
     }
@@ -849,19 +841,15 @@ class BlockTextureAtlas {
      * @private
      */
     async _loadTextureDirectly(textureUri) {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
         const logKey = `BlockTextureAtlas._loadTextureDirectly(${textureUri})`;
-        performanceLogger.markStart(logKey);
         
         if (this._textureLoadLocks[textureUri]) {
             console.log(`[TEXTURE] Waiting for in-progress load: ${textureUri}`);
             const result = await this._textureLoadLocks[textureUri];
-            performanceLogger.markEnd(logKey, { waitedForLock: true });
             return result;
         }
         if (this._textureLoadFailures.has(textureUri)) {
             console.warn(`[TEXTURE] Texture previously failed: ${textureUri}`);
-            performanceLogger.markEnd(logKey, { skipped: true, reason: "previous failure" });
             throw new Error(`Texture previously failed to load: ${textureUri}`);
         }
 
@@ -933,7 +921,6 @@ class BlockTextureAtlas {
                     }
                     this._scheduleAtlasUpdate();
                     console.log(`[TEXTURE] ✓ Direct load successful: ${textureUri}`);
-                    performanceLogger.markEnd(logKey, { success: true });
                     resolve(texture);
                 },
                 undefined,
@@ -955,11 +942,9 @@ class BlockTextureAtlas {
                             errorMetadata
                         );
                         this._scheduleAtlasUpdate();
-                        performanceLogger.markEnd(logKey, { success: false, usedErrorFallback: true });
                         resolve();
                     } else {
                         this._textureLoadFailures.add(textureUri);
-                        performanceLogger.markEnd(logKey, { success: false, error: error.message });
                         reject(error);
                     }
                 }

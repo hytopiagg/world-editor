@@ -74,8 +74,6 @@ class BlockTypeRegistry {
         if (this._initialized) {
             return;
         }
-        const { performanceLogger } = require("../utils/PerformanceLogger");
-        performanceLogger.markStart("BlockTypeRegistry.initialize");
         console.time("BlockTypeRegistry.initialize");
 
         try {
@@ -89,9 +87,6 @@ class BlockTypeRegistry {
             console.warn("Failed to load error texture:", error);
         }
         const blockTypes = getBlockTypes();
-        performanceLogger.checkpoint("BlockTypesManager scan complete", { 
-            blockCount: blockTypes.length 
-        });
 
         for (const blockTypeData of blockTypes) {
             const isLiquid = false;
@@ -116,9 +111,6 @@ class BlockTypeRegistry {
             } block types`
         );
         console.timeEnd("BlockTypeRegistry.initialize");
-        performanceLogger.markEnd("BlockTypeRegistry.initialize", {
-            blockCount: Object.keys(this._blockTypes).length
-        });
     }
     /**
      * Register a block type
@@ -347,8 +339,6 @@ class BlockTypeRegistry {
      * @returns {Promise<void>}
      */
     async preload(options = {}) {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
-        performanceLogger.markStart("BlockTypeRegistry.preload");
         console.time("BlockTypeRegistry.preload");
 
         const { onlyEssential = false } = options;
@@ -379,27 +369,15 @@ class BlockTypeRegistry {
         if (blockTypesToPreload.length === 0) {
             console.log("No block types need texture preloading, skipping.");
             console.timeEnd("BlockTypeRegistry.preload");
-            performanceLogger.markEnd("BlockTypeRegistry.preload", { 
-                preloadedCount: 0,
-                onlyEssential
-            });
             return;
         }
         console.log(
             `Preloading textures for ${blockTypesToPreload.length} block types${onlyEssential ? ' (essential only)' : ''}...`
         );
-        performanceLogger.checkpoint("Starting texture preload", {
-            blockTypesToPreload: blockTypesToPreload.length,
-            onlyEssential
-        });
         await Promise.all(
             blockTypesToPreload.map((blockType) => blockType.preloadTextures())
         );
         console.timeEnd("BlockTypeRegistry.preload");
-        performanceLogger.markEnd("BlockTypeRegistry.preload", {
-            preloadedCount: blockTypesToPreload.length,
-            onlyEssential
-        });
     }
     /**
      * Add a block type ID to the essential block types set
@@ -415,14 +393,11 @@ class BlockTypeRegistry {
      * @returns {Promise<void>}
      */
     async preloadBlockTypeTextures(blockId) {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
         const logKey = `BlockTypeRegistry.preloadBlockTypeTextures(${blockId})`;
-        performanceLogger.markStart(logKey);
         
         const blockType = this.getBlockType(blockId);
         if (!blockType) {
             console.warn(`[TEXTURE] Block type ${blockId} not found for preload`);
-            performanceLogger.markEnd(logKey, { skipped: true, reason: "blockType not found" });
             return;
         }
         
@@ -439,10 +414,8 @@ class BlockTypeRegistry {
             // Retry any missing textures immediately
             await this._retryMissingTextures();
             
-            performanceLogger.markEnd(logKey, { success: true, blockName: blockType.name });
         } catch (error) {
             console.error(`[TEXTURE] ✗ Failed to preload textures for ${blockType.name}:`, error);
-            performanceLogger.markEnd(logKey, { success: false, error: error.message });
             throw error;
         }
     }

@@ -1,6 +1,5 @@
 import { DB_VERSION } from "../Constants";
 import { loadingManager } from "./LoadingManager";
-import { performanceLogger } from "../utils/PerformanceLogger";
 export const STORES = {
     TERRAIN: "terrain",
     ENVIRONMENT: "environment",
@@ -58,11 +57,9 @@ export class DatabaseManager {
         if (this.dbConnection) {
             return Promise.resolve(this.dbConnection);
         }
-        performanceLogger.markStart("DatabaseManager.openDB");
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.DB_NAME, DB_VERSION);
             request.onerror = () => {
-                performanceLogger.markEnd("DatabaseManager.openDB");
                 reject(request.error);
             };
             request.onupgradeneeded = (event) => {
@@ -80,7 +77,6 @@ export class DatabaseManager {
                 } catch (e) {
                     console.warn("[DB] Migration check failed:", e);
                 }
-                performanceLogger.markEnd("DatabaseManager.openDB");
                 resolve(request.result);
             };
         });
@@ -222,7 +218,6 @@ export class DatabaseManager {
                         return resolve(storeName === STORES.TERRAIN ? {} : []);
                     }
                     const logKey = `DatabaseManager.getData(${storeName})`;
-                    performanceLogger.markStart(logKey);
                     const prefix = this.prefixForProject(projectId);
                     const range = this.makePrefixRange(prefix);
                     
@@ -233,7 +228,6 @@ export class DatabaseManager {
                         const count = countReq.result;
                         if (count === 0) {
                             // Empty query - return immediately without cursor iteration
-                            performanceLogger.markEnd(logKey, { itemCount: 0, fastPath: true });
                             resolve(storeName === STORES.TERRAIN ? {} : []);
                             return;
                         }
@@ -258,12 +252,10 @@ export class DatabaseManager {
                                 }
                                 cursor.continue();
                             } else {
-                                performanceLogger.markEnd(logKey, { itemCount: processedCount });
                                 resolve(data);
                             }
                         };
                         cursorReq.onerror = (e) => {
-                            performanceLogger.markEnd(logKey);
                             reject((e.target as any).error);
                         };
                     };
@@ -288,12 +280,10 @@ export class DatabaseManager {
                                 }
                                 cursor.continue();
                             } else {
-                                performanceLogger.markEnd(logKey, { itemCount: count });
                                 resolve(data);
                             }
                         };
                         cursorReq.onerror = (e) => {
-                            performanceLogger.markEnd(logKey);
                             reject((e.target as any).error);
                         };
                     };

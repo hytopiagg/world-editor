@@ -29,9 +29,6 @@ class SpatialGridManager {
         };
 
         managerInstance = this;
-        console.log(
-            `SpatialGridManager singleton instance created with chunk size ${CHUNK_SIZE}`
-        );
     }
     /**
      * Get chunks that are visible within the camera frustum
@@ -126,11 +123,7 @@ class SpatialGridManager {
         const end = performance.now();
         const duration = end - start;
         if (duration > 5) {
-            console.log(
-                `Frustum check took ${duration.toFixed(2)}ms for ${
-                    chunksInFrustum.size
-                } chunks`
-            );
+            // Frustum check took longer than expected
         }
         return chunksInFrustum;
     }
@@ -155,7 +148,6 @@ class SpatialGridManager {
      * @param {Object} options - Options for updating
      */
     updateInFrustum(terrainBlocks, camera, options = {}) {
-        console.log("SpatialGridManager: Updating blocks in frustum");
         if (!camera) {
             console.warn("No camera provided for updateInFrustum");
             return Promise.resolve();
@@ -230,9 +222,7 @@ class SpatialGridManager {
         } = options;
 
         if (this.isProcessing && !force) {
-            console.log(
-                "SpatialGridManager: Already processing a grid update, skipped"
-            );
+            // Already processing a grid update, skipped
             return;
         }
 
@@ -247,11 +237,6 @@ class SpatialGridManager {
         }
 
         const blocks = Object.entries(terrainBlocks);
-        console.log(
-            `SpatialGridManager: Updating from terrain with ${blocks.length.toLocaleString()} blocks ${
-                force ? "(FORCED)" : ""
-            }`
-        );
 
         if (force) {
             this.spatialHashGrid.clear();
@@ -268,9 +253,7 @@ class SpatialGridManager {
         }
 
         if (!workerSuccess) {
-            console.log(
-                "SpatialGridManager: Using direct fallback for block processing"
-            );
+            // Using direct fallback for block processing
             this.buildDirectly(blocks);
         }
 
@@ -290,10 +273,7 @@ class SpatialGridManager {
      * @private
      */
     buildDirectly(blocks) {
-        console.log(
-            `SpatialGridManager: Building spatial grid directly with ${blocks.length} blocks`
-        );
-
+        // Building spatial grid directly
         this.spatialHashGrid.clear();
 
         const batchSize = 1000;
@@ -315,17 +295,13 @@ class SpatialGridManager {
                     const progress = Math.round(
                         (batchIndex / totalBatches) * 100
                     );
-                    console.log(
-                        `SpatialGridManager: Processed ${batchIndex} of ${totalBatches} batches (${progress}%)`
-                    );
+                    // Processed batch progress
                 }
 
                 if (batchIndex < totalBatches) {
                     setTimeout(processNextBatch, 0);
                 } else {
-                    console.log(
-                        `SpatialGridManager: Direct processing complete, added ${this.spatialHashGrid.size} blocks`
-                    );
+                    // Direct processing complete
                 }
             };
 
@@ -388,13 +364,6 @@ class SpatialGridManager {
                     continue;
                 }
 
-                console.log(
-                    "setting block in spatial hash grid:",
-                    x,
-                    y,
-                    z,
-                    blockId
-                );
                 this.spatialHashGrid.set(x, y, z, blockId);
             }
         }
@@ -512,18 +481,7 @@ class SpatialGridManager {
 
         const isDebugEnabled = false; //debug && isPlacing;
         if (isDebugEnabled) {
-            console.log(
-                `RAYCAST: Starting ray from (${rayOrigin.x.toFixed(
-                    2
-                )}, ${rayOrigin.y.toFixed(2)}, ${rayOrigin.z.toFixed(2)})`
-            );
-            console.log(
-                `RAYCAST: Ray direction (${dirNormalized.x.toFixed(
-                    2
-                )}, ${dirNormalized.y.toFixed(2)}, ${dirNormalized.z.toFixed(
-                    2
-                )})`
-            );
+            // Debug raycast information
         }
 
         for (let step = 0; step < maxSteps; step++) {
@@ -540,9 +498,7 @@ class SpatialGridManager {
                 previousBlockY = blockY;
                 previousBlockZ = blockZ;
                 if (isDebugEnabled) {
-                    console.log(
-                        `RAYCAST: Crossed block boundary to (${blockX}, ${blockY}, ${blockZ})`
-                    );
+                    // Debug block boundary crossing
                 }
             }
 
@@ -564,9 +520,7 @@ class SpatialGridManager {
             if (blockId === 0 || blockId === null || blockId === undefined) {
                 lastEmptyPosition.set(currentX, currentY, currentZ);
                 if (isDebugEnabled && step % 10 === 0) {
-                    console.log(
-                        `RAYCAST: Empty at (${blockX}, ${blockY}, ${blockZ}), step=${step}`
-                    );
+                    // Debug empty block position
                 }
             } else {
                 const blockPos = new THREE.Vector3(
@@ -579,17 +533,7 @@ class SpatialGridManager {
                 if (exactDistance < foundDistance) {
                     const hitPointRaw = lastEmptyPosition.clone();
                     if (isDebugEnabled) {
-                        console.log(
-                            `RAYCAST: Ray trajectory between (${lastEmptyPosition.x.toFixed(
-                                2
-                            )}, ${lastEmptyPosition.y.toFixed(
-                                2
-                            )}, ${lastEmptyPosition.z.toFixed(
-                                2
-                            )}) and (${currentX.toFixed(2)}, ${currentY.toFixed(
-                                2
-                            )}, ${currentZ.toFixed(2)})`
-                        );
+                        // Debug ray trajectory
                     }
 
                     const faceInfo = this._determineBlockFaceAdvanced(
@@ -1066,7 +1010,6 @@ class SpatialGridManager {
      * @returns {boolean} - True if the block was deleted
      */
     deleteBlock(key, y, z) {
-        console.log(`SpatialGridManager.deleteBlock: Deleting block at ${key}`);
         if (arguments.length === 3) {
             return this.spatialHashGrid.set(key, y, z, 0);
         } else {
@@ -1089,7 +1032,6 @@ class SpatialGridManager {
      * This will remove all blocks from the grid
      */
     clear() {
-        console.log("SpatialGridManager: Clearing spatial hash grid");
         if (!this.spatialHashGrid) {
             console.warn("SpatialGridManager: No spatial hash grid to clear");
             return;
@@ -1098,7 +1040,6 @@ class SpatialGridManager {
         if (typeof this.spatialHashGrid.clear === "function") {
             this.spatialHashGrid.clear();
         } else {
-            console.log("SpatialGridManager: Recreating spatial hash grid");
             this.spatialHashGrid = new SpatialHashGrid({
                 chunkSize: CHUNK_SIZE,
             });
@@ -1109,7 +1050,6 @@ class SpatialGridManager {
             blockCount: 0,
             updateCount: 0,
         };
-        console.log("SpatialGridManager: Spatial hash grid cleared");
     }
     /**
      * Deserialize the grid data from the worker
@@ -1155,27 +1095,11 @@ class SpatialGridManager {
                         collisionTable: collisionTable?.constructor?.name,
                     }
                 );
-
-                console.log("SpatialGridManager: Data details", {
-                    blockIdsLength: blockIds?.length,
-                    coordinatesLength: coordinates?.length,
-                    size,
-                });
                 return false;
             }
 
             if (size > 0) {
-                console.log(
-                    `SpatialGridManager: Received grid with ${size} blocks. Sample blocks:`
-                );
-                const sampleSize = Math.min(3, size);
-                for (let i = 0; i < sampleSize; i++) {
-                    const x = coordinates[i * 3];
-                    const y = coordinates[i * 3 + 1];
-                    const z = coordinates[i * 3 + 2];
-                    const id = blockIds[i];
-                    console.log(`  Block ${i}: (${x},${y},${z}) ID=${id}`);
-                }
+                // Received grid with blocks
             }
 
             this.spatialHashGrid.initializeFromBinary({
@@ -1186,9 +1110,6 @@ class SpatialGridManager {
                 size,
                 hashConstants,
             });
-            console.log(
-                `SpatialGridManager: Successfully deserialized worker grid with ${this.spatialHashGrid.size} blocks`
-            );
             return true;
         } catch (error) {
             console.error(
@@ -1214,16 +1135,11 @@ class SpatialGridManager {
             blockCount: 0,
             updateCount: 0,
         };
-        console.log("SpatialGridManager: Reset to initial state");
     }
 
     processWithWorker(blocks) {
         return new Promise((resolve) => {
             try {
-                console.log(
-                    `Processing ${blocks.length} blocks with web worker`
-                );
-
                 const worker = new Worker(
                     new URL("../workers/SpatialHashWorker.js", import.meta.url)
                 );
@@ -1231,10 +1147,6 @@ class SpatialGridManager {
                 const workerStartTime = performance.now();
 
                 worker.onmessage = (event) => {
-                    console.log(
-                        "SpatialGridManager: Web worker message received",
-                        event
-                    );
                     const data = event.data;
                     if (data.error) {
                         console.error("Web worker error:", data.error);
@@ -1247,9 +1159,6 @@ class SpatialGridManager {
                             (performance.now() - workerStartTime) /
                             1000
                         ).toFixed(2);
-                        console.log(
-                            `Web worker processing completed in ${workerElapsedTime}s`
-                        );
 
                         if (!this.spatialHashGrid) {
                             console.warn(
@@ -1260,18 +1169,9 @@ class SpatialGridManager {
                         try {
                             const success = this.deserializeWorkerGrid(data);
                             if (success) {
-                                console.log(
-                                    `Spatial hash built with ${this.spatialHashGrid.size} blocks using web worker`
-                                );
-
+                                // Spatial hash built successfully with web worker
                                 if (data.stats) {
-                                    console.log(
-                                        `Worker processed ${data.size.toLocaleString()} blocks in ${
-                                            data.stats?.processTime?.toFixed(
-                                                1
-                                            ) || "unknown"
-                                        }s`
-                                    );
+                                    // Worker processed blocks
                                 }
                             } else {
                                 console.error(
@@ -1292,9 +1192,6 @@ class SpatialGridManager {
                         }
 
                         worker.terminate();
-                        console.log(
-                            `SpatialGridManager: Successfully deserialized worker grid with ${this.spatialHashGrid.size} blocks`
-                        );
                         resolve(true);
                     }
                 };
@@ -1305,7 +1202,6 @@ class SpatialGridManager {
                     resolve(false);
                 };
 
-                console.log("processWithWorker - build grid sent")
                 worker.postMessage({
                     operation: "buildGrid",
                     blocks: blocks,

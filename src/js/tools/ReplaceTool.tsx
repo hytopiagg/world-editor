@@ -110,8 +110,6 @@ export default class ReplaceTool extends BaseTool {
     /* =============================== BaseTool ============================ */
 
     async onActivate() {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
-        performanceLogger.markStart("ReplaceTool.onActivate");
         
         console.log("[REPLACE_TOOL] ReplaceTool activated");
         
@@ -151,10 +149,6 @@ export default class ReplaceTool extends BaseTool {
             this.previewGroup.visible = true;
         }
         this.isPlacing = false;
-        
-        performanceLogger.markEnd("ReplaceTool.onActivate", { 
-            uniqueBlockTypes: uniqueBlockIds.size 
-        });
         return true;
     }
 

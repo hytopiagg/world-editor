@@ -14,8 +14,6 @@ function handleTerrainMouseUp(
     ref,
     getRaycastIntersection
 ) {
-    console.log("handleTerrainMouseUp");
-    console.log('e', e);
 
     if (e.type !== "mouseup") {
         return;
@@ -39,10 +37,8 @@ function handleTerrainMouseUp(
         }
     }
 
-    console.log("isPlacingRef.current", isPlacingRef.current);
     if (isPlacingRef.current) {
         isPlacingRef.current = false;
-        console.log("placedBlockCountRef.current", placedBlockCountRef.current);
         if (placedBlockCountRef.current > 0) {
             if (spatialGridManagerRef.current) {
                 const addedBlocks = Array.from(
@@ -79,7 +75,6 @@ function handleTerrainMouseUp(
                         tempRef.undoRedoManager.current &&
                         tempRef.undoRedoManager.current.saveUndo
                     ) {
-                        console.log("mouse-up saveUndo");
                         tempRef.undoRedoManager.current.saveUndo(
                             placementChangesRef.current
                         );
@@ -128,11 +123,8 @@ function handleTerrainMouseDown(
         return;
     }
 
-    console.log("handleTerrainMouseDown");
     if (isToolActive) {
-        console.log("isToolActive");
         if ((isToolActive.name === "terrain" || isToolActive.name === "replace") && e.button !== 0) {
-            console.log("Terrain tool ignoring non-left click");
             return;
         }
         const intersection = getRaycastIntersection();
@@ -165,10 +157,8 @@ function handleTerrainMouseDown(
 
     if (e.button === 0 || (!cameraManager.isPointerUnlockedMode && cameraManager.isPointerLocked && e.button === 2)) {
         if (!isToolActive) {
-            console.log("isPlacingRef.current = true");
             isPlacingRef.current = true;
             const initialBlockIntersection = getRaycastIntersection();
-            console.log("initialBlockIntersection", initialBlockIntersection);
             if (initialBlockIntersection) {
                 currentPlacingYRef.current = previewPositionRef.current.y; // Use current preview Y
             }
@@ -190,15 +180,8 @@ function handleTerrainMouseDown(
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
             };
-            console.log("[MODEL_DRAG] MouseDown - Reset state:", {
-                isFirstBlock: isFirstBlockRef.current,
-                placedEnvironmentCount: placedEnvironmentCountRef.current,
-                currentBlockType: currentBlockTypeRef?.current?.name,
-                isEnvironment: currentBlockTypeRef?.current?.isEnvironment
-            });
             updatePreviewPosition();
             if (isFirstBlockRef.current) {
-                console.log("[MODEL_DRAG] MouseDown - isFirstBlockRef is true, calling handleBlockPlacement");
                 handleBlockPlacement();
             }
             playPlaceSound(); // Play sound on initial click

@@ -70,7 +70,6 @@ const imageCache = new Map();
 // Clear cache if it gets too large (optional cleanup)
 const clearCacheIfNeeded = () => {
     if (imageCache.size > 100) {
-        console.log("Clearing image cache (size limit reached)");
         imageCache.clear();
     }
 };
@@ -133,8 +132,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
         mountedRef.current = true;
 
         const loadThumbnail = async () => {
-            console.log(`[EnvButton] (${envType.name}) Loading thumbnail…`);
-
             // OPTIMIZATION: Use pre-generated thumbnail if available
             if (envType.thumbnailUrl) {
                 const thumbnailPath = envType.thumbnailUrl.startsWith("assets/")
@@ -154,9 +151,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                         setImageUrl(thumbnailPath);
                         setIsLoading(false);
                         setRetryCount(0);
-                        console.log(
-                            `[EnvButton] (${envType.name}) Using pre-generated thumbnail`
-                        );
                         return true;
                     }
                 } catch (error) {
@@ -176,9 +170,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                     setImageUrl(cachedImage);
                     setIsLoading(false);
                     setRetryCount(0);
-                    console.log(
-                        `[EnvButton] (${envType.name}) Memory cache hit. activeRenders=${activeRenders}`
-                    );
                     return true;
                 }
             }
@@ -199,12 +190,8 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                     setImageUrl(cachedImage);
                     setIsLoading(false);
                     setRetryCount(0);
-                    console.log(
-                        `[EnvButton] (${envType.name}) Database cache hit. activeRenders=${activeRenders}`
-                    );
                     return true;
                 }
-                console.log("No cached image found for:", cacheKey);
             } catch (error) {
                 console.warn(
                     "Failed to load cached image for:",
@@ -219,9 +206,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
             if (mountedRef.current) {
                 setShowCanvas(true);
                 setIsQueued(false);
-                console.log(
-                    `[EnvButton] (${envType.name}) Rendering started. activeRenders=${activeRenders}`
-                );
             }
         };
 
@@ -262,7 +246,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
     ]);
 
     if (!envType) {
-        console.log("EnvironmentButton: envType is null");
         return null;
     }
 
@@ -272,11 +255,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
         );
         if (canvas) {
             try {
-                console.log(
-                    `[EnvButton] (${envType.name}) Capture attempt ${
-                        retryCount + 1
-                    }`
-                );
                 const url = canvas.toDataURL("image/png");
                 const cacheKey = getCacheKey();
 
@@ -287,21 +265,16 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                 setIsLoading(false);
                 setRetryCount(0);
 
-                console.log("Saving preview to cache with key:", cacheKey);
-                DatabaseManager.saveData(STORES.PREVIEWS, cacheKey, url)
-                    .then(() =>
-                        console.log(
-                            `[EnvButton] (${envType.name}) Cached preview under key: ${cacheKey}`
-                        )
-                    )
-                    .catch((error) => {
+                DatabaseManager.saveData(STORES.PREVIEWS, cacheKey, url).catch(
+                    (error) => {
                         // Failure to store the cached image should not trigger a visual retry.
                         // Log it but proceed – the preview itself rendered fine.
                         console.warn(
                             `[EnvButton] (${envType.name}) saveData (cache write) failed:`,
                             error
                         );
-                    });
+                    }
+                );
             } catch (error) {
                 console.warn(
                     `[EnvButton] (${envType.name}) toDataURL threw on attempt ${
@@ -315,11 +288,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                 activeRenders = Math.max(0, activeRenders - 1);
 
                 if (retryCount + 1 < MAX_RETRIES) {
-                    console.log(
-                        `[EnvButton] (${envType.name}) Scheduling retry #${
-                            retryCount + 1
-                        } in ${RETRY_DELAY_MS}ms`
-                    );
                     setTimeout(() => {
                         if (!mountedRef.current) return;
                         setRetryCount((c) => c + 1);
@@ -349,9 +317,6 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
                 // noop – extension not available
             }
 
-            console.log(
-                `[EnvButton] (${envType.name}) Capture done. activeRenders=${activeRenders}`
-            );
             startNextRender();
         }
     };

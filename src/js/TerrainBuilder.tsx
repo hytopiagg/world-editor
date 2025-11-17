@@ -47,7 +47,6 @@ import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
 import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
 import { playPlaceSound } from "./Sound";
-import { performanceLogger } from "./utils/PerformanceLogger";
 import {
     GroundTool,
     SchematicPlacementTool,
@@ -221,14 +220,6 @@ function optimizeRenderer(gl: THREE.WebGLRenderer | null) {
         // Note: powerPreference must be set at context creation time, not here
         // It's now properly configured in the Canvas component gl prop
 
-        console.log(
-            `Renderer optimized for ${gpuInfo.estimatedPerformanceClass} performance GPU`,
-            {
-                gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
-                isIntegrated: gpuInfo.isIntegratedGPU,
-                appliedSettings: settings,
-            }
-        );
     }
 }
 const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
@@ -300,10 +291,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             }
 
             if (isAutoSaveEnabledRef.current) {
-                console.log(
-                        `Auto-save enabled with interval: ${AUTO_SAVE_INTERVAL / 1000
-                    } seconds`
-                );
                 autoSaveIntervalRef.current = setInterval(() => {
                     if (
                         pendingChangesRef.current?.terrain &&
@@ -314,12 +301,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 pendingChangesRef.current.terrain.removed || {}
                             ).length > 0)
                     ) {
-                        console.log("Auto-saving terrain...");
                         efficientTerrainSave();
                     }
                 }, AUTO_SAVE_INTERVAL);
-            } else {
-                console.log("Auto-save is disabled");
             }
         };
 
@@ -339,14 +323,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
         const handleBeforeUnload = (event) => {
             if (localStorage.getItem("IS_DATABASE_CLEARING")) {
-                console.log(
-                    "Database is being cleared, skipping unsaved changes check"
-                );
                 return;
             }
 
             if (!pendingChangesRef || !pendingChangesRef.current) {
-                console.log("No pending changes ref available");
                 return;
             }
 
@@ -370,7 +350,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
         const handlePopState = (event) => {
             if (reloadJustPrevented) {
-                console.log("Detected popstate after reload prevention");
                 event.preventDefault();
 
                 reloadJustPrevented = false;
@@ -385,17 +364,11 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 const reloadAttempted =
                     localStorage.getItem("reload_attempted") === "true";
                 if (reloadAttempted) {
-                    console.log(
-                        "Page became visible again after reload attempt"
-                    );
 
                     localStorage.removeItem("reload_attempted");
 
                     if (reloadJustPrevented) {
                         reloadJustPrevented = false;
-                        console.log(
-                            "User canceled reload, restoring history state"
-                        );
 
                         window.history.pushState(
                             null,
@@ -426,8 +399,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     }, []);
 
     const efficientTerrainSave = async () => {
-        console.log("efficientTerrainSave");
-        console.log("pendingChangesRef", pendingChangesRef.current);
         if (localStorage.getItem("IS_DATABASE_CLEARING")) {
             return false;
         }
@@ -444,7 +415,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         }
 
         const changesToSave = { ...pendingChangesRef.current.terrain };
-        console.log("changesToSave", changesToSave);
 
         resetPendingChanges();
 
@@ -484,7 +454,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         store.delete(composedKey);
                     });
                 }
-                console.log(`Deleted ${removeKeys.length} blocks from DB`);
             }
 
             // --- Handle additions / updates in manageable chunks ---
@@ -502,7 +471,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         store.put(value, composedKey);
                     });
                 }
-                console.log(`Added/updated ${addEntries.length} blocks in DB`);
             }
 
             // All chunk transactions awaited above have completed at this point.
@@ -517,7 +485,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     };
 
     useEffect(() => {
-        console.log("Initializing incremental terrain save system");
 
         initialSaveCompleteRef.current = false;
 
@@ -527,10 +494,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             };
 
         lastSaveTimeRef.current = Date.now();
-        console.log(
-            "Last save time initialized to:",
-            new Date(lastSaveTimeRef.current).toLocaleTimeString()
-        );
 
         const validateTerrain = async () => {
             try {
@@ -539,16 +502,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     "current"
                 );
                 if (terrain && Object.keys(terrain).length > 0) {
-                    console.log(
-                            `Loaded existing terrain with ${Object.keys(terrain).length
-                        } blocks`
-                    );
 
                     initialSaveCompleteRef.current = true;
-                } else {
-                    console.log(
-                        "No existing terrain found, will create baseline on first save"
-                    );
                 }
             } catch (err) {
                 console.error("Error validating terrain data:", err);
@@ -733,7 +688,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             return;
         }
         if (!pendingChangesRef.current) {
-            console.log("initializing pendingChangesRef");
             pendingChangesRef.current = {
                 terrain: {
                     added: {},
@@ -761,7 +715,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             });
             if (useProvidedBlocks) {
                 if (getChunkSystem() && updateTerrainChunks) {
-                    console.log("buildUpdateTerrain - updateTerrainChunks");
                     updateTerrainChunks(terrainBlocks, deferMeshBuilding);
                     if (Object.keys(terrainRef.current).length === 0) {
                         const blockEntries = Object.entries(terrainBlocks);
@@ -858,7 +811,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     };
     const handleMouseDown = useCallback(
         (e) => {
-            console.log("handleMouseDown");
 
             // Pointer-lock handling: first click should engage lock rather than place
             if (
@@ -930,9 +882,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         // Store original ratio before reducing
                         originalPixelRatioRef.current = currentRatio;
                         gl.setPixelRatio(Math.max(0.3, currentRatio * 0.5));
-                        console.log(
-                            `[QUALITY] Reduced pixel ratio from ${currentRatio} to ${gl.getPixelRatio()} for low-res sculpt`
-                        );
                     } catch (err) {
                         console.warn(
                             "[QUALITY] Failed to reduce pixel ratio:",
@@ -966,30 +915,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         [threeRaycaster.ray, gl, cameraManager]
     );
     const handleBlockPlacement = async () => {
-        const { performanceLogger } = require("./utils/PerformanceLogger");
-        performanceLogger.markStart("Block Placement");
 
-        console.log("[BLOCK_PLACE] ********handleBlockPlacement********");
-        console.log(
-            "[BLOCK_PLACE] currentBlockTypeRef.current",
-            currentBlockTypeRef.current
-        );
 
         if (!currentBlockTypeRef.current) {
-            console.log(
-                "[BLOCK_PLACE] currentBlockTypeRef.current is undefined"
-            );
-            performanceLogger.markEnd("Block Placement", {
-                skipped: true,
-                reason: "no block type",
-            });
             return;
         }
 
         const blockType = currentBlockTypeRef.current;
-        console.log(
-            `[BLOCK_PLACE] Placing block: ${blockType.name} (ID: ${blockType.id})`
-        );
 
         // Ensure textures are loaded before placement
         try {
@@ -1001,17 +933,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     const needsPreload =
                         blockTypeInstance.needsTexturePreload?.();
                     if (needsPreload) {
-                        console.log(
-                            `[BLOCK_PLACE] Textures need preload, loading now...`
-                        );
                         await BlockTypeRegistry.instance.preloadBlockTypeTextures(
                             blockType.id
                         );
-                        console.log(
-                            `[BLOCK_PLACE] ✓ Textures loaded before placement`
-                        );
-                    } else {
-                        console.log(`[BLOCK_PLACE] Textures already loaded`);
                     }
                 }
             }
@@ -1031,78 +955,25 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             currentBlockTypeRef.current?.isEnvironment &&
             placedEnvironmentCountRef.current < 1
         ) {
-            console.log(
-                "[MODEL_DRAG] ========== MODEL PLACEMENT ATTEMPT =========="
-            );
-            console.log(
-                "[MODEL_DRAG] isEnvironment:",
-                currentBlockTypeRef.current?.isEnvironment
-            );
-            console.log(
-                "[MODEL_DRAG] placedEnvironmentCountRef.current:",
-                placedEnvironmentCountRef.current
-            );
-            console.log(
-                "[MODEL_DRAG] isFirstBlockRef.current:",
-                isFirstBlockRef.current
-            );
-            console.log(
-                "[MODEL_DRAG] isPlacingRef.current:",
-                isPlacingRef.current
-            );
-            console.log("[MODEL_DRAG] modeRef.current:", modeRef.current);
-            console.log(
-                "[MODEL_DRAG] Condition check: isEnvironment && placedCount < 1:",
-                currentBlockTypeRef.current?.isEnvironment &&
-                    placedEnvironmentCountRef.current < 1
-            );
 
             if (isFirstBlockRef.current) {
-                console.log(
-                    "[MODEL_DRAG] ✓ isFirstBlockRef is true - proceeding with placement"
-                );
                 if (
                     environmentBuilderRef.current &&
                     typeof environmentBuilderRef.current
                         .placeEnvironmentModel === "function"
                 ) {
                     try {
-                        console.log(
-                            "[MODEL_DRAG] Calling placeEnvironmentModel with mode:",
-                            modeRef.current
-                        );
                         const result =
                             await environmentBuilderRef.current.placeEnvironmentModel(
                                 modeRef.current,
                                 true
                             );
-                        console.log(
-                            "[MODEL_DRAG] placeEnvironmentModel result:",
-                            result
-                        );
-                        console.log(
-                            "[MODEL_DRAG] Result length:",
-                            result?.length
-                        );
 
                         if (result?.length > 0) {
                             const oldCount = placedEnvironmentCountRef.current;
                             placedEnvironmentCountRef.current += result.length;
-                            console.log(
-                                "[MODEL_DRAG] Updated placedEnvironmentCountRef:",
-                                oldCount,
-                                "->",
-                                placedEnvironmentCountRef.current
-                            );
                             // Set isFirstBlockRef to false after successful model placement to prevent drag placement
                             isFirstBlockRef.current = false;
-                            console.log(
-                                "[MODEL_DRAG] Set isFirstBlockRef to false after model placement"
-                            );
-                        } else {
-                            console.log(
-                                "[MODEL_DRAG] No objects placed (result empty or null)"
-                            );
                         }
 
                         if (modeRef.current === "add" && result?.length > 0) {
@@ -1116,13 +987,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                             .environment.added,
                                         ...result,
                                     ];
-                                console.log(
-                                    "[MODEL_DRAG] Updated placementChanges.environment.added:",
-                                    oldAdded,
-                                    "->",
-                                    placementChangesRef.current.environment
-                                        .added.length
-                                );
                             }
                         }
                     } catch (error) {
@@ -1137,26 +1001,12 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         "[MODEL_DRAG] ✗ Environment builder reference or placeEnvironmentModel function not available"
                     );
                 }
-            } else {
-                console.log(
-                    "[MODEL_DRAG] ✗ BLOCKED: isFirstBlockRef is false - should not place during drag"
-                );
             }
-            console.log(
-                "[MODEL_DRAG] ========== MODEL PLACEMENT ATTEMPT END =========="
-            );
         } else {
-            if (currentBlockTypeRef.current?.isEnvironment) {
-                console.log(
-                    "[MODEL_DRAG] Model placement blocked - placedEnvironmentCountRef.current >= 1:",
-                    placedEnvironmentCountRef.current
-                );
-            }
             if (
                 modeRef.current === "add" &&
                 !currentBlockTypeRef?.current?.isEnvironment
             ) {
-                console.log("handleBlockPlacement - ADD");
                 const now = performance.now();
                 // Auto create/select emissive variant that matches current registry light level
                 try {
@@ -1216,11 +1066,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 } finally {
                                     window.__pendingVariantKeys.delete(key);
                                 }
-                            } else {
-                                console.log(
-                                    "Variant creation already pending for",
-                                    key
-                                );
                             }
                         }
                         if (variant) {
@@ -1405,10 +1250,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             isFirstBlockRef.current = false;
         }
 
-        performanceLogger.markEnd("Block Placement", {
-            blockId: blockType?.id,
-            blockName: blockType?.name,
-        });
     };
     const getRaycastIntersection = useCallback(() => {
         const ptr =
@@ -1649,14 +1490,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 // Don't place models during drag - only blocks
                 // Models should be placed one at a time on click, not during drag
                 if (!currentBlockTypeRef.current?.isEnvironment) {
-                    console.log(
-                        "[MODEL_DRAG] updatePreviewPosition calling handleBlockPlacement for blocks"
-                    );
                     handleBlockPlacement();
-                } else {
-                    console.log(
-                        "[MODEL_DRAG] updatePreviewPosition skipping handleBlockPlacement for models (drag placement disabled)"
-                    );
                 }
             }
         }
@@ -1692,9 +1526,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     const currentRatio = gl.getPixelRatio();
                     const originalRatio = originalPixelRatioRef.current;
                     gl.setPixelRatio(originalRatio);
-                    console.log(
-                        `[QUALITY] Restored pixel ratio from ${currentRatio} to ${originalRatio}`
-                    );
                     originalPixelRatioRef.current = null;
                 } catch (err) {
                     console.warn(
@@ -2055,15 +1886,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     useEffect(() => {
         let mounted = true;
         async function initialize() {
-            console.info("[TerrainBuilder] initialize() start", {
-                hasScene: !!scene,
-                hasThreeCamera: !!threeCamera,
-                hasOrbitControls: !!orbitControlsRef.current,
-                projectId:
-                    typeof DatabaseManager?.getCurrentProjectId === "function"
-                        ? DatabaseManager.getCurrentProjectId()
-                        : "unknown",
-            });
             if (threeCamera && orbitControlsRef.current) {
                 cameraManager.initialize(threeCamera, orbitControlsRef.current);
                 orbitControlsRef.current.addEventListener("change", () => {
@@ -2105,19 +1927,12 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         viewDistance: getViewDistance(),
                         viewDistanceEnabled: true,
                     });
-                    console.info("[TerrainBuilder] initChunkSystem complete");
                 } catch (error) {
                     console.error("Error initializing chunk system:", error);
                 }
                 try {
                     updateChunkSystemCamera(threeCamera);
                     const cs = getChunkSystem();
-                    console.info(
-                        "[TerrainBuilder] camera bound to chunk system",
-                        {
-                                hasCamera: !!(cs && cs._scene && (cs._scene as any).camera),
-                        }
-                    );
                 } catch (e) {
                     console.warn(
                         "[TerrainBuilder] failed to bind camera to chunk system",
@@ -2126,13 +1941,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 }
             }
             meshesInitializedRef.current = true;
-            performanceLogger.markStart("TerrainBuilder.loadTerrainData");
-            console.info(
-                "[TerrainBuilder] loading custom blocks and terrain for project",
-                DatabaseManager.getCurrentProjectId &&
-                    DatabaseManager.getCurrentProjectId()
-            );
-            performanceLogger.markStart("Load Custom Blocks");
             await DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
                     .then((customBlocksData: any) => {
                         if (customBlocksData && Array.isArray(customBlocksData) && customBlocksData.length > 0) {
@@ -2145,11 +1953,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             })
                         );
                     }
-                    performanceLogger.markEnd("Load Custom Blocks", {
-                        customBlockCount: customBlocksData?.length || 0,
-                    });
-                    console.log("Loading terrain...");
-                    performanceLogger.markStart("Load Terrain Data from DB");
                     return DatabaseManager.getData(STORES.TERRAIN, "current");
                 })
                     .then((savedTerrain: any) => {
@@ -2157,13 +1960,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     const terrainBlockCount = savedTerrain
                         ? Object.keys(savedTerrain).length
                         : 0;
-                    performanceLogger.markEnd("Load Terrain Data from DB", {
-                        blockCount: terrainBlockCount,
-                    });
-                    console.info("[TerrainBuilder] terrain fetched", {
-                        hasTerrain: !!savedTerrain,
-                        count: terrainBlockCount,
-                    });
                     if (savedTerrain) {
                             terrainRef.current = savedTerrain as Record<string, number>;
                         totalBlocksRef.current = Object.keys(
@@ -2178,9 +1974,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         );
                         setTimeout(async () => {
                             try {
-                                performanceLogger.markStart(
-                                    "Mark Essential Block Types"
-                                );
                                     const usedBlockIds = new Set<number>();
                                 Object.values(terrainRef.current).forEach(
                                     (blockId) => {
@@ -2197,12 +1990,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                         );
                                     }
                                 });
-                                performanceLogger.markEnd(
-                                    "Mark Essential Block Types",
-                                    {
-                                        uniqueBlockTypes: usedBlockIds.size,
-                                    }
-                                );
 
                                 // Only preload textures if there are blocks in the terrain
                                 // For empty worlds, skip preload entirely (saves ~18 seconds)
@@ -2218,10 +2005,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                     await BlockTypeRegistry.instance.preload({
                                         onlyEssential: true,
                                     });
-                                } else if (terrainBlockCount === 0) {
-                                    performanceLogger.checkpoint(
-                                        "Skipping texture preload for empty world"
-                                    );
                                 }
                                 await rebuildTextureAtlas();
                                 if (!getChunkSystem()) {
@@ -2254,32 +2037,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                         } catch (_) { }
                                     processChunkRenderQueue();
                                 }
-                                try {
-                                    const cs = getChunkSystem();
-                                    console.info(
-                                        "[TerrainBuilder] post-apply: chunk camera set?",
-                                        {
-                                            hasCamera: !!(
-                                                cs &&
-                                                cs._scene &&
-                                    (cs._scene as any).camera
-                                            ),
-                                        }
-                                    );
-                                    } catch (_) { }
                                 window.fullTerrainDataRef = terrainRef.current;
                                 loadingManager.hideLoading();
-                                performanceLogger.markEnd(
-                                    "TerrainBuilder.loadTerrainData",
-                                    {
-                                        totalBlocks: totalBlocksRef.current,
-                                    }
-                                );
                                 setPageIsLoaded(true);
-                                // Print performance summary after loading completes
-                                setTimeout(() => {
-                                    performanceLogger.printSummary();
-                                }, 1000);
                             } catch (error) {
                                 console.error(
                                     "Error preloading textures:",
@@ -2290,21 +2050,12 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 );
                                 updateTerrainChunks(terrainRef.current);
                                 loadingManager.hideLoading();
-                                performanceLogger.markEnd(
-                                    "TerrainBuilder.loadTerrainData"
-                                );
                                 setPageIsLoaded(true);
                             }
                         }, 100);
                     } else {
                         terrainRef.current = {};
                         totalBlocksRef.current = 0;
-                        performanceLogger.markEnd(
-                            "TerrainBuilder.loadTerrainData",
-                            {
-                                totalBlocks: 0,
-                            }
-                        );
                     }
                     loadingManager.hideLoading();
                     setPageIsLoaded(true);
@@ -2316,7 +2067,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     );
                     meshesInitializedRef.current = true;
                     loadingManager.hideLoading();
-                    performanceLogger.markEnd("TerrainBuilder.loadTerrainData");
                     setPageIsLoaded(true);
                 });
         }
@@ -2885,10 +2635,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             `Building terrain with ${blockCount} blocks...`,
                             60
                         );
-                        console.log(
-                            "blocks from - refreshTerrainFromDB",
-                            blocks
-                        );
                         chunkSystem.updateFromTerrainData(blocks);
                         loadingManager.updateLoading(
                             "Processing terrain chunks...",
@@ -2917,7 +2663,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             });
         },
         forceRebuildSpatialHash: (options = {}) => {
-            console.log("forceRebuildSpatialHash - terrain builder");
             if (!spatialGridManagerRef.current) {
                 console.warn(
                     "TerrainBuilder: Cannot rebuild spatial hash - spatial grid manager not available"
@@ -3166,14 +2911,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 skipSpatialHash?: boolean;
             } = {}
     ) => {
-        const { performanceLogger } = require("./utils/PerformanceLogger");
-        performanceLogger.markStart("updateTerrainBlocks");
 
         if (!addedBlocks && !removedBlocks) {
-            performanceLogger.markEnd("updateTerrainBlocks", {
-                skipped: true,
-                reason: "no blocks",
-            });
             return;
         }
         // Ensure objects
@@ -3198,10 +2937,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             Object.keys(addedBlocks).length === 0 &&
             Object.keys(removedBlocks).length === 0
         ) {
-            performanceLogger.markEnd("updateTerrainBlocks", {
-                skipped: true,
-                reason: "empty after filter",
-            });
             return;
         }
 
@@ -3213,23 +2948,12 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             }
         });
 
-        console.log(
-                `[UPDATE_TERRAIN] Updating terrain with ${Object.keys(addedBlocks).length
-            } added, ${Object.keys(removedBlocks).length} removed`
-        );
-        console.log(
-            `[UPDATE_TERRAIN] Found ${uniqueBlockIds.size} unique block types:`,
-            Array.from(uniqueBlockIds)
-        );
 
         // Preload textures for all blocks that will be placed
         if (uniqueBlockIds.size > 0 && !options.skipTexturePreload) {
             try {
                 const blockTypeRegistry = window.BlockTypeRegistry;
                 if (blockTypeRegistry && blockTypeRegistry.instance) {
-                    console.log(
-                        `[UPDATE_TERRAIN] Ensuring textures are loaded for ${uniqueBlockIds.size} block types...`
-                    );
                     const preloadPromises = Array.from(uniqueBlockIds).map(
                         async (blockId) => {
                             try {
@@ -3243,9 +2967,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 ) {
                                     await blockTypeRegistry.instance.preloadBlockTypeTextures(
                                         blockId
-                                    );
-                                    console.log(
-                                        `[UPDATE_TERRAIN] ✓ Ensured textures loaded for block ${blockId}`
                                     );
                                 }
                             } catch (error) {
@@ -3377,11 +3098,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             });
         }
 
-        performanceLogger.markEnd("updateTerrainBlocks", {
-            blocksAdded: Object.keys(addedBlocks).length,
-            blocksRemoved: Object.keys(removedBlocks).length,
-            uniqueBlockTypes: uniqueBlockIds.size,
-        });
     };
     const applyDeferredSpatialHashUpdates = async () => {
         return spatialHashUpdateManager.applyDeferredSpatialHashUpdates(
@@ -3636,9 +3352,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     // Only restore if current ratio is significantly lower than original (indicating it was reduced)
                     if (currentRatio < originalRatio * 0.8) {
                         gl.setPixelRatio(originalRatio);
-                        console.log(
-                            `[QUALITY] Auto-restored pixel ratio from ${currentRatio} to ${originalRatio} (safety check)`
-                        );
                         originalPixelRatioRef.current = null;
                     }
                 } catch (err) {
@@ -4220,34 +3933,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             window.__WE_AIRBORNE__ = airborneNow;
 
                             // Debug logs: enable with window.__WE_DEBUG_JUMP__ = true (only on transitions/landing)
-                            if (window.__WE_DEBUG_JUMP__) {
-                                try {
-                                    const planeTop =
-                                        window.__WE_PM_PLANE_TOP_Y__;
-                                    const groundedDbg = groundedNow ? 1 : 0;
-                                    const airborneDbg = airborneNow ? 1 : 0;
-                                    const seqDbg =
-                                        window.__WE_AIRBORNE_SEQ__ || 0;
-                                    const lastDbg =
-                                        window.__WE_LAST_LANDED_SEQ__ || 0;
-                                    const shouldLog =
-                                        playedLanding ||
-                                        airborneNow !== wasAirborne;
-                                    if (shouldLog) {
-                                        console.log(
-                                            `[JumpDBG] g=${groundedDbg} a=${airborneDbg} vy=${vy.toFixed(
-                                                3
-                                            )} ms=${(
-                                                nowTs -
-                                                (window.__WE_AIRBORNE_SINCE__ ||
-                                                    nowTs)
-                                            ).toFixed(
-                                                0
-                                            )} seq=${seqDbg} last=${lastDbg} planeY=${planeTop}`
-                                        );
-                                    }
-                                    } catch { }
-                            }
 
                             // Choose tag with jump priority
                             let tag = "idle";
@@ -4438,9 +4123,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             ) {
                 try {
                     gl.setPixelRatio(originalPixelRatioRef.current);
-                    console.log(
-                        `[QUALITY] Restored pixel ratio to ${originalPixelRatioRef.current} on cleanup`
-                    );
                     originalPixelRatioRef.current = null;
                 } catch (err) {
                     console.warn(
@@ -4503,15 +4185,6 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             }
         }
 
-        // Log WebGL2 capabilities if available
-        if (gpuInfo.supportsWebGL2) {
-            console.log("✅ WebGL2 features available:", {
-                logarithmicDepthBuffer: settings.logarithmicDepthBuffer,
-                maxTextureSize: gpuInfo.maxTextureSize,
-                anisotropicFiltering: settings.enableAnisotropicFiltering,
-                maxAnisotropy: settings.maxAnisotropy,
-            });
-        }
     }, []);
 
     return (

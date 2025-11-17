@@ -14,7 +14,6 @@ import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constant
 import { CustomModel } from "./types/DatabaseTypes";
 import { getViewDistance } from "./constants/terrain";
 import { getVector3, releaseVector3, getMatrix4, releaseMatrix4, getEuler, releaseEuler, getQuaternion, releaseQuaternion, ObjectPoolManager } from "./utils/ObjectPool";
-import { performanceLogger } from "./utils/PerformanceLogger";
 export const environmentModels = (() => {
     try {
         const fetchModelList = () => {
@@ -288,6 +287,18 @@ const EnvironmentBuilder = (
     };
 
     const rebuildAllVisibleInstances = (cameraPos?: THREE.Vector3) => {
+        // First, ensure all meshes are added to the scene before rebuilding
+        // This is critical for models loaded from DB - their meshes might not be in the scene yet
+        // This fixes the issue where the last model type doesn't render until a new instance is placed
+        for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
+            if (instancedData.instances && instancedData.instances.size > 0) {
+                const wasAdded = ensureInstancedMeshesAdded(modelUrl);
+                if (wasAdded) {
+                    console.log(`[MODEL_PERSISTENCE] Ensured meshes added to scene for ${modelUrl.split('/').pop()}`);
+                }
+            }
+        }
+        // Now rebuild all visible instances
         for (const [modelUrl, instancedData] of instancedMeshes.current.entries()) {
             if (instancedData.instances && instancedData.instances.size > 0) {
                 rebuildVisibleInstances(modelUrl, cameraPos);
@@ -295,9 +306,9 @@ const EnvironmentBuilder = (
         }
     };
 
-    const ensureInstancedMeshesAdded = (modelUrl: string) => {
+    const ensureInstancedMeshesAdded = (modelUrl: string): boolean => {
         const data = instancedMeshes.current.get(modelUrl);
-        if (!scene || !data) return;
+        if (!scene || !data) return false;
         
         // Check if meshes are actually in the current scene
         // Scene can change (new UUID), so we need to re-add meshes even if addedToScene was true
@@ -315,6 +326,7 @@ const EnvironmentBuilder = (
                 scene.add(mesh);
             });
             data.addedToScene = true;
+            return true; // Meshes were added
         } else if (!data.addedToScene) {
             // First time adding
             data.meshes.forEach((mesh: THREE.InstancedMesh) => {
@@ -322,7 +334,9 @@ const EnvironmentBuilder = (
                 scene.add(mesh);
             });
             data.addedToScene = true;
+            return true; // Meshes were added
         }
+        return false; // Meshes were already in scene
     };
 
 
@@ -541,16 +555,11 @@ const EnvironmentBuilder = (
     };
 
     const preloadModels = async () => {
-        performanceLogger.markStart("EnvironmentBuilder.preloadModels");
         try {
-            performanceLogger.markStart("Load Custom Models from DB");
             const customModels = await DatabaseManager.getData(
                 STORES.CUSTOM_MODELS,
                 "models"
             ) as CustomModel[];
-            performanceLogger.markEnd("Load Custom Models from DB", {
-                customModelCount: customModels?.length || 0
-            });
             if (customModels) {
                 const customModelIndices = environmentModels
                     .filter((model) => model.isCustom)
@@ -621,15 +630,9 @@ const EnvironmentBuilder = (
             console.log(`[EnvironmentBuilder] Skipping model preload - using lazy loading instead. ${environmentModels.length} models available.`);
             
             // Only refresh environment from DB (this will trigger lazy loading for existing instances)
-            performanceLogger.markStart("Refresh Environment from DB");
             await refreshEnvironmentFromDB();
-            performanceLogger.markEnd("Refresh Environment from DB");
-            performanceLogger.markEnd("EnvironmentBuilder.preloadModels", {
-                totalModels: environmentModels.length
-            });
         } catch (error) {
             console.error("Error loading custom models from DB:", error);
-            performanceLogger.markEnd("EnvironmentBuilder.preloadModels");
         }
     };
     const setupInstancedMesh = (modelType, gltf) => {
@@ -1170,8 +1173,8 @@ const EnvironmentBuilder = (
         };
     };
 
-    const clearEnvironments = () => {
-        console.log('[MODEL_PERSISTENCE] clearEnvironments called - clearing all instances');
+    const clearEnvironments = (shouldSave = true) => {
+        console.log('[MODEL_PERSISTENCE] clearEnvironments called - clearing all instances', { shouldSave });
         const totalBefore = Array.from(instancedMeshes.current.values()).reduce((sum, data) => sum + data.instances.size, 0);
         console.log('[MODEL_PERSISTENCE] Total instances before clear:', totalBefore);
         for (const [modelUrl, instancedData] of instancedMeshes.current) {
@@ -1193,7 +1196,14 @@ const EnvironmentBuilder = (
                 mesh.instanceMatrix.needsUpdate = true;
             });
         }
-        updateLocalStorage();
+        // Only save if explicitly requested (default true for backward compatibility)
+        // Don't save when clearing due to empty DB during refresh - this prevents
+        // overwriting a pending save that might be in progress
+        if (shouldSave) {
+            updateLocalStorage();
+        } else {
+            console.log('[MODEL_PERSISTENCE] Skipping save in clearEnvironments - shouldSave=false');
+        }
         console.log('[MODEL_PERSISTENCE] clearEnvironments completed');
     };
     const getRandomValue = (min, max) => {
@@ -1885,7 +1895,9 @@ const EnvironmentBuilder = (
                     console.warn("[MODEL_PERSISTENCE] This can happen if refreshEnvironmentFromDB runs before updateLocalStorage completes.");
                 } else {
                     console.log("[MODEL_PERSISTENCE] No instances in memory, clearing local env");
-                    clearEnvironments();
+                    // Don't save when clearing due to empty DB - the DB is already empty,
+                    // and saving here could overwrite a pending save that's in progress
+                    clearEnvironments(false);
                 }
             }
         } catch (error) {

@@ -258,9 +258,7 @@ class BlockType {
      * @returns {Promise<void>}
      */
     async preloadTextures() {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
         const logKey = `BlockType.preloadTextures(${this.id}-${this.name})`;
-        performanceLogger.markStart(logKey);
         
         console.log(`[TEXTURE] Preloading textures for BlockType: ${this.name} (ID: ${this.id})`);
         console.log(`[TEXTURE] Texture URIs:`, this._textureUris);
@@ -329,7 +327,6 @@ class BlockType {
         
         const loadedCount = loadPromises.filter(p => p !== null).length;
         console.log(`[TEXTURE] Completed preloading for ${this.name}: ${loadedCount} textures`);
-        performanceLogger.markEnd(logKey, { textureCount: Object.keys(this._textureUris).length });
     }
     /**
      * Check if this block type's textures need to be preloaded

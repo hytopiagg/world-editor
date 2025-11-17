@@ -307,8 +307,6 @@ export class TerrainTool extends BaseTool {
     }
 
     modifyTerrain() {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
-        performanceLogger.markStart("TerrainTool.modifyTerrain");
         
         const radius = this.settings.radius;
         
@@ -516,15 +514,9 @@ export class TerrainTool extends BaseTool {
                 this.lastMeshUpdate = nowFlush;
             }
         }
-        
-        performanceLogger.markEnd("TerrainTool.modifyTerrain", {
-            blocksAdded: Object.keys(addedBlocks).length,
-            blocksRemoved: Object.keys(removedBlocks).length,
-            blockId: selectedBlockId
-        });
     }
 
-    calculateFalloff(distance, radius) {
+    calculateFalloff(distance: number, radius: number): number {
         const normalizedDistance = distance / radius;
 
         switch (this.settings.falloffCurve) {
@@ -538,7 +530,7 @@ export class TerrainTool extends BaseTool {
         }
     }
 
-    getAverageHeight(centerX, centerZ, sampleRadius) {
+    getAverageHeight(centerX: number, centerZ: number, sampleRadius: number): number {
         let totalHeight = 0;
         let sampleCount = 0;
 
@@ -565,7 +557,7 @@ export class TerrainTool extends BaseTool {
         return sampleCount > 0 ? totalHeight / sampleCount : 0;
     }
 
-    lerp(a, b, t) {
+    lerp(a: number, b: number, t: number): number {
         return a + (b - a) * Math.max(0, Math.min(1, t));
     }
 
@@ -605,11 +597,9 @@ export class TerrainTool extends BaseTool {
         this.heightMap.clear();
         this.originalHeights.clear();
         this.dirtyRegions.clear();
-
-        console.log("Terrain tool: Cleared height maps after terrain modification");
     }
 
-    updateSettings(newSettings) {
+    updateSettings(newSettings: any): void {
         this.settings = { ...this.settings, ...newSettings };
 
         // Update preview cylinder if settings changed
@@ -678,7 +668,7 @@ export class TerrainTool extends BaseTool {
         }
     }
 
-    handleKeyDown(event) {
+    handleKeyDown(event: KeyboardEvent): void {
         switch (event.key.toLowerCase()) {
             case 'escape':
                 // Cancel current operation

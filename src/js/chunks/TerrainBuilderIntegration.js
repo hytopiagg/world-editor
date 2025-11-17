@@ -4,7 +4,6 @@ import BlockMaterial from "../blocks/BlockMaterial";
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
 import ChunkSystem from "./ChunkSystem";
 import { CHUNK_SIZE } from "./ChunkConstants";
-import { performanceLogger } from "../utils/PerformanceLogger";
 
 let chunkSystem = null;
 /**
@@ -15,17 +14,13 @@ let chunkSystem = null;
  */
 export const initChunkSystem = async (scene, options = {}) => {
     if (!chunkSystem) {
-        performanceLogger.markStart("initChunkSystem");
         chunkSystem = new ChunkSystem(scene, options);
 
         await chunkSystem.initialize();
 
-        performanceLogger.markStart("rebuildTextureAtlas (initial)");
         await rebuildTextureAtlas();
-        performanceLogger.markEnd("rebuildTextureAtlas (initial)");
 
         const verifyTextures = async (attempt = 1) => {
-            console.log(`Texture verification check #${attempt}`);
             const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
             if (!textureAtlas || !textureAtlas.image) {
                 console.warn(
@@ -44,9 +39,6 @@ export const initChunkSystem = async (scene, options = {}) => {
         };
 
         setTimeout(() => verifyTextures(), 1000);
-
-        console.log("Chunk system initialized with options:", options);
-        performanceLogger.markEnd("initChunkSystem", { options });
     }
     return chunkSystem;
 };
@@ -118,21 +110,12 @@ export const updateTerrainChunks = (
         return { totalBlocks: 0, visibleBlocks: 0 };
     }
     const blockCount = Object.keys(terrainData).length;
-    performanceLogger.markStart("updateTerrainChunks", {
-        blockCount,
-        onlyVisibleChunks
-    });
-    
+
     // Fast-path for empty terrain - skip expensive chunk operations
     if (blockCount === 0) {
-        performanceLogger.checkpoint("Skipping chunk update for empty terrain");
-        performanceLogger.markEnd("updateTerrainChunks", {
-            totalBlocks: 0,
-            skipped: true
-        });
         return { totalBlocks: 0, visibleBlocks: 0 };
     }
-    
+
     if (onlyVisibleChunks && chunkSystem._scene.camera) {
         const viewDistance = chunkSystem._viewDistance || 96; // Default 6 chunks
         const priorityDistance = viewDistance * 0.5;
@@ -149,10 +132,6 @@ export const updateTerrainChunks = (
             import("../managers/SpatialGridManager")
                 .then(({ SpatialGridManager }) => {
                     const spatialGridManager = new SpatialGridManager();
-                    console.log(
-                        "Updating spatial hash grid from terrain data",
-                        terrainData
-                    );
 
                     spatialGridManager
                         .updateFromTerrain(terrainData, {
@@ -161,9 +140,6 @@ export const updateTerrainChunks = (
                             message: "Building spatial index for raycasting...",
                         })
                         .then(() => {
-                            console.log(
-                                "Spatial hash grid updated successfully with worker"
-                            );
                             if (environmentBuilderRef.current) {
                                 environmentBuilderRef.current.forceRebuildSpatialHash();
                             }
@@ -188,25 +164,16 @@ export const updateTerrainChunks = (
             console.error("Error updating spatial hash grid:", error);
             updateTerrainChunks.spatialHashUpdating = false;
         }
-    } else {
-        console.log(
-            "Spatial hash grid update already in progress, skipping duplicate update"
-        );
     }
 
     setTimeout(() => {
         if (chunkSystem) {
-            console.log("Processing chunk render queue for nearby chunks...");
             chunkSystem._chunkManager.processRenderQueue(true);
 
             setTimeout(() => {
-                console.log("Loading complete, disabling bulk loading mode");
                 chunkSystem.setBulkLoadingMode(false);
 
                 chunkSystem._chunkManager.processRenderQueue(true);
-                performanceLogger.markEnd("updateTerrainChunks", {
-                    totalBlocks: Object.keys(terrainData).length
-                });
             }, 2000);
         }
     }, 100);
@@ -232,12 +199,6 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
             "Chunk system not fully initialized, skipping updateTerrainBlocks"
         );
         return;
-    }
-    console.time("TerrainBuilderIntegration.updateTerrainBlocks");
-
-    if (Object.keys(addedBlocks).length > 0) {
-        const firstBlockKey = Object.keys(addedBlocks)[0];
-        const [x, y, z] = firstBlockKey.split(",").map(Number);
     }
 
     const addedBlocksArray = Object.entries(addedBlocks).map(
@@ -282,10 +243,6 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
                     });
 
                     if (newBlockTypesToPreload.length > 0) {
-                        console.log(
-                            `Preloading textures for ${newBlockTypesToPreload.length} newly added block types...`
-                        );
-
                         for (const blockType of newBlockTypesToPreload) {
                             await blockType.preloadTextures();
                         }
@@ -313,8 +270,6 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
     );
 
     chunkSystem.updateBlocks(addedBlocksArray, removedBlocksArray);
-
-    console.timeEnd("TerrainBuilderIntegration.updateTerrainBlocks");
 };
 /**
  * Set the view distance
@@ -369,8 +324,6 @@ export const clearChunks = () => {
         return;
     }
     try {
-        console.time("clearChunks");
-        console.log("Clearing all chunks from chunk system");
         chunkSystem.clearChunks();
 
         setTimeout(() => {
@@ -384,7 +337,6 @@ export const clearChunks = () => {
                 );
             }
         }, 100);
-        console.timeEnd("clearChunks");
     } catch (error) {
         console.error("Error clearing chunks:", error);
     }
@@ -440,7 +392,6 @@ export const refreshChunkMaterials = () => {
         const textureAtlas = BlockTextureAtlas.instance.textureAtlas;
 
         BlockMaterial.instance.setTextureAtlas(textureAtlas);
-        console.log("Chunk materials refreshed with current texture atlas");
         return true;
     } catch (error) {
         console.error("Error refreshing chunk materials:", error);
@@ -453,19 +404,9 @@ export const refreshChunkMaterials = () => {
  * @returns {Promise<boolean>} True if the rebuild was successful
  */
 export const rebuildTextureAtlas = async () => {
-    // Only track if not already tracking
-    const isInitialRebuild = !performanceLogger.markers.has("rebuildTextureAtlas");
-    if (isInitialRebuild) {
-        performanceLogger.markStart("rebuildTextureAtlas");
-    }
-    console.log("Rebuilding texture atlas and refreshing all materials...");
-
     THREE.Texture.DEFAULT_FILTER = THREE.NearestFilter;
     try {
-        performanceLogger.markStart("BlockTextureAtlas.rebuildTextureAtlas");
-        const atlasTexture =
-            await BlockTextureAtlas.instance.rebuildTextureAtlas();
-        performanceLogger.markEnd("BlockTextureAtlas.rebuildTextureAtlas");
+        await BlockTextureAtlas.instance.rebuildTextureAtlas();
 
         // Only preload essential block types (those actually used in terrain)
         // This avoids loading all 167 textures when only a few are needed
@@ -481,7 +422,6 @@ export const rebuildTextureAtlas = async () => {
         BlockMaterial.instance.setTextureAtlas(textureAtlas);
 
         if (chunkSystem) {
-            console.log("Forcing chunk visibility update to apply textures");
             chunkSystem.forceUpdateChunkVisibility();
 
             processChunkRenderQueue();
@@ -494,10 +434,6 @@ export const rebuildTextureAtlas = async () => {
                 BlockTextureAtlas.instance._missingTextureWarnings &&
                 BlockTextureAtlas.instance._missingTextureWarnings.size > 0
             ) {
-                console.log(
-                    `Retry #${attempt}: Loading ${BlockTextureAtlas.instance._missingTextureWarnings.size} missing textures`
-                );
-
                 const missingTextures = Array.from(
                     BlockTextureAtlas.instance._missingTextureWarnings
                 );
@@ -521,24 +457,14 @@ export const rebuildTextureAtlas = async () => {
                         retryDelay
                     );
                 } else {
-                    console.log("Completed all texture loading retries");
                 }
-            } else {
-                console.log("No missing textures detected, skipping retry");
             }
         };
 
         setTimeout(() => retryMissingTextures(), retryDelay);
-        console.log("Texture atlas rebuild completed successfully");
-        if (isInitialRebuild) {
-            performanceLogger.markEnd("rebuildTextureAtlas");
-        }
         return true;
     } catch (error) {
         console.error("Error during texture atlas rebuild:", error);
-        if (isInitialRebuild) {
-            performanceLogger.markEnd("rebuildTextureAtlas");
-        }
         return false;
     }
 };

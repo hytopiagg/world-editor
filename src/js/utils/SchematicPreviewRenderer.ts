@@ -22,8 +22,7 @@ interface BlockTypeRegistryInstance {
     initialize: () => Promise<void>;
 }
 
-const BlockTypeRegistry: { instance?: BlockTypeRegistryInstance } | null =
-    BlockTypeRegistryModule || null;
+const BlockTypeRegistry = BlockTypeRegistryModule || null;
 
 const _textureLoader = new THREE.TextureLoader();
 const _textureCache = new Map<string, Promise<THREE.Texture | null>>();

@@ -129,7 +129,6 @@ const BlockToolsSidebar = ({
     }, []);
 
     const loadSchematicsFromDB = useCallback(async () => {
-        console.log("[BlockToolsSidebar] Loading schematics from DB...");
         try {
             const { DatabaseManager, STORES } = await import(
                 "../managers/DatabaseManager"
@@ -186,14 +185,7 @@ const BlockToolsSidebar = ({
                     }
 
                     if (!listsAreIdentical) {
-                        console.log(
-                            `[BlockToolsSidebar] Schematic list changed or initial load. Updating state with ${loadedSchematics.length} schematics.`
-                        );
                         setSchematicList(loadedSchematics);
-                    } else {
-                        console.log(
-                            `[BlockToolsSidebar] Loaded ${loadedSchematics.length} schematics from DB, list content (IDs, timestamps) is unchanged. Skipping state update.`
-                        );
                     }
                 }
             };
@@ -216,9 +208,6 @@ const BlockToolsSidebar = ({
             loadSchematicsFromDB();
         }
         const handleSchematicsUpdated = () => {
-            console.log(
-                "[BlockToolsSidebar] schematicsDbUpdated event received."
-            );
             if (
                 document.visibilityState === "visible" &&
                 activeTab === "components"
@@ -258,20 +247,14 @@ const BlockToolsSidebar = ({
                     ...model,
                     isEnvironment: true,
                 });
-                console.log(
-                    "Initial environment model auto-selected:",
-                    model.name
-                );
             }
         }
     }, []);
 
     useEffect(() => {
         const handleRefresh = () => {
-            console.log("Handling refresh event in BlockToolsSidebar");
             try {
                 const customBlocksData = getCustomBlocks();
-                console.log("Custom blocks loaded:", customBlocksData);
                 setCustomBlocks(customBlocksData);
                 // Also sync currently selected block from localStorage so the
                 // visual selection updates when programmatic selection occurs
@@ -290,10 +273,6 @@ const BlockToolsSidebar = ({
         };
 
         const handleCustomBlocksUpdated = (event) => {
-            console.log(
-                "Custom blocks updated from Minecraft importer:",
-                event.detail?.blocks
-            );
             handleRefresh();
         };
 
@@ -396,16 +375,10 @@ const BlockToolsSidebar = ({
                 !isGeneratingPreviews.current
             ) {
                 isGeneratingPreviews.current = false;
-                console.log(
-                    "[BlockToolsSidebar] Finished preview generation queue or queue stopped."
-                );
                 if (currentPreviewIndex.current > 0) {
                     requestAnimationFrame(() => {
                         if (cameraManager) {
                             cameraManager.loadSavedState();
-                            console.log(
-                                "[BlockToolsSidebar] Camera state restored after preview generation batch."
-                            );
                         }
                     });
                 }
@@ -416,9 +389,6 @@ const BlockToolsSidebar = ({
             const entry = schematicList[currentPreviewIndex.current];
 
             if (!entry.schematic) {
-                console.log(
-                    `[BlockToolsSidebar] No schematic data for entry ${entry.id} (index ${currentPreviewIndex.current}), marking as null.`
-                );
                 setSchematicPreviews((prevPreviews) => ({
                     ...prevPreviews,
                     [entry.id]: null,
@@ -449,11 +419,6 @@ const BlockToolsSidebar = ({
                     let newPreviewDataUrl = null;
                     let errorOccurred = false;
                     try {
-                        console.log(
-                            `[BlockToolsSidebar] Generating preview for schematic (index ${
-                                currentPreviewIndex.current
-                            }): ${entry.prompt.substring(0, 30)}...`
-                        );
                         const blocksForPreview =
                             entry.schematic && entry.schematic.blocks
                                 ? entry.schematic.blocks
@@ -518,16 +483,10 @@ const BlockToolsSidebar = ({
                 }
 
                 if (needsProcessing) {
-                    console.log(
-                        "[BlockToolsSidebar] Starting/Restarting preview generation queue as items need processing."
-                    );
                     isGeneratingPreviews.current = true;
                     currentPreviewIndex.current = 0;
                     requestAnimationFrame(processQueue);
                 } else {
-                    console.log(
-                        "[BlockToolsSidebar] All schematics processed or no new items/failures."
-                    );
                 }
             } else {
                 // console.log("[BlockToolsSidebar] Preview generation already in progress."); // Can be noisy
@@ -540,9 +499,6 @@ const BlockToolsSidebar = ({
 
         return () => {
             isGeneratingPreviews.current = false;
-            console.log(
-                "[BlockToolsSidebar] Preview generation queue stopped due to cleanup or schematicList change."
-            );
         };
     }, [schematicList]);
 
@@ -574,7 +530,6 @@ const BlockToolsSidebar = ({
     }, [schematicList]);
 
     const handleDragStart = (blockId) => {
-        console.log("Drag started with block:", blockId);
     };
 
     const handleDownloadAllCustom = async () => {
@@ -596,7 +551,6 @@ const BlockToolsSidebar = ({
         try {
             const zipBlob = await zip.generateAsync({ type: "blob" });
             saveAs(zipBlob, "custom.zip");
-            console.log("Downloaded custom.zip");
         } catch (err) {
             console.error("Error saving custom.zip: ", err);
             alert("Failed to save custom.zip. See console.");
@@ -774,7 +728,6 @@ const BlockToolsSidebar = ({
             selectedBlockID = defaultBlock.id;
         } else if (newTab === "models") {
             const defaultEnvModel = environmentModels.find((m) => !m.isCustom);
-            console.log("defaultEnvModel", defaultEnvModel);
             if (defaultEnvModel) {
                 setCurrentBlockType({
                     ...defaultEnvModel,
@@ -798,7 +751,6 @@ const BlockToolsSidebar = ({
     };
 
     const handleEnvironmentSelect = (envType) => {
-        console.log("Environment selected:", envType);
         // Keep Terrain tool active while changing blocks; deactivate others
         try {
             const manager = terrainBuilderRef?.current?.toolManagerRef?.current;
@@ -818,9 +770,6 @@ const BlockToolsSidebar = ({
     };
 
     const handleBlockSelect = async (blockType) => {
-        console.log("[BLOCK_SELECT] Block selected:", blockType);
-        const { performanceLogger } = require("../utils/PerformanceLogger");
-        performanceLogger.markStart("Block Selection", { blockId: blockType.id, blockName: blockType.name });
         
         // Keep Terrain tool active while changing blocks; deactivate others
         try {
@@ -842,10 +791,8 @@ const BlockToolsSidebar = ({
         
         // Preload textures immediately when block is selected
         try {
-            console.log(`[BLOCK_SELECT] Preloading textures for block ${blockType.id} (${blockType.name})...`);
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
                 await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockType.id);
-                console.log(`[BLOCK_SELECT] ✓ Textures preloaded for block ${blockType.id}`);
             } else {
                 console.warn("[BLOCK_SELECT] BlockTypeRegistry not available");
             }
@@ -853,12 +800,10 @@ const BlockToolsSidebar = ({
             console.error(`[BLOCK_SELECT] ✗ Failed to preload textures for block ${blockType.id}:`, error);
         }
         
-        performanceLogger.markEnd("Block Selection");
     };
 
     /** @param {import("./AIAssistantPanel").SchematicHistoryEntry} schematicEntry */
     const handleSchematicSelect = (schematicEntry) => {
-        console.log("Schematic selected:", schematicEntry.prompt);
         setCurrentBlockType({
             ...schematicEntry,
             isComponent: true,
@@ -1261,18 +1206,12 @@ const BlockToolsSidebar = ({
                             "models",
                             updatedModelsForDB
                         );
-                        console.log(
-                            `Saved ${newModelsForDB.length} new models to DB.`
-                        );
                         environmentModels.push(...newModelsForUI);
                         if (environmentBuilder && environmentBuilder.current) {
                             for (const model of newModelsForUI) {
                                 try {
                                     await environmentBuilder.current.loadModel(
                                         model.modelUrl
-                                    );
-                                    console.log(
-                                        `Custom model ${model.name} added and loaded.`
                                     );
                                 } catch (loadError) {
                                     console.error(
@@ -1422,7 +1361,6 @@ const BlockToolsSidebar = ({
         offset += 4;
         if (DEBUG_BP_IMPORT) {
             console.groupCollapsed("[BP] Header");
-            console.log("magic:", [...bytes.slice(0, 4)]);
             console.groupEnd();
         }
         // metadata
@@ -1435,8 +1373,6 @@ const BlockToolsSidebar = ({
             console.groupCollapsed("[BP] Metadata");
             try {
                 const keys = Object.keys(metadata || {});
-                console.log("keys:", keys);
-                console.log("Name:", metadata?.Name?.value || metadata?.Name);
             } catch {}
             console.groupEnd();
         }
@@ -1455,8 +1391,6 @@ const BlockToolsSidebar = ({
             structure = await parseNbtBrowser(structInflated);
             if (DEBUG_BP_IMPORT) {
                 console.groupCollapsed("[BP] Structure: gzip decompressed");
-                console.log("inflated bytes:", structInflated.byteLength);
-                console.log("first 8 bytes:", [...structInflated.slice(0, 8)]);
                 console.groupEnd();
             }
         } catch (e) {
@@ -1464,10 +1398,6 @@ const BlockToolsSidebar = ({
             structure = await parseNbtBrowser(structCompressed);
             if (DEBUG_BP_IMPORT) {
                 console.groupCollapsed("[BP] Structure: raw parse fallback");
-                console.log("raw bytes:", structCompressed.byteLength);
-                console.log("first 8 bytes:", [
-                    ...structCompressed.slice(0, 8),
-                ]);
                 console.groupEnd();
             }
         }
@@ -1502,7 +1432,6 @@ const BlockToolsSidebar = ({
         }
         if (DEBUG_BP_IMPORT) {
             console.groupCollapsed("[BP] BlockRegion summary");
-            console.log("regions count:", regions.length);
             console.groupEnd();
         }
         const terrain = {};
@@ -1530,19 +1459,10 @@ const BlockToolsSidebar = ({
                 console.groupCollapsed(
                     `[BP] Region #${idx} @(${baseX},${baseY},${baseZ})`
                 );
-                console.log("palette length:", palette.length);
-                console.log(
-                    "bitsPerBlock:",
-                    Math.max(
-                        4,
-                        Math.ceil(Math.log2(Math.max(1, palette.length)))
-                    )
-                );
                 try {
                     const names = palette
                         .slice(0, 10)
                         .map((p) => getVal(p?.Name) || "?");
-                    console.log("palette sample:", names);
                 } catch {}
                 console.groupEnd();
             }
@@ -1588,28 +1508,6 @@ const BlockToolsSidebar = ({
         }
         if (DEBUG_BP_IMPORT) {
             console.groupCollapsed("[BP] Terrain map summary");
-            console.log("Total blocks:", Object.keys(terrain).length);
-            const bbox = (map) => {
-                const keys = Object.keys(map);
-                if (!keys.length) return null;
-                let minX = Infinity,
-                    minY = Infinity,
-                    minZ = Infinity,
-                    maxX = -Infinity,
-                    maxY = -Infinity,
-                    maxZ = -Infinity;
-                for (const k of keys) {
-                    const [x, y, z] = k.split(",").map(Number);
-                    if (x < minX) minX = x;
-                    if (y < minY) minY = y;
-                    if (z < minZ) minZ = z;
-                    if (x > maxX) maxX = x;
-                    if (y > maxY) maxY = y;
-                    if (z > maxZ) maxZ = z;
-                }
-                return { minX, minY, minZ, maxX, maxY, maxZ };
-            };
-            console.log("bbox:", bbox(terrain));
             console.groupEnd();
         }
         return { terrain, entities };
@@ -1727,11 +1625,6 @@ const BlockToolsSidebar = ({
 
         if (DEBUG_BP_IMPORT) {
             console.groupCollapsed("[BP] Import with custom mappings");
-            console.log("Custom mappings:", customMappings);
-            console.log(
-                "Block count:",
-                Object.keys(schematic.blocks || {}).length
-            );
             console.groupEnd();
         }
 

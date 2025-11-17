@@ -2,7 +2,6 @@ import * as THREE from "three";
 import BlockTypeRegistry from "../blocks/BlockTypeRegistry";
 import { CHUNK_SIZE } from "./ChunkConstants";
 import ChunkManager from "./ChunkManager";
-import { performanceLogger } from "../utils/PerformanceLogger";
 /**
  * Integrates the chunk system with TerrainBuilder
  */
@@ -39,7 +38,6 @@ class ChunkSystem {
         if (this._initialized) {
             return;
         }
-        performanceLogger.markStart("ChunkSystem.initialize");
         await BlockTypeRegistry.instance.initialize();
         // Skip preload here - it will be called from TerrainBuilder after checking terrain
         // This allows us to skip preload for empty worlds
@@ -48,10 +46,6 @@ class ChunkSystem {
             this._options.viewDistanceEnabled
         );
         this._initialized = true;
-        performanceLogger.markEnd("ChunkSystem.initialize", {
-            viewDistance: this._options.viewDistance,
-            viewDistanceEnabled: this._options.viewDistanceEnabled
-        });
     }
 
     processRenderQueue() {

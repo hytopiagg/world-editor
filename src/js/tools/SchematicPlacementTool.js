@@ -61,14 +61,11 @@ class SchematicPlacementTool extends BaseTool {
     }
 
     async onActivate(schematicData) {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
-        performanceLogger.markStart("SchematicPlacementTool.onActivate");
         
         if (!schematicData) {
             console.warn(
                 "[SCHEMATIC] SchematicPlacementTool activated without valid schematic data."
             );
-            performanceLogger.markEnd("SchematicPlacementTool.onActivate", { skipped: true, reason: "no data" });
             return false;
         }
 
@@ -82,7 +79,6 @@ class SchematicPlacementTool extends BaseTool {
             console.warn(
                 "[SCHEMATIC] SchematicPlacementTool activated with empty schematic data."
             );
-            performanceLogger.markEnd("SchematicPlacementTool.onActivate", { skipped: true, reason: "empty data" });
             return false;
         }
 
@@ -134,10 +130,6 @@ class SchematicPlacementTool extends BaseTool {
             this.schematicEntities
         );
 
-        performanceLogger.markEnd("SchematicPlacementTool.onActivate", { 
-            blockCount: Object.keys(this.schematicData).length,
-            uniqueBlockTypes: uniqueBlockIds.size
-        });
         return true; // Indicate activation succeeded
     }
 
@@ -322,12 +314,9 @@ class SchematicPlacementTool extends BaseTool {
     }
 
     async placeSchematic() {
-        const { performanceLogger } = require("../utils/PerformanceLogger");
-        performanceLogger.markStart("SchematicPlacementTool.placeSchematic");
         
         if (!this.schematicData || !this.previewPositionRef.current) {
             console.error("[SCHEMATIC] Cannot place schematic: data or position missing.");
-            performanceLogger.markEnd("SchematicPlacementTool.placeSchematic", { skipped: true, reason: "missing data" });
             return;
         }
         const basePosition = this.previewPositionRef.current;
@@ -521,11 +510,6 @@ class SchematicPlacementTool extends BaseTool {
 
         console.log("[SCHEMATIC] pendingChanges", pendingChanges);
         console.log(`[SCHEMATIC] ✓ Schematic placement complete: ${Object.keys(addedBlocks).length} blocks placed`);
-        performanceLogger.markEnd("SchematicPlacementTool.placeSchematic", {
-            blocksPlaced: Object.keys(addedBlocks).length,
-            blocksRemoved: Object.keys(removedBlocks).length,
-            entitiesPlaced: placedEntities.length
-        });
 
         if (pendingChanges) {
             pendingChanges.terrain.added = {

@@ -1,8 +1,9 @@
 import { getChunkSystem } from "../chunks/TerrainBuilderIntegration";
 import { CHUNK_SIZE, getViewDistance } from "../constants/terrain";
+import ChunkSystem from "../chunks/ChunkSystem";
 
-export const setDeferredChunkMeshing = (defer) => {
-    const chunkSystem = getChunkSystem();
+export const setDeferredChunkMeshing = (defer: boolean): boolean => {
+    const chunkSystem = getChunkSystem() as ChunkSystem | null;
     if (!chunkSystem) {
         console.error(
             "Cannot set deferred chunk meshing: chunk system not available"
@@ -24,8 +25,8 @@ export const setDeferredChunkMeshing = (defer) => {
  * @param {Object} options - Options for the update
  * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates (faster but less accurate at boundaries)
  */
-export const forceChunkUpdate = (chunkKeys, options: any = {}) => {
-    const chunkSystem = getChunkSystem();
+export const forceChunkUpdate = (chunkKeys: string[], options: any = {}): void => {
+    const chunkSystem = getChunkSystem() as ChunkSystem | null;
     if (!chunkSystem || chunkKeys.length === 0) {
         return;
     }
@@ -38,8 +39,8 @@ export const forceChunkUpdate = (chunkKeys, options: any = {}) => {
  * @param {Object} options - Options for the update
  * @param {Boolean} options.skipNeighbors - If true, skip neighbor chunk updates for faster processing
  */
-export const forceChunkUpdateByOrigin = (chunkOrigin, options: any = {}) => {
-    const chunkSystem = getChunkSystem();
+export const forceChunkUpdateByOrigin = (chunkOrigin: number[], options: any = {}): void => {
+    const chunkSystem = getChunkSystem() as ChunkSystem | null;
     if (!chunkSystem) {
         console.warn("forceChunkUpdateByOrigin: No chunk system available");
         return;
@@ -56,8 +57,8 @@ export const forceChunkUpdateByOrigin = (chunkOrigin, options: any = {}) => {
  * @param {number} options.priorityDistance Distance within which chunks get immediate meshes
  * @param {number} options.deferredBuildDelay Delay in ms before building deferred chunks
  */
-export const configureChunkLoading = (options: any = {}) => {
-    const chunkSystem = getChunkSystem();
+export const configureChunkLoading = (options: any = {}): boolean => {
+    const chunkSystem = getChunkSystem() as ChunkSystem | null;
     if (!chunkSystem) {
         console.warn(
             "Cannot configure chunk loading: chunk system not available"
@@ -75,8 +76,8 @@ export const configureChunkLoading = (options: any = {}) => {
     return true;
 };
 
-export const loadAllChunks = async () => {
-    const chunkSystem = getChunkSystem();
+export const loadAllChunks = async (): Promise<boolean | void> => {
+    const chunkSystem = getChunkSystem() as ChunkSystem | null;
     if (!chunkSystem) {
         console.warn("No chunk system available for loading chunks");
         return;
