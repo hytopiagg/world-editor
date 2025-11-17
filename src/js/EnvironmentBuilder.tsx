@@ -2088,27 +2088,40 @@ const EnvironmentBuilder = (
 
                 const yOffset = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
                 
+                // Round coordinates to ensure exact matching with spatial grid
+                // The spatial grid uses integer coordinates, so we need to match exactly
+                const oldX = Math.round(oldPosition.x);
+                const oldY = Math.round(oldPosition.y - yOffset);
+                const oldZ = Math.round(oldPosition.z);
+                
+                const newX = Math.round(newPosition.x);
+                const newY = Math.round(newPosition.y - yOffset);
+                const newZ = Math.round(newPosition.z);
+                
+                console.log(`[EnvironmentBuilder] Updating spatial grid for moved entity`, {
+                    modelUrl,
+                    oldPosition: { x: oldX, y: oldY, z: oldZ, raw: oldPosition.toArray() },
+                    newPosition: { x: newX, y: newY, z: newZ, raw: newPosition.toArray() },
+                    yOffset,
+                });
+                
                 // Remove old position from spatial grid
                 terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
-                    x: oldPosition.x,
-                    y: oldPosition.y - yOffset,
-                    z: oldPosition.z,
+                    x: oldX,
+                    y: oldY,
+                    z: oldZ,
                     blockId: 1000,
                 }], { force: true });
 
                 // Add new position to spatial grid
                 terrainBuilderRef.current.updateSpatialHashForBlocks([{
-                    x: newPosition.x,
-                    y: newPosition.y - yOffset,
-                    z: newPosition.z,
+                    x: newX,
+                    y: newY,
+                    z: newZ,
                     blockId: 1000,
                 }], [], { force: true });
 
-                console.log(`[EnvironmentBuilder] Updated spatial grid for moved entity`, {
-                    modelUrl,
-                    oldPosition: oldPosition.toArray(),
-                    newPosition: newPosition.toArray(),
-                });
+                console.log(`[EnvironmentBuilder] Spatial grid updated successfully`);
             }
         }),
         [scene, currentBlockType, placeholderMeshRef.current]

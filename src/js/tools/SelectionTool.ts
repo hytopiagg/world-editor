@@ -1772,21 +1772,14 @@ class SelectionTool extends BaseTool {
 
         const envBuilder = this.environmentBuilderRef.current;
 
-        // Update entity instance in EnvironmentBuilder and get old position
-        const updateResult = this.updateEntityInstanceTransform();
+        // Update entity instance in EnvironmentBuilder
+        this.updateEntityInstanceTransform();
 
-        // Get the old position from the update result or from manipulationStartTransform
+        // Use the original position from manipulationStartTransform as the old position
+        // This is the true starting position before any gizmo manipulation
+        // (updateResult.oldPosition would be the position from the last frame, not the original)
         let oldPosition: THREE.Vector3 | null = null;
-        if (
-            updateResult &&
-            typeof updateResult === "object" &&
-            "success" in updateResult &&
-            updateResult.success &&
-            "oldPosition" in updateResult
-        ) {
-            oldPosition = updateResult.oldPosition;
-        } else if (this.manipulationStartTransform) {
-            // Fallback to manipulationStartTransform if updateResult doesn't have oldPosition
+        if (this.manipulationStartTransform) {
             oldPosition = this.manipulationStartTransform.position;
         }
 
@@ -1796,6 +1789,15 @@ class SelectionTool extends BaseTool {
                 this.selectedEntity.currentPosition
             );
             if (positionChanged) {
+                console.log(
+                    "[SelectionTool] Updating spatial grid for moved entity",
+                    {
+                        modelUrl: this.selectedEntity.modelUrl,
+                        oldPosition: oldPosition.toArray(),
+                        newPosition:
+                            this.selectedEntity.currentPosition.toArray(),
+                    }
+                );
                 envBuilder.updateEntitySpatialGrid(
                     this.selectedEntity.modelUrl,
                     oldPosition,
