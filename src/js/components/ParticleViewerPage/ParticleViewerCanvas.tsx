@@ -20,17 +20,17 @@ interface ParticleViewerCanvasProps {
 }
 
 // Component to handle play mode movement
-function PlayModeController({ 
-    targetObject, 
-    playModeEnabled, 
+function PlayModeController({
+    targetObject,
+    playModeEnabled,
     targetObjectRef,
     initialPositionsRef,
     playerMeshRef,
     boneMapRef,
     onPlayerMeshReady,
     onPlayerMeshReadyStateChange
-}: { 
-    targetObject: TargetObjectType; 
+}: {
+    targetObject: TargetObjectType;
     playModeEnabled: boolean;
     targetObjectRef: React.RefObject<THREE.Object3D | null>;
     initialPositionsRef: React.MutableRefObject<{
@@ -74,7 +74,7 @@ function PlayModeController({
             // Initialize camera yaw from current rotation
             cameraYawRef.current = camera.rotation.y;
             cameraPitchRef.current = camera.rotation.x;
-            
+
             // Ensure camera starts at a reasonable height above ground
             if (targetObject === "player" && targetObjectRef.current) {
                 const playerPos = targetObjectRef.current.position;
@@ -83,7 +83,7 @@ function PlayModeController({
                 const pitch = Math.max(-0.3, Math.min(0.3, cameraPitchRef.current)); // Limit pitch
                 const horizontalDistance = offsetRadius * Math.cos(pitch);
                 const verticalOffset = offsetRadius * Math.sin(pitch) + offsetHeight;
-                
+
                 // Set initial camera position above player
                 camera.position.set(
                     playerPos.x - Math.sin(cameraYawRef.current) * horizontalDistance,
@@ -135,7 +135,7 @@ function PlayModeController({
             console.log('[PlayMode] Initializing physics for player');
             const physics = new PhysicsManager({ gravity: { x: 0, y: -32, z: 0 }, tickRate: 60 });
             physicsRef.current = physics;
-            
+
             physics.ready().then(() => {
                 physics.addFlatGround(4000, -0.5);
                 const pos = targetObjectRef.current?.position || new THREE.Vector3(0, 1.5, 0);
@@ -168,7 +168,7 @@ function PlayModeController({
 
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDragging) return;
-            
+
             const deltaX = (e.clientX - lastMouseX) * mouseSensitivity * 10; // Scale up since we're not using movementX
             const deltaY = (e.clientY - lastMouseY) * mouseSensitivity * 10;
 
@@ -283,7 +283,7 @@ function PlayModeController({
                                 });
                                 scene.add(obj);
                                 playerMeshRef.current = obj;
-                                
+
                                 // Build and log bone map for play mode player mesh
                                 console.log('[PlayMode] Building bone map for play mode player mesh...');
                                 const playModeBoneMap = new Map<string, THREE.Object3D>();
@@ -297,7 +297,7 @@ function PlayModeController({
                                 });
                                 console.log(`[PlayMode] ✓ Built bone map with ${playModeBoneMap.size} entries`);
                                 console.log('[PlayMode] Bone map keys:', Array.from(playModeBoneMap.keys()));
-                                
+
                                 // Update boneMapRef with play mode player mesh bones
                                 // Note: This is a workaround - we need to update the ref that particle emitters use
                                 if (boneMapRef) {
@@ -308,7 +308,7 @@ function PlayModeController({
                                     });
                                     console.log(`[PlayMode] ✓ Updated boneMapRef with ${boneMapRef.current.size} bones`);
                                 }
-                                
+
                                 console.log('[PlayMode] Player mesh added to scene:', {
                                     name: obj.name,
                                     type: obj.type,
@@ -316,16 +316,16 @@ function PlayModeController({
                                     uuid: obj.uuid,
                                     children: obj.children.length,
                                 });
-                                
+
                                 if (onPlayerMeshReady) {
                                     onPlayerMeshReady(obj);
                                 }
-                                
+
                                 // Trigger state update to cause re-attachment of particle emitters
                                 if (onPlayerMeshReadyStateChange) {
                                     onPlayerMeshReadyStateChange(true);
                                 }
-                                
+
                                 // Force a small delay then log to ensure everything is set up
                                 setTimeout(() => {
                                     console.log('[PlayMode] Player mesh ready callback completed. Verifying setup:', {
@@ -350,33 +350,33 @@ function PlayModeController({
                                             )
                                         );
                                     const actions: Record<string, THREE.AnimationAction> = {};
-                                    
+
                                     // Idle animations
                                     const idleUpper = findClip(["idle-upper", "idle_upper"]);
                                     const idleLower = findClip(["idle-lower", "idle_lower"]);
                                     if (idleUpper) actions["idle-upper"] = mixer.clipAction(idleUpper);
                                     if (idleLower) actions["idle-lower"] = mixer.clipAction(idleLower);
-                                    
+
                                     // Walk animations
                                     const walkUpper = findClip(["walk-upper", "walk_upper"]);
                                     const walkLower = findClip(["walk-lower", "walk_lower"]);
                                     if (walkUpper) actions["walk-upper"] = mixer.clipAction(walkUpper);
                                     if (walkLower) actions["walk-lower"] = mixer.clipAction(walkLower);
-                                    
+
                                     // Run animations
                                     const runUpper = findClip(["run-upper", "run_upper", "sprint-upper", "sprint_upper"]);
                                     const runLower = findClip(["run-lower", "run_lower", "sprint-lower", "sprint_lower"]);
                                     if (runUpper) actions["run-upper"] = mixer.clipAction(runUpper);
                                     if (runLower) actions["run-lower"] = mixer.clipAction(runLower);
-                                    
+
                                     // Jump animations
                                     const jumpUpper = findClip(["jump-upper", "jump_upper"]);
                                     const jumpLower = findClip(["jump-lower", "jump_lower"]);
                                     if (jumpUpper) actions["jump-upper"] = mixer.clipAction(jumpUpper);
                                     if (jumpLower) actions["jump-lower"] = mixer.clipAction(jumpLower);
-                                    
+
                                     playerAnimationsRef.current = actions;
-                                    
+
                                     // Start with idle
                                     if (idleUpper && idleLower) {
                                         idleUpper.reset().fadeIn(0.2).play();
@@ -406,7 +406,7 @@ function PlayModeController({
                     const meshAlpha = 1 - Math.exp(-30 * dtClamped);
                     const oldPos = playerMeshRef.current.position.clone();
                     playerMeshRef.current.position.lerp(cur, meshAlpha);
-                    
+
                     // Log position updates periodically (every ~1 second)
                     if (Math.random() < 0.016) { // ~1% chance per frame at 60fps = ~1 per second
                         console.log('[PlayMode] Player mesh position update:', {
@@ -416,7 +416,7 @@ function PlayModeController({
                             lerpAlpha: meshAlpha,
                         });
                     }
-                    
+
                     // Update rotation based on movement
                     if (lastPosRef.current) {
                         const dx = playerPos.x - lastPosRef.current.x;
@@ -428,7 +428,7 @@ function PlayModeController({
                             playerMeshRef.current.rotation.y = faceYaw;
                         }
                     }
-                    
+
                     // Log bone positions periodically to verify they're moving with the mesh
                     if (boneMapRef && boneMapRef.current && Math.random() < 0.016) {
                         console.log('[PlayMode] Sample bone positions (first 3):');
@@ -449,14 +449,14 @@ function PlayModeController({
                     const moving = !!(input.w || input.a || input.s || input.d);
                     const running = moving && !!input.sh;
                     const grounded = true; // Simplified - could add proper ground detection
-                    
+
                     let tag = "idle";
                     if (!grounded) {
                         tag = "jump";
                     } else if (moving) {
                         tag = running ? "run" : "walk";
                     }
-                    
+
                     if (playerActiveTagRef.current !== tag) {
                         const actions = playerAnimationsRef.current;
                         // Fade out current
@@ -478,14 +478,14 @@ function PlayModeController({
                 }
 
                 lastPosRef.current = playerPos.clone();
-                
+
                 // Third-person camera follow
                 const offsetRadius = 8.0;
                 const offsetHeight = 3.0;
                 const pitch = cameraPitchRef.current;
                 const horizontalDistance = offsetRadius * Math.cos(pitch);
                 const verticalOffset = offsetRadius * Math.sin(pitch) + offsetHeight;
-                
+
                 camera.position.set(
                     playerPos.x - Math.sin(cameraYawRef.current) * horizontalDistance,
                     playerPos.y + verticalOffset,
@@ -586,7 +586,7 @@ export default function ParticleViewerCanvas({
             <Grid args={[100, 100]} cellColor="#ffffff" sectionColor="#ffffff" fadeDistance={25} />
 
             {/* Target Object */}
-            <TargetObjectRenderer 
+            <TargetObjectRenderer
                 type={targetObject}
                 entityTarget={entityTarget}
                 playModeEnabled={playModeEnabled}
@@ -594,7 +594,7 @@ export default function ParticleViewerCanvas({
             />
 
             {/* Camera Positioner - adjusts camera to face front of object */}
-            <CameraPositioner 
+            <CameraPositioner
                 targetObjectRef={targetObjectRef}
                 playModeEnabled={playModeEnabled}
             />
@@ -617,7 +617,7 @@ export default function ParticleViewerCanvas({
                     } : null,
                     boneMapSize: boneMapRef?.current?.size || 0,
                 });
-                
+
                 return (
                     <ParticleEmitterRenderer
                         key={emitterKey}
@@ -641,7 +641,7 @@ export default function ParticleViewerCanvas({
             />
 
             {/* Play Mode Controller */}
-            <PlayModeController 
+            <PlayModeController
                 targetObject={targetObject}
                 playModeEnabled={playModeEnabled}
                 targetObjectRef={targetObjectRef}
