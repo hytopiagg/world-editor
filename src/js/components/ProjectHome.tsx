@@ -97,7 +97,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     // Global outside click: close inline menus and clear hover when clicking away
     useEffect(() => {
         const onDocMouseDown = (e: MouseEvent) => {
-            console.log('[PH] doc mousedown', { btn: e.button, menuOpen: contextMenu.open });
             const target = e.target as HTMLElement | null;
             const inInlineMenu = !!(target && (target as any).closest && (target as any).closest('.ph-inline-menu'));
             const inContextMenu = !!(target && (target as any).closest && (target as any).closest('.ph-context-menu'));
@@ -111,14 +110,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                 if (contextMenu.open) {
                     // If the click is on the overlay, let the overlay handler process selection and close the menu
                     if (onOverlay) {
-                        console.log('[PH] overlay click detected in capture; deferring to overlay handler');
                         return; // do nothing here
                     }
-                    console.log('[PH] closing menu only (keeping selection)');
                     setContextMenu({ id: null, x: 0, y: 0, open: false });
                 } else {
                     if (!onCard) {
-                        console.log('[PH] clearing selection (no menu open)');
                         setContextMenu({ id: null, x: 0, y: 0, open: false });
                         clearSelection();
                     }
@@ -253,7 +249,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
         setLoading(true);
         try {
             try { await (DatabaseManager as any).getDBConnection?.(); } catch (_) { }
-            console.log('[ProjectHome] refresh -> fetching projects');
             const list = await DatabaseManager.listProjects();
             const all = Array.isArray(list) ? list.map((p: any) => ({ ...p })) : [];
             setFolders(all.filter((p: any) => p.type === 'folder'));
@@ -262,7 +257,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     .filter((p: any) => p.type !== 'folder')
                     .sort((a: any, b: any) => (b.lastOpenedAt || b.updatedAt || 0) - (a.lastOpenedAt || a.updatedAt || 0))
             );
-            console.log('[ProjectHome] refresh -> projects loaded', (list || []).length);
         } catch (e) {
             setProjects([]);
             console.warn('[ProjectHome] refresh error', e);
@@ -280,7 +274,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
 
     useEffect(() => {
         try { (window as any).__PH_SELECTED__ = selectedIds || []; } catch (_) { }
-        try { console.log('[PH] selection changed', selectedIds); } catch (_) { }
     }, [selectedIds]);
 
     const titleForNav = () => {
@@ -313,7 +306,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     const inMenu = !!(target && target.closest && target.closest('.ph-context-menu'));
                     if (inCard || inMenu) return; // let card/menu handlers manage
                     e.preventDefault();
-                    console.log('[PH] main onContextMenu fallback -> open root menu');
                     try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
                     setSelectedIds([]);
                     setContextMenu({ id: '__ROOT__', x: e.clientX, y: e.clientY, open: true });
@@ -361,7 +353,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             try {
                                 const json = e.dataTransfer?.getData('application/x-project-ids');
                                 const ids = json ? JSON.parse(json) : [];
-                                console.log('[PH] drop on root', ids);
                                 if (Array.isArray(ids) && ids.length > 0) {
                                     for (const id of ids) await DB.updateProjectFolder(id, null);
                                     setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId: null } : p));
@@ -377,7 +368,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                 onOpenFolder={(fid) => setActiveFolderId(fid)}
                                 setContextMenu={setContextMenu}
                                 onDropProjects={async (folderId, ids) => {
-                                    console.log('[PH] drop into folder', folderId, ids);
                                     for (const id of ids) await DB.updateProjectFolder(id, folderId);
                                     setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId } : p));
                                 }}
@@ -414,7 +404,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                                 visibleIds = filtered
                                                     .filter((pp) => !activeFolderId ? (pp.folderId == null) : (pp.folderId === activeFolderId))
                                                     .map((pp) => pp.id);
-                                                console.log('[ProjectHome] onSelect (grid)', { clickedId: id, idx, visibleIds, selectedIdsBefore: selectedIds });
                                             } catch (_) { }
                                             selectByIndex(visibleIds, idx, ev);
                                         }}
@@ -433,7 +422,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             try {
                                 const json = e.dataTransfer?.getData('application/x-project-ids');
                                 const ids = json ? JSON.parse(json) : [];
-                                console.log('[PH] drop on root (list)', ids);
                                 if (Array.isArray(ids) && ids.length > 0) {
                                     for (const id of ids) await DB.updateProjectFolder(id, null);
                                     setProjects((prev) => prev.map((p) => ids.includes(p.id) ? { ...p, folderId: null } : p));
@@ -478,7 +466,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             onMouseDown={(e) => {
                                 // Close on left-click; allow right-click to reposition
                                 if (e.button === 0) {
-                                    console.log('[PH] overlay left-click');
                                     try {
                                         // If click is within an open context menu, ignore and let the menu handle it
                                         const el = e.target as HTMLElement;
@@ -493,7 +480,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                             }
                                         }
                                         if (pid) {
-                                            console.log('[PH] overlay select underlying', { pid });
                                             const visible = filtered.filter((pp) => !activeFolderId ? (pp.folderId == null) : (pp.folderId === activeFolderId));
                                             const visibleIds = visible.map(pp => pp.id);
                                             const idx = visibleIds.findIndex((vid) => vid === pid);
@@ -505,7 +491,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             }}
                             onContextMenu={(e) => {
                                 e.preventDefault();
-                                console.log('[PH] overlay right-click');
                                 // Hit-test using elementsFromPoint to go through overlay
                                 const els = (document as any).elementsFromPoint ? (document as any).elementsFromPoint(e.clientX, e.clientY) : [];
                                 let pid: string | null = null;

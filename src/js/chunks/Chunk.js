@@ -142,12 +142,7 @@ class Chunk {
                     window.__LIGHT_DEBUG__ === true)
             ) {
                 if (sources.length > 0) {
-                    console.log(
-                        "[light-build] cached sources for",
-                        this.chunkId,
-                        "count:",
-                        sources.length
-                    );
+                    // Cached sources available
                 }
             }
         } catch (_) {}
@@ -790,20 +785,10 @@ class Chunk {
      * @returns {Promise<Object>} The meshes
      */
     async buildPartialMeshes(chunkManager, blockCoordinates) {
-        const perfId = `buildPartialMeshes-${this.chunkId}-${blockCoordinates.length}`;
-        console.time(perfId);
-        console.log(
-            `Building partial meshes for ${blockCoordinates.length} blocks in chunk ${this.chunkId}`
-        );
-
         if (
             (!this._solidMesh && !this._liquidMesh) ||
             blockCoordinates.length > 50
         ) {
-            console.log(
-                `Falling back to full rebuild for chunk ${this.chunkId} - no existing meshes or too many blocks (${blockCoordinates.length})`
-            );
-            console.timeEnd(perfId);
             return this.buildMeshes(chunkManager);
         }
         try {
@@ -833,10 +818,6 @@ class Chunk {
                 }
             }
             if (localCoordinates.length === 0) {
-                console.log(
-                    `No valid local coordinates for this chunk - skipping partial mesh update`
-                );
-                console.timeEnd(perfId);
                 return {
                     liquidMesh: this._liquidMesh,
                     solidMesh: this._solidMesh,
@@ -1102,17 +1083,10 @@ class Chunk {
             this._updateMeshVisibility();
 
             delete this._extendedBlockTypes;
-            console.log(
-                `Successfully built partial mesh for chunk ${this.chunkId} with ${blockCoordinates.length} affected blocks (expanded to ${effectiveRange.size} blocks)`
-            );
-            console.timeEnd(perfId);
+
             return meshes;
         } catch (error) {
-            console.error(
-                `Error building partial meshes for chunk ${this.chunkId}:`,
-                error
-            );
-            console.timeEnd(perfId);
+            // Error building partial meshes
 
             return this.buildMeshes(chunkManager);
         }
@@ -1320,11 +1294,6 @@ class Chunk {
                         adjacentChunkId !== this.chunkId &&
                         chunkManager._chunks.has(adjacentChunkId)
                     ) {
-                        if (Math.random() < 0.1) {
-                            console.log(
-                                `Also rebuilding adjacent chunk ${adjacentChunkId} due to edge block removal`
-                            );
-                        }
 
                         chunkManager.markChunkForRemesh(adjacentChunkId, {
                             forceCompleteRebuild: true,

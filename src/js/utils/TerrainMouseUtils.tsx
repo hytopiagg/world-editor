@@ -65,9 +65,6 @@ function handleTerrainMouseUp(
                         placementChangesRef.current
                     );
                 } else {
-                    console.warn(
-                        "No direct access to saveUndo function, trying fallbacks"
-                    );
                     const tempRef = ref?.current;
                     if (
                         tempRef &&
@@ -77,10 +74,6 @@ function handleTerrainMouseUp(
                     ) {
                         tempRef.undoRedoManager.current.saveUndo(
                             placementChangesRef.current
-                        );
-                    } else {
-                        console.error(
-                            "Could not find a way to save undo state, changes won't be tracked for undo/redo"
                         );
                     }
                 }
@@ -170,10 +163,6 @@ function handleTerrainMouseDown(
             threeRaycaster.ray.intersectPlane(groundPlane, groundPoint);
             if (groundPoint) {
                 rawPlacementAnchorRef.current.copy(groundPoint);
-            } else {
-                console.warn(
-                    "Initial ground plane raycast failed on mousedown. Cannot set raw placement anchor."
-                );
             }
             isFirstBlockRef.current = true;
             recentlyPlacedBlocksRef.current.clear();

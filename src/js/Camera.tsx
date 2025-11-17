@@ -39,7 +39,7 @@ class CameraManager {
         this.modifierKeysActive = false;
         this.lastFrameTime = performance.now();
         this.normalizedFps = 120; // Default to 60 FPS
-        this.isPointerUnlockedMode = false;
+        this.isPointerUnlockedMode = true; // Crosshair mode OFF by default
         this.isPointerLocked = false;
         this.handlePointerMove = () => { };
     }

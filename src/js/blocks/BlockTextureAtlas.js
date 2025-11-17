@@ -68,7 +68,6 @@ class BlockTextureAtlas {
      * @returns {Promise<void>}
      */
     async initialize() {
-        console.log("🧊 Initializing BlockTextureAtlas...");
         try {
             await this.loadTexture("./assets/blocks/error.png");
 
@@ -77,7 +76,6 @@ class BlockTextureAtlas {
             for (const blockType of multiSidedBlockTypes) {
                 await this.preloadMultiSidedTextures(blockType);
             }
-            console.log("✅ BlockTextureAtlas initialization complete!");
         } catch (error) {
             console.error("❌ Error initializing BlockTextureAtlas:", error);
         }
@@ -89,7 +87,6 @@ class BlockTextureAtlas {
     static get instance() {
         if (!BlockTextureAtlas._instance) {
             BlockTextureAtlas._instance = new BlockTextureAtlas();
-            console.log("Created BlockTextureAtlas singleton instance");
         }
         return BlockTextureAtlas._instance;
     }
@@ -245,7 +242,6 @@ class BlockTextureAtlas {
         }
         const isDataUri = textureUri.startsWith("data:image/");
         if (isDataUri) {
-            console.log(`[TEXTURE] Loading data URI texture: ${textureUri.substring(0, 50)}...`);
             await this.loadTextureFromDataURI(textureUri, textureUri);
             return;
         }
@@ -260,11 +256,8 @@ class BlockTextureAtlas {
             this._textureAtlasMetadata.has(normalizedPath) ||
             this._textureAtlasMetadata.has(alternativePath)
         ) {
-            console.log(`[TEXTURE] Texture already loaded: ${textureUri}`);
             return;
         }
-        
-        console.log(`[TEXTURE] Starting load: ${textureUri}`);
         const isSingleTextureFile = textureUri.match(
             /\/blocks\/([^\/]+\.(png|jpe?g))$/
         );
@@ -274,29 +267,23 @@ class BlockTextureAtlas {
         try {
             if (isSingleTextureFile) {
                 await this._loadTextureDirectly(textureUri);
-                console.log(`[TEXTURE] ✓ Successfully loaded: ${textureUri}`);
             } else if (
                 multiSidedBlockMatch &&
                 !textureUri.match(/[\+\-][xyz]\.png$/)
             ) {
                 const blockType = multiSidedBlockMatch[1];
-                console.log(`[TEXTURE] Loading multi-sided textures for: ${blockType}`);
                 await this.preloadMultiSidedTextures(blockType);
-                console.log(`[TEXTURE] ✓ Successfully loaded multi-sided textures for: ${blockType}`);
             } else {
                 if (!textureUri.match(/\.(png|jpe?g)$/i) && !isDataUri) {
                     const fallbackPath = `${textureUri}.png`;
                     try {
-                        console.log(`[TEXTURE] Trying fallback path: ${fallbackPath}`);
                         await this._loadTextureDirectly(fallbackPath);
-                        console.log(`[TEXTURE] ✓ Successfully loaded via fallback: ${fallbackPath}`);
                         return;
                     } catch (error) {
                         console.warn(`[TEXTURE] Fallback failed for ${fallbackPath}:`, error);
                     }
                 }
                 await this._loadTextureDirectly(textureUri);
-                console.log(`[TEXTURE] ✓ Successfully loaded: ${textureUri}`);
             }
         } catch (error) {
             console.error(`[TEXTURE] ✗ Failed to load: ${textureUri}`, error);
@@ -553,7 +540,6 @@ class BlockTextureAtlas {
      * Clear the texture UV coordinate cache
      */
     clearTextureUVCache() {
-        console.log("Clearing texture UV coordinate cache");
         this._textureUVCache.clear();
     }
     /**
@@ -561,11 +547,9 @@ class BlockTextureAtlas {
      * @returns {Promise<void>}
      */
     async rebuildTextureAtlas() {
-        console.log("Rebuilding texture atlas...");
         this._textureAtlas.needsUpdate = true;
         BlockMaterial.instance.setTextureAtlas(this._textureAtlas);
         this.clearTextureUVCache();
-        console.log("Texture atlas rebuilt successfully");
     }
     /**
      * Preload multi-sided block textures
@@ -844,7 +828,6 @@ class BlockTextureAtlas {
         const logKey = `BlockTextureAtlas._loadTextureDirectly(${textureUri})`;
         
         if (this._textureLoadLocks[textureUri]) {
-            console.log(`[TEXTURE] Waiting for in-progress load: ${textureUri}`);
             const result = await this._textureLoadLocks[textureUri];
             return result;
         }
@@ -920,7 +903,6 @@ class BlockTextureAtlas {
                         );
                     }
                     this._scheduleAtlasUpdate();
-                    console.log(`[TEXTURE] ✓ Direct load successful: ${textureUri}`);
                     resolve(texture);
                 },
                 undefined,
@@ -936,7 +918,6 @@ class BlockTextureAtlas {
                         "./assets/blocks/error.png"
                     );
                     if (errorMetadata) {
-                        console.log(`[TEXTURE] Using error texture fallback for: ${textureUri}`);
                         this._textureAtlasMetadata.set(
                             textureUri,
                             errorMetadata

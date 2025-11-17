@@ -35,7 +35,6 @@ class BlockMaterial {
     constructor() {
         this._materialManager = MaterialManager.instance;
         this._gpuInfo = detectGPU();
-        console.log("🧱 BlockMaterial initialized with GPU-optimized settings");
     }
 
     /**
@@ -54,7 +53,6 @@ class BlockMaterial {
     get defaultSolidNonLit(): THREE.MeshPhongMaterial {
         if (!this._defaultSolidNonLit) {
             this._defaultSolidNonLit = this._createSolidBlockMaterial(false);
-            console.log("🧱 Created solid non-lit material");
         }
         return this._defaultSolidNonLit;
     }
@@ -65,7 +63,6 @@ class BlockMaterial {
     get defaultSolidLit(): THREE.MeshPhongMaterial {
         if (!this._defaultSolidLit) {
             this._defaultSolidLit = this._createSolidBlockMaterial(true);
-            console.log("🧱 Created solid LIT material");
         }
         return this._defaultSolidLit;
     }
@@ -205,7 +202,6 @@ class BlockMaterial {
     get liquidMaterial(): THREE.ShaderMaterial {
         if (!this._liquidMaterial) {
             this._liquidMaterial = this.createOptimizedLiquidMaterial();
-            console.log("💧 Created optimized liquid material");
         }
         return this._liquidMaterial;
     }

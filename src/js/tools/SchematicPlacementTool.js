@@ -5,11 +5,6 @@ import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
 
 class SchematicPlacementTool extends BaseTool {
     constructor(terrainBuilderProps) {
-        console.log(
-            "[SchematicPlacementTool] Constructor received props:",
-            terrainBuilderProps
-        );
-
         if (!terrainBuilderProps || !terrainBuilderProps.scene) {
             console.error(
                 "[SchematicPlacementTool] ERROR: Scene object is missing in terrainBuilderProps!"

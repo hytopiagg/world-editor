@@ -93,7 +93,6 @@ export class DatabaseManager {
         return this.getConnection();
     }
     static async saveData(storeName: string, key: string, data: any): Promise<void> {
-        console.log("saveData", storeName, key, data);
         const db = await this.getConnection();
         return new Promise((resolve, reject) => {
             if ((storeName === STORES.TERRAIN || storeName === STORES.ENVIRONMENT) && key === "current") {

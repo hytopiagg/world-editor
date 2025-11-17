@@ -63,14 +63,10 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
 
                 // >>> Load saved view distance
                 try {
-                    console.log("Loading view distance...");
                     const savedViewDistance = await DatabaseManager.getData(STORES.SETTINGS, "viewDistance");
-                    console.log("Saved view distance:", savedViewDistance);
                     if (typeof savedViewDistance === "number") {
-                        console.log("Setting view distance...");
                         setViewDistance(savedViewDistance);
                         if (terrainBuilderRef?.current?.setViewDistance) {
-                            console.log("Setting view distance in terrain builder...");
                             terrainBuilderRef.current.setViewDistance(savedViewDistance);
                         }
                     }

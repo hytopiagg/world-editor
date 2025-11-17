@@ -77,27 +77,17 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                     const sel = (window as any).__PH_SELECTED__ || [];
                     const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
                     e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
-                    console.log('[Card] dragstart', { id: p.id, payload });
                 } catch (err) { console.warn('[Card] dragstart error', err); }
             }}
-            onDragEnd={() => { console.log('[Card] dragend', p.id); }}
+            onDragEnd={() => { }}
             onClick={(ev) => {
-                try {
-                    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-                    console.log('[GridCard] click', { id: p.id, index, x: ev.clientX, y: ev.clientY, rect, meta: { name: p.name } });
-                } catch (_) { }
                 onSelect(p.id, index, ev);
             }}
             onMouseDown={(e) => {
-                try { console.log('[GridCard] mousedown', { id: p.id, index, button: e.button }); } catch (_) { }
                 setPressedCardId(p.id);
             }}
             onMouseUp={(e) => {
                 setPressedCardId(null);
-                try {
-                    const sel = (window as any).__PH_SELECTED__ || [];
-                    console.log('[GridCard] mouseup selection snapshot', { id: p.id, index, selectedIds: sel });
-                } catch (_) { }
             }}
             onMouseLeave={() => { setPressedCardId((cur) => (cur === p.id ? null : cur)); setHoveredId(null); }}
             onMouseEnter={() => setHoveredId(p.id)}
@@ -121,7 +111,6 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                             const sel = (window as any).__PH_SELECTED__ || [];
                             const payload = Array.isArray(sel) && sel.includes(p.id) ? sel : [p.id];
                             e.dataTransfer?.setData('application/x-project-ids', JSON.stringify(payload));
-                            console.log('[Card] dragstart (thumb)', { id: p.id, payload });
                         } catch (err) { console.warn('[Card] dragstart error', err); }
                     }}
                 >

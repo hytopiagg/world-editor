@@ -78,10 +78,6 @@ export function detectGPU(forceRefresh = false): GPUInfo {
         if (gl) {
             supportsWebGL2 = true;
             contextType = "webgl2";
-            // Only log once when first detected
-            if (!cachedGPUInfo) {
-                console.log("✅ WebGL2 context successfully created");
-            }
         } else {
             // Fallback to WebGL1
             gl = (canvas.getContext("webgl", {
@@ -93,12 +89,6 @@ export function detectGPU(forceRefresh = false): GPUInfo {
 
             if (gl) {
                 contextType = "webgl";
-                // Only log once when first detected
-                if (!cachedGPUInfo) {
-                    console.log(
-                        "⚠️ WebGL1 context created (WebGL2 not available)"
-                    );
-                }
             }
         }
 
@@ -231,13 +221,7 @@ export function detectGPU(forceRefresh = false): GPUInfo {
     detectionInProgress = false;
 
     if (isFirstDetection || forceRefresh) {
-        console.log("🖥️ GPU Detection Complete:", {
-            gpu: `${cachedGPUInfo.vendor} ${cachedGPUInfo.renderer}`,
-            performance: cachedGPUInfo.estimatedPerformanceClass,
-            webgl2: cachedGPUInfo.supportsWebGL2,
-            maxTextureSize: cachedGPUInfo.maxTextureSize,
-            integrated: cachedGPUInfo.isIntegratedGPU,
-        });
+        // GPU detection complete
     }
 
     return cachedGPUInfo;
@@ -401,19 +385,8 @@ export function applyGPUOptimizedSettings(renderer: any, gpuInfo?: GPUInfo) {
     renderer.userData.gpuOptimizedSettings = settings;
     renderer.userData.gpuInfo = gpuInfo;
 
-    // Only log settings application once to avoid spam
+    // Settings applied
     if (!settingsAppliedLogged) {
-        console.log(
-            `✅ Applied GPU-optimized settings for ${gpuInfo.estimatedPerformanceClass} performance GPU:`,
-            {
-                gpu: `${gpuInfo.vendor} ${gpuInfo.renderer}`,
-                contextType: gpuInfo.contextType,
-                maxTextureSize: gpuInfo.maxTextureSize,
-                maxAnisotropy: gpuInfo.maxAnisotropy,
-                supportsWebGL2: gpuInfo.supportsWebGL2,
-                settings,
-            }
-        );
         settingsAppliedLogged = true;
     }
 
@@ -431,28 +404,8 @@ export function logGPUInfo(force = false): GPUInfo {
     const gpuInfo = detectGPU();
     const settings = getRecommendedSettings(gpuInfo);
 
-    // Only log detailed info once or when forced
+    // GPU info logged
     if (force || !detailedInfoLogged) {
-        console.group("🖥️ GPU Detection Results");
-        console.log("Hardware:", {
-            vendor: gpuInfo.vendor,
-            renderer: gpuInfo.renderer,
-            isIntegratedGPU: gpuInfo.isIntegratedGPU,
-            isHighPerformance: gpuInfo.isHighPerformance,
-            performanceClass: gpuInfo.estimatedPerformanceClass,
-        });
-
-        console.log("WebGL Capabilities:", {
-            supportsWebGL2: gpuInfo.supportsWebGL2,
-            contextType: gpuInfo.contextType,
-            maxTextureSize: gpuInfo.maxTextureSize,
-            maxAnisotropy: gpuInfo.maxAnisotropy,
-            supportedExtensions: gpuInfo.supportedExtensions.length,
-        });
-
-        console.log("Optimized Settings:", settings);
-        console.groupEnd();
-
         detailedInfoLogged = true;
     }
 
@@ -482,9 +435,7 @@ export function createOptimizedContext(
             contextAttribs
         ) as WebGL2RenderingContext | null;
         if (gl2) {
-            // Only log context creation once to avoid spam
             if (!contextCreationLogged) {
-                console.log("✅ Optimized WebGL2 context created successfully");
                 contextCreationLogged = true;
             }
             return gl2;
@@ -499,16 +450,11 @@ export function createOptimizedContext(
         )) as WebGLRenderingContext | null;
 
     if (gl) {
-        // Only log context creation once to avoid spam
         if (!contextCreationLogged) {
-            console.log(
-                "⚠️ Optimized WebGL1 context created (WebGL2 not available)"
-            );
             contextCreationLogged = true;
         }
         return gl;
     }
 
-    console.error("❌ Failed to create WebGL context");
     return null;
 }
