@@ -111,7 +111,6 @@ function App() {
     const [showOptionsPanel, setShowOptionsPanel] = useState(true);
     const [showToolbar, setShowToolbar] = useState(true);
     const [isCompactMode, setIsCompactMode] = useState(true);
-    const [showCrosshair, setShowCrosshair] = useState(cameraManager.isPointerLocked);
     const [cameraPosition, setCameraPosition] = useState(null);
     const [playerModeEnabled, setPlayerModeEnabled] = useState(false);
     const physicsRef = useRef<PhysicsManager | null>(null);
@@ -355,13 +354,7 @@ function App() {
         DatabaseManager.saveData(STORES.REDO, "states", []);
     }, [projectId]);
 
-    useEffect(() => {
-        // Poll pointer lock state to update crosshair visibility
-        const crosshairInterval = setInterval(() => {
-            setShowCrosshair(cameraManager.isPointerLocked);
-        }, 100);
-        return () => clearInterval(crosshairInterval);
-    }, []);
+    // Crosshair is always visible in crosshair mode, no polling needed
 
     useEffect(() => {
         const shouldDefocus = (el: HTMLElement | null) => {
@@ -901,8 +894,8 @@ function App() {
                     />
                 )}
 
-                {/* Crosshair visible while pointer is locked */}
-                {projectId && showCrosshair && !cameraManager.isPointerUnlockedMode && (
+                {/* Crosshair visible only in crosshair mode */}
+                {projectId && !cameraManager.isPointerUnlockedMode && (
                     <div
                         style={{
                             position: "fixed",

@@ -263,8 +263,12 @@ class CameraManager {
         ) {
             const direction = new THREE.Vector3();
             this.camera.getWorldDirection(direction);
-
-            direction.y = 0;
+            
+            // In crosshair mode, move in full camera direction (including vertical)
+            // In rotate mode, move only horizontally
+            if (this.isPointerUnlockedMode) {
+                direction.y = 0;
+            }
             direction.normalize();
 
             const moveDirection =
@@ -439,7 +443,7 @@ class CameraManager {
             }
             this.isPointerLocked = false;
             console.log("Camera mode toggled. Rotate mode:", this.isPointerUnlockedMode);
-            const modeText = this.isPointerUnlockedMode ? "Rotate" : "Pointer Lock";
+            const modeText = this.isPointerUnlockedMode ? "Rotate" : "Crosshair";
             QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
             DatabaseManager.saveData(STORES.SETTINGS, "pointerLockMode", this.isPointerUnlockedMode).catch(() => { });
             window.dispatchEvent(new Event("pointerLockModeChanged"));

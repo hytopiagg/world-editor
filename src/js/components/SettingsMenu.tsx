@@ -164,7 +164,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
             document.exitPointerLock();
         }
 
-        const modeText = newValue ? "Rotate" : "Pointer Lock";
+        const modeText = newValue ? "Rotate" : "Crosshair";
         QuickTipsManager.setToolTip(`Camera Mode: ${modeText}`);
 
         try {
@@ -272,7 +272,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
                         animationDelay: "0.095s"
                     }}>
-                        <span>Pointer Lock Mode</span>
+                        <span>Crosshair Mode</span>
                         <input
                             type="checkbox"
                             checked={!isPointerUnlockedMode}

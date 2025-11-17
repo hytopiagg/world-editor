@@ -609,6 +609,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const gridRef = useRef<THREE.GridHelper>(null);
     const mouseMoveAnimationRef = useRef(null);
     const isPlacingRef = useRef(false);
+    const mouseButtonDownRef = useRef<number | null>(null); // Track which mouse button is held down (0 = left, 2 = right)
+    const lastDragPlacementTimeRef = useRef(0);
+    const DRAG_PLACEMENT_INTERVAL = 50; // ms between placements during drag
     const currentPlacingYRef = useRef(0);
     const previewPositionRef = useRef(new THREE.Vector3());
     const rawPlacementAnchorRef = useRef(new THREE.Vector3());
@@ -786,57 +789,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
     };
     const handleMouseDown = useCallback(
         (e) => {
-
-            // Pointer-lock handling: first click should engage lock rather than place
-            if (
-                !cameraManager.isPointerUnlockedMode &&
-                !cameraManager.isPointerLocked
-            ) {
-                const canvasEl = gl && gl.domElement;
-                if (canvasEl && canvasEl.requestPointerLock) {
-                    try {
-                        const lockResult = canvasEl.requestPointerLock();
-                        const handleRelock = () => {
-                            if (document.pointerLockElement === canvasEl) {
-                                document.removeEventListener(
-                                    "pointerlockchange",
-                                    handleRelock
-                                );
-                            }
-                        };
-                        document.addEventListener(
-                            "pointerlockchange",
-                            handleRelock,
-                            { once: true }
-                        );
-
-                        if (
-                            lockResult &&
-                            typeof lockResult.catch === "function"
-                        ) {
-                            lockResult.catch((err) => {
-                                document.removeEventListener(
-                                    "pointerlockchange",
-                                    handleRelock
-                                );
-                            });
-                        }
-                    } catch (err) {
-                        // Pointer lock request error
-                    }
-                }
-                return;
-            }
-
-            if (
-                !cameraManager.isPointerUnlockedMode &&
-                cameraManager.isPointerLocked
-            ) {
-                if (e.button === 0) {
-                    modeRef.current = "add";
-                } else if (e.button === 2) {
-                    modeRef.current = "remove";
-                }
+            // Set mode based on mouse button
+            if (e.button === 0) {
+                modeRef.current = "add";
+                mouseButtonDownRef.current = 0;
+            } else if (e.button === 2) {
+                modeRef.current = "remove";
+                mouseButtonDownRef.current = 2;
             }
 
             // Low-res sculpting: temporarily drop pixel ratio
@@ -1205,11 +1164,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
     };
     const getRaycastIntersection = useCallback(() => {
-        const ptr =
-            !cameraManager.isPointerUnlockedMode &&
-            cameraManager.isPointerLocked
-                ? new THREE.Vector2(0, 0)
-                : pointer.clone();
+        // Use center of screen for raycasting in crosshair mode, mouse position in rotate mode
+        const ptr = cameraManager.isPointerUnlockedMode 
+            ? pointer.clone() 
+            : new THREE.Vector2(0, 0);
         return getTerrainRaycastIntersection(
             scene,
             threeCamera,
@@ -1263,11 +1221,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
         const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
         const currentGroundPoint = new THREE.Vector3();
-        const normalizedMouse =
-            !cameraManager.isPointerUnlockedMode &&
-            cameraManager.isPointerLocked
-                ? new THREE.Vector2(0, 0)
-                : pointer.clone();
+        // Use center of screen for raycasting in crosshair mode, mouse position in rotate mode
+        const normalizedMouse = cameraManager.isPointerUnlockedMode 
+            ? pointer.clone() 
+            : new THREE.Vector2(0, 0);
         threeRaycaster.setFromCamera(normalizedMouse, threeCamera);
         const hitGround = threeRaycaster.ray.intersectPlane(
             groundPlane,
@@ -1443,6 +1400,24 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     handleBlockPlacement();
                 }
             }
+            
+            // Continuous placement/removal during drag (for both add and remove modes)
+            if (
+                isPlacingRef.current &&
+                !isToolActive &&
+                mouseButtonDownRef.current !== null &&
+                (mouseButtonDownRef.current === 0 || mouseButtonDownRef.current === 2)
+            ) {
+                const now = performance.now();
+                // Throttle continuous placement during drag
+                if (now - lastDragPlacementTimeRef.current >= DRAG_PLACEMENT_INTERVAL) {
+                    // Only place blocks, not models, during drag
+                    if (!currentBlockTypeRef.current?.isEnvironment) {
+                        handleBlockPlacement();
+                    }
+                    lastDragPlacementTimeRef.current = now;
+                }
+            }
         }
                 (fn as any).isProcessing = false;
     };
@@ -1450,6 +1425,11 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         })();
     const handleMouseUp = useCallback(
         (e) => {
+            // Clear mouse button tracking
+            if (e.button === 0 || e.button === 2) {
+                mouseButtonDownRef.current = null;
+            }
+
             handleTerrainMouseUp(
                 e,
                 toolManagerRef,
@@ -3006,20 +2986,24 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             handleMouseUp(event);
         };
         const handleContextMenu = (event) => {
-            if (
-                !cameraManager.isPointerUnlockedMode &&
-                cameraManager.isPointerLocked
-            ) {
-                event.preventDefault();
+            // Prevent context menu in crosshair mode
+            event.preventDefault();
+        };
+        // Global mouseup handler to catch mouse release outside canvas
+        const handleGlobalMouseUp = (event) => {
+            if (event.button === 0 || event.button === 2) {
+                mouseButtonDownRef.current = null;
             }
         };
         canvas.addEventListener("mousedown", handleCanvasMouseDown);
         canvas.addEventListener("mouseup", handleCanvasMouseUp);
         canvas.addEventListener("contextmenu", handleContextMenu);
+        window.addEventListener("mouseup", handleGlobalMouseUp);
         return () => {
             canvas.removeEventListener("mousedown", handleCanvasMouseDown);
             canvas.removeEventListener("mouseup", handleCanvasMouseUp);
             canvas.removeEventListener("contextmenu", handleContextMenu);
+            window.removeEventListener("mouseup", handleGlobalMouseUp);
         };
     }, [gl, handleMouseDown, handleMouseUp, cameraManager]); // Add dependencies
     useEffect(() => {
@@ -4044,6 +4028,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 enableZoom={false}
                 enableRotate={true}
                 mouseButtons={{
+                    LEFT: THREE.MOUSE.ROTATE,
                     MIDDLE: THREE.MOUSE.PAN,
                     RIGHT: THREE.MOUSE.ROTATE,
                 }}
