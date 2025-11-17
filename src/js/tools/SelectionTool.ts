@@ -354,6 +354,34 @@ class SelectionTool extends BaseTool {
         }
     }
 
+    deleteSelectedEntity() {
+        if (!this.selectedEntity || !this.environmentBuilderRef?.current) {
+            return;
+        }
+
+        // Store entity info before deletion
+        const modelUrl = this.selectedEntity.modelUrl;
+        const instanceId = this.selectedEntity.instanceId;
+        const entityName = this.selectedEntity.name;
+
+        // Remove the entity instance
+        // removeInstance handles undo/redo internally
+        this.environmentBuilderRef.current.removeInstance(
+            modelUrl,
+            instanceId,
+            true // updateUndoRedo = true
+        );
+
+        // Deselect the entity (this will clean up gizmo, bounding box, etc.)
+        this.deselectEntity();
+
+        // Update tooltip to confirm deletion
+        QuickTipsManager.setToolTip(`Entity "${entityName}" deleted`);
+        setTimeout(() => {
+            QuickTipsManager.setToolTip(this.tooltip);
+        }, 2000);
+    }
+
     handleMouseMove(event, position) {
         if (!this.previewPositionRef?.current) return;
 
@@ -415,6 +443,11 @@ class SelectionTool extends BaseTool {
             } else if (event.key === "Escape") {
                 // Deselect entity on Escape
                 this.deselectEntity();
+                return;
+            } else if (event.key === "Backspace" || event.key === "Delete") {
+                // Delete selected entity on Backspace/Delete
+                event.preventDefault();
+                this.deleteSelectedEntity();
                 return;
             }
         }
