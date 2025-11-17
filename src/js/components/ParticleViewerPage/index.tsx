@@ -62,6 +62,7 @@ export default function ParticleViewerPage() {
             name: `Emitter ${emitters.length + 1}`,
             textureUri: "./assets/particles/spark_01.png",
             position: { x: 0, y: 0, z: 0 },
+            positionVariance: { x: 0, y: 0, z: 0 },
             rate: 10,
             rateVariance: 0,
             lifetime: 2.0,

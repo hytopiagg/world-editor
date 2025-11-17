@@ -365,7 +365,7 @@ export default class ParticleEmitterCore {
 
     ((this._options.velocity.x > 0) ? max : min).x += this._options.velocity.x * maxLife;
     ((this._options.velocity.y > 0) ? max : min).y += this._options.velocity.y * maxLife;
-    ((this._options.velocity.z > 0) ? max : min).x += this._options.velocity.z * maxLife;
+    ((this._options.velocity.z > 0) ? max : min).z += this._options.velocity.z * maxLife;
 
     return new Box3(min, max);
   }

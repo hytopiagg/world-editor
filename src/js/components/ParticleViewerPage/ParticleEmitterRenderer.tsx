@@ -161,16 +161,37 @@ export default function ParticleEmitterRenderer({
     if (config.colorEnd) {
       updates.colorEnd = new THREE.Color(config.colorEnd.r, config.colorEnd.g, config.colorEnd.b);
     }
+    if (config.colorStartVariance) {
+      updates.colorStartVariance = new THREE.Color(config.colorStartVariance.r, config.colorStartVariance.g, config.colorStartVariance.b);
+    }
+    if (config.colorEndVariance) {
+      updates.colorEndVariance = new THREE.Color(config.colorEndVariance.r, config.colorEndVariance.g, config.colorEndVariance.b);
+    }
     if (config.gravity) {
       updates.gravity = new THREE.Vector3(config.gravity.x, config.gravity.y, config.gravity.z);
     }
     if (config.lifetime !== undefined) updates.lifetime = config.lifetime;
+    if (config.lifetimeVariance !== undefined) updates.lifetimeVariance = config.lifetimeVariance;
+    if (config.maxParticles !== undefined) updates.maxParticles = config.maxParticles;
+    if (config.opacityEnd !== undefined) updates.opacityEnd = config.opacityEnd;
+    if (config.opacityEndVariance !== undefined) updates.opacityEndVariance = config.opacityEndVariance;
+    if (config.opacityStart !== undefined) updates.opacityStart = config.opacityStart;
+    if (config.opacityStartVariance !== undefined) updates.opacityStartVariance = config.opacityStartVariance;
+    if (config.positionVariance) {
+      updates.positionVariance = new THREE.Vector3(config.positionVariance.x, config.positionVariance.y, config.positionVariance.z);
+    }
     if (config.rate !== undefined) updates.rate = config.rate;
-    if (config.sizeStart !== undefined) updates.sizeStart = config.sizeStart;
+    if (config.rateVariance !== undefined) updates.rateVariance = config.rateVariance;
     if (config.sizeEnd !== undefined) updates.sizeEnd = config.sizeEnd;
+    if (config.sizeEndVariance !== undefined) updates.sizeEndVariance = config.sizeEndVariance;
+    if (config.sizeStart !== undefined) updates.sizeStart = config.sizeStart;
+    if (config.sizeStartVariance !== undefined) updates.sizeStartVariance = config.sizeStartVariance;
     if (config.transparent !== undefined) updates.transparent = config.transparent;
     if (config.velocity) {
       updates.velocity = new THREE.Vector3(config.velocity.x, config.velocity.y, config.velocity.z);
+    }
+    if (config.velocityVariance) {
+      updates.velocityVariance = new THREE.Vector3(config.velocityVariance.x, config.velocityVariance.y, config.velocityVariance.z);
     }
 
     emitter.setEmitterCoreOptions(updates);

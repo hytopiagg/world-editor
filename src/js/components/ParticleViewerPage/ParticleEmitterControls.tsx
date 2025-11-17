@@ -151,6 +151,56 @@ export default function ParticleEmitterControls({
                             </select>
                         </div>
                     )}
+                    <div>
+                        <div className="text-xs text-white/60 mb-1.5">Offset</div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">X</label>
+                                <input
+                                    type="number"
+                                    value={emitter.offset?.x ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        offset: { 
+                                            ...(emitter.offset || { x: 0, y: 0, z: 0 }), 
+                                            x: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">Y</label>
+                                <input
+                                    type="number"
+                                    value={emitter.offset?.y ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        offset: { 
+                                            ...(emitter.offset || { x: 0, y: 0, z: 0 }), 
+                                            y: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">Z</label>
+                                <input
+                                    type="number"
+                                    value={emitter.offset?.z ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        offset: { 
+                                            ...(emitter.offset || { x: 0, y: 0, z: 0 }), 
+                                            z: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </CollapsibleSection>
 
@@ -325,6 +375,62 @@ export default function ParticleEmitterControls({
                         </div>
                     </div>
                     <div>
+                        <div className="text-xs text-white/60 mb-1.5">Start Color Variance</div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">R</label>
+                                <input
+                                    type="number"
+                                    value={emitter.colorStartVariance?.r ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        colorStartVariance: { 
+                                            ...(emitter.colorStartVariance || { r: 0, g: 0, b: 0 }), 
+                                            r: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) 
+                                        } 
+                                    })}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">G</label>
+                                <input
+                                    type="number"
+                                    value={emitter.colorStartVariance?.g ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        colorStartVariance: { 
+                                            ...(emitter.colorStartVariance || { r: 0, g: 0, b: 0 }), 
+                                            g: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) 
+                                        } 
+                                    })}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">B</label>
+                                <input
+                                    type="number"
+                                    value={emitter.colorStartVariance?.b ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        colorStartVariance: { 
+                                            ...(emitter.colorStartVariance || { r: 0, g: 0, b: 0 }), 
+                                            b: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) 
+                                        } 
+                                    })}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div>
                         <div className="text-xs text-white/60 mb-1.5">End Color</div>
                         <div className="grid grid-cols-3 gap-1.5">
                             <div>
@@ -380,6 +486,62 @@ export default function ParticleEmitterControls({
                             </div>
                         </div>
                     </div>
+                    <div>
+                        <div className="text-xs text-white/60 mb-1.5">End Color Variance</div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">R</label>
+                                <input
+                                    type="number"
+                                    value={emitter.colorEndVariance?.r ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        colorEndVariance: { 
+                                            ...(emitter.colorEndVariance || { r: 0, g: 0, b: 0 }), 
+                                            r: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) 
+                                        } 
+                                    })}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">G</label>
+                                <input
+                                    type="number"
+                                    value={emitter.colorEndVariance?.g ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        colorEndVariance: { 
+                                            ...(emitter.colorEndVariance || { r: 0, g: 0, b: 0 }), 
+                                            g: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) 
+                                        } 
+                                    })}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">B</label>
+                                <input
+                                    type="number"
+                                    value={emitter.colorEndVariance?.b ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        colorEndVariance: { 
+                                            ...(emitter.colorEndVariance || { r: 0, g: 0, b: 0 }), 
+                                            b: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) 
+                                        } 
+                                    })}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </CollapsibleSection>
 
@@ -399,11 +561,35 @@ export default function ParticleEmitterControls({
                         />
                     </div>
                     <div>
+                        <label className="block text-xs text-white/60 mb-1">Start Var</label>
+                        <input
+                            type="number"
+                            value={emitter.opacityStartVariance ?? 0}
+                            onChange={(e) => onUpdate({ opacityStartVariance: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) })}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            className="w-full px-2 py-1.5 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                        />
+                    </div>
+                    <div>
                         <label className="block text-xs text-white/60 mb-1">End</label>
                         <input
                             type="number"
                             value={emitter.opacityEnd ?? 0}
                             onChange={(e) => onUpdate({ opacityEnd: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) })}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            className="w-full px-2 py-1.5 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs text-white/60 mb-1">End Var</label>
+                        <input
+                            type="number"
+                            value={emitter.opacityEndVariance ?? 0}
+                            onChange={(e) => onUpdate({ opacityEndVariance: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) })}
                             min={0}
                             max={1}
                             step={0.01}
@@ -467,6 +653,59 @@ export default function ParticleEmitterControls({
                         </div>
                     </div>
                     <div>
+                        <div className="text-xs text-white/60 mb-1.5">Position Variance</div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">X</label>
+                                <input
+                                    type="number"
+                                    value={emitter.positionVariance?.x ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        positionVariance: { 
+                                            ...(emitter.positionVariance || { x: 0, y: 0, z: 0 }), 
+                                            x: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    min={0}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">Y</label>
+                                <input
+                                    type="number"
+                                    value={emitter.positionVariance?.y ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        positionVariance: { 
+                                            ...(emitter.positionVariance || { x: 0, y: 0, z: 0 }), 
+                                            y: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    min={0}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">Z</label>
+                                <input
+                                    type="number"
+                                    value={emitter.positionVariance?.z ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        positionVariance: { 
+                                            ...(emitter.positionVariance || { x: 0, y: 0, z: 0 }), 
+                                            z: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    min={0}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div>
                         <div className="text-xs text-white/60 mb-1.5">Velocity</div>
                         <div className="grid grid-cols-3 gap-1.5">
                             <div>
@@ -510,6 +749,59 @@ export default function ParticleEmitterControls({
                                             z: parseFloat(e.target.value) || 0 
                                         } 
                                     })}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-white/60 mb-1.5">Velocity Variance</div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">X</label>
+                                <input
+                                    type="number"
+                                    value={emitter.velocityVariance?.x ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        velocityVariance: { 
+                                            ...(emitter.velocityVariance || { x: 0, y: 0, z: 0 }), 
+                                            x: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    min={0}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">Y</label>
+                                <input
+                                    type="number"
+                                    value={emitter.velocityVariance?.y ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        velocityVariance: { 
+                                            ...(emitter.velocityVariance || { x: 0, y: 0, z: 0 }), 
+                                            y: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    min={0}
+                                    step={0.1}
+                                    className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-white/40 mb-0.5">Z</label>
+                                <input
+                                    type="number"
+                                    value={emitter.velocityVariance?.z ?? 0}
+                                    onChange={(e) => onUpdate({ 
+                                        velocityVariance: { 
+                                            ...(emitter.velocityVariance || { x: 0, y: 0, z: 0 }), 
+                                            z: parseFloat(e.target.value) || 0 
+                                        } 
+                                    })}
+                                    min={0}
                                     step={0.1}
                                     className="w-full px-1.5 py-1 bg-white/10 border border-white/10 rounded-lg text-xs text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
                                 />
