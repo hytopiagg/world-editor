@@ -370,7 +370,8 @@ class Chunk {
                             (neighborBlockType.isLiquid ||
                                 !neighborBlockType.isFaceTransparent(
                                     blockFace
-                                )) &&
+                                ) ||
+                                neighborBlockType.id === blockType.id) &&
                             (!neighborBlockType.isLiquid ||
                                 neighborBlockType.id === blockType.id);
                         if (shouldCullFace) {
@@ -1206,7 +1207,6 @@ class Chunk {
         }
 
         if (isBlockRemoval) {
-
             if (this._solidMesh) {
                 chunkManager.chunkMeshManager.removeSolidMesh(this);
                 this._solidMesh = undefined;
@@ -1294,7 +1294,6 @@ class Chunk {
                         adjacentChunkId !== this.chunkId &&
                         chunkManager._chunks.has(adjacentChunkId)
                     ) {
-
                         chunkManager.markChunkForRemesh(adjacentChunkId, {
                             forceCompleteRebuild: true,
                         });
