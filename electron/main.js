@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 const path = require("path");
+const os = require("os");
 const { app, BrowserWindow, shell, Menu } = require("electron");
 let DiscordClient;
 try {
@@ -18,6 +19,12 @@ const isDev = process.env.ELECTRON_IS_DEV === "1" || !app.isPackaged;
 const REMOTE_URL = process.env.WE_REMOTE_URL || "https://build.hytopia.com";
 const PREFER_REMOTE = process.env.WE_PREFER_REMOTE !== "0"; // default: prefer remote with fallback
 
+// Dynamically calculate heap size based on available system memory
+// Use 60% of total RAM, with min 4GB and max 16GB
+const totalMemoryGB = os.totalmem() / (1024 * 1024 * 1024);
+const calculatedHeapGB = Math.floor(totalMemoryGB * 0.6);
+const heapSizeMB = Math.max(4096, Math.min(16384, calculatedHeapGB * 1024));
+
 // Performance-oriented flags (safe defaults)
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
 app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
@@ -28,7 +35,7 @@ app.commandLine.appendSwitch("enable-zero-copy");
 app.commandLine.appendSwitch("enable-native-gpu-memory-buffers");
 app.commandLine.appendSwitch("ignore-gpu-blacklist");
 app.commandLine.appendSwitch("v8-cache-options", "code");
-app.commandLine.appendSwitch("js-flags", "--max-old-space-size=4096");
+app.commandLine.appendSwitch("js-flags", `--max-old-space-size=${heapSizeMB}`);
 app.commandLine.appendSwitch(
     "enable-features",
     [
