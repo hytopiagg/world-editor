@@ -8,7 +8,6 @@ import type { TargetObjectType, ParticleEmitterConfig, EntityTarget } from "./in
 import TargetObjectRenderer from "./TargetObjectRenderer";
 import ParticleEmitterRenderer from "./ParticleEmitterRenderer";
 import CameraPositioner from "./CameraPositioner";
-import PhysicsManager from "../../physics/PhysicsManager";
 import * as THREE from "three";
 
 interface ParticleViewerCanvasProps {
@@ -35,6 +34,7 @@ function PlayModeController({
     targetObjectRef: React.RefObject<THREE.Object3D | null>;
     initialPositionsRef: React.MutableRefObject<{
         object: THREE.Vector3 | null;
+        objectRotation: number | null;
         camera: THREE.Vector3 | null;
         emitters: Map<string, THREE.Vector3>;
     }>;
@@ -44,7 +44,6 @@ function PlayModeController({
     onPlayerMeshReadyStateChange?: (ready: boolean) => void;
 }) {
     const { camera, scene } = useThree();
-    const physicsRef = useRef<PhysicsManager | null>(null);
     const inputStateRef = useRef<{ state: Record<string, boolean> }>({ state: {} });
     const moveSpeed = 5; // units per second
     const runMultiplier = 2;
@@ -56,57 +55,62 @@ function PlayModeController({
     const playerActiveTagRef = useRef<string | undefined>(undefined);
     const lastPosRef = useRef<THREE.Vector3 | null>(null);
     const faceYawRef = useRef<number | undefined>(undefined);
-    const airborneRef = useRef(false);
-    const lastPhysicsTimeRef = useRef<number>(0);
 
     // Store initial positions when entering play mode
     useEffect(() => {
         if (playModeEnabled) {
             console.log('[PlayMode] Storing initial positions');
-            // Store object position
+            // Store object position and rotation
             if (targetObjectRef.current) {
                 initialPositionsRef.current.object = targetObjectRef.current.position.clone();
-                console.log('[PlayMode] Stored object position:', initialPositionsRef.current.object);
+                initialPositionsRef.current.objectRotation = targetObjectRef.current.rotation.y;
+                console.log('[PlayMode] Stored object position:', initialPositionsRef.current.object, 'rotation:', initialPositionsRef.current.objectRotation);
             }
-            // Store camera position and rotation
+            // Store camera position
             initialPositionsRef.current.camera = camera.position.clone();
             console.log('[PlayMode] Stored camera position:', initialPositionsRef.current.camera);
             // Initialize camera yaw from current rotation
             cameraYawRef.current = camera.rotation.y;
             cameraPitchRef.current = camera.rotation.x;
 
-            // Ensure camera starts at a reasonable height above ground
-            if (targetObject === "player" && targetObjectRef.current) {
-                const playerPos = targetObjectRef.current.position;
+            // Ensure camera starts at a reasonable height above ground/entity
+            if (targetObjectRef.current) {
+                const objPos = targetObjectRef.current.position;
                 const offsetRadius = 8.0;
                 const offsetHeight = 3.0;
                 const pitch = Math.max(-0.3, Math.min(0.3, cameraPitchRef.current)); // Limit pitch
                 const horizontalDistance = offsetRadius * Math.cos(pitch);
                 const verticalOffset = offsetRadius * Math.sin(pitch) + offsetHeight;
 
-                // Set initial camera position above player
+                // Set initial camera position above object (player or entity)
                 camera.position.set(
-                    playerPos.x - Math.sin(cameraYawRef.current) * horizontalDistance,
-                    Math.max(1.5, playerPos.y + verticalOffset), // Ensure minimum height above ground
-                    playerPos.z - Math.cos(cameraYawRef.current) * horizontalDistance
+                    objPos.x - Math.sin(cameraYawRef.current) * horizontalDistance,
+                    Math.max(1.5, objPos.y + verticalOffset), // Ensure minimum height above ground
+                    objPos.z - Math.cos(cameraYawRef.current) * horizontalDistance
                 );
-                camera.lookAt(playerPos);
+                camera.lookAt(objPos);
             }
             lastPosRef.current = null;
             faceYawRef.current = undefined;
-            airborneRef.current = false;
         } else {
-            // Reset positions when exiting play mode
+            // Reset positions when exiting play mode (applies to both player and entities)
             console.log('[PlayMode] Resetting positions');
             if (initialPositionsRef.current.object && targetObjectRef.current) {
                 targetObjectRef.current.position.copy(initialPositionsRef.current.object);
-                console.log('[PlayMode] Reset object to:', initialPositionsRef.current.object);
+                // Reset object rotation if stored (for both player and entities)
+                // Add Math.PI to invert the rotation (same offset used in movement facing: Math.atan2(...) + Math.PI)
+                if (initialPositionsRef.current.objectRotation !== null) {
+                    targetObjectRef.current.rotation.y = initialPositionsRef.current.objectRotation + Math.PI;
+                }
+                console.log('[PlayMode] Reset object to:', initialPositionsRef.current.object, 'rotation:', initialPositionsRef.current.objectRotation, 'applied:', initialPositionsRef.current.objectRotation !== null ? initialPositionsRef.current.objectRotation + Math.PI : null);
             }
             if (initialPositionsRef.current.camera) {
                 camera.position.copy(initialPositionsRef.current.camera);
                 console.log('[PlayMode] Reset camera to:', initialPositionsRef.current.camera);
             }
-            // Reset camera rotation (will be handled by OrbitControls)
+            // Reset camera rotation refs (OrbitControls will handle actual rotation)
+            cameraYawRef.current = 0;
+            cameraPitchRef.current = 0;
             // Clean up player mesh
             if (playerMeshRef.current) {
                 scene.remove(playerMeshRef.current);
@@ -124,28 +128,16 @@ function PlayModeController({
             }
             playerAnimationsRef.current = {};
             playerActiveTagRef.current = undefined;
-            // Reset physics time tracking
-            lastPhysicsTimeRef.current = 0;
         }
     }, [playModeEnabled, camera, scene]);
 
-    // Initialize physics for player
+    // Initialize player position when entering play mode
     useEffect(() => {
-        if (playModeEnabled && targetObject === "player" && !physicsRef.current) {
-            console.log('[PlayMode] Initializing physics for player');
-            const physics = new PhysicsManager({ gravity: { x: 0, y: -32, z: 0 }, tickRate: 60 });
-            physicsRef.current = physics;
-
-            physics.ready().then(() => {
-                physics.addFlatGround(4000, -0.5);
-                const pos = targetObjectRef.current?.position || new THREE.Vector3(0, 1.5, 0);
-                console.log('[PlayMode] Creating player at:', pos);
-                physics.createOrResetPlayer(pos);
-                lastPosRef.current = pos.clone();
-            });
-        } else if (!playModeEnabled && physicsRef.current) {
-            console.log('[PlayMode] Cleaning up physics');
-            physicsRef.current = null;
+        if (playModeEnabled && targetObject === "player") {
+            if (!lastPosRef.current && targetObjectRef.current) {
+                const pos = targetObjectRef.current.position;
+                lastPosRef.current = new THREE.Vector3(pos.x, 0.75, pos.z);
+            }
         }
     }, [playModeEnabled, targetObject]);
 
@@ -172,9 +164,13 @@ function PlayModeController({
             const deltaX = (e.clientX - lastMouseX) * mouseSensitivity * 10; // Scale up since we're not using movementX
             const deltaY = (e.clientY - lastMouseY) * mouseSensitivity * 10;
 
+            const oldYaw = cameraYawRef.current;
+            const oldPitch = cameraPitchRef.current;
             cameraYawRef.current -= deltaX;
             cameraPitchRef.current -= deltaY;
             cameraPitchRef.current = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, cameraPitchRef.current));
+
+            console.log(`[PlayMode] MOUSEMOVE: deltaX=${deltaX.toFixed(4)} deltaY=${deltaY.toFixed(4)} yaw ${oldYaw.toFixed(4)} -> ${cameraYawRef.current.toFixed(4)} pitch ${oldPitch.toFixed(4)} -> ${cameraPitchRef.current.toFixed(4)}`);
 
             // For first-person (entities/blocks), set camera rotation directly
             // For third-person (player), we'll use yaw/pitch to position camera around player
@@ -222,12 +218,16 @@ function PlayModeController({
         const onKeyDown = (e: KeyboardEvent) => {
             const k = mapKey(e);
             if (!k || !allowed[k]) return;
+            const wasPressed = stateObj.state[k] || false;
             stateObj.state[k] = true;
+            console.log(`[PlayMode] KEYDOWN: key="${e.key}" mapped="${k}" wasPressed=${wasPressed} newState=`, { ...stateObj.state });
         };
         const onKeyUp = (e: KeyboardEvent) => {
             const k = mapKey(e);
             if (!k || !allowed[k]) return;
+            const wasPressed = stateObj.state[k] || false;
             stateObj.state[k] = false;
+            console.log(`[PlayMode] KEYUP: key="${e.key}" mapped="${k}" wasPressed=${wasPressed} newState=`, { ...stateObj.state });
         };
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup', onKeyUp);
@@ -244,27 +244,47 @@ function PlayModeController({
         const input = inputStateRef.current.state;
         const isRunning = input.sh || false;
 
-        if (targetObject === "player" && physicsRef.current) {
-            // Physics-based movement for player
-            // Fix: Add Math.PI offset like TerrainBuilder does
-            const yaw = cameraYawRef.current + Math.PI;
-            const now = performance.now();
-            const dt = lastPhysicsTimeRef.current ? (now - lastPhysicsTimeRef.current) / 1000 : delta;
-            const dtClamped = Math.min(0.1, Math.max(0, dt));
-            lastPhysicsTimeRef.current = now;
+        if (targetObject === "player") {
+            // Simple movement for player (no physics) - use camera yaw for world-space movement
+            const speed = moveSpeed * (isRunning ? runMultiplier : 1) * delta;
+            const yaw = cameraYawRef.current;
 
-            physicsRef.current.step(dtClamped, {
-                w: input.w || false,
-                a: input.a || false,
-                s: input.s || false,
-                d: input.d || false,
-                sp: input.sp || false,
-                sh: input.sh || false,
-            }, yaw);
+            // Calculate movement direction based on camera yaw (world space, not camera-relative)
+            const sinYaw = Math.sin(yaw);
+            const cosYaw = Math.cos(yaw);
 
-            // Update player mesh position from physics
-            const playerPos = physicsRef.current.getPlayerPosition();
-            if (playerPos) {
+            // Forward direction in world space (negative Z is forward in Three.js)
+            const forward = new THREE.Vector3(-sinYaw, 0, -cosYaw);
+            // Right direction in world space
+            const right = new THREE.Vector3(cosYaw, 0, -sinYaw);
+
+            // Initialize player position if not set
+            if (!lastPosRef.current) {
+                lastPosRef.current = new THREE.Vector3(0, 0.75, 0);
+            }
+
+            const moveDelta = new THREE.Vector3(0, 0, 0);
+            if (input.w) moveDelta.add(forward.multiplyScalar(-speed)); // Swap W/S
+            if (input.s) moveDelta.add(forward.multiplyScalar(speed));
+            if (input.a) moveDelta.add(right.multiplyScalar(speed)); // Swap A/D
+            if (input.d) moveDelta.add(right.multiplyScalar(-speed));
+
+            // Update player position
+            if (moveDelta.lengthSq() > 0) {
+                lastPosRef.current.add(moveDelta);
+            }
+            // Keep Y position stable at 0.75 (halfHeight)
+            lastPosRef.current.y = 0.75;
+
+            const playerPos = lastPosRef.current;
+
+            // Load and update player mesh
+            {
+                // Log player position when A or D is pressed
+                const shouldLogPos = !!(input.a || input.d);
+                if (shouldLogPos) {
+                    console.log(`[PlayMode] PLAYER_POS: x=${playerPos.x.toFixed(4)} y=${playerPos.y.toFixed(4)} z=${playerPos.z.toFixed(4)}`);
+                }
                 // Load player mesh if not loaded
                 if (!playerMeshRef.current && !(window as any).__WE_PLAYER_MESH_LOADING__) {
                     (window as any).__WE_PLAYER_MESH_LOADING__ = true;
@@ -395,38 +415,22 @@ function PlayModeController({
                     );
                 }
 
-                // Update player mesh position with smoothing
+                // Update player mesh position directly (no smoothing needed since movement is already smooth)
                 if (playerMeshRef.current) {
-                    const halfH = physicsRef.current.getPlayerHalfHeight();
-                    const cur = new THREE.Vector3(
+                    const halfH = 0.75; // Fixed half height
+                    playerMeshRef.current.position.set(
                         playerPos.x,
                         playerPos.y - halfH,
                         playerPos.z
                     );
-                    const meshAlpha = 1 - Math.exp(-30 * dtClamped);
-                    const oldPos = playerMeshRef.current.position.clone();
-                    playerMeshRef.current.position.lerp(cur, meshAlpha);
 
-                    // Log position updates periodically (every ~1 second)
-                    if (Math.random() < 0.016) { // ~1% chance per frame at 60fps = ~1 per second
-                        console.log('[PlayMode] Player mesh position update:', {
-                            oldPos: oldPos.toArray(),
-                            newPos: playerMeshRef.current.position.toArray(),
-                            physicsPos: playerPos.toArray(),
-                            lerpAlpha: meshAlpha,
-                        });
-                    }
 
-                    // Update rotation based on movement
-                    if (lastPosRef.current) {
-                        const dx = playerPos.x - lastPosRef.current.x;
-                        const dz = playerPos.z - lastPosRef.current.z;
-                        const speed2 = dx * dx + dz * dz;
-                        if (speed2 > 1e-6) {
-                            const faceYaw = Math.atan2(dx, dz) + Math.PI;
-                            faceYawRef.current = faceYaw;
-                            playerMeshRef.current.rotation.y = faceYaw;
-                        }
+                    // Update rotation based on movement direction
+                    if (moveDelta.lengthSq() > 0) {
+                        // Add Math.PI to face the correct direction (same as physics version)
+                        const faceYaw = Math.atan2(moveDelta.x, moveDelta.z) + Math.PI;
+                        faceYawRef.current = faceYaw;
+                        playerMeshRef.current.rotation.y = faceYaw;
                     }
 
                     // Log bone positions periodically to verify they're moving with the mesh
@@ -445,7 +449,7 @@ function PlayModeController({
 
                 // Update animations based on movement state
                 if (playerMixerRef.current) {
-                    playerMixerRef.current.update(dtClamped);
+                    playerMixerRef.current.update(delta);
                     const moving = !!(input.w || input.a || input.s || input.d);
                     const running = moving && !!input.sh;
                     const grounded = true; // Simplified - could add proper ground detection
@@ -477,8 +481,6 @@ function PlayModeController({
                     }
                 }
 
-                lastPosRef.current = playerPos.clone();
-
                 // Third-person camera follow
                 const offsetRadius = 8.0;
                 const offsetHeight = 3.0;
@@ -486,35 +488,58 @@ function PlayModeController({
                 const horizontalDistance = offsetRadius * Math.cos(pitch);
                 const verticalOffset = offsetRadius * Math.sin(pitch) + offsetHeight;
 
-                camera.position.set(
-                    playerPos.x - Math.sin(cameraYawRef.current) * horizontalDistance,
-                    playerPos.y + verticalOffset,
-                    playerPos.z - Math.cos(cameraYawRef.current) * horizontalDistance
-                );
+                const sinYaw = Math.sin(cameraYawRef.current);
+                const cosYaw = Math.cos(cameraYawRef.current);
+                const newCamX = playerPos.x - sinYaw * horizontalDistance;
+                const newCamY = playerPos.y + verticalOffset;
+                const newCamZ = playerPos.z - cosYaw * horizontalDistance;
+
+                camera.position.set(newCamX, newCamY, newCamZ);
                 camera.lookAt(playerPos);
             }
         } else if (targetObject !== "none" && targetObject !== "block" && targetObjectRef.current) {
-            // Simple camera-based movement for entities/blocks
+            // Simple movement for entities/blocks - use camera yaw for world-space movement (same as player)
             const speed = moveSpeed * (isRunning ? runMultiplier : 1) * delta;
-            const direction = new THREE.Vector3();
-            camera.getWorldDirection(direction);
-            direction.y = 0; // Keep movement horizontal
-            direction.normalize();
+            const yaw = cameraYawRef.current;
 
-            const right = new THREE.Vector3();
-            right.crossVectors(direction, new THREE.Vector3(0, 1, 0));
-            right.normalize();
+            // Calculate movement direction based on camera yaw (world space, not camera-relative)
+            const sinYaw = Math.sin(yaw);
+            const cosYaw = Math.cos(yaw);
+
+            // Forward direction in world space (negative Z is forward in Three.js)
+            const forward = new THREE.Vector3(-sinYaw, 0, -cosYaw);
+            // Right direction in world space
+            const right = new THREE.Vector3(cosYaw, 0, -sinYaw);
 
             const moveDelta = new THREE.Vector3(0, 0, 0);
-            if (input.w) moveDelta.add(direction.multiplyScalar(speed));
-            if (input.s) moveDelta.add(direction.multiplyScalar(-speed));
-            if (input.a) moveDelta.add(right.multiplyScalar(-speed));
-            if (input.d) moveDelta.add(right.multiplyScalar(speed));
+            if (input.w) moveDelta.add(forward.multiplyScalar(-speed)); // Swap W/S
+            if (input.s) moveDelta.add(forward.multiplyScalar(speed));
+            if (input.a) moveDelta.add(right.multiplyScalar(speed)); // Swap A/D
+            if (input.d) moveDelta.add(right.multiplyScalar(-speed));
 
             if (moveDelta.lengthSq() > 0) {
                 targetObjectRef.current.position.add(moveDelta);
-                camera.position.add(moveDelta);
+
+                // Update entity rotation to face movement direction
+                const faceYaw = Math.atan2(moveDelta.x, moveDelta.z) + Math.PI;
+                targetObjectRef.current.rotation.y = faceYaw;
             }
+
+            // Third-person camera follow for entities (same as player)
+            const entityPos = targetObjectRef.current.position;
+            const offsetRadius = 8.0;
+            const offsetHeight = 3.0;
+            const pitch = cameraPitchRef.current;
+            const horizontalDistance = offsetRadius * Math.cos(pitch);
+            const verticalOffset = offsetRadius * Math.sin(pitch) + offsetHeight;
+
+            // Reuse sinYaw and cosYaw from above (they're the same values)
+            const newCamX = entityPos.x - sinYaw * horizontalDistance;
+            const newCamY = entityPos.y + verticalOffset;
+            const newCamZ = entityPos.z - cosYaw * horizontalDistance;
+
+            camera.position.set(newCamX, newCamY, newCamZ);
+            camera.lookAt(entityPos);
         }
     });
 
@@ -536,10 +561,12 @@ export default function ParticleViewerCanvas({
     const [playerMeshReady, setPlayerMeshReady] = useState(false); // State to trigger re-attachment
     const initialPositionsRef = useRef<{
         object: THREE.Vector3 | null;
+        objectRotation: number | null;
         camera: THREE.Vector3 | null;
         emitters: Map<string, THREE.Vector3>;
     }>({
         object: null,
+        objectRotation: null,
         camera: null,
         emitters: new Map(),
     });
