@@ -894,13 +894,13 @@ const BlockToolsSidebar = ({
                 try {
                     const allBlocksFromZips = [];
                     const regularTextureBlocks = [];
-                    
+
                     for (const zipFile of zipFiles) {
                         try {
                             const zip = await JSZip.loadAsync(zipFile);
                             // Track which files are used for multi-texture blocks
                             const usedFiles = new Set();
-                            
+
                             // Group face files by their immediate parent directory
                             /** @type {Map<string, Record<string, {entry: import('jszip').JSZipObject, path: string}>>} */
                             const dirToFacesMap = new Map();
@@ -918,7 +918,10 @@ const BlockToolsSidebar = ({
                                         : "";
                                 if (!dirToFacesMap.has(dirPath))
                                     dirToFacesMap.set(dirPath, {});
-                                dirToFacesMap.get(dirPath)[faceKey] = { entry: zipEntry, path: relativePath };
+                                dirToFacesMap.get(dirPath)[faceKey] = {
+                                    entry: zipEntry,
+                                    path: relativePath,
+                                };
                             });
 
                             // Build blocks for any directory that contains all six faces
@@ -959,9 +962,9 @@ const BlockToolsSidebar = ({
                                 const sideTextures = {};
                                 for (const faceKey of requiredFaces) {
                                     try {
-                                        let blob = await faces[faceKey].entry.async(
-                                            "blob"
-                                        );
+                                        let blob = await faces[
+                                            faceKey
+                                        ].entry.async("blob");
                                         if (
                                             !blob.type ||
                                             blob.type ===
@@ -1002,7 +1005,8 @@ const BlockToolsSidebar = ({
                             }
 
                             // Process remaining image files as regular textures
-                            const imageExtensions = /\.(png|jpg|jpeg|gif|webp|bmp)$/i;
+                            const imageExtensions =
+                                /\.(png|jpg|jpeg|gif|webp|bmp)$/i;
                             const imageEntries = [];
                             zip.forEach((relativePath, zipEntry) => {
                                 if (zipEntry.dir) return;
@@ -1016,50 +1020,71 @@ const BlockToolsSidebar = ({
                             });
 
                             // Process all image entries
-                            const texturePromises = imageEntries.map(async ({ relativePath, zipEntry }) => {
-                                try {
-                                    let blob = await zipEntry.async("blob");
-                                    if (
-                                        !blob.type ||
-                                        blob.type === "application/octet-stream"
-                                    ) {
-                                        // Try to determine type from extension
-                                        const ext = relativePath.toLowerCase().split('.').pop();
-                                        const mimeTypes = {
-                                            'png': 'image/png',
-                                            'jpg': 'image/jpeg',
-                                            'jpeg': 'image/jpeg',
-                                            'gif': 'image/gif',
-                                            'webp': 'image/webp',
-                                            'bmp': 'image/bmp'
-                                        };
-                                        blob = new Blob([blob], {
-                                            type: mimeTypes[ext] || 'image/png',
-                                        });
-                                    }
-                                    
-                                    const textureUri = await blobToDataUrl(blob);
-                                    
-                                    // Derive block name from filename (without extension)
-                                    const fileName = relativePath.split('/').pop() || relativePath;
-                                    const blockName = fileName.replace(/\.[^/.]+$/, "");
-                                    
-                                    return {
-                                        name: blockName,
-                                        textureUri,
-                                        isCustom: true,
-                                    };
-                                } catch (err) {
-                                    console.warn(
-                                        `Failed to process texture ${relativePath} from ZIP:`,
-                                        err
-                                    );
-                                    return null;
-                                }
-                            });
+                            const texturePromises = imageEntries.map(
+                                async ({ relativePath, zipEntry }) => {
+                                    try {
+                                        let blob = await zipEntry.async("blob");
+                                        if (
+                                            !blob.type ||
+                                            blob.type ===
+                                                "application/octet-stream"
+                                        ) {
+                                            // Try to determine type from extension
+                                            const ext = relativePath
+                                                .toLowerCase()
+                                                .split(".")
+                                                .pop();
+                                            const mimeTypes = {
+                                                png: "image/png",
+                                                jpg: "image/jpeg",
+                                                jpeg: "image/jpeg",
+                                                gif: "image/gif",
+                                                webp: "image/webp",
+                                                bmp: "image/bmp",
+                                            };
+                                            blob = new Blob([blob], {
+                                                type:
+                                                    mimeTypes[ext] ||
+                                                    "image/png",
+                                            });
+                                        }
 
-                            const processedTextures = await Promise.all(texturePromises);
-                            regularTextureBlocks.push(...processedTextures.filter(block => block !== null));
+                                        const textureUri = await blobToDataUrl(
+                                            blob
+                                        );
+
+                                        // Derive block name from filename (without extension)
+                                        const fileName =
+                                            relativePath.split("/").pop() ||
+                                            relativePath;
+                                        const blockName = fileName.replace(
+                                            /\.[^/.]+$/,
+                                            ""
+                                        );
+
+                                        return {
+                                            name: blockName,
+                                            textureUri,
+                                            isCustom: true,
+                                        };
+                                    } catch (err) {
+                                        console.warn(
+                                            `Failed to process texture ${relativePath} from ZIP:`,
+                                            err
+                                        );
+                                        return null;
+                                    }
+                                }
+                            );
+
+                            const processedTextures = await Promise.all(
+                                texturePromises
+                            );
+                            regularTextureBlocks.push(
+                                ...processedTextures.filter(
+                                    (block) => block !== null
+                                )
+                            );
                         } catch (zipErr) {
                             console.error(
                                 "Error processing ZIP for multi-texture blocks:",
@@ -1069,7 +1094,10 @@ const BlockToolsSidebar = ({
                     }
 
                     // Process all blocks from zip files
-                    const allBlocks = [...allBlocksFromZips, ...regularTextureBlocks];
+                    const allBlocks = [
+                        ...allBlocksFromZips,
+                        ...regularTextureBlocks,
+                    ];
                     if (allBlocks.length > 0) {
                         try {
                             await batchProcessCustomBlocks(allBlocks);
