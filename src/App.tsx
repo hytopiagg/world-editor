@@ -81,6 +81,7 @@ function App() {
         }
     };
     const undoRedoManagerRef = useRef(null);
+    const lastResetProjectIdRef = useRef<string | null>(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
     const [mode, setMode] = useState("add");
     const [axisLockEnabled, setAxisLockEnabled] = useState(false);
@@ -235,9 +236,9 @@ function App() {
                 if (typeof savedSensitivity === "number") {
                     cameraManager.setPointerSensitivity(savedSensitivity);
                 }
-                } catch (error) {
-                    // Error loading app settings
-                }
+            } catch (error) {
+                // Error loading app settings
+            }
 
             const savedBlockId = localStorage.getItem("selectedBlock");
             if (savedBlockId) {
@@ -287,6 +288,8 @@ function App() {
             try { (environmentBuilderRef as any).current = null; } catch (_) { }
             // Clear physics/player globals when leaving project
             try { delete (window as any).__WE_PHYSICS__; } catch (_) { }
+            // Reset the camera reset tracking when leaving project
+            lastResetProjectIdRef.current = null;
         } else {
             setPageIsLoaded(false);
             // Also clear tool/undo state to prevent stale bindings
@@ -302,6 +305,16 @@ function App() {
             } catch (_) { }
         }
     }, [projectId]);
+
+    // Reset camera to default position when a project finishes loading
+    useEffect(() => {
+        if (projectId && pageIsLoaded && lastResetProjectIdRef.current !== projectId) {
+            // Mark that we've reset for this project
+            lastResetProjectIdRef.current = projectId;
+            // Use the same reset mechanism as the settings menu button
+            setCameraReset(prev => !prev);
+        }
+    }, [projectId, pageIsLoaded]);
 
     useEffect(() => {
         const handleKeyDown = async (e) => {
