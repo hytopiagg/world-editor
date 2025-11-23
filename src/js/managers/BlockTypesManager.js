@@ -96,7 +96,7 @@ let blockTypesArray = (() => {
  * @param {boolean} deferAtlasRebuild - Whether to defer atlas rebuilding (useful for batch operations)
  * @returns {Array} - The updated block types array
  */
-const processCustomBlock = (block, deferAtlasRebuild = false) => {
+const processCustomBlock = async (block, deferAtlasRebuild = false) => {
     const blockId = parseInt(block.id);
     const ERROR_TEXTURE_PATH = "./assets/blocks/error.png";
 
@@ -188,13 +188,42 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
     }
 
     // Always ensure the block is registered in the BlockTypeRegistry so meshes can resolve its textures
+    // Use lazy loading (like default textures) instead of eager loading
     try {
         if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
             const registry = window.BlockTypeRegistry.instance;
+            const BlockType = require("../blocks/BlockType").default;
 
             if (processedBlock.isMultiTexture && processedBlock.sideTextures) {
-                // Multi-texture path: update with face textures (works for data URIs or paths)
-                registry.updateBlockType(processedBlock);
+                // Multi-texture path: create BlockType and queue textures for lazy loading
+                const textureUris = {};
+                const COORD_TO_FACE_MAP = {
+                    "+x": "right",
+                    "-x": "left",
+                    "+y": "top",
+                    "-y": "bottom",
+                    "+z": "front",
+                    "-z": "back",
+                };
+                Object.entries(processedBlock.sideTextures).forEach(([coord, uri]) => {
+                    const face = COORD_TO_FACE_MAP[coord] || coord;
+                    textureUris[face] = uri;
+                });
+
+                const blockType = new BlockType({
+                    id: processedBlock.id,
+                    name: processedBlock.name,
+                    isLiquid: false,
+                    textureUris: textureUris,
+                    lightLevel: processedBlock.lightLevel,
+                });
+                
+                // Register without loading textures immediately
+                await registry.registerBlockType(blockType);
+                
+                // Don't queue textures here - they'll be loaded on-demand when chunks need them
+                // This prevents FPS drops from loading all textures at once
+                
                 try {
                     window.dispatchEvent(
                         new CustomEvent("custom-block-registered", {
@@ -207,59 +236,26 @@ const processCustomBlock = (block, deferAtlasRebuild = false) => {
                     );
                 } catch (_) {}
             } else if (finalTextureUri) {
-                if (finalTextureUri.startsWith("data:image/")) {
-                    // Data URI path: use register API which loads and binds atlas
-                    if (registry.registerCustomTextureForBlockId) {
-                        registry.registerCustomTextureForBlockId(
-                            processedBlock.id,
-                            finalTextureUri,
-                            {
-                                name: processedBlock.name,
-                                updateMeshes: true,
-                                rebuildAtlas: !deferAtlasRebuild,
-                            }
-                        );
-                    }
-                } else {
-                    // Asset path: directly update block type so the registry references the path
-                    registry.updateBlockType({
-                        id: processedBlock.id,
-                        name: processedBlock.name,
-                        textureUri: finalTextureUri,
-                        lightLevel: processedBlock.lightLevel,
-                    });
-                }
+                // Create BlockType with texture URIs (works for both data URIs and asset paths)
+                const textureUris = BlockType.textureUriToTextureUris(finalTextureUri);
+                
+                const blockType = new BlockType({
+                    id: processedBlock.id,
+                    name: processedBlock.name,
+                    isLiquid: false,
+                    textureUris: textureUris,
+                    lightLevel: processedBlock.lightLevel,
+                });
+                
+                // Register without loading textures immediately
+                await registry.registerBlockType(blockType);
+                
+                // Don't queue textures here - they'll be loaded on-demand when chunks need them
+                // This prevents FPS drops from loading all textures at once
             }
-            // Force a texture-atlas rebuild when we changed or added a single-face custom block
-            if (!processedBlock.isMultiTexture && !deferAtlasRebuild) {
-                (async () => {
-                    try {
-                        const atlas = require("../blocks/BlockTextureAtlas")
-                            .default.instance;
-                        // Attempt to bind id-based keys as well for single-face customs
-                        if (
-                            finalTextureUri &&
-                            finalTextureUri.startsWith("data:image/")
-                        ) {
-                            atlas.applyDataUriToAllFaces(
-                                `${processedBlock.id}`,
-                                finalTextureUri
-                            );
-                        }
-                        await atlas.rebuildTextureAtlas();
-                        window.dispatchEvent(
-                            new CustomEvent("textureAtlasUpdated", {
-                                detail: { blockId: processedBlock.id },
-                            })
-                        );
-                    } catch (rebuildErr) {
-                        console.warn(
-                            "Atlas rebuild failed for single-face custom",
-                            rebuildErr
-                        );
-                    }
-                })();
-            }
+            
+            // Don't rebuild atlas immediately - let it happen lazily when textures are actually loaded
+            // The queue system will handle rebuilding when needed
         }
 
         // Push lightLevel again to be safe (covers both branches)

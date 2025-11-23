@@ -134,12 +134,29 @@ class BlockTextureAtlas {
         if (!this._textureLoadQueue.includes(textureUri)) {
             this._textureLoadQueue.push(textureUri);
         }
+        // Delay starting queue processing to avoid impacting initial world load
+        // Only start processing if queue isn't already running
         if (!this._isProcessingQueue) {
-            this._processTextureLoadQueue();
+            // Use requestIdleCallback if available, otherwise delay by 500ms
+            // This gives the world time to render before loading textures
+            if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(() => {
+                    if (!this._isProcessingQueue && this._textureLoadQueue.length > 0) {
+                        this._processTextureLoadQueue();
+                    }
+                }, { timeout: 1000 });
+            } else {
+                setTimeout(() => {
+                    if (!this._isProcessingQueue && this._textureLoadQueue.length > 0) {
+                        this._processTextureLoadQueue();
+                    }
+                }, 500);
+            }
         }
     }
     /**
-     * Process the texture load queue asynchronously
+     * Process the texture load queue asynchronously with batching (2 concurrent loads, gradual processing)
+     * Processes textures gradually to avoid impacting FPS
      * @private
      */
     async _processTextureLoadQueue() {
@@ -147,19 +164,50 @@ class BlockTextureAtlas {
             return;
         this._isProcessingQueue = true;
         try {
+            const BATCH_SIZE = 2; // Reduced from 5 to 2 for less aggressive loading
+            const DELAY_BETWEEN_BATCHES = 100; // Increased delay to 100ms to give browser time to render
+            
             while (this._textureLoadQueue.length > 0) {
-                const textureUri = this._textureLoadQueue.shift();
-                if (
-                    this._textureAtlasMetadata.has(textureUri) ||
-                    this._textureLoadLocks[textureUri] ||
-                    this._textureLoadFailures.has(textureUri)
-                ) {
-                    continue;
+                // Get up to BATCH_SIZE textures to process
+                const batch = [];
+                while (batch.length < BATCH_SIZE && this._textureLoadQueue.length > 0) {
+                    const textureUri = this._textureLoadQueue.shift();
+                    // Skip if already loaded, locked, or failed
+                    if (
+                        this._textureAtlasMetadata.has(textureUri) ||
+                        this._textureLoadLocks[textureUri] ||
+                        this._textureLoadFailures.has(textureUri)
+                    ) {
+                        continue;
+                    }
+                    batch.push(textureUri);
                 }
-                try {
-                    await this.loadTexture(textureUri);
-                } catch (error) {}
-                await new Promise((resolve) => setTimeout(resolve, 0));
+                
+                if (batch.length === 0) {
+                    // No valid textures in queue, exit
+                    break;
+                }
+                
+                // Process batch concurrently
+                await Promise.allSettled(
+                    batch.map(async (textureUri) => {
+                        try {
+                            await this.loadTexture(textureUri);
+                        } catch (error) {
+                            // Error already logged in loadTexture
+                        }
+                    })
+                );
+                
+                // Longer delay between batches to prevent FPS drops
+                // Use requestIdleCallback if available for better performance
+                if (typeof requestIdleCallback !== 'undefined') {
+                    await new Promise((resolve) => {
+                        requestIdleCallback(() => resolve(), { timeout: DELAY_BETWEEN_BATCHES });
+                    });
+                } else {
+                    await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+                }
             }
         } finally {
             this._isProcessingQueue = false;

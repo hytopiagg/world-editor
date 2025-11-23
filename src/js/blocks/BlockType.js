@@ -237,6 +237,13 @@ class BlockType {
         Object.values(this._textureUris).forEach((textureUri) => {
             if (!textureUri) return;
 
+            // Data URIs should be queued directly without fallback paths
+            if (textureUri.startsWith("data:image/")) {
+                BlockTextureAtlas.instance.queueTextureForLoading(textureUri);
+                return;
+            }
+
+            // For file paths, queue the main texture and fallbacks
             BlockTextureAtlas.instance.queueTextureForLoading(textureUri);
 
             if (!textureUri.match(/\.(png|jpe?g)$/i)) {
