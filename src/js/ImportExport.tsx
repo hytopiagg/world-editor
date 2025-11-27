@@ -650,6 +650,45 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
             environmentData
         );
 
+        // Preload textures for all blocks in the imported map
+        if (terrainBuilderRef && terrainBuilderRef.current && Object.keys(terrainData).length > 0) {
+            loadingManager.updateLoading(
+                "Preloading textures...",
+                82
+            );
+
+            try {
+                // Collect all unique block IDs from the terrain data
+                const uniqueBlockIds = new Set<number>();
+                Object.values(terrainData).forEach((blockId) => {
+                    if (blockId && typeof blockId === 'number' && blockId > 0) {
+                        uniqueBlockIds.add(blockId);
+                    }
+                });
+
+                console.log(`[IMPORT] Preloading textures for ${uniqueBlockIds.size} unique block types...`);
+
+                const blockTypeRegistry = (window as any).BlockTypeRegistry;
+                if (blockTypeRegistry && blockTypeRegistry.instance) {
+                    const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                        try {
+                            await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                            console.log(`[IMPORT] ✓ Preloaded textures for block ${blockId}`);
+                        } catch (error) {
+                            console.error(`[IMPORT] ✗ Failed to preload textures for block ${blockId}:`, error);
+                        }
+                    });
+                    await Promise.allSettled(preloadPromises);
+                    console.log(`[IMPORT] ✓ Completed texture preloading`);
+                } else {
+                    console.warn("[IMPORT] BlockTypeRegistry not available");
+                }
+            } catch (error) {
+                console.error("[IMPORT] ✗ Error during texture preloading:", error);
+                // Continue with import even if preloading fails
+            }
+        }
+
         if (terrainBuilderRef && terrainBuilderRef.current) {
             loadingManager.updateLoading(
                 "Rebuilding terrain from imported data...",
