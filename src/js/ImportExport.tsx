@@ -500,7 +500,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                 let maxX = -Infinity,
                     maxZ = -Infinity;
                 Object.keys(terrainData).forEach((key) => {
-                    const [x, y, z] = key.split(",").map(Number);
+                    const [x, , z] = key.split(",").map(Number);
                     minX = Math.min(minX, x);
                     maxX = Math.max(maxX, x);
                     minZ = Math.min(minZ, z);
@@ -556,12 +556,17 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             );
                         }
 
-                        // Apply scale
-                        const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(entity.modelScale, entity.modelScale, entity.modelScale));
+                        // Handle modelScale: support both old format (number) and new format (Vector3 object)
+                        const modelScale = entity.modelScale;
+                        const scaleX = typeof modelScale === 'number' ? modelScale : (modelScale?.x ?? 1);
+                        const scaleY = typeof modelScale === 'number' ? modelScale : (modelScale?.y ?? 1);
+                        const scaleZ = typeof modelScale === 'number' ? modelScale : (modelScale?.z ?? 1);
 
-                        // Apply rotation around Y
-                        const qInv = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), euler.y);
-                        scaledOffset.applyQuaternion(qInv);
+                        // Apply scale
+                        const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(scaleX, scaleY, scaleZ));
+
+                        // Apply full rotation (all three axes)
+                        scaledOffset.applyEuler(euler);
 
                         // Convert centre position (x,y,z) to origin (adjustedX etc.)
                         const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset).sub(new THREE.Vector3(0.5, 0.5, 0.5));
@@ -578,9 +583,9 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                                 z: euler.z,
                             },
                             scale: {
-                                x: entity.modelScale,
-                                y: entity.modelScale,
-                                z: entity.modelScale,
+                                x: scaleX,
+                                y: scaleY,
+                                z: scaleZ,
                             },
                             modelUrl: matchingModel
                                 ? matchingModel.modelUrl
@@ -848,17 +853,20 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 if (entityType) {
                     // ... (keep existing entity processing logic)
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
-                    const rotYVal = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
+                    // Extract rotation values - support both THREE.Euler and plain object format
+                    const rotX = isThreeEuler ? obj.rotation.x : (obj.rotation?.x || 0);
+                    const rotY = isThreeEuler ? obj.rotation.y : (obj.rotation?.y || 0);
+                    const rotZ = isThreeEuler ? obj.rotation.z : (obj.rotation?.z || 0);
 
+                    const hasRotation = Math.abs(rotX) > 0.001 || Math.abs(rotY) > 0.001 || Math.abs(rotZ) > 0.001;
 
-                    const hasRotation = Math.abs(rotYVal) > 0.001;
-
+                    // Create euler for offset calculation and quaternion conversion
+                    const rotationEuler = new THREE.Euler(rotX, rotY, rotZ);
 
                     const quaternion = new THREE.Quaternion();
                     if (hasRotation) {
-                        quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotYVal);
+                        quaternion.setFromEuler(rotationEuler);
                     } else {
-
                         quaternion.identity();
                     }
 
@@ -886,8 +894,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
                     const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(obj.scale.x, obj.scale.y, obj.scale.z));
 
-                    const qOffset = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotYVal);
-                    scaledOffset.applyQuaternion(qOffset);
+                    // Apply full rotation (all three axes) to match SelectionTool behavior
+                    scaledOffset.applyEuler(rotationEuler);
 
                     const adjustedPos = new THREE.Vector3(
                         obj.position.x,
@@ -902,7 +910,11 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                         modelLoopedAnimations: entityType.animations || [
                             "idle",
                         ],
-                        modelScale: obj.scale.x, // Assuming uniform scale for simplicity
+                        modelScale: {
+                            x: obj.scale.x,
+                            y: obj.scale.y,
+                            z: obj.scale.z,
+                        },
                         name: entityType.name,
                         rigidBodyOptions: {
                             type: "fixed",

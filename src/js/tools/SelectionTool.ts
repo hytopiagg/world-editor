@@ -1138,10 +1138,13 @@ class SelectionTool extends BaseTool {
         const wireframe = new THREE.LineSegments(edges, lineMaterial);
         group.add(wireframe);
 
-        // Position the bounding box group at entity position + scaled center offset
+        // Position the bounding box group at entity position + rotated scaled center offset
         // Scale the center offset by the entity scale to maintain correct positioning
         const scaledBboxCenter = bboxCenter.clone().multiply(entityScale);
-        const worldPos = entity.entity.position.clone().add(scaledBboxCenter);
+        // Rotate the offset to match entity rotation (same as gizmo positioning)
+        const rotatedOffset = scaledBboxCenter.clone();
+        rotatedOffset.applyEuler(entity.entity.rotation);
+        const worldPos = entity.entity.position.clone().add(rotatedOffset);
         group.position.copy(worldPos);
         group.rotation.copy(entity.entity.rotation);
 
@@ -1471,9 +1474,28 @@ class SelectionTool extends BaseTool {
         // Dispose existing gizmo if any
         this.disposeGizmo();
 
-        // Create helper object at entity position
+        // Get model info to calculate bounding box center
+        const model = environmentModels.find(
+            (m) => m.modelUrl === this.selectedEntity.modelUrl
+        );
+        const bboxCenter =
+            model?.boundingBoxCenter || new THREE.Vector3(0, 0, 0);
+        const entityScale = this.selectedEntity.currentScale;
+        const scaledBboxCenter = bboxCenter.clone().multiply(entityScale);
+
+        // Rotate the offset to match entity rotation
+        const rotatedOffset = scaledBboxCenter.clone();
+        rotatedOffset.applyEuler(this.selectedEntity.currentRotation);
+
+        // Calculate bounding box center in world space
+        // This is where the gizmo should be positioned (same as bounding box rotation pivot)
+        const bboxCenterWorld = this.selectedEntity.currentPosition
+            .clone()
+            .add(rotatedOffset);
+
+        // Create helper object at bounding box center (not entity origin)
         this.gizmoObject = new THREE.Object3D();
-        this.gizmoObject.position.copy(this.selectedEntity.currentPosition);
+        this.gizmoObject.position.copy(bboxCenterWorld);
         this.gizmoObject.rotation.copy(this.selectedEntity.currentRotation);
         this.gizmoObject.scale.copy(this.selectedEntity.currentScale);
 
@@ -1642,8 +1664,27 @@ class SelectionTool extends BaseTool {
             return;
         }
 
+        // Get model info to calculate bounding box center
+        const model = environmentModels.find(
+            (m) => m.modelUrl === this.selectedEntity.modelUrl
+        );
+        const bboxCenter =
+            model?.boundingBoxCenter || new THREE.Vector3(0, 0, 0);
+        const entityScale = this.selectedEntity.currentScale;
+        const scaledBboxCenter = bboxCenter.clone().multiply(entityScale);
+
+        // Rotate the offset to match entity rotation
+        const rotatedOffset = scaledBboxCenter.clone();
+        rotatedOffset.applyEuler(this.selectedEntity.currentRotation);
+
+        // Calculate bounding box center in world space
+        const bboxCenterWorld = this.selectedEntity.currentPosition
+            .clone()
+            .add(rotatedOffset);
+
         // Sync gizmo helper object with entity transform
-        this.gizmoObject.position.copy(this.selectedEntity.currentPosition);
+        // Position gizmo at bounding box center (rotation pivot)
+        this.gizmoObject.position.copy(bboxCenterWorld);
         this.gizmoObject.rotation.copy(this.selectedEntity.currentRotation);
         this.gizmoObject.scale.copy(this.selectedEntity.currentScale);
     }
@@ -1665,9 +1706,31 @@ class SelectionTool extends BaseTool {
         // Ensure matrix is up to date
         this.gizmoObject.updateMatrixWorld(false);
 
-        this.selectedEntity.currentPosition.copy(this.gizmoObject.position);
+        // Get model info to calculate bounding box center
+        const model = environmentModels.find(
+            (m) => m.modelUrl === this.selectedEntity.modelUrl
+        );
+        const bboxCenter =
+            model?.boundingBoxCenter || new THREE.Vector3(0, 0, 0);
+
+        // The gizmoObject is positioned at the bounding box center
+        // We need to calculate the entity origin position from this
+        const newScale = this.gizmoObject.scale.clone();
+        const scaledBboxCenter = bboxCenter.clone().multiply(newScale);
+
+        // Calculate entity origin: gizmo position (bbox center) - scaled bbox center offset
+        // The offset needs to be rotated to match the current rotation
+        const rotatedOffset = scaledBboxCenter.clone();
+        rotatedOffset.applyEuler(this.gizmoObject.rotation);
+
+        const newEntityPosition = this.gizmoObject.position
+            .clone()
+            .sub(rotatedOffset);
+
+        // Update entity transform
+        this.selectedEntity.currentPosition.copy(newEntityPosition);
         this.selectedEntity.currentRotation.copy(this.gizmoObject.rotation);
-        this.selectedEntity.currentScale.copy(this.gizmoObject.scale);
+        this.selectedEntity.currentScale.copy(newScale);
 
         // Update entity instance in EnvironmentBuilder (without saving yet)
         this.updateEntityInstanceTransform();
