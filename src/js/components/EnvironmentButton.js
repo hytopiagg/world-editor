@@ -134,9 +134,17 @@ const EnvironmentButton = ({ envType, onSelect, isSelected, onDelete }) => {
         const loadThumbnail = async () => {
             // OPTIMIZATION: Use pre-generated thumbnail if available
             if (envType.thumbnailUrl) {
-                const thumbnailPath = envType.thumbnailUrl.startsWith("assets/")
-                    ? `/${envType.thumbnailUrl}`
-                    : envType.thumbnailUrl;
+                // Construct thumbnail path using PUBLIC_URL (needed for Electron file:// protocol)
+                let thumbnailPath;
+                if (envType.thumbnailUrl.startsWith("http://") || envType.thumbnailUrl.startsWith("https://") || envType.thumbnailUrl.startsWith("blob:")) {
+                    thumbnailPath = envType.thumbnailUrl;
+                } else if (envType.thumbnailUrl.startsWith("assets/")) {
+                    // Use PUBLIC_URL for proper path resolution in Electron
+                    const cleanPath = envType.thumbnailUrl.replace(/^\/+/, "");
+                    thumbnailPath = `${process.env.PUBLIC_URL || ""}/${cleanPath}`.replace(/\/+/g, "/").replace(/^\/\//, "/");
+                } else {
+                    thumbnailPath = envType.thumbnailUrl;
+                }
 
                 // Try loading the pre-generated thumbnail
                 try {

@@ -12,21 +12,21 @@ export default function EntityBrowser({ onSelect, onClose }: EntityBrowserProps)
     const filteredEntities = useMemo(() => {
         if (!searchQuery.trim()) return environmentModels;
         const query = searchQuery.toLowerCase();
-        return environmentModels.filter(entity => 
+        return environmentModels.filter(entity =>
             entity.name.toLowerCase().includes(query) ||
             entity.category?.toLowerCase().includes(query)
         );
     }, [searchQuery]);
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div 
+        <div className="flex fixed inset-0 z-50 justify-center items-center p-4 backdrop-blur-sm bg-black/60" onClick={onClose}>
+            <div
                 className="bg-[#0e1117] border border-white/10 rounded-lg w-full max-w-6xl max-h-[80vh] flex flex-col shadow-xl"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-white/10">
-                    <h2 className="text-white/80 text-lg font-semibold">Select Entity</h2>
+                <div className="flex justify-between items-center p-4 border-b border-white/10">
+                    <h2 className="text-lg font-semibold text-white/80">Select Entity</h2>
                     <button
                         onClick={onClose}
                         className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
@@ -44,22 +44,33 @@ export default function EntityBrowser({ onSelect, onClose }: EntityBrowserProps)
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search entities by name..."
-                        className="w-full px-3 py-2 bg-white/10 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/50 focus:border-white/50 focus:outline-none"
+                        className="px-3 py-2 w-full text-sm text-white rounded-lg border bg-white/10 border-white/10 placeholder:text-white/50 focus:border-white/50 focus:outline-none"
                         autoFocus
                     />
                 </div>
 
                 {/* Grid */}
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="overflow-y-auto flex-1 p-4">
                     {filteredEntities.length === 0 ? (
-                        <div className="text-center text-white/40 py-8">No entities found</div>
+                        <div className="py-8 text-center text-white/40">No entities found</div>
                     ) : (
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
                             {filteredEntities.map((entity) => {
-                                const thumbnailPath = entity.thumbnailUrl 
-                                    ? `./${entity.thumbnailUrl}` 
-                                    : entity.modelUrl.replace('.gltf', '_thumb.png');
-                                
+                                // Construct thumbnail path using PUBLIC_URL (needed for Electron file:// protocol)
+                                let thumbnailPath;
+                                if (entity.thumbnailUrl) {
+                                    if (entity.thumbnailUrl.startsWith("http://") || entity.thumbnailUrl.startsWith("https://") || entity.thumbnailUrl.startsWith("blob:")) {
+                                        thumbnailPath = entity.thumbnailUrl;
+                                    } else if (entity.thumbnailUrl.startsWith("assets/")) {
+                                        const cleanPath = entity.thumbnailUrl.replace(/^\/+/, "");
+                                        thumbnailPath = `${process.env.PUBLIC_URL || ""}/${cleanPath}`.replace(/\/+/g, "/").replace(/^\/\//, "/");
+                                    } else {
+                                        thumbnailPath = entity.thumbnailUrl;
+                                    }
+                                } else {
+                                    thumbnailPath = entity.modelUrl.replace('.gltf', '_thumb.png');
+                                }
+
                                 return (
                                     <button
                                         key={entity.id}
@@ -67,16 +78,16 @@ export default function EntityBrowser({ onSelect, onClose }: EntityBrowserProps)
                                             onSelect(entity.modelUrl);
                                             onClose();
                                         }}
-                                        className="group relative aspect-square bg-white/5 border border-white/10 rounded-lg overflow-hidden hover:border-white/30 transition-colors flex flex-col"
+                                        className="flex overflow-hidden relative flex-col rounded-lg border transition-colors group aspect-square bg-white/5 border-white/10 hover:border-white/30"
                                         title={entity.name}
                                     >
                                         {/* Thumbnail */}
-                                        <div className="flex-1 flex items-center justify-center p-2">
+                                        <div className="flex flex-1 justify-center items-center p-2">
                                             {entity.thumbnailUrl ? (
                                                 <img
                                                     src={thumbnailPath}
                                                     alt={entity.name}
-                                                    className="w-full h-full object-contain"
+                                                    className="object-contain w-full h-full"
                                                     onError={(e) => {
                                                         // Fallback to placeholder if thumbnail fails
                                                         (e.target as HTMLImageElement).style.display = 'none';
@@ -85,8 +96,8 @@ export default function EntityBrowser({ onSelect, onClose }: EntityBrowserProps)
                                                     }}
                                                 />
                                             ) : null}
-                                            <div 
-                                                className="w-full h-full flex items-center justify-center text-white/20 text-xs"
+                                            <div
+                                                className="flex justify-center items-center w-full h-full text-xs text-white/20"
                                                 style={{ display: entity.thumbnailUrl ? 'none' : 'flex' }}
                                             >
                                                 <svg viewBox="0 0 24 24" className="w-8 h-8 stroke-current fill-none stroke-[1.5]">
@@ -94,7 +105,7 @@ export default function EntityBrowser({ onSelect, onClose }: EntityBrowserProps)
                                                 </svg>
                                             </div>
                                         </div>
-                                        
+
                                         {/* Name */}
                                         <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white/80 text-[10px] px-1.5 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                                             {entity.name}
