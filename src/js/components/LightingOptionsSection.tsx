@@ -8,9 +8,9 @@ interface LightingOptionsSectionProps {
 export default function LightingOptionsSection({ terrainBuilderRef }: LightingOptionsSectionProps) {
     type LightSettings = { color?: string; intensity?: number };
     const [ambientColor, setAmbientColor] = useState<string>("#ffffff");
-    const [ambientIntensity, setAmbientIntensity] = useState<number>(0.25);
+    const [ambientIntensity, setAmbientIntensity] = useState<number>(1);
     const [dirColor, setDirColor] = useState<string>("#ffffff");
-    const [dirIntensity, setDirIntensity] = useState<number>(2);
+    const [dirIntensity, setDirIntensity] = useState<number>(1);
 
     const clampIntensity = (v: number, min = 0, max = 10) => Math.max(min, Math.min(max, v));
 

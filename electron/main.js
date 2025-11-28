@@ -197,7 +197,7 @@ app.whenReady().then(() => {
     try {
         if (updateElectronApp && app.isPackaged) {
             updateElectronApp({
-                repo: "hytopiagg/desktop-releases",
+                repo: "hytopiagg/builder-desktop-releases",
                 updateInterval: "1 hour",
                 logger: undefined,
             });

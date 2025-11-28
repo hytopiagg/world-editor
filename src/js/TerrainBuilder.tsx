@@ -4085,7 +4085,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 <directionalLight
                     ref={directionalLightRef}
                     position={[10, 20, 10]}
-                    intensity={2}
+                    intensity={1}
                     color={0xffffff}
                     castShadow={true}
                     shadow-mapSize-width={shadowMapSize}
@@ -4110,7 +4110,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 />
                 {/* Ambient light (lower intensity so emissive blocks are visible) */}
                 {/* @ts-expect-error - React Three Fiber JSX elements */}
-                <ambientLight ref={ambientRef} intensity={0.25} />
+                <ambientLight ref={ambientRef} intensity={1} />
                 {/* mesh of invisible plane to receive shadows, and grid helper to display grid */}
                 {/* @ts-expect-error - React Three Fiber JSX elements */}
                 <mesh

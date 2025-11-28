@@ -17,7 +17,7 @@ class ChunkManager {
         this._chunkRemeshOptions = new Map();
         this._scene = scene;
         this._chunkMeshManager = new ChunkMeshManager();
-        this._viewDistance = 128;
+        this._viewDistance = 256;
         this._viewDistanceEnabled = true;
         this._blockTypeCache = new Map();
         this._isBulkLoading = false; // Flag to indicate if we're in a bulk loading operation

@@ -18,7 +18,7 @@ interface SettingsMenuProps {
 export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar, isCompactMode, onToggleCompactMode }: SettingsMenuProps) {
     const maxMoveSpeed = 5;
     const [loadedDefaults, setLoadedDefaults] = useState(false);
-    const [viewDistance, setViewDistance] = useState(128);
+    const [viewDistance, setViewDistance] = useState(256);
 
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
     const [showSidebar, setShowSidebar] = useState(true);

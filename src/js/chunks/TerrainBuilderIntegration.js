@@ -117,7 +117,7 @@ export const updateTerrainChunks = (
     }
 
     if (onlyVisibleChunks && chunkSystem._scene.camera) {
-        const viewDistance = chunkSystem._viewDistance || 96; // Default 6 chunks
+        const viewDistance = chunkSystem._viewDistance || 256; // Default view distance
         const priorityDistance = viewDistance * 0.5;
         chunkSystem.setBulkLoadingMode(true, priorityDistance);
     } else {

@@ -10,12 +10,12 @@ const QuickTips = () => {
     const [isDownloadCTA, setIsDownloadCTA] = useState(false);
     const fadeTimeoutRef = useRef(null);
     const isDownloadCTARef = useRef(false);
-    
+
     // Keep ref in sync with state
     useEffect(() => {
         isDownloadCTARef.current = isDownloadCTA;
     }, [isDownloadCTA]);
-    
+
     const startFadeTimer = (ms = 10000) => {
         if (fadeTimeoutRef.current) {
             clearTimeout(fadeTimeoutRef.current);
@@ -32,18 +32,18 @@ const QuickTips = () => {
             if (!dismissed) {
                 const platform = detectPlatform();
                 const owner = "hytopiagg";
-                const repo = "world-editor";
+                const repo = "builder-desktop-releases";  // Fixed: was "world-editor"
                 const latestBase = `https://github.com/${owner}/${repo}/releases/latest/download`;
                 const assetForPlatform = platform === "mac"
-                    ? "Hytopia-World-Editor-mac-x64.dmg"
+                    ? "Hytopia-World-Editor-mac-universal.dmg"  // Fixed: was mac-x64
                     : platform === "win"
-                        ? "Hytopia-World-Editor-win-x64.exe"
+                        ? "Hytopia-World-Editor-win.exe"  // Fixed: was win-x64.exe (use NSIS installer)
                         : platform === "linux"
                             ? "Hytopia-World-Editor-linux-x64.AppImage"
                             : "";
                 const href = assetForPlatform
                     ? `${latestBase}/${assetForPlatform}`
-                    : `https://github.com/${owner}/${repo}#desktop-app-electron`;
+                    : `https://github.com/${owner}/${repo}#desktop-app-electron`;  // Fixed: updated repo
                 setTipText(
                     <span>
                         Prefer a smoother experience? <a href={href} target="_blank" rel="noreferrer">Download the Desktop App</a>.
@@ -89,7 +89,7 @@ const QuickTips = () => {
     return (
         isVisible && (
             <div className={containerClassName}>
-                <div className="quick-tips py-2 filter backdrop-blur-lg">
+                <div className="py-2 filter backdrop-blur-lg quick-tips">
                     <p className="tip-title">Quick Tips:</p>
                     <p className="tip-text">
                         {tipText ? (
