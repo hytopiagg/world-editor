@@ -790,9 +790,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const handleMouseDown = useCallback(
             (e) => {
                 // Set mode based on mouse button
-                // Right-click only removes blocks in crosshair mode
+                // Right-click only removes blocks in crosshair mode (as a shortcut)
+                // Left-click respects the toolbar mode selection
                 if (e.button === 0) {
-                    modeRef.current = "add";
+                    // Respect the toolbar mode for left-click - don't override it
                     mouseButtonDownRef.current = 0;
                 } else if (e.button === 2) {
                     // Only allow block removal in crosshair mode
