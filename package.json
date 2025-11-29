@@ -54,7 +54,8 @@
         "electron:dist": "npm run clean:dist && npm run build:electron && electron-builder",
         "electron:dist:mac": "npm run clean:dist && npm run build:electron && electron-builder --mac --universal",
         "electron:dist:win": "npm run clean:dist && npm run build:electron && electron-builder --win",
-        "electron:dist:all": "npm run clean:dist && npm run build:electron && electron-builder --mac --universal && electron-builder --win",
+        "electron:dist:linux": "npm run clean:dist && npm run build:electron && electron-builder --linux",
+        "electron:dist:all": "npm run clean:dist && npm run build:electron && electron-builder --mac --universal && electron-builder --win && electron-builder --linux",
         "electron": "node -e \"process.exit(process.platform==='darwin'?0:1)\" && npm run electron:dist:mac || npm run electron:dist"
     },
     "eslintConfig": {
