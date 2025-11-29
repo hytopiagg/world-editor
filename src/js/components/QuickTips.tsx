@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import "../../css/QuickTips.css";
 import { FaTimes } from "react-icons/fa";
 import QuickTipsManager from "./QuickTipsManager";
-import { detectPlatform } from "../utils/env";
 const QuickTips = () => {
     const [isVisible, setIsVisible] = useState(true);
     const [tipText, setTipText] = useState<React.ReactNode>(QuickTipsManager.getToolTip());
@@ -30,20 +29,10 @@ const QuickTips = () => {
         try {
             const dismissed = localStorage.getItem("downloadElectronDismissed") === "true";
             if (!dismissed) {
-                const platform = detectPlatform();
                 const owner = "hytopiagg";
-                const repo = "builder-desktop-releases";  // Fixed: was "world-editor"
-                const latestBase = `https://github.com/${owner}/${repo}/releases/latest/download`;
-                const assetForPlatform = platform === "mac"
-                    ? "Hytopia-World-Editor-mac-universal.dmg"  // Fixed: was mac-x64
-                    : platform === "win"
-                        ? "Hytopia-World-Editor-win.exe"  // Fixed: was win-x64.exe (use NSIS installer)
-                        : platform === "linux"
-                            ? "Hytopia-World-Editor-linux-x64.AppImage"
-                            : "";
-                const href = assetForPlatform
-                    ? `${latestBase}/${assetForPlatform}`
-                    : `https://github.com/${owner}/${repo}#desktop-app-electron`;  // Fixed: updated repo
+                const repo = "builder-desktop-releases";
+                // Link to releases page so users can choose the correct build for their architecture
+                const href = `https://github.com/${owner}/${repo}/releases/latest`;
                 setTipText(
                     <span>
                         Prefer a smoother experience? <a href={href} target="_blank" rel="noreferrer">Download the Desktop App</a>.
