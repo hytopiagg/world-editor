@@ -946,9 +946,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     acc[key] = {
                         modelUri: modelUriForJson, // Use adjusted relative path
                         modelPreferredShape: (entityType.addCollider === false) ? "none" : "trimesh",
-                        modelLoopedAnimations: entityType.animations || [
-                            "idle",
-                        ],
+                        modelLoopedAnimations: [],
                         modelScale: {
                             x: obj.scale.x,
                             y: obj.scale.y,
