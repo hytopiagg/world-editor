@@ -385,6 +385,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             isCustom: true,
                             isMultiTexture: likelyIsMultiTexture,
                             lightLevel: blockType.lightLevel,
+                            isLiquid: blockType.isLiquid === true, // Preserve isLiquid flag from import
 
                             sideTextures:
                                 blockType.sideTextures || {},
@@ -882,6 +883,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     isCustom: block.isCustom || (block.id >= 1000 && block.id < 2000),
                     isMultiTexture: isMulti,
                     lightLevel: (block as any).lightLevel,
+                    isLiquid: (block as any).isLiquid === true, // Export isLiquid flag if set to true
                 };
             }),
             blocks: remappedTerrain,

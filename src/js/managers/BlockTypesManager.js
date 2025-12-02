@@ -81,14 +81,20 @@ let blockTypesArray = (() => {
         );
     }
     
-    return Array.from(blockMap.values()).map((block) => ({
-        ...block,
-        isMultiTexture: Object.keys(block.sideTextures).length > 0,
-        isEnvironment: false,
-        hasMissingTexture: block.textureUri === "./assets/blocks/error.png",
-        // Default no emission. Users can later set lightLevel per block id via registry APIs.
-        lightLevel: undefined,
-    }));
+    return Array.from(blockMap.values()).map((block) => {
+        // Set water and lava blocks as liquid by default
+        const isLiquid = block.name.toLowerCase() === 'water' || block.name.toLowerCase() === 'lava';
+        
+        return {
+            ...block,
+            isMultiTexture: Object.keys(block.sideTextures).length > 0,
+            isEnvironment: false,
+            hasMissingTexture: block.textureUri === "./assets/blocks/error.png",
+            // Default no emission. Users can later set lightLevel per block id via registry APIs.
+            lightLevel: undefined,
+            isLiquid: isLiquid,
+        };
+    });
 })();
 /**
  * Add or update a custom block
@@ -169,6 +175,7 @@ const processCustomBlock = async (block, deferAtlasRebuild = false) => {
                 : block.lightLevel === 0
                 ? 0
                 : undefined,
+        isLiquid: block.isLiquid === true, // Store isLiquid flag
 
         isMultiTexture:
             block.sideTextures && Object.keys(block.sideTextures).length > 0,
@@ -213,7 +220,7 @@ const processCustomBlock = async (block, deferAtlasRebuild = false) => {
                 const blockType = new BlockType({
                     id: processedBlock.id,
                     name: processedBlock.name,
-                    isLiquid: false,
+                    isLiquid: processedBlock.isLiquid || false,
                     textureUris: textureUris,
                     lightLevel: processedBlock.lightLevel,
                 });
@@ -242,7 +249,7 @@ const processCustomBlock = async (block, deferAtlasRebuild = false) => {
                 const blockType = new BlockType({
                     id: processedBlock.id,
                     name: processedBlock.name,
-                    isLiquid: false,
+                    isLiquid: processedBlock.isLiquid || false,
                     textureUris: textureUris,
                     lightLevel: processedBlock.lightLevel,
                 });

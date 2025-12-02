@@ -994,11 +994,47 @@ class ChunkManager {
     }
     _handleBlockTypeChanged(blockTypeId) {
         const chunksToUpdate = new Set();
+        
+        // Check if this is a liquid block type change
+        let isLiquidBlock = false;
+        try {
+            const BlockTypeRegistry = require("../blocks/BlockTypeRegistry");
+            const blockType = BlockTypeRegistry.instance?.getBlockType?.(blockTypeId);
+            isLiquidBlock = blockType?.isLiquid === true;
+        } catch (e) {
+            // If we can't determine, assume it might be liquid and mark neighbors
+            isLiquidBlock = false;
+        }
+        
+        // Find all chunks containing this block type
         for (const chunkKey of this._chunks.keys()) {
-            if (this._chunks.get(chunkKey).containsBlockType(blockTypeId)) {
+            const chunk = this._chunks.get(chunkKey);
+            if (chunk && chunk.containsBlockType(blockTypeId)) {
                 chunksToUpdate.add(chunkKey);
+                
+                // If this is a liquid block, also mark all adjacent chunks
+                // because liquid blocks affect face culling in neighbors
+                if (isLiquidBlock) {
+                    const origin = chunk.originCoordinate;
+                    for (let dx = -1; dx <= 1; dx++) {
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dz = -1; dz <= 1; dz++) {
+                                const neighborKey = `${
+                                    origin.x + dx * 16
+                                },${origin.y + dy * 16},${
+                                    origin.z + dz * 16
+                                }`;
+                                if (this._chunks.has(neighborKey)) {
+                                    chunksToUpdate.add(neighborKey);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+        
+        // If no chunks found but chunks are visible, update visible chunks as fallback
         if (chunksToUpdate.size === 0) {
             for (const chunkKey of this._chunks.keys()) {
                 if (this._isChunkVisible(chunkKey)) {
@@ -1006,8 +1042,10 @@ class ChunkManager {
                 }
             }
         }
+        
+        // Mark all affected chunks for remesh
         for (const chunkKey of chunksToUpdate) {
-            this.markChunkForRemesh(chunkKey, { forceNow: true });
+            this.markChunkForRemesh(chunkKey, { forceNow: true, forceCompleteRebuild: true });
         }
         this.processRenderQueue(true);
     }

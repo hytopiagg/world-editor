@@ -87,11 +87,11 @@ class BlockTypeRegistry {
         const blockTypes = getBlockTypes();
 
         for (const blockTypeData of blockTypes) {
-            const isLiquid = false;
+            const isLiquid = blockTypeData.isLiquid === true;
 
             const blockType = new BlockType({
                 id: blockTypeData.id,
-                isLiquid: blockTypeData.isLiquid || isLiquid,
+                isLiquid: isLiquid,
                 name: blockTypeData.name || "Unknown",
                 textureUris: blockTypeData.isMultiTexture
                     ? convertSideTexturesToFaceNames(blockTypeData.sideTextures)
@@ -313,6 +313,75 @@ class BlockTypeRegistry {
                         manager.processRenderQueue?.(true);
                     }
                 } catch (e) {}
+            }
+
+            // Update isLiquid flag, trigger mesh refresh if changed
+            if (
+                typeof blockTypeData.isLiquid !== "undefined" &&
+                blockType.isLiquid !== blockTypeData.isLiquid
+            ) {
+                blockType._isLiquid = blockTypeData.isLiquid; // internal update
+                
+                // Dispatch event on both window and document to ensure ChunkManager catches it
+                // ChunkManager listens on document, but some code may listen on window
+                try {
+                    const event = new CustomEvent("blockTypeChanged", {
+                        detail: { blockTypeId: blockTypeData.id },
+                    });
+                    window.dispatchEvent(event);
+                    document.dispatchEvent(event);
+                } catch (e) {
+                    console.error("Failed to dispatch blockTypeChanged event:", e);
+                }
+
+                // Also directly trigger remeshing for immediate visual update
+                // The event handler will also handle this, but doing it directly ensures it happens
+                try {
+                    const chunkSystem =
+                        window?.getChunkSystem?.() ||
+                        require("../chunks/TerrainBuilderIntegration").getChunkSystem();
+                    const manager = chunkSystem;
+                    if (manager && manager._chunks) {
+                        // Find all chunks containing this block type and remesh them
+                        const chunksToUpdate = new Set();
+                        for (const chunkKey of manager._chunks.keys()) {
+                            const chunk = manager._chunks.get(chunkKey);
+                            if (chunk && chunk.containsBlockType?.(blockTypeData.id)) {
+                                chunksToUpdate.add(chunkKey);
+                                
+                                // Also mark all adjacent chunks (liquid blocks affect face culling)
+                                const origin = chunk.originCoordinate;
+                                for (let dx = -1; dx <= 1; dx++) {
+                                    for (let dy = -1; dy <= 1; dy++) {
+                                        for (let dz = -1; dz <= 1; dz++) {
+                                            const neighborKey = `${
+                                                origin.x + dx * 16
+                                            },${origin.y + dy * 16},${
+                                                origin.z + dz * 16
+                                            }`;
+                                            if (manager._chunks.has(neighborKey)) {
+                                                chunksToUpdate.add(neighborKey);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Mark all affected chunks for remesh
+                        for (const chunkKey of chunksToUpdate) {
+                            manager.markChunkForRemesh?.(chunkKey, { 
+                                forceCompleteRebuild: true,
+                                forceNow: true 
+                            });
+                        }
+                        
+                        // Process render queue immediately
+                        manager.processRenderQueue?.(true);
+                    }
+                } catch (e) {
+                    console.error("Failed to remesh chunks for isLiquid change:", e);
+                }
             }
         }
     }

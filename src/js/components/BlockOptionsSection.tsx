@@ -22,12 +22,16 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
     const [lightLevel, setLightLevel] = useState<number>(
         typeof selectedBlock?.lightLevel === 'number' ? selectedBlock.lightLevel : 0
     );
+    const [isLiquid, setIsLiquid] = useState<boolean>(
+        selectedBlock?.isLiquid === true
+    );
     // const [isCreatingVariant, setIsCreatingVariant] = useState(false);
 
     useEffect(() => {
         setEditableName(selectedBlock?.name || '');
         setIsEditing(false); // Reset editing state when block changes
         setLightLevel(typeof selectedBlock?.lightLevel === 'number' ? selectedBlock.lightLevel : 0);
+        setIsLiquid(selectedBlock?.isLiquid === true);
     }, [selectedBlock]);
 
     const handleNameChange = (event) => {
@@ -97,6 +101,33 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
         }, 200);
         return () => clearTimeout(t);
     }, [lightLevel, selectedBlock?.id]);
+
+    // Immediate update of isLiquid to trigger visual updates across all chunks
+    useEffect(() => {
+        if (!selectedBlock?.id) return;
+        // Use immediate update (no debounce) to ensure visual changes happen right away
+        try {
+            const reg = (window as any).BlockTypeRegistry?.instance;
+            if (reg && reg.updateBlockType) {
+                // Always write the desired isLiquid flag to the TRUE BASE type,
+                // so variants remain immutable and placed blocks keep their liquid state.
+                const baseId = typeof (selectedBlock as any).variantOfId === 'number'
+                    ? (selectedBlock as any).variantOfId
+                    : selectedBlock.id;
+                reg.updateBlockType({ id: baseId, isLiquid: isLiquid });
+                
+                // Also update the blockTypesArray to persist the change
+                const { getBlockTypes } = require("../managers/BlockTypesManager");
+                const allBlocks = getBlockTypes();
+                const blockIndex = allBlocks.findIndex((b: any) => b.id === baseId);
+                if (blockIndex >= 0) {
+                    allBlocks[blockIndex].isLiquid = isLiquid;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to update isLiquid:", e);
+        }
+    }, [isLiquid, selectedBlock?.id]);
 
     if (!selectedBlock) return null;
 
@@ -205,6 +236,21 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                         onMouseDown={(e) => e.stopPropagation()}
                         onPointerDown={(e) => e.stopPropagation() as any}
                     />
+                </div>
+                {/* Liquid block toggle */}
+                <div className="flex gap-x-2 items-center w-full">
+                    <label className="text-xs text-[#F1F1F1]/80 w-10">Liquid</label>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={isLiquid}
+                            onChange={(e) => setIsLiquid(e.target.checked)}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-white/10 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-white/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500/80"></div>
+                    </label>
+                    <span className="text-xs text-[#F1F1F1]/60">{isLiquid ? 'Yes' : 'No'}</span>
                 </div>
                 <div className="flex gap-2 justify-end items-center mt-2">
                     <button
