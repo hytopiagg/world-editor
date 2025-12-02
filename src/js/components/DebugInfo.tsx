@@ -5,15 +5,37 @@ const DebugInfo = ({
     terrainBuilderRef,
 }) => {
     const [fps, setFps] = useState(0);
+    const [cameraPosition, setCameraPosition] = useState({ x: 0, y: 0, z: 0 });
     const frameTimesRef = useRef([]);
     const lastTimeRef = useRef(performance.now());
     const frameRef = useRef(null);
+    const cameraUpdateRef = useRef(null);
 
     useEffect(() => {
         frameRef.current = requestAnimationFrame(measureFps);
         return () => {
             if (frameRef.current) {
                 cancelAnimationFrame(frameRef.current);
+            }
+        };
+    }, [terrainBuilderRef]);
+
+    useEffect(() => {
+        const updateCameraPosition = () => {
+            const camera = terrainBuilderRef?.current?.cameraRef;
+            if (camera) {
+                setCameraPosition({
+                    x: camera.position.x,
+                    y: camera.position.y,
+                    z: camera.position.z,
+                });
+            }
+            cameraUpdateRef.current = requestAnimationFrame(updateCameraPosition);
+        };
+        cameraUpdateRef.current = requestAnimationFrame(updateCameraPosition);
+        return () => {
+            if (cameraUpdateRef.current) {
+                cancelAnimationFrame(cameraUpdateRef.current);
             }
         };
     }, [terrainBuilderRef]);
@@ -77,6 +99,16 @@ const DebugInfo = ({
                     animationDelay: "0.09s"
                 }}
             >
+                <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Camera Position</span>
+                <span className="text-right">
+                    {`${Math.round(cameraPosition.x)}, ${Math.round(cameraPosition.y)}, ${Math.round(cameraPosition.z)}`}
+                </span>
+            </div>
+            <div className="flex justify-between w-full text-right opacity-0 duration-150 fade-down"
+                style={{
+                    animationDelay: "0.12s"
+                }}
+            >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Total Blocks:</span>
                 <span className="">
                     {terrainBuilderRef?.current?.totalBlocksRef || 0}
@@ -84,7 +116,7 @@ const DebugInfo = ({
             </div>
             <div className="flex justify-between w-full text-right opacity-0 duration-150 fade-down"
                 style={{
-                    animationDelay: "0.12s"
+                    animationDelay: "0.15s"
                 }}
             >
                 <span className="text-left text-xs text-[#F1F1F1] whitespace-nowrap">Total Env. Objects:</span>

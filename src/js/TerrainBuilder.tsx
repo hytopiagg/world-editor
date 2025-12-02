@@ -179,6 +179,7 @@ interface TerrainBuilderRef {
     activateTool: (toolName: string, activationData?: any) => boolean;
     toolManagerRef: { current: any };
     previewPositionRef: THREE.Vector3;
+    cameraRef: THREE.Camera | null;
     totalBlocksRef: number;
     setDeferredChunkMeshing: (defer: boolean) => void;
     deferSpatialHashUpdates: (defer: boolean) => void;
@@ -2416,6 +2417,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             },
             get previewPositionRef() {
                 return previewPositionRef.current;
+            },
+            get cameraRef() {
+                return cameraRef.current;
             },
             get totalBlocksRef() {
                 return totalBlocksRef.current;
