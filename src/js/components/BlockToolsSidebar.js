@@ -100,6 +100,7 @@ const BlockToolsSidebar = ({
     const [categoryScrollIndex, setCategoryScrollIndex] = useState(0);
     const [hasNavigatedCategories, setHasNavigatedCategories] = useState(false);
     const [netNavigationCount, setNetNavigationCount] = useState(0);
+    const [recentlyUsedBlockIds, setRecentlyUsedBlockIds] = useState([]);
     /** @type {[import("./AIAssistantPanel").SchematicHistoryEntry[], Function]} */
     const [schematicList, setSchematicList] = useState([]);
     const [schematicPreviews, setSchematicPreviews] = useState({});
@@ -126,6 +127,123 @@ const BlockToolsSidebar = ({
             const savedComp = localStorage.getItem("selectedComponentId");
             if (savedComp) setSelectedComponentID(savedComp);
         } catch (_) {}
+        
+        // Always scan terrain when project loads to refresh the list with actual blocks in the world
+        // This replaces any existing localStorage data
+        const scanTerrainBlocks = () => {
+            try {
+                if (terrainBuilderRef?.current?.getCurrentTerrainData) {
+                    const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
+                    
+                    if (terrainData && typeof terrainData === 'object') {
+                        const uniqueBlockIds = Array.from(new Set(
+                            Object.values(terrainData).filter(
+                                (id) => id && typeof id === "number" && id > 0
+                            )
+                        ));
+                        
+                        if (uniqueBlockIds.length > 0) {
+                            console.log("[RecentlyUsed] Found blocks in terrain:", uniqueBlockIds);
+                            // Limit to 20 most recent (or just take first 20 if we can't determine order)
+                            const limited = uniqueBlockIds.slice(0, 20);
+                            setRecentlyUsedBlockIds(limited);
+                            // Save to localStorage for future loads
+                            try {
+                                localStorage.setItem("recentlyUsedBlocks", JSON.stringify(limited));
+                                console.log("[RecentlyUsed] Saved scanned blocks to localStorage, replaced existing list");
+                            } catch (err) {
+                                console.error("[RecentlyUsed] Failed to save scanned blocks:", err);
+                            }
+                        } else {
+                            console.log("[RecentlyUsed] No blocks found in terrain");
+                            // Clear the list if no blocks found
+                            setRecentlyUsedBlockIds([]);
+                            try {
+                                localStorage.setItem("recentlyUsedBlocks", JSON.stringify([]));
+                            } catch (err) {
+                                console.error("[RecentlyUsed] Failed to clear localStorage:", err);
+                            }
+                        }
+                    } else {
+                        console.log("[RecentlyUsed] Terrain data is not available yet");
+                    }
+                } else {
+                    console.log("[RecentlyUsed] terrainBuilderRef or getCurrentTerrainData not available");
+                }
+            } catch (err) {
+                console.error("[RecentlyUsed] Error scanning terrain:", err);
+            }
+        };
+        
+        // Try scanning after a delay to ensure terrain is loaded
+        const timeoutId = setTimeout(() => {
+            console.log("[RecentlyUsed] Scanning terrain after delay...");
+            scanTerrainBlocks();
+        }, 3000); // Wait 3 seconds for terrain to load
+        
+        // Also listen for when terrain might be ready
+        const handleTerrainReady = () => {
+            console.log("[RecentlyUsed] Terrain ready event received, scanning...");
+            clearTimeout(timeoutId);
+            setTimeout(scanTerrainBlocks, 500); // Small delay to ensure data is ready
+        };
+        
+        window.addEventListener("terrainLoaded", handleTerrainReady);
+        window.addEventListener("projectLoaded", handleTerrainReady);
+        
+        return () => {
+            clearTimeout(timeoutId);
+            window.removeEventListener("terrainLoaded", handleTerrainReady);
+            window.removeEventListener("projectLoaded", handleTerrainReady);
+        };
+    }, [terrainBuilderRef]);
+    
+    // Listen for blocksPlaced event to update recently used blocks
+    useEffect(() => {
+        const handleBlocksPlaced = (event) => {
+            console.log("[RecentlyUsed] Event received:", event.detail);
+            const { blockIds } = event.detail || {};
+            if (!Array.isArray(blockIds) || blockIds.length === 0) {
+                console.log("[RecentlyUsed] Invalid blockIds:", blockIds);
+                return;
+            }
+            
+            console.log("[RecentlyUsed] Processing blockIds:", blockIds);
+            setRecentlyUsedBlockIds((prev) => {
+                console.log("[RecentlyUsed] Previous state:", prev);
+                const updated = [...prev];
+                blockIds.forEach((blockId) => {
+                    // Remove if already exists (to avoid duplicates)
+                    const index = updated.indexOf(blockId);
+                    if (index !== -1) {
+                        updated.splice(index, 1);
+                    }
+                    // Add to the beginning
+                    updated.unshift(blockId);
+                });
+                // Keep only the most recent 20 blocks
+                const limited = updated.slice(0, 20);
+                
+                console.log("[RecentlyUsed] New state:", limited);
+                
+                // Save to localStorage
+                try {
+                    localStorage.setItem("recentlyUsedBlocks", JSON.stringify(limited));
+                    console.log("[RecentlyUsed] Saved to localStorage");
+                } catch (err) {
+                    console.error("[RecentlyUsed] Failed to save to localStorage:", err);
+                }
+                
+                return limited;
+            });
+        };
+        
+        console.log("[RecentlyUsed] Setting up event listener");
+        window.addEventListener("blocksPlaced", handleBlocksPlaced);
+        return () => {
+            console.log("[RecentlyUsed] Removing event listener");
+            window.removeEventListener("blocksPlaced", handleBlocksPlaced);
+        };
     }, []);
 
     const loadSchematicsFromDB = useCallback(async () => {
@@ -2074,6 +2192,29 @@ const BlockToolsSidebar = ({
     const visibleCustomBlocks = customBlocks
         .filter((block) => block.id >= 1000 && block.id < 2000)
         .filter((block) => isMatch(block.name) || isMatch(block.id));
+    
+    // Get recently used blocks (filtered by search if applicable)
+    const visibleRecentlyUsedBlocks = recentlyUsedBlockIds
+        .map((blockId) => {
+            // Try to find in default blocks first
+            const defaultBlock = blockTypes.find((b) => b.id === blockId);
+            if (defaultBlock) return defaultBlock;
+            // Then try custom blocks
+            return customBlocks.find((b) => b.id === blockId);
+        })
+        .filter((block) => block !== undefined)
+        .filter((block) => isMatch(block.name) || isMatch(block.id));
+    
+    // Debug logging
+    if (recentlyUsedBlockIds.length > 0) {
+        console.log("[RecentlyUsed] recentlyUsedBlockIds:", recentlyUsedBlockIds);
+        console.log("[RecentlyUsed] visibleRecentlyUsedBlocks:", visibleRecentlyUsedBlocks);
+        console.log("[RecentlyUsed] visibleRecentlyUsedBlocks.length:", visibleRecentlyUsedBlocks.length);
+        console.log("[RecentlyUsed] searchQuery:", searchQuery);
+        console.log("[RecentlyUsed] normalizedQuery:", normalizedQuery);
+        console.log("[RecentlyUsed] blockTypes length:", blockTypes.length);
+        console.log("[RecentlyUsed] customBlocks length:", customBlocks.length);
+    }
 
     // --------- Category Filtering Helpers ---------
     const modelCategoryMatch = (envType) => {
@@ -2263,9 +2404,48 @@ const BlockToolsSidebar = ({
                     <div className="block-buttons-grid">
                         {activeTab === "blocks" ? (
                             <>
-                                <div className="block-tools-section-label">
-                                    Default Blocks (ID: 1-999)
-                                </div>
+                                {(() => {
+                                    console.log("[RecentlyUsed] Rendering blocks tab");
+                                    console.log("[RecentlyUsed] visibleRecentlyUsedBlocks.length:", visibleRecentlyUsedBlocks.length);
+                                    console.log("[RecentlyUsed] recentlyUsedBlockIds:", recentlyUsedBlockIds);
+                                    console.log("[RecentlyUsed] Will render section?", visibleRecentlyUsedBlocks.length > 0);
+                                    console.log("[RecentlyUsed] visibleRecentlyUsedBlocks:", visibleRecentlyUsedBlocks);
+                                    return null;
+                                })()}
+                                {visibleRecentlyUsedBlocks.length > 0 && (
+                                    <>
+                                        {console.log("[RecentlyUsed] RENDERING SECTION!")}
+                                        <div className="block-tools-section-label">
+                                            Recently Used ({visibleRecentlyUsedBlocks.length})
+                                        </div>
+                                        {visibleRecentlyUsedBlocks.map((blockType) => (
+                                            <BlockButton
+                                                key={`recent-${blockType.id}`}
+                                                blockType={blockType}
+                                                isSelected={
+                                                    selectedBlockID === blockType.id
+                                                }
+                                                onSelect={(block) => {
+                                                    handleBlockSelect(block);
+                                                    localStorage.setItem(
+                                                        "selectedBlock",
+                                                        block.id
+                                                    );
+                                                }}
+                                                handleDragStart={handleDragStart}
+                                                needsTexture={blockType.needsTexture}
+                                            />
+                                        ))}
+                                        <div className="block-tools-section-label">
+                                            Default Blocks (ID: 1-999)
+                                        </div>
+                                    </>
+                                )}
+                                {visibleRecentlyUsedBlocks.length === 0 && (
+                                    <div className="block-tools-section-label">
+                                        Default Blocks (ID: 1-999)
+                                    </div>
+                                )}
                                 {visibleDefaultBlocks.map((blockType) => (
                                     <BlockButton
                                         key={blockType.id}

@@ -763,6 +763,14 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 trackTerrainChanges(addedBlocks, {});
                 placementChangesRef.current.terrain.added[posKey] = blockId;
                 terrainRef.current[posKey] = blockId;
+                
+                // Dispatch event for recently used blocks tracking
+                if (typeof window !== "undefined" && blockId && typeof blockId === "number" && blockId > 0) {
+                    console.log("[RecentlyUsed] fastUpdateBlock: Dispatching blocksPlaced event with blockId:", blockId);
+                    window.dispatchEvent(new CustomEvent("blocksPlaced", {
+                        detail: { blockIds: [blockId] }
+                    }));
+                }
             }
             totalBlocksRef.current = Object.keys(terrainRef.current).length;
             if (getChunkSystem()) {
@@ -1089,6 +1097,20 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     if (blockWasPlaced) {
                         importedUpdateTerrainBlocks(addedBlocks, {});
                         trackTerrainChanges(addedBlocks, {}); // <<< Add this line
+                        
+                        // Dispatch event for recently used blocks tracking
+                        if (Object.keys(addedBlocks).length > 0 && typeof window !== "undefined") {
+                            const uniqueBlockIds = Array.from(new Set(Object.values(addedBlocks).filter(
+                                (id) => id && typeof id === "number" && id > 0
+                            )));
+                            if (uniqueBlockIds.length > 0) {
+                                console.log("[RecentlyUsed] handleBlockPlacement: Dispatching blocksPlaced event with blockIds:", uniqueBlockIds);
+                                window.dispatchEvent(new CustomEvent("blocksPlaced", {
+                                    detail: { blockIds: uniqueBlockIds }
+                                }));
+                            }
+                        }
+                        
                         const addedBlocksArray = Object.entries(addedBlocks).map(
                             ([posKey, blockId]) => {
                                 const [x, y, z] = posKey.split(",").map(Number);
@@ -1956,6 +1978,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                     window.fullTerrainDataRef = terrainRef.current;
                                     loadingManager.hideLoading();
                                     setPageIsLoaded(true);
+                                    // Dispatch event for recently used blocks scanning
+                                    if (typeof window !== "undefined") {
+                                        window.dispatchEvent(new CustomEvent("terrainLoaded"));
+                                    }
                                 } catch (error) {
                                     updateTerrainChunks(terrainRef.current);
                                     loadingManager.hideLoading();
@@ -1968,6 +1994,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         }
                         loadingManager.hideLoading();
                         setPageIsLoaded(true);
+                        // Dispatch event for recently used blocks scanning
+                        if (typeof window !== "undefined") {
+                            window.dispatchEvent(new CustomEvent("terrainLoaded"));
+                        }
                     })
                     .catch((error) => {
                         meshesInitializedRef.current = true;
@@ -2920,6 +2950,20 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     }
                 }
             });
+            
+            // Dispatch event for recently used blocks tracking when blocks are added
+            if (Object.keys(addedBlocks).length > 0 && typeof window !== "undefined") {
+                const uniqueBlockIds = Array.from(new Set(Object.values(addedBlocks).filter(
+                    (id) => id && typeof id === "number" && id > 0
+                )));
+                if (uniqueBlockIds.length > 0) {
+                    console.log("[RecentlyUsed] Dispatching blocksPlaced event with blockIds:", uniqueBlockIds);
+                    window.dispatchEvent(new CustomEvent("blocksPlaced", {
+                        detail: { blockIds: uniqueBlockIds }
+                    }));
+                }
+            }
+            
             if (
                 !options.skipUndoSave &&
                 pendingChangesRef.current &&
