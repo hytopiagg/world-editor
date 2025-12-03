@@ -408,6 +408,8 @@ function UndoRedoManager(
                 if (!isTerrainChange && !isEnvironmentChange) {
                 }
 
+                // Dispatch event to notify that undo operation completed
+                window.dispatchEvent(new CustomEvent("undo-complete"));
             } else {
             }
         } catch (error) {
@@ -615,6 +617,8 @@ function UndoRedoManager(
                 if (!isTerrainChange && !isEnvironmentChange) {
                 }
 
+                // Dispatch event to notify that redo operation completed
+                window.dispatchEvent(new CustomEvent("redo-complete"));
             } else {
             }
         } catch (error) {

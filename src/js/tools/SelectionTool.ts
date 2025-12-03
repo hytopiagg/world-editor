@@ -91,6 +91,16 @@ class SelectionTool extends BaseTool {
     handleSidebarPositionChange: ((e: CustomEvent) => void) | null = null;
     handleSidebarRotationChange: ((e: CustomEvent) => void) | null = null;
     handleSidebarScaleChange: ((e: CustomEvent) => void) | null = null;
+    handleUndoRedoComplete: (() => void) | null = null;
+
+    // Copy/paste properties
+    copiedEntity: {
+        modelUrl: string;
+        name: string;
+        position: THREE.Vector3;
+        rotation: THREE.Euler;
+        scale: THREE.Vector3;
+    } | null = null;
 
     // Flag to indicate if we should hide the preview block
     shouldHidePreviewBlock(): boolean {
@@ -193,6 +203,16 @@ class SelectionTool extends BaseTool {
             "entity-scale-changed",
             this.handleSidebarScaleChange
         );
+
+        // Listen for undo/redo completion to check if selected entity still exists
+        this.handleUndoRedoComplete = () => {
+            if (this.selectedEntity) {
+                // Check if the selected entity still exists after undo/redo
+                this.checkSelectedEntityExists();
+            }
+        };
+        window.addEventListener("undo-complete", this.handleUndoRedoComplete);
+        window.addEventListener("redo-complete", this.handleUndoRedoComplete);
     }
 
     onActivate(activationData) {
@@ -419,6 +439,44 @@ class SelectionTool extends BaseTool {
     }
 
     handleKeyDown(event) {
+        // Handle copy shortcut when entity is selected
+        if (this.selectedEntity) {
+            // Check for copy (Cmd/Ctrl+C)
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+                // Prevent default browser copy behavior
+                const target = event.target as HTMLElement;
+                const isInput =
+                    target.tagName === "INPUT" ||
+                    target.tagName === "TEXTAREA" ||
+                    target.isContentEditable;
+                
+                // Only handle copy if not in an input field
+                if (!isInput) {
+                    event.preventDefault();
+                    this.copyEntity();
+                    return;
+                }
+            }
+        }
+        
+        // Handle paste shortcut (works even when no entity is selected)
+        // Check for paste (Cmd/Ctrl+V)
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+            // Prevent default browser paste behavior
+            const target = event.target as HTMLElement;
+            const isInput =
+                target.tagName === "INPUT" ||
+                target.tagName === "TEXTAREA" ||
+                target.isContentEditable;
+            
+            // Only handle paste if not in an input field
+            if (!isInput) {
+                event.preventDefault();
+                this.pasteEntity();
+                return;
+            }
+        }
+        
         // Handle gizmo mode switching when entity is selected
         if (this.selectedEntity) {
             // Use Ctrl (or Cmd on Mac) alone to cycle through gizmo modes
@@ -986,6 +1044,10 @@ class SelectionTool extends BaseTool {
                 "entity-scale-changed",
                 this.handleSidebarScaleChange
             );
+        }
+        if (this.handleUndoRedoComplete) {
+            window.removeEventListener("undo-complete", this.handleUndoRedoComplete);
+            window.removeEventListener("redo-complete", this.handleUndoRedoComplete);
         }
 
         this.selectionStartPosition = null;
@@ -1768,6 +1830,11 @@ class SelectionTool extends BaseTool {
     onGizmoMouseDown() {
         if (!this.selectedEntity) return;
 
+        // Check if entity still exists before starting manipulation
+        if (!this.checkSelectedEntityExists()) {
+            return;
+        }
+
         // Store original transform for undo
         this.manipulationStartTransform = {
             position: this.selectedEntity.currentPosition.clone(),
@@ -1784,6 +1851,28 @@ class SelectionTool extends BaseTool {
         this.isManipulating = false;
     }
 
+    checkSelectedEntityExists(): boolean {
+        if (!this.selectedEntity || !this.environmentBuilderRef?.current) {
+            return false;
+        }
+
+        // Check if the entity still exists in the environment
+        const allObjects = this.environmentBuilderRef.current.getAllEnvironmentObjects();
+        const exists = allObjects.some(
+            (obj) =>
+                obj.modelUrl === this.selectedEntity.modelUrl &&
+                obj.instanceId === this.selectedEntity.instanceId
+        );
+
+        if (!exists) {
+            // Entity no longer exists, deselect it
+            this.deselectEntity();
+            return false;
+        }
+
+        return true;
+    }
+
     updateEntityInstanceTransform() {
         if (
             !this.selectedEntity ||
@@ -1798,6 +1887,11 @@ class SelectionTool extends BaseTool {
                     hasCamera: !!this.threeCamera,
                 }
             );
+            return null;
+        }
+
+        // Check if entity still exists before trying to update
+        if (!this.checkSelectedEntityExists()) {
             return null;
         }
 
@@ -1922,6 +2016,135 @@ class SelectionTool extends BaseTool {
 
         // Clear manipulation state
         this.manipulationStartTransform = null;
+    }
+
+    copyEntity() {
+        if (!this.selectedEntity) {
+            return;
+        }
+
+        // Store the entity data for pasting
+        this.copiedEntity = {
+            modelUrl: this.selectedEntity.modelUrl,
+            name: this.selectedEntity.name,
+            position: this.selectedEntity.currentPosition.clone(),
+            rotation: this.selectedEntity.currentRotation.clone(),
+            scale: this.selectedEntity.currentScale.clone(),
+        };
+
+        // Show feedback to user
+        QuickTipsManager.setToolTip(`Copied "${this.selectedEntity.name}". Press Cmd/Ctrl+V to paste.`);
+        setTimeout(() => {
+            if (this.selectedEntity) {
+                QuickTipsManager.setToolTip(this.tooltip);
+            }
+        }, 2000);
+    }
+
+    pasteEntity() {
+        if (!this.copiedEntity || !this.environmentBuilderRef?.current) {
+            QuickTipsManager.setToolTip("No entity copied. Select an entity and press Cmd/Ctrl+C to copy.");
+            setTimeout(() => {
+                if (this.selectedEntity) {
+                    QuickTipsManager.setToolTip(this.tooltip);
+                }
+            }, 2000);
+            return;
+        }
+
+        // Calculate offset position (2 blocks offset)
+        const offset = new THREE.Vector3(2, 0, 2);
+        const newPosition = this.copiedEntity.position.clone().add(offset);
+
+        // Get model type
+        const modelType = this.environmentBuilderRef.current.getModelType(
+            this.copiedEntity.name,
+            this.copiedEntity.modelUrl
+        );
+
+        if (!modelType) {
+            QuickTipsManager.setToolTip("Error: Could not find model type for pasted entity.");
+            setTimeout(() => {
+                if (this.selectedEntity) {
+                    QuickTipsManager.setToolTip(this.tooltip);
+                }
+            }, 2000);
+            return;
+        }
+
+        // Create temporary mesh with new position
+        const tempMesh = new THREE.Object3D();
+        tempMesh.position.copy(newPosition);
+        tempMesh.rotation.copy(this.copiedEntity.rotation);
+        tempMesh.scale.copy(this.copiedEntity.scale);
+
+        // Place the new entity instance (null instanceId means generate new one)
+        const placedInstance = this.environmentBuilderRef.current.placeEnvironmentModelWithoutSaving(
+            modelType,
+            tempMesh,
+            null // Generate new instance ID
+        );
+
+        if (!placedInstance) {
+            QuickTipsManager.setToolTip("Error: Failed to paste entity.");
+            setTimeout(() => {
+                if (this.selectedEntity) {
+                    QuickTipsManager.setToolTip(this.tooltip);
+                }
+            }, 2000);
+            return;
+        }
+
+        // Create undo/redo entry for the paste operation
+        if (this.undoRedoManager?.current) {
+            const changes = {
+                terrain: { added: {}, removed: {} },
+                environment: {
+                    added: [
+                        {
+                            modelUrl: placedInstance.modelUrl,
+                            instanceId: placedInstance.instanceId,
+                            position: placedInstance.position,
+                            rotation: placedInstance.rotation,
+                            scale: placedInstance.scale,
+                        },
+                    ],
+                    removed: [],
+                },
+            };
+            this.undoRedoManager.current.saveUndo(changes);
+        }
+
+        // Save to database
+        if (this.environmentBuilderRef.current.updateLocalStorage) {
+            this.environmentBuilderRef.current.updateLocalStorage();
+        }
+
+        // Create EntityRaycastResult-like object directly from placed instance
+        // placeEnvironmentModelWithoutSaving returns position, rotation, scale as THREE objects
+        const entityResult: EntityRaycastResult = {
+            entity: {
+                modelUrl: placedInstance.modelUrl,
+                instanceId: placedInstance.instanceId,
+                name: this.copiedEntity.name,
+                position: placedInstance.position,
+                rotation: placedInstance.rotation,
+                scale: placedInstance.scale,
+            },
+            distance: 0,
+            point: placedInstance.position.clone(),
+        };
+
+        // Select the new entity immediately
+        this.selectEntity(entityResult);
+
+        // Show feedback
+        QuickTipsManager.setToolTip(`Pasted "${this.copiedEntity.name}". Entity selected.`);
+        setTimeout(() => {
+            if (this.selectedEntity) {
+                QuickTipsManager.setToolTip(this.tooltip);
+            }
+        }, 2000);
     }
 }
 
