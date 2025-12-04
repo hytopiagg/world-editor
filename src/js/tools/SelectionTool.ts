@@ -2,6 +2,7 @@ import * as THREE from "three";
 import BaseTool from "./BaseTool";
 import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
 import QuickTipsManager from "../components/QuickTipsManager";
+import ToastManager from "../components/ToastManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { SchematicData } from "../utils/SchematicPreviewRenderer";
 import { generateUniqueId } from "../components/AIAssistantPanel";
@@ -477,28 +478,9 @@ class SelectionTool extends BaseTool {
             }
         }
         
-        // Handle gizmo mode switching when entity is selected
+        // Handle entity-specific keyboard shortcuts when entity is selected
         if (this.selectedEntity) {
-            // Use Ctrl (or Cmd on Mac) alone to cycle through gizmo modes
-            // Check if Ctrl/Cmd is pressed and the key itself is Control/Meta (not a character key)
-            if (
-                (event.ctrlKey || event.metaKey) &&
-                (event.key === "Control" || event.key === "Meta") &&
-                !event.shiftKey &&
-                !event.altKey
-            ) {
-                event.preventDefault();
-                // Cycle through gizmo modes: translate -> rotate -> scale -> translate
-                const modes: ("translate" | "rotate" | "scale")[] = [
-                    "translate",
-                    "rotate",
-                    "scale",
-                ];
-                const currentIndex = modes.indexOf(this.gizmoMode);
-                const nextIndex = (currentIndex + 1) % modes.length;
-                this.setGizmoMode(modes[nextIndex]);
-                return;
-            } else if (event.key === "Escape") {
+            if (event.key === "Escape") {
                 // Deselect entity on Escape
                 this.deselectEntity();
                 return;
@@ -2033,6 +2015,7 @@ class SelectionTool extends BaseTool {
         };
 
         // Show feedback to user
+        ToastManager.showToast("Copied", 2000);
         QuickTipsManager.setToolTip(`Copied "${this.selectedEntity.name}". Press Cmd/Ctrl+V to paste.`);
         setTimeout(() => {
             if (this.selectedEntity) {
@@ -2053,8 +2036,12 @@ class SelectionTool extends BaseTool {
         }
 
         // Calculate offset position (2 blocks offset)
+        // Use currently selected entity position if available, otherwise use copied entity position
+        const basePosition = this.selectedEntity 
+            ? this.selectedEntity.currentPosition 
+            : this.copiedEntity.position;
         const offset = new THREE.Vector3(2, 0, 2);
-        const newPosition = this.copiedEntity.position.clone().add(offset);
+        const newPosition = basePosition.clone().add(offset);
 
         // Get model type
         const modelType = this.environmentBuilderRef.current.getModelType(
@@ -2139,6 +2126,7 @@ class SelectionTool extends BaseTool {
         this.selectEntity(entityResult);
 
         // Show feedback
+        ToastManager.showToast("Paste Successful", 2000);
         QuickTipsManager.setToolTip(`Pasted "${this.copiedEntity.name}". Entity selected.`);
         setTimeout(() => {
             if (this.selectedEntity) {

@@ -15,6 +15,7 @@ import BlockToolsSidebar, {
 } from "./js/components/BlockToolsSidebar";
 import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import QuickTips from './js/components/QuickTips';
+import ToastManager from './js/components/ToastManager';
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
 import SelectionDimensionsTip from "./js/components/SelectionDimensionsTip";
 import ToolBar from "./js/components/ToolBar";
@@ -55,6 +56,17 @@ function App() {
             DatabaseManager.setCurrentProjectId(projectId);
         }
     }, [projectId]);
+
+    // Listen for toast notifications
+    useEffect(() => {
+        const handleToastChange = (toastList: Array<{ id: string; message: string; timestamp: number }>) => {
+            setToasts([...toastList]);
+        };
+        ToastManager.addListener(handleToastChange);
+        return () => {
+            ToastManager.removeListener(handleToastChange);
+        };
+    }, []);
     const handleSwitchProject = async () => {
         try {
             const shouldSave = window.confirm("Switch projects? Save current project before switching?");
@@ -106,6 +118,7 @@ function App() {
         snapToGrid: true,
     });
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'complete'>('idle');
+    const [toasts, setToasts] = useState<Array<{ id: string; message: string; timestamp: number }>>([]);
     const [isTextureModalOpen, setIsTextureModalOpen] = useState(false);
     const [isAIComponentsActive, setIsAIComponentsActive] = useState(false);
     const [showBlockSidebar, setShowBlockSidebar] = useState(true);
@@ -776,6 +789,46 @@ function App() {
                 )}
 
                 {projectId && <div className="vignette-gradient"></div>}
+
+                {projectId && toasts.length > 0 && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            top: "40px",
+                            left: "50%",
+                            transform: "translateX(-50%)",
+                            zIndex: 10000,
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: "8px",
+                            pointerEvents: "none",
+                        }}
+                    >
+                        {toasts.map((toast, index) => (
+                            <div
+                                key={toast.id}
+                                className="toast-notification"
+                                style={{
+                                    backgroundColor: "rgba(0, 0, 0, 0.8)",
+                                    color: "white",
+                                    padding: "8px 16px",
+                                    borderRadius: "4px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.3)",
+                                    fontFamily: "Arial, sans-serif",
+                                    fontSize: "14px",
+                                    fontWeight: "bold",
+                                    animation: "slideUpIn 0.3s ease-out",
+                                }}
+                            >
+                                {toast.message}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {projectId && saveStatus !== 'idle' && (
                     <div
