@@ -1550,7 +1550,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             return terrainRef.current;
         };
         const updateTerrainFromToolBar = (terrainData) => {
-            loadingManager.showLoading("Starting Minecraft map import...", 0);
+            loadingManager.showLoading("Updating terrain...", 0);
             terrainRef.current = terrainData;
             loadingManager.updateLoading(
                 "Saving imported terrain to database...",

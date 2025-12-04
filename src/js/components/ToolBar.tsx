@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     FaCloud,
     FaCubes,
@@ -18,15 +18,20 @@ import {
     FaWrench,
     FaHome
 } from "react-icons/fa";
+import pako from "pako";
 import "../../css/ToolBar.css";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
 import { exportMapFile, importMap } from "../ImportExport";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
-import MinecraftImportWizard from "./MinecraftImportWizard";
 import Tooltip from "./Tooltip";
 import { getBlockTypes } from "../managers/BlockTypesManager";
 import "../../css/AxiomBlockRemapper.css";
 import { AxiomBlockRemapper } from "./AxiomBlockRemapper.jsx";
+import { NBTParser } from "../utils/minecraft/NBTParser";
+import {
+    suggestMapping,
+    DEFAULT_BLOCK_MAPPINGS,
+} from "../utils/minecraft/BlockMapper";
 
 // Enum to track which submenu is currently open
 enum SubMenuType {
@@ -89,8 +94,13 @@ const ToolBar = ({
 
     const [waitingForMouseCycle, setWaitingForMouseCycle] = useState(false);
 
-    const [showMinecraftImportModal, setShowMinecraftImportModal] =
-        useState(false);
+    // Axiom Blueprint converter state
+    const [showBlockRemapper, setShowBlockRemapper] = useState(false);
+    const [pendingBpImport, setPendingBpImport] = useState<any>(null);
+    const [unmappedBlocks, setUnmappedBlocks] = useState<string[]>([]);
+    const [blockCounts, setBlockCounts] = useState<Record<string, number>>({});
+    const bpFileInputRef = useRef<HTMLInputElement>(null);
+
     const [showGlobalRemapModal, setShowGlobalRemapModal] = useState(false);
     const [usedBlockCounts, setUsedBlockCounts] = useState<Record<number, number>>({});
     const [globalRemapTargets, setGlobalRemapTargets] = useState<Record<number, number>>({});
@@ -861,6 +871,375 @@ const ToolBar = ({
         };
     }, []);
 
+    // Axiom Blueprint converter functions
+    const DEBUG_BP_IMPORT = true;
+
+    const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as ArrayBuffer);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+
+    const parseNbtBrowser = async (arrayBuffer: ArrayBuffer | Uint8Array) => {
+        if (arrayBuffer instanceof Uint8Array) {
+            return NBTParser.parse(arrayBuffer);
+        }
+        if (arrayBuffer instanceof ArrayBuffer) {
+            return NBTParser.parse(new Uint8Array(arrayBuffer));
+        }
+        if (arrayBuffer && (arrayBuffer as any).buffer instanceof ArrayBuffer) {
+            return NBTParser.parse(new Uint8Array((arrayBuffer as any).buffer));
+        }
+        return NBTParser.parse(arrayBuffer);
+    };
+
+    const decodeLongPairToBigInt = (pair: [number, number]) => {
+        const hi = BigInt((pair[0] >>> 0) >>> 0);
+        const lo = BigInt((pair[1] >>> 0) >>> 0);
+        return (hi << 32n) | lo;
+    };
+
+    const decodePaletteIndices = (longPairs: any[], paletteLen: number, totalBlocks: number) => {
+        const longs =
+            longPairs &&
+            longPairs.length > 0 &&
+            typeof longPairs[0] === "bigint"
+                ? longPairs
+                : (longPairs || []).map(decodeLongPairToBigInt);
+
+        const bitsPerBlock = Math.max(
+            4,
+            Math.ceil(Math.log2(Math.max(1, paletteLen)))
+        );
+        const valuesPerLong = Math.max(1, Math.floor(64 / bitsPerBlock));
+        const mask = (1n << BigInt(bitsPerBlock)) - 1n;
+
+        const out = new Array(totalBlocks);
+        for (let i = 0; i < totalBlocks; i++) {
+            const longIndex = Math.floor(i / valuesPerLong);
+            const indexWithinLong = i % valuesPerLong;
+            const startBit = BigInt(indexWithinLong * bitsPerBlock);
+            const word = longs[longIndex] ?? 0n;
+            out[i] = Number((word >> startBit) & mask);
+        }
+        return out;
+    };
+
+    const sectionIndexToLocalXYZ = (index: number) => {
+        const x = index & 15;
+        const z = (index >> 4) & 15;
+        const y = (index >> 8) & 15;
+        return { x, y, z };
+    };
+
+    const parseAxiomBpInBrowser = async (file: File) => {
+        const ab = await readFileAsArrayBuffer(file);
+        const bytes = new Uint8Array(ab);
+        const dv = new DataView(bytes.buffer);
+        let offset = 0;
+        // Magic
+        if (
+            !(
+                bytes[0] === 0x0a &&
+                bytes[1] === 0xe5 &&
+                bytes[2] === 0xbb &&
+                bytes[3] === 0x36
+            )
+        ) {
+            throw new Error("Invalid .bp magic");
+        }
+        offset += 4;
+        // metadata
+        const metaLen = dv.getUint32(offset);
+        offset += 4;
+        const metaBuf = bytes.subarray(offset, offset + metaLen);
+        offset += metaLen;
+        const metadata = await parseNbtBrowser(metaBuf);
+        // preview
+        const previewLen = dv.getUint32(offset);
+        offset += 4;
+        const previewBuf = bytes.subarray(offset, offset + previewLen);
+        offset += previewLen;
+        // structure (gzip NBT)
+        const structLen = dv.getUint32(offset);
+        offset += 4;
+        const structCompressed = bytes.subarray(offset, offset + structLen);
+        let structure;
+        try {
+            const structInflated = pako.ungzip(structCompressed);
+            structure = await parseNbtBrowser(structInflated);
+        } catch (e) {
+            structure = await parseNbtBrowser(structCompressed);
+        }
+        return { metadata, previewBuf, structure };
+    };
+
+    const loadSavedMappings = () => {
+        try {
+            const raw = localStorage.getItem("axiomBlockMappings");
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (_) {
+            return {};
+        }
+    };
+
+    const convertStructureToTerrainMap = (structure: any, customMappings: Record<string, any> = {}) => {
+        const getVal = (v: any) => (v && v.value !== undefined ? v.value : v);
+        let regions: any[] = [];
+        if (Array.isArray(structure.BlockRegion)) {
+            regions = structure.BlockRegion;
+        } else if (
+            structure.BlockRegion &&
+            structure.BlockRegion.value &&
+            structure.BlockRegion.value.value
+        ) {
+            regions = structure.BlockRegion.value.value;
+        }
+        const terrain: Record<string, number> = {};
+        const entities: any[] = [];
+        for (let idx = 0; idx < regions.length; idx++) {
+            const region = regions[idx];
+            const baseX = getVal(region.X) * 16;
+            const baseY = getVal(region.Y) * 16;
+            const baseZ = getVal(region.Z) * 16;
+            const bs = getVal(region.BlockStates);
+            if (!bs) continue;
+            let data = getVal(bs.data) || [];
+            let palette = getVal(bs.palette) || [];
+            if (palette && palette.value && palette.value.value) {
+                palette = palette.value.value;
+            }
+            if (!palette.length) continue;
+            const totalBlocks = 16 * 16 * 16;
+            const indices = decodePaletteIndices(
+                data,
+                palette.length,
+                totalBlocks
+            );
+            for (let i = 0; i < totalBlocks; i++) {
+                const pIdx = indices[i];
+                const entry = palette[pIdx];
+                if (!entry) continue;
+                const nameVal = getVal(entry.Name);
+                if (!nameVal || typeof nameVal !== "string") continue;
+                const mcName = nameVal;
+                const mapping =
+                    customMappings[mcName] || suggestMapping(mcName);
+                if (!mapping || mapping.action === "skip") continue;
+
+                if (mapping.action === "entity") {
+                    const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
+                    const x = baseX + lx;
+                    const y = baseY + ly;
+                    const z = baseZ + lz;
+                    const entityName = mapping.entityName;
+                    entities.push({
+                        entityName,
+                        position: [x, y, z],
+                        rotation: [0, 0, 0],
+                    });
+                    continue;
+                }
+
+                const blockId = parseInt(
+                    mapping.id || mapping.targetBlockId || mapping?.id,
+                    10
+                );
+                if (!blockId) continue;
+
+                const { x: lx, y: ly, z: lz } = sectionIndexToLocalXYZ(i);
+                const x = baseX + lx;
+                const y = baseY + ly;
+                const z = baseZ + lz;
+                terrain[`${x},${y},${z}`] = blockId;
+            }
+        }
+        return { terrain, entities };
+    };
+
+    const terrainToRelativeSchematic = (terrainMap: Record<string, number>) => {
+        const keys = Object.keys(terrainMap);
+        if (keys.length === 0) return { blocks: {}, entities: [] };
+        let minX = Infinity,
+            minY = Infinity,
+            minZ = Infinity;
+        for (const k of keys) {
+            const [x, y, z] = k.split(",").map(Number);
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (z < minZ) minZ = z;
+        }
+        const relBlocks: Record<string, number> = {};
+        for (const [k, id] of Object.entries(terrainMap)) {
+            const [x, y, z] = k.split(",").map(Number);
+            const rx = x - minX;
+            const ry = y - minY;
+            const rz = z - minZ;
+            relBlocks[`${rx},${ry},${rz}`] = id;
+        }
+        return {
+            blocks: relBlocks,
+            entities: [],
+            min: { x: minX, y: minY, z: minZ },
+        };
+    };
+
+    const extractUnmappedBlocks = (structure: any) => {
+        const getVal = (v: any) => (v && v.value !== undefined ? v.value : v);
+        let regions: any[] = [];
+        if (Array.isArray(structure.BlockRegion)) {
+            regions = structure.BlockRegion;
+        } else if (
+            structure.BlockRegion &&
+            structure.BlockRegion.value &&
+            structure.BlockRegion.value.value
+        ) {
+            regions = structure.BlockRegion.value.value;
+        }
+
+        const blockCounts: Record<string, number> = {};
+        const unmappedBlocks = new Set<string>();
+
+        for (const region of regions) {
+            const bs = getVal(region.BlockStates);
+            if (!bs) continue;
+
+            let palette = getVal(bs.palette) || [];
+            if (palette && palette.value && palette.value.value) {
+                palette = palette.value.value;
+            }
+
+            let data = getVal(bs.data) || [];
+            const totalBlocks = 16 * 16 * 16;
+            const indices = decodePaletteIndices(
+                data,
+                palette.length,
+                totalBlocks
+            );
+
+            for (let i = 0; i < totalBlocks; i++) {
+                const pIdx = indices[i];
+                const entry = palette[pIdx];
+                if (!entry) continue;
+
+                const nameVal = getVal(entry.Name);
+                if (!nameVal || typeof nameVal !== "string") continue;
+
+                const mcName = nameVal;
+                blockCounts[mcName] = (blockCounts[mcName] || 0) + 1;
+
+                if (!DEFAULT_BLOCK_MAPPINGS[mcName]) {
+                    const suggested = suggestMapping(mcName);
+                    if (!suggested || suggested.action === "skip") {
+                        unmappedBlocks.add(mcName);
+                    }
+                }
+            }
+        }
+
+        return {
+            unmappedBlocks: Array.from(unmappedBlocks),
+            blockCounts,
+        };
+    };
+
+    const handleBlockMappingConfirm = (customMappings: Record<string, any>) => {
+        if (!pendingBpImport) return;
+
+        const { metadata, structure, file } = pendingBpImport;
+        const saved = loadSavedMappings();
+        const mergedMappings = { ...saved, ...customMappings };
+        const { terrain, entities } = convertStructureToTerrainMap(
+            structure,
+            mergedMappings
+        );
+        const schematic = terrainToRelativeSchematic(terrain);
+        if (entities && entities.length) {
+            schematic.entities = entities.map((e: any) => ({
+                entityName: e.entityName,
+                position: [
+                    e.position[0] - schematic.min.x,
+                    e.position[1] - schematic.min.y,
+                    e.position[2] - schematic.min.z,
+                ],
+                rotation: e.rotation,
+            }));
+        }
+
+        const nameTag =
+            metadata && metadata.Name && (metadata.Name.value || metadata.Name);
+        const name =
+            typeof nameTag === "string" && nameTag.trim()
+                ? nameTag
+                : file.name.replace(/\.bp$/i, "");
+
+        // Activate schematic tool with the imported blueprint
+        try {
+            if (terrainBuilderRef?.current?.activateTool) {
+                terrainBuilderRef.current.activateTool("schematic", schematic);
+            }
+        } catch (_) {}
+
+        // Clean up
+        setShowBlockRemapper(false);
+        setPendingBpImport(null);
+        setUnmappedBlocks([]);
+        setBlockCounts({});
+    };
+
+    const handleBlockMappingCancel = () => {
+        setShowBlockRemapper(false);
+        setPendingBpImport(null);
+        setUnmappedBlocks([]);
+        setBlockCounts({});
+        if (bpFileInputRef.current) {
+            bpFileInputRef.current.value = "";
+        }
+    };
+
+    const handleBpFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
+        try {
+            if (bp) {
+                const { metadata, structure } = await parseAxiomBpInBrowser(bp);
+
+                // Check for unmapped blocks
+                const { unmappedBlocks, blockCounts } =
+                    extractUnmappedBlocks(structure);
+                // Apply saved mappings to reduce remap workload
+                const saved = loadSavedMappings();
+                const remainingUnmapped = unmappedBlocks.filter((name) => {
+                    const m = saved[name];
+                    if (!m) return true;
+                    if (m.action === "map" && (m.id || m.targetBlockId))
+                        return false;
+                    if (
+                        m.action === "entity" &&
+                        (m.entityName || m.targetEntityName)
+                    )
+                        return false;
+                    return true;
+                });
+
+                // Always show remapper UI, even if all blocks are auto-mapped
+                setPendingBpImport({ metadata, structure, file: bp });
+                setUnmappedBlocks(remainingUnmapped);
+                setBlockCounts(blockCounts);
+                setShowBlockRemapper(true);
+            }
+        } catch (err) {
+            console.error("Import failed:", err);
+            alert("Failed to import file. See console for details.");
+        } finally {
+            e.target.value = "";
+        }
+    };
+
     return (
         <>
             <div className="controls-container">
@@ -1107,15 +1486,23 @@ const ToolBar = ({
                                 <FaMountain className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
-                        <Tooltip text="Import Minecraft Map">
+                        <Tooltip text="Import Axiom Blueprint (.bp)">
                             <button
-                                onClick={() =>
-                                    setShowMinecraftImportModal(true)
-                                }
+                                onClick={() => {
+                                    bpFileInputRef.current?.click();
+                                }}
                                 className="control-button"
                             >
                                 <FaCubes />
                             </button>
+                            <input
+                                ref={bpFileInputRef}
+                                type="file"
+                                multiple={false}
+                                accept=".bp,application/octet-stream"
+                                onChange={handleBpFileInputChange}
+                                style={{ display: "none" }}
+                            />
                         </Tooltip>
                         <div className="relative">
                             <Tooltip text="AI Tools" hideTooltip={activeSubmenu === SubMenuType.AI || isAIComponentsActive}>
@@ -1601,20 +1988,12 @@ const ToolBar = ({
                     </div>
                 </div>
             )}
-            {showMinecraftImportModal && (
-                <MinecraftImportWizard
-                    isOpen={showMinecraftImportModal}
-                    onClose={() => setShowMinecraftImportModal(false)}
-                    onComplete={(result) => {
-                        if (result && result.success) {
-                            console.log(
-                                "Minecraft map imported successfully:",
-                                result
-                            );
-                        }
-                        setShowMinecraftImportModal(false);
-                    }}
-                    terrainBuilderRef={terrainBuilderRef}
+            {showBlockRemapper && (
+                <AxiomBlockRemapper
+                    unmappedBlocks={unmappedBlocks}
+                    blockCounts={blockCounts}
+                    onConfirmMappings={handleBlockMappingConfirm}
+                    onCancel={handleBlockMappingCancel}
                 />
             )}
             {showGlobalRemapModal && (
