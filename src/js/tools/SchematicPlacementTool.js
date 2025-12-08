@@ -25,6 +25,12 @@ class SchematicPlacementTool extends BaseTool {
                 "[SchematicPlacementTool] ERROR: updateTerrainForUndoRedo function is missing in terrainBuilderProps!"
             );
         }
+        
+        // Explicitly set undoRedoManager like other tools do
+        if (terrainBuilderProps) {
+            this.undoRedoManager = terrainBuilderProps.undoRedoManager;
+        }
+        
         this.name = "SchematicPlacementTool";
         this.schematicData = null;
         this.previewGroup = new THREE.Group();
@@ -491,7 +497,17 @@ class SchematicPlacementTool extends BaseTool {
         }
 
         // Save to undo stack AFTER all placement (blocks AND entities) is complete
-        if (this.undoRedoManager && this.undoRedoManager.current) {
+        // Try multiple ways to access undoRedoManager (similar to other tools)
+        let undoManager = null;
+        if (this.undoRedoManager?.current) {
+            undoManager = this.undoRedoManager.current;
+        } else if (this.terrainBuilderProps?.undoRedoManager?.current) {
+            undoManager = this.terrainBuilderProps.undoRedoManager.current;
+        } else if (this.terrainBuilderRef?.current?.undoRedoManager?.current) {
+            undoManager = this.terrainBuilderRef.current.undoRedoManager.current;
+        }
+        
+        if (undoManager && undoManager.saveUndo) {
             const changes = {
                 terrain: { added: addedBlocks, removed: removedBlocks },
                 environment: {
@@ -500,10 +516,16 @@ class SchematicPlacementTool extends BaseTool {
                 },
             };
 
-            this.undoRedoManager.current.saveUndo(changes);
+            undoManager.saveUndo(changes);
+            console.log("[Schematic Tool] Saved undo state for schematic placement");
         } else {
             console.warn(
-                "[Schematic Tool] UndoRedoManager not available, cannot save undo state."
+                "[Schematic Tool] UndoRedoManager not available, cannot save undo state.",
+                {
+                    hasUndoRedoManager: !!this.undoRedoManager,
+                    hasTerrainBuilderProps: !!this.terrainBuilderProps,
+                    hasTerrainBuilderRef: !!this.terrainBuilderRef,
+                }
             );
         }
 
