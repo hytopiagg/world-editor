@@ -481,6 +481,9 @@ function App() {
             });
         } else {
             try { delete (window as any).__WE_PHYSICS__; } catch (_) { }
+            // Reset solid query flag so it can be set up again when player mode is re-enabled
+            try { delete (window as any).__WE_SOLID_BOUND__; } catch (_) { }
+            try { delete (window as any).__WE_IS_SOLID__; } catch (_) { }
             // Despawn player glTF
             try {
                 const scene: any = (window as any).__WE_SCENE__;

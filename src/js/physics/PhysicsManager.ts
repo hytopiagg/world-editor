@@ -304,44 +304,30 @@ export class PhysicsManager {
 
             // Vertical collision: ground and ceiling
             let newVy = lv.y;
-            // Use current position (pos.y) for ground detection to avoid jitter from physics integration
-            // This stabilizes groundY calculation when strafing (A/D)
-            const bottomForGround = pos.y - halfHeight;
+            const bottom = next.y - halfHeight;
             const top = next.y + halfHeight;
-            const groundY = Math.floor(bottomForGround - 0.01);
+            const groundY = Math.floor(bottom - 0.01);
             const ceilingY = Math.floor(top + 0.01);
 
             let grounded = false;
             // Detect ground contact if a solid block is directly below within a small tolerance
             if (newVy <= 0) {
-                const bottom = next.y - halfHeight; // Use next.y for proximity check
                 const nearTopOfGround = bottom <= groundY + 1 + 0.08; // tolerance 8cm
-                // Use current position (pos) instead of next position for ground support check
-                // to avoid jitter when strafing (A/D) - next.x/z changes cause sampling points to cross voxel boundaries
-                const hasVoxelSupport = sampleXZSolid(pos.x, groundY, pos.z);
+                // Use next.x, next.z for ground support check to detect blocks at the position we're moving to
+                const hasVoxelSupport = sampleXZSolid(next.x, groundY, next.z);
                 const planeTopY = (this as any)._flatGroundTopY;
-                const isOnFlatPlane = typeof planeTopY === "number";
-                // Use bottomForGround (from pos.y) for flat plane proximity check to avoid jitter
-                const bottomForPlaneCheck = bottomForGround;
                 const nearFlatPlane =
-                    isOnFlatPlane &&
-                    Math.abs(bottomForPlaneCheck - planeTopY) <= 0.08 &&
-                    bottomForPlaneCheck <= planeTopY + 0.08;
-                
+                    typeof planeTopY === "number" &&
+                    Math.abs(bottom - planeTopY) <= 0.08 &&
+                    bottom <= planeTopY + 0.08;
                 if (nearTopOfGround && hasVoxelSupport) {
                     grounded = true;
                     newVy = 0;
-                    // If on flat plane, use consistent fixed value to eliminate jitter
-                    if (isOnFlatPlane) {
-                        next.y = planeTopY + halfHeight;
-                    } else {
-                        next.y = groundY + 1 + halfHeight + 0.001; // small epsilon
-                    }
+                    next.y = groundY + 1 + halfHeight + 0.001; // small epsilon
                 } else if (nearFlatPlane) {
                     grounded = true;
                     newVy = 0;
-                    // Set to consistent fixed value when on flat plane (not jumping) to eliminate jitter
-                    next.y = planeTopY + halfHeight;
+                    next.y = planeTopY + halfHeight + 0.001; // snap to plane top
                 }
             }
             // Ceiling check (moving up): stop upward motion if intersecting just below ceiling

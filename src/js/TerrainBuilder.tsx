@@ -3382,32 +3382,31 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             window.__WE_TP_YAW__ = Math.atan2(dirX, dirZ);
                         }
                         // Provide PhysicsManager with a solid query backed by spatial hash and environment colliders
+                        // Always set up the solid query when physics is active to ensure it's set even if physics manager was recreated
                         try {
-                            if (!window.__WE_SOLID_BOUND__) {
-                                window.__WE_SOLID_BOUND__ = true;
-                                const solidFn = (x, y, z) => {
-                                    try {
-                                        // Blocks via spatial grid
-                                        const sgm = spatialGridManagerRef.current;
-                                        if (
-                                            sgm &&
-                                            sgm.hasBlock(
-                                                Math.floor(x),
-                                                Math.floor(y),
-                                                Math.floor(z)
-                                            )
+                            const solidFn = (x, y, z) => {
+                                try {
+                                    // Blocks via spatial grid
+                                    const sgm = spatialGridManagerRef.current;
+                                    if (
+                                        sgm &&
+                                        sgm.hasBlock(
+                                            Math.floor(x),
+                                            Math.floor(y),
+                                            Math.floor(z)
                                         )
-                                            return true;
-                                        // Environment entities with colliders: approximate by checking an occupancy flag in spatial hash
-                                        // We already write env objects into spatial hash using updateSpatialHashForBlocks with model add/remove.
-                                        // So sgm.hasBlock covers them too when addCollider is enabled.
-                                    } catch (_) { }
-                                    return false;
-                                };
-                                physics.setIsSolidQuery(solidFn);
-                                // Also expose to window for fallback path inside physics
-                                window.__WE_IS_SOLID__ = solidFn;
-                            }
+                                    )
+                                        return true;
+                                    // Environment entities with colliders: approximate by checking an occupancy flag in spatial hash
+                                    // We already write env objects into spatial hash using updateSpatialHashForBlocks with model add/remove.
+                                    // So sgm.hasBlock covers them too when addCollider is enabled.
+                                } catch (_) { }
+                                return false;
+                            };
+                            physics.setIsSolidQuery(solidFn);
+                            // Also expose to window for fallback path inside physics
+                            window.__WE_IS_SOLID__ = solidFn;
+                            window.__WE_SOLID_BOUND__ = true;
                         } catch (_) { }
 
                         physics.step(
