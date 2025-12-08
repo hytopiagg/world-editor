@@ -10,6 +10,7 @@ import {
     FaChevronLeft,
     FaChevronRight,
     FaTrash,
+    FaEllipsisV,
 } from "react-icons/fa";
 import "../../css/BlockToolsSidebar.css";
 import { cameraManager } from "../Camera";
@@ -21,6 +22,7 @@ import {
     processCustomBlock,
     getBlockById,
     getBlockTypes,
+    removeCustomBlock,
 } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
@@ -113,11 +115,13 @@ const BlockToolsSidebar = ({
     const [pendingBpImport, setPendingBpImport] = useState(null);
     const [unmappedBlocks, setUnmappedBlocks] = useState([]);
     const [blockCounts, setBlockCounts] = useState({});
+    const [customBlocksMenuOpen, setCustomBlocksMenuOpen] = useState(false);
     const schematicListStateRef = useRef(schematicList);
     const isGeneratingPreviews = useRef(false);
     const currentPreviewIndex = useRef(0);
     const fileInputRef = useRef(null);
     const bpFileInputRef = useRef(null);
+    const customBlocksMenuRef = useRef(null);
 
     useEffect(() => {
         const savedBlockId = localStorage.getItem("selectedBlock");
@@ -423,6 +427,26 @@ const BlockToolsSidebar = ({
         schematicListStateRef.current = schematicList;
     }, [schematicList]);
 
+    // Handle clicking outside the custom blocks menu to close it
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (
+                customBlocksMenuOpen &&
+                customBlocksMenuRef.current &&
+                !customBlocksMenuRef.current.contains(event.target)
+            ) {
+                setCustomBlocksMenuOpen(false);
+            }
+        };
+
+        if (customBlocksMenuOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+            return () => {
+                document.removeEventListener("mousedown", handleClickOutside);
+            };
+        }
+    }, [customBlocksMenuOpen]);
+
     // Listen for explicit remap requests from the ComponentOptions UI
     useEffect(() => {
         const handler = (e) => {
@@ -651,6 +675,7 @@ const BlockToolsSidebar = ({
     const handleDragStart = (blockId) => {};
 
     const handleDownloadAllCustom = async () => {
+        setCustomBlocksMenuOpen(false);
         const zip = new JSZip();
         const root = zip.folder("custom");
         const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
@@ -672,6 +697,82 @@ const BlockToolsSidebar = ({
         } catch (err) {
             console.error("Error saving custom.zip: ", err);
             alert("Failed to save custom.zip. See console.");
+        }
+    };
+
+    const handleDeleteAllCustomBlocks = async () => {
+        setCustomBlocksMenuOpen(false);
+        const confirmed = window.confirm(
+            "Delete ALL custom blocks? This cannot be undone. Instances of these blocks in the world will be replaced with air."
+        );
+        if (!confirmed) return;
+
+        try {
+            const customBlocksToDelete = getCustomBlocks();
+            const customBlockIds = customBlocksToDelete.map((b) => b.id);
+
+            // Remove custom blocks from blockTypesArray (memory)
+            customBlocksToDelete.forEach((block) => {
+                removeCustomBlock(block.id);
+            });
+
+            // Clear custom blocks from database
+            await DatabaseManager.saveData(STORES.CUSTOM_BLOCKS, "blocks", []);
+
+            // Update terrain: replace custom blocks with air (ID 0)
+            try {
+                const currentTerrain = await DatabaseManager.getData(
+                    STORES.TERRAIN,
+                    "current"
+                ) || {};
+                let blocksReplaced = 0;
+                const newTerrain = Object.entries(currentTerrain).reduce(
+                    (acc, [pos, id]) => {
+                        if (customBlockIds.includes(id)) {
+                            acc[pos] = 0; // Replace with air
+                            blocksReplaced++;
+                        } else {
+                            acc[pos] = id;
+                        }
+                        return acc;
+                    },
+                    {}
+                );
+                if (blocksReplaced > 0) {
+                    await DatabaseManager.saveData(
+                        STORES.TERRAIN,
+                        "current",
+                        newTerrain
+                    );
+                    if (terrainBuilderRef?.current?.buildUpdateTerrain) {
+                        terrainBuilderRef.current.buildUpdateTerrain();
+                    }
+                }
+            } catch (terrainErr) {
+                console.warn(
+                    "Failed to update terrain after deleting custom blocks:",
+                    terrainErr
+                );
+            }
+
+            // Refresh UI to reflect changes
+            refreshBlockTools();
+
+            // Reset selected block if it was a custom block
+            if (customBlockIds.includes(selectedBlockID)) {
+                const defaultBlock = blockTypes[0];
+                setCurrentBlockType(defaultBlock);
+                selectedBlockID = defaultBlock.id;
+                try {
+                    localStorage.setItem("selectedBlock", defaultBlock.id.toString());
+                } catch (_) {}
+            }
+
+            // Close menu
+            setCustomBlocksMenuOpen(false);
+        } catch (err) {
+            console.error("Failed to delete all custom blocks:", err);
+            alert("Failed to delete all custom blocks. See console for details.");
         }
     };
 
@@ -3149,15 +3250,50 @@ const BlockToolsSidebar = ({
                                 ))}
                                 <div className="mt-2 block-tools-section-label custom-label-with-icon">
                                     Custom Blocks (ID: 1000-1999)
-                                    <button
-                                        className="download-all-icon-button"
-                                        onClick={handleDownloadAllCustom}
-                                        title="Download all custom textures"
-                                    >
-                                        {visibleCustomBlocks.length > 0 && (
-                                            <FaDownload />
-                                        )}
-                                    </button>
+                                    {visibleCustomBlocks.length > 0 && (
+                                        <div
+                                            ref={customBlocksMenuRef}
+                                            className="relative inline-block"
+                                        >
+                                            <button
+                                                className="download-all-icon-button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setCustomBlocksMenuOpen(
+                                                        !customBlocksMenuOpen
+                                                    );
+                                                }}
+                                                title="Custom blocks menu"
+                                            >
+                                                <FaEllipsisV />
+                                            </button>
+                                            {customBlocksMenuOpen && (
+                                                <div
+                                                    className="absolute right-0 top-full mt-1 z-50 min-w-[160px] bg-[#1a1a1a] border border-white/20 rounded-md shadow-lg overflow-hidden"
+                                                    onClick={(e) =>
+                                                        e.stopPropagation()
+                                                    }
+                                                >
+                                                    <button
+                                                        className="w-full px-3 py-2 text-left text-xs text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+                                                        onClick={handleDownloadAllCustom}
+                                                    >
+                                                        <FaDownload className="w-3 h-3" />
+                                                        Download All
+                                                    </button>
+                                                    <button
+                                                        className="w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-white/10 transition-colors flex items-center gap-2"
+                                                        onClick={
+                                                            handleDeleteAllCustomBlocks
+                                                        }
+                                                    >
+                                                        <FaTrash className="w-3 h-3" />
+                                                        Delete All
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 {visibleCustomBlocks.map((blockType) => (
                                     <BlockButton
