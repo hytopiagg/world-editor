@@ -192,11 +192,13 @@ export class MaterialManager {
 
     /**
      * Create optimized environment material
+     * Uses MeshStandardMaterial for better PBR support (emissive textures, etc.)
      */
     private createOptimizedEnvironmentMaterial(): THREE.Material {
         const settings = this.optimizationSettings;
 
-        const material = new THREE.MeshLambertMaterial({
+        // Use MeshStandardMaterial for better PBR support, especially for emissive textures
+        const material = new THREE.MeshStandardMaterial({
             transparent: true,
             alphaTest: settings.alphaTestThreshold,
             side: THREE.FrontSide,
@@ -326,6 +328,18 @@ export class MaterialManager {
         if (options.depthTest !== undefined) {
             material.depthTest = options.depthTest;
         }
+        // Support emissive properties for PBR materials
+        if (options.emissive !== undefined) {
+            (material as any).emissive = options.emissive instanceof THREE.Color 
+                ? options.emissive.clone() 
+                : new THREE.Color(options.emissive);
+        }
+        if (options.emissiveMap !== undefined) {
+            (material as any).emissiveMap = options.emissiveMap;
+        }
+        if (options.emissiveIntensity !== undefined) {
+            (material as any).emissiveIntensity = options.emissiveIntensity;
+        }
     }
 
     /**
@@ -346,7 +360,7 @@ export class MaterialManager {
     /**
      * Reset environment material to default state
      */
-    private resetEnvironmentMaterial(material: THREE.MeshLambertMaterial): void {
+    private resetEnvironmentMaterial(material: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial): void {
         material.map = null;
         material.color.setHex(0xffffff);
         material.opacity = 1;
@@ -355,6 +369,16 @@ export class MaterialManager {
         material.side = THREE.FrontSide;
         material.depthWrite = true;
         material.depthTest = true;
+        // Reset emissive properties
+        if ((material as any).emissive) {
+            (material as any).emissive.setHex(0x000000);
+        }
+        if ((material as any).emissiveMap) {
+            (material as any).emissiveMap = null;
+        }
+        if ((material as any).emissiveIntensity !== undefined) {
+            (material as any).emissiveIntensity = 1.0;
+        }
         material.needsUpdate = true;
     }
 
