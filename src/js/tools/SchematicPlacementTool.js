@@ -25,12 +25,12 @@ class SchematicPlacementTool extends BaseTool {
                 "[SchematicPlacementTool] ERROR: updateTerrainForUndoRedo function is missing in terrainBuilderProps!"
             );
         }
-        
+
         // Explicitly set undoRedoManager like other tools do
         if (terrainBuilderProps) {
             this.undoRedoManager = terrainBuilderProps.undoRedoManager;
         }
-        
+
         this.name = "SchematicPlacementTool";
         this.schematicData = null;
         this.previewGroup = new THREE.Group();
@@ -62,7 +62,6 @@ class SchematicPlacementTool extends BaseTool {
     }
 
     async onActivate(schematicData) {
-        
         if (!schematicData) {
             console.warn(
                 "[SCHEMATIC] SchematicPlacementTool activated without valid schematic data."
@@ -86,26 +85,36 @@ class SchematicPlacementTool extends BaseTool {
         // Extract all unique block IDs from the schematic
         const uniqueBlockIds = new Set();
         for (const blockId of Object.values(this.schematicData)) {
-            if (blockId && typeof blockId === 'number' && blockId > 0) {
+            if (blockId && typeof blockId === "number" && blockId > 0) {
                 uniqueBlockIds.add(blockId);
             }
         }
-        
+
         // Preload textures for all blocks in the schematic
         try {
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
-                const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
-                    try {
-                        await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
-                    } catch (error) {
-                        console.error(`[SCHEMATIC] ✗ Failed to preload textures for block ${blockId}:`, error);
+                const preloadPromises = Array.from(uniqueBlockIds).map(
+                    async (blockId) => {
+                        try {
+                            await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(
+                                blockId
+                            );
+                        } catch (error) {
+                            console.error(
+                                `[SCHEMATIC] ✗ Failed to preload textures for block ${blockId}:`,
+                                error
+                            );
+                        }
                     }
-                });
-                
+                );
+
                 await Promise.allSettled(preloadPromises);
             }
         } catch (error) {
-            console.error("[SCHEMATIC] ✗ Error during texture preloading:", error);
+            console.error(
+                "[SCHEMATIC] ✗ Error during texture preloading:",
+                error
+            );
             // Continue with activation even if preloading fails
         }
 
@@ -299,9 +308,10 @@ class SchematicPlacementTool extends BaseTool {
     }
 
     async placeSchematic() {
-        
         if (!this.schematicData || !this.previewPositionRef.current) {
-            console.error("[SCHEMATIC] Cannot place schematic: data or position missing.");
+            console.error(
+                "[SCHEMATIC] Cannot place schematic: data or position missing."
+            );
             return;
         }
         const basePosition = this.previewPositionRef.current;
@@ -314,34 +324,50 @@ class SchematicPlacementTool extends BaseTool {
             terrain: { added: {}, removed: {} },
             environment: { added: [], removed: [] },
         };
-        
+
         // Extract unique block IDs and ensure textures are loaded before placement
         const uniqueBlockIds = new Set();
         for (const blockId of Object.values(this.schematicData)) {
-            if (blockId && typeof blockId === 'number' && blockId > 0) {
+            if (blockId && typeof blockId === "number" && blockId > 0) {
                 uniqueBlockIds.add(blockId);
             }
         }
-        
+
         try {
             if (window.BlockTypeRegistry && window.BlockTypeRegistry.instance) {
-                const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
-                    try {
-                        const blockType = window.BlockTypeRegistry.instance.getBlockType(blockId);
-                        if (blockType && blockType.needsTexturePreload?.()) {
-                            await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                const preloadPromises = Array.from(uniqueBlockIds).map(
+                    async (blockId) => {
+                        try {
+                            const blockType =
+                                window.BlockTypeRegistry.instance.getBlockType(
+                                    blockId
+                                );
+                            if (
+                                blockType &&
+                                blockType.needsTexturePreload?.()
+                            ) {
+                                await window.BlockTypeRegistry.instance.preloadBlockTypeTextures(
+                                    blockId
+                                );
+                            }
+                        } catch (error) {
+                            console.warn(
+                                `[SCHEMATIC] ⚠ Failed to ensure textures for block ${blockId}:`,
+                                error
+                            );
                         }
-                    } catch (error) {
-                        console.warn(`[SCHEMATIC] ⚠ Failed to ensure textures for block ${blockId}:`, error);
                     }
-                });
+                );
                 await Promise.allSettled(preloadPromises);
             }
         } catch (error) {
-            console.error("[SCHEMATIC] ✗ Error ensuring textures before placement:", error);
+            console.error(
+                "[SCHEMATIC] ✗ Error ensuring textures before placement:",
+                error
+            );
             // Continue with placement anyway
         }
-        
+
         for (const [relPosStr, blockId] of Object.entries(this.schematicData)) {
             const [relX, relY, relZ] = relPosStr.split(",").map(Number);
             const rotatedRel = this.getRotatedRelativePosition(
@@ -504,9 +530,10 @@ class SchematicPlacementTool extends BaseTool {
         } else if (this.terrainBuilderProps?.undoRedoManager?.current) {
             undoManager = this.terrainBuilderProps.undoRedoManager.current;
         } else if (this.terrainBuilderRef?.current?.undoRedoManager?.current) {
-            undoManager = this.terrainBuilderRef.current.undoRedoManager.current;
+            undoManager =
+                this.terrainBuilderRef.current.undoRedoManager.current;
         }
-        
+
         if (undoManager && undoManager.saveUndo) {
             const changes = {
                 terrain: { added: addedBlocks, removed: removedBlocks },
@@ -517,7 +544,9 @@ class SchematicPlacementTool extends BaseTool {
             };
 
             undoManager.saveUndo(changes);
-            console.log("[Schematic Tool] Saved undo state for schematic placement");
+            console.log(
+                "[Schematic Tool] Saved undo state for schematic placement"
+            );
         } else {
             console.warn(
                 "[Schematic Tool] UndoRedoManager not available, cannot save undo state.",
