@@ -132,77 +132,106 @@ const BlockToolsSidebar = ({
             const savedComp = localStorage.getItem("selectedComponentId");
             if (savedComp) setSelectedComponentID(savedComp);
         } catch (_) {}
-        
+
         // Always scan terrain when project loads to refresh the list with actual blocks in the world
         // This replaces any existing localStorage data
         const scanTerrainBlocks = () => {
             try {
                 if (terrainBuilderRef?.current?.getCurrentTerrainData) {
-                    const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
-                    
-                    if (terrainData && typeof terrainData === 'object') {
-                        const uniqueBlockIds = Array.from(new Set(
-                            Object.values(terrainData).filter(
-                                (id) => id && typeof id === "number" && id > 0
+                    const terrainData =
+                        terrainBuilderRef.current.getCurrentTerrainData();
+
+                    if (terrainData && typeof terrainData === "object") {
+                        const uniqueBlockIds = Array.from(
+                            new Set(
+                                Object.values(terrainData).filter(
+                                    (id) =>
+                                        id && typeof id === "number" && id > 0
+                                )
                             )
-                        ));
-                        
+                        );
+
                         if (uniqueBlockIds.length > 0) {
-                            console.log("[RecentlyUsed] Found blocks in terrain:", uniqueBlockIds);
+                            console.log(
+                                "[RecentlyUsed] Found blocks in terrain:",
+                                uniqueBlockIds
+                            );
                             // Limit to 20 most recent (or just take first 20 if we can't determine order)
                             const limited = uniqueBlockIds.slice(0, 20);
                             setRecentlyUsedBlockIds(limited);
                             // Save to localStorage for future loads
                             try {
-                                localStorage.setItem("recentlyUsedBlocks", JSON.stringify(limited));
-                                console.log("[RecentlyUsed] Saved scanned blocks to localStorage, replaced existing list");
+                                localStorage.setItem(
+                                    "recentlyUsedBlocks",
+                                    JSON.stringify(limited)
+                                );
+                                console.log(
+                                    "[RecentlyUsed] Saved scanned blocks to localStorage, replaced existing list"
+                                );
                             } catch (err) {
-                                console.error("[RecentlyUsed] Failed to save scanned blocks:", err);
+                                console.error(
+                                    "[RecentlyUsed] Failed to save scanned blocks:",
+                                    err
+                                );
                             }
                         } else {
-                            console.log("[RecentlyUsed] No blocks found in terrain");
+                            console.log(
+                                "[RecentlyUsed] No blocks found in terrain"
+                            );
                             // Clear the list if no blocks found
                             setRecentlyUsedBlockIds([]);
                             try {
-                                localStorage.setItem("recentlyUsedBlocks", JSON.stringify([]));
+                                localStorage.setItem(
+                                    "recentlyUsedBlocks",
+                                    JSON.stringify([])
+                                );
                             } catch (err) {
-                                console.error("[RecentlyUsed] Failed to clear localStorage:", err);
+                                console.error(
+                                    "[RecentlyUsed] Failed to clear localStorage:",
+                                    err
+                                );
                             }
                         }
                     } else {
-                        console.log("[RecentlyUsed] Terrain data is not available yet");
+                        console.log(
+                            "[RecentlyUsed] Terrain data is not available yet"
+                        );
                     }
                 } else {
-                    console.log("[RecentlyUsed] terrainBuilderRef or getCurrentTerrainData not available");
+                    console.log(
+                        "[RecentlyUsed] terrainBuilderRef or getCurrentTerrainData not available"
+                    );
                 }
             } catch (err) {
                 console.error("[RecentlyUsed] Error scanning terrain:", err);
             }
         };
-        
+
         // Try scanning after a delay to ensure terrain is loaded
         const timeoutId = setTimeout(() => {
             console.log("[RecentlyUsed] Scanning terrain after delay...");
             scanTerrainBlocks();
         }, 3000); // Wait 3 seconds for terrain to load
-        
+
         // Also listen for when terrain might be ready
         const handleTerrainReady = () => {
-            console.log("[RecentlyUsed] Terrain ready event received, scanning...");
+            console.log(
+                "[RecentlyUsed] Terrain ready event received, scanning..."
+            );
             clearTimeout(timeoutId);
             setTimeout(scanTerrainBlocks, 500); // Small delay to ensure data is ready
         };
-        
+
         window.addEventListener("terrainLoaded", handleTerrainReady);
         window.addEventListener("projectLoaded", handleTerrainReady);
-        
+
         return () => {
             clearTimeout(timeoutId);
             window.removeEventListener("terrainLoaded", handleTerrainReady);
             window.removeEventListener("projectLoaded", handleTerrainReady);
         };
     }, [terrainBuilderRef]);
-    
+
     // Listen for blocksPlaced event to update recently used blocks
     useEffect(() => {
         const handleBlocksPlaced = (event) => {
@@ -212,7 +241,7 @@ const BlockToolsSidebar = ({
                 console.log("[RecentlyUsed] Invalid blockIds:", blockIds);
                 return;
             }
-            
+
             console.log("[RecentlyUsed] Processing blockIds:", blockIds);
             setRecentlyUsedBlockIds((prev) => {
                 console.log("[RecentlyUsed] Previous state:", prev);
@@ -228,21 +257,27 @@ const BlockToolsSidebar = ({
                 });
                 // Keep only the most recent 20 blocks
                 const limited = updated.slice(0, 20);
-                
+
                 console.log("[RecentlyUsed] New state:", limited);
-                
+
                 // Save to localStorage
                 try {
-                    localStorage.setItem("recentlyUsedBlocks", JSON.stringify(limited));
+                    localStorage.setItem(
+                        "recentlyUsedBlocks",
+                        JSON.stringify(limited)
+                    );
                     console.log("[RecentlyUsed] Saved to localStorage");
                 } catch (err) {
-                    console.error("[RecentlyUsed] Failed to save to localStorage:", err);
+                    console.error(
+                        "[RecentlyUsed] Failed to save to localStorage:",
+                        err
+                    );
                 }
-                
+
                 return limited;
             });
         };
-        
+
         console.log("[RecentlyUsed] Setting up event listener");
         window.addEventListener("blocksPlaced", handleBlocksPlaced);
         return () => {
@@ -721,10 +756,11 @@ const BlockToolsSidebar = ({
 
             // Update terrain: replace custom blocks with air (ID 0)
             try {
-                const currentTerrain = await DatabaseManager.getData(
-                    STORES.TERRAIN,
-                    "current"
-                ) || {};
+                const currentTerrain =
+                    (await DatabaseManager.getData(
+                        STORES.TERRAIN,
+                        "current"
+                    )) || {};
                 let blocksReplaced = 0;
                 const newTerrain = Object.entries(currentTerrain).reduce(
                     (acc, [pos, id]) => {
@@ -764,7 +800,10 @@ const BlockToolsSidebar = ({
                 setCurrentBlockType(defaultBlock);
                 selectedBlockID = defaultBlock.id;
                 try {
-                    localStorage.setItem("selectedBlock", defaultBlock.id.toString());
+                    localStorage.setItem(
+                        "selectedBlock",
+                        defaultBlock.id.toString()
+                    );
                 } catch (_) {}
             }
 
@@ -772,7 +811,9 @@ const BlockToolsSidebar = ({
             setCustomBlocksMenuOpen(false);
         } catch (err) {
             console.error("Failed to delete all custom blocks:", err);
-            alert("Failed to delete all custom blocks. See console for details.");
+            alert(
+                "Failed to delete all custom blocks. See console for details."
+            );
         }
     };
 
@@ -2047,7 +2088,9 @@ const BlockToolsSidebar = ({
 
     // Helper function to process custom blocks from ZIP (similar to ImportExport.tsx)
     const processCustomBlocksFromZipForComponent = async (zip, importData) => {
-        console.log("[COMPONENT_ZIP] Starting custom blocks processing from ZIP");
+        console.log(
+            "[COMPONENT_ZIP] Starting custom blocks processing from ZIP"
+        );
         const blocksFolder = zip.folder("blocks");
         if (!blocksFolder) {
             console.log("[COMPONENT_ZIP] No blocks folder found in ZIP");
@@ -2056,34 +2099,67 @@ const BlockToolsSidebar = ({
 
         // Process each block type that has custom textures
         if (importData.blockTypes) {
-            const customBlocksCount = importData.blockTypes.filter(b => b.isCustom || (b.id >= 1000 && b.id < 2000)).length;
-            console.log(`[COMPONENT_ZIP] Found ${customBlocksCount} custom blocks to process from ZIP`);
-            
+            const customBlocksCount = importData.blockTypes.filter(
+                (b) => b.isCustom || (b.id >= 1000 && b.id < 2000)
+            ).length;
+            console.log(
+                `[COMPONENT_ZIP] Found ${customBlocksCount} custom blocks to process from ZIP`
+            );
+
             for (const blockType of importData.blockTypes) {
-                if ((blockType.isCustom || (blockType.id >= 1000 && blockType.id < 2000)) && blockType.textureUri) {
-                    console.log(`[COMPONENT_ZIP] Processing custom block: ${blockType.name} (ID: ${blockType.id})`);
-                    
+                if (
+                    (blockType.isCustom ||
+                        (blockType.id >= 1000 && blockType.id < 2000)) &&
+                    blockType.textureUri
+                ) {
+                    console.log(
+                        `[COMPONENT_ZIP] Processing custom block: ${blockType.name} (ID: ${blockType.id})`
+                    );
+
                     if (blockType.isMultiTexture) {
                         // Multi-texture block - folder contains face textures
                         const blockFolder = blocksFolder.folder(blockType.name);
                         if (blockFolder) {
                             const sideTextures = {};
-                            const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
+                            const faceKeys = [
+                                "+x",
+                                "-x",
+                                "+y",
+                                "-y",
+                                "+z",
+                                "-z",
+                            ];
 
                             for (const faceKey of faceKeys) {
                                 // Try different extensions
                                 for (const ext of ["png", "jpg", "jpeg"]) {
-                                    const textureFile = blockFolder.file(`${faceKey}.${ext}`);
+                                    const textureFile = blockFolder.file(
+                                        `${faceKey}.${ext}`
+                                    );
                                     if (textureFile) {
-                                        let blob = await textureFile.async("blob");
+                                        let blob = await textureFile.async(
+                                            "blob"
+                                        );
                                         // Ensure correct MIME type as JSZip might default to octet-stream
-                                        if (blob.type === 'application/octet-stream' || !blob.type) {
-                                            const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-                                            blob = new Blob([blob], { type: mimeType });
+                                        if (
+                                            blob.type ===
+                                                "application/octet-stream" ||
+                                            !blob.type
+                                        ) {
+                                            const mimeType = `image/${
+                                                ext === "jpg" ? "jpeg" : ext
+                                            }`;
+                                            blob = new Blob([blob], {
+                                                type: mimeType,
+                                            });
                                         }
-                                        const dataUrl = await blobToDataUrl(blob);
+                                        const dataUrl = await blobToDataUrl(
+                                            blob
+                                        );
                                         sideTextures[faceKey] = dataUrl;
-                                        console.log(`[COMPONENT_ZIP] Loaded texture for face ${faceKey} of block ${blockType.name}`);
+                                        console.log(
+                                            `[COMPONENT_ZIP] Loaded texture for face ${faceKey} of block ${blockType.name}`
+                                        );
                                         break; // Found one, move to next face
                                     }
                                 }
@@ -2092,23 +2168,34 @@ const BlockToolsSidebar = ({
                             // Update the block type with the extracted textures
                             blockType.sideTextures = sideTextures;
                             // For multi-texture, ensure textureUri is a valid data URI from one of the sides
-                            blockType.textureUri = sideTextures["+y"] || Object.values(sideTextures)[0] || null;
+                            blockType.textureUri =
+                                sideTextures["+y"] ||
+                                Object.values(sideTextures)[0] ||
+                                null;
 
                             if (!blockType.textureUri) {
-                                console.warn(`[COMPONENT_ZIP] Could not find any textures for multi-texture block: ${blockType.name}`);
+                                console.warn(
+                                    `[COMPONENT_ZIP] Could not find any textures for multi-texture block: ${blockType.name}`
+                                );
                             } else {
-                                console.log(`[COMPONENT_ZIP] Successfully processed multi-texture block: ${blockType.name}`);
+                                console.log(
+                                    `[COMPONENT_ZIP] Successfully processed multi-texture block: ${blockType.name}`
+                                );
                             }
                         }
                     } else {
                         // Single texture block
-                        const sanitizedBlockName = blockType.name.replace(/\s+/g, "_").toLowerCase();
+                        const sanitizedBlockName = blockType.name
+                            .replace(/\s+/g, "_")
+                            .toLowerCase();
                         let textureFile = null;
-                        let fileExt = '';
+                        let fileExt = "";
 
                         // Try different extensions
                         for (const ext of ["png", "jpg", "jpeg"]) {
-                            const potentialFile = blocksFolder.file(`${sanitizedBlockName}.${ext}`);
+                            const potentialFile = blocksFolder.file(
+                                `${sanitizedBlockName}.${ext}`
+                            );
                             if (potentialFile) {
                                 textureFile = potentialFile;
                                 fileExt = ext;
@@ -2119,20 +2206,31 @@ const BlockToolsSidebar = ({
                         if (textureFile) {
                             let blob = await textureFile.async("blob");
                             // Ensure correct MIME type as JSZip might default to octet-stream
-                            if (blob.type === 'application/octet-stream' || !blob.type) {
-                                const mimeType = `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`;
+                            if (
+                                blob.type === "application/octet-stream" ||
+                                !blob.type
+                            ) {
+                                const mimeType = `image/${
+                                    fileExt === "jpg" ? "jpeg" : fileExt
+                                }`;
                                 blob = new Blob([blob], { type: mimeType });
                             }
                             const dataUrl = await blobToDataUrl(blob);
                             blockType.textureUri = dataUrl;
-                            console.log(`[COMPONENT_ZIP] Successfully processed single-texture block: ${blockType.name}`);
+                            console.log(
+                                `[COMPONENT_ZIP] Successfully processed single-texture block: ${blockType.name}`
+                            );
                         } else {
-                            console.warn(`[COMPONENT_ZIP] Could not find texture file for block: ${blockType.name}`);
+                            console.warn(
+                                `[COMPONENT_ZIP] Could not find texture file for block: ${blockType.name}`
+                            );
                         }
                     }
                 }
             }
-            console.log(`[COMPONENT_ZIP] Completed processing custom blocks from ZIP`);
+            console.log(
+                `[COMPONENT_ZIP] Completed processing custom blocks from ZIP`
+            );
         } else {
             console.log("[COMPONENT_ZIP] No blockTypes found in importData");
         }
@@ -2140,9 +2238,11 @@ const BlockToolsSidebar = ({
 
     // Helper function to handle ZIP file imports for components
     const handleComponentZipImport = async (zipFile) => {
-        console.log("[COMPONENT_ZIP] ===== Starting ZIP component import =====");
+        console.log(
+            "[COMPONENT_ZIP] ===== Starting ZIP component import ====="
+        );
         console.log(`[COMPONENT_ZIP] File name: ${zipFile.name}`);
-        
+
         try {
             console.log("[COMPONENT_ZIP] Step 1: Loading ZIP file...");
             const zip = await JSZip.loadAsync(zipFile);
@@ -2159,25 +2259,42 @@ const BlockToolsSidebar = ({
             const mapJsonContent = await mapJsonFile.async("text");
             const importData = JSON.parse(mapJsonContent);
             console.log("[COMPONENT_ZIP] ✓ Parsed map.json");
-            console.log(`[COMPONENT_ZIP] Import data keys:`, Object.keys(importData));
-            console.log(`[COMPONENT_ZIP] Block types count:`, importData.blockTypes?.length || 0);
-            console.log(`[COMPONENT_ZIP] Blocks count:`, Object.keys(importData.blocks || {}).length);
+            console.log(
+                `[COMPONENT_ZIP] Import data keys:`,
+                Object.keys(importData)
+            );
+            console.log(
+                `[COMPONENT_ZIP] Block types count:`,
+                importData.blockTypes?.length || 0
+            );
+            console.log(
+                `[COMPONENT_ZIP] Blocks count:`,
+                Object.keys(importData.blocks || {}).length
+            );
 
             // Process custom blocks from ZIP FIRST (so they're available in the system)
-            console.log("[COMPONENT_ZIP] Step 3: Processing custom blocks from ZIP...");
+            console.log(
+                "[COMPONENT_ZIP] Step 3: Processing custom blocks from ZIP..."
+            );
             await processCustomBlocksFromZipForComponent(zip, importData);
             console.log("[COMPONENT_ZIP] ✓ Custom blocks processed from ZIP");
 
-                // Now process the custom blocks into the system (similar to ImportExport.tsx)
-                console.log("[COMPONENT_ZIP] Step 4: Registering custom blocks in system...");
-                if (importData.blockTypes && importData.blockTypes.length > 0) {
-                    const existingBlocks = getBlockTypes();
-                const existingBlockNames = new Set(existingBlocks.map(b => b.name.toLowerCase()));
-                const existingBlockIds = new Set(existingBlocks.map(b => b.id));
-                
+            // Now process the custom blocks into the system (similar to ImportExport.tsx)
+            console.log(
+                "[COMPONENT_ZIP] Step 4: Registering custom blocks in system..."
+            );
+            if (importData.blockTypes && importData.blockTypes.length > 0) {
+                const existingBlocks = getBlockTypes();
+                const existingBlockNames = new Set(
+                    existingBlocks.map((b) => b.name.toLowerCase())
+                );
+                const existingBlockIds = new Set(
+                    existingBlocks.map((b) => b.id)
+                );
+
                 // Create a mapping from block name to ID for existing blocks
                 const existingBlockNameToId = {};
-                existingBlocks.forEach(block => {
+                existingBlocks.forEach((block) => {
                     existingBlockNameToId[block.name.toLowerCase()] = block.id;
                 });
 
@@ -2195,15 +2312,22 @@ const BlockToolsSidebar = ({
                 let remappedCount = 0;
 
                 for (const blockType of importData.blockTypes) {
-                    if ((blockType.isCustom || (blockType.id >= 1000 && blockType.id < 2000)) && blockType.textureUri) {
+                    if (
+                        (blockType.isCustom ||
+                            (blockType.id >= 1000 && blockType.id < 2000)) &&
+                        blockType.textureUri
+                    ) {
                         const blockNameLower = blockType.name.toLowerCase();
                         const importedBlockId = blockType.id;
 
                         if (existingBlockNames.has(blockNameLower)) {
                             // Block name exists, remap to existing block's ID
-                            const existingBlockId = existingBlockNameToId[blockNameLower];
+                            const existingBlockId =
+                                existingBlockNameToId[blockNameLower];
                             blockIdMapping[importedBlockId] = existingBlockId;
-                            console.log(`[COMPONENT_ZIP] Remapping block "${blockType.name}" from imported ID ${importedBlockId} to existing ID ${existingBlockId}`);
+                            console.log(
+                                `[COMPONENT_ZIP] Remapping block "${blockType.name}" from imported ID ${importedBlockId} to existing ID ${existingBlockId}`
+                            );
                             remappedCount++;
                             continue;
                         }
@@ -2216,11 +2340,11 @@ const BlockToolsSidebar = ({
                             blockType.isMultiTexture !== undefined
                                 ? blockType.isMultiTexture
                                 : !(
-                                    blockType.textureUri?.endsWith(".png") ||
-                                    blockType.textureUri?.endsWith(".jpg") ||
-                                    blockType.textureUri?.endsWith(".jpeg") ||
-                                    blockType.textureUri?.endsWith(".gif")
-                                );
+                                      blockType.textureUri?.endsWith(".png") ||
+                                      blockType.textureUri?.endsWith(".jpg") ||
+                                      blockType.textureUri?.endsWith(".jpeg") ||
+                                      blockType.textureUri?.endsWith(".gif")
+                                  );
 
                         const processedBlock = {
                             id: newBlockId,
@@ -2241,11 +2365,15 @@ const BlockToolsSidebar = ({
                         existingBlockIds.add(newBlockId);
                         existingBlockNameToId[blockNameLower] = newBlockId;
 
-                        console.log(`[COMPONENT_ZIP] Added new custom block "${blockType.name}" with ID ${newBlockId} (imported as ID ${importedBlockId})`);
+                        console.log(
+                            `[COMPONENT_ZIP] Added new custom block "${blockType.name}" with ID ${newBlockId} (imported as ID ${importedBlockId})`
+                        );
                     }
                 }
 
-                console.log(`[COMPONENT_ZIP] Block processing complete: ${processedCount} new blocks added, ${remappedCount} blocks remapped to existing IDs`);
+                console.log(
+                    `[COMPONENT_ZIP] Block processing complete: ${processedCount} new blocks added, ${remappedCount} blocks remapped to existing IDs`
+                );
 
                 // Save custom blocks to database for persistence
                 try {
@@ -2255,27 +2383,38 @@ const BlockToolsSidebar = ({
                         "blocks",
                         updatedCustomBlocks
                     );
-                    console.log(`[COMPONENT_ZIP] Saved ${updatedCustomBlocks.length} custom blocks to database`);
+                    console.log(
+                        `[COMPONENT_ZIP] Saved ${updatedCustomBlocks.length} custom blocks to database`
+                    );
                 } catch (error) {
-                    console.error("[COMPONENT_ZIP] Error saving custom blocks to database:", error);
+                    console.error(
+                        "[COMPONENT_ZIP] Error saving custom blocks to database:",
+                        error
+                    );
                 }
 
                 // Refresh block tools to show new blocks
                 refreshBlockTools();
-                console.log("[COMPONENT_ZIP] ✓ Custom blocks registered in system");
+                console.log(
+                    "[COMPONENT_ZIP] ✓ Custom blocks registered in system"
+                );
 
                 // Now convert the terrain data to a relative schematic
-                console.log("[COMPONENT_ZIP] Step 5: Converting terrain data to schematic format...");
-                
+                console.log(
+                    "[COMPONENT_ZIP] Step 5: Converting terrain data to schematic format..."
+                );
+
                 // Handle remaining block mappings (for blocks that aren't custom blocks)
                 const currentBlockTypes = getBlockTypes();
                 if (importData.blockTypes && importData.blockTypes.length > 0) {
-                    importData.blockTypes.forEach(importedBlockType => {
+                    importData.blockTypes.forEach((importedBlockType) => {
                         const importedId = importedBlockType.id;
                         if (!blockIdMapping.hasOwnProperty(importedId)) {
-                            const blockName = importedBlockType.name.toLowerCase();
-                            const existingBlock = currentBlockTypes.find(block =>
-                                block.name.toLowerCase() === blockName
+                            const blockName =
+                                importedBlockType.name.toLowerCase();
+                            const existingBlock = currentBlockTypes.find(
+                                (block) =>
+                                    block.name.toLowerCase() === blockName
                             );
                             if (existingBlock) {
                                 blockIdMapping[importedId] = existingBlock.id;
@@ -2286,48 +2425,74 @@ const BlockToolsSidebar = ({
                     });
                 }
 
-                console.log(`[COMPONENT_ZIP] Block ID mapping created:`, blockIdMapping);
+                console.log(
+                    `[COMPONENT_ZIP] Block ID mapping created:`,
+                    blockIdMapping
+                );
 
                 // Map block IDs using the mapping
                 const mappedTerrain = {};
-                Object.entries(importData.blocks || {}).forEach(([key, importedBlockId]) => {
-                    if (typeof importedBlockId !== 'number' || !Number.isInteger(importedBlockId) || importedBlockId < 0) {
-                        console.warn(`[COMPONENT_ZIP] Skipping corrupted block entry at ${key}: invalid block ID "${importedBlockId}"`);
-                        return;
+                Object.entries(importData.blocks || {}).forEach(
+                    ([key, importedBlockId]) => {
+                        if (
+                            typeof importedBlockId !== "number" ||
+                            !Number.isInteger(importedBlockId) ||
+                            importedBlockId < 0
+                        ) {
+                            console.warn(
+                                `[COMPONENT_ZIP] Skipping corrupted block entry at ${key}: invalid block ID "${importedBlockId}"`
+                            );
+                            return;
+                        }
+                        const mappedId =
+                            blockIdMapping[importedBlockId] !== undefined
+                                ? blockIdMapping[importedBlockId]
+                                : importedBlockId;
+                        mappedTerrain[key] = mappedId;
                     }
-                    const mappedId = blockIdMapping[importedBlockId] !== undefined
-                        ? blockIdMapping[importedBlockId]
-                        : importedBlockId;
-                    mappedTerrain[key] = mappedId;
-                });
+                );
 
-                console.log(`[COMPONENT_ZIP] Mapped terrain data: ${Object.keys(mappedTerrain).length} blocks`);
+                console.log(
+                    `[COMPONENT_ZIP] Mapped terrain data: ${
+                        Object.keys(mappedTerrain).length
+                    } blocks`
+                );
 
                 // Convert to relative schematic
                 const schematic = terrainToRelativeSchematic(mappedTerrain);
-                console.log(`[COMPONENT_ZIP] ✓ Converted to relative schematic`);
-                console.log(`[COMPONENT_ZIP] Schematic blocks count: ${Object.keys(schematic.blocks || {}).length}`);
+                console.log(
+                    `[COMPONENT_ZIP] ✓ Converted to relative schematic`
+                );
+                console.log(
+                    `[COMPONENT_ZIP] Schematic blocks count: ${
+                        Object.keys(schematic.blocks || {}).length
+                    }`
+                );
                 console.log(`[COMPONENT_ZIP] Schematic min:`, schematic.min);
 
                 // Build blocksMeta from blockTypes
                 console.log("[COMPONENT_ZIP] Step 6: Building blocksMeta...");
                 const blocksMeta = {};
                 const usedBlockIds = new Set();
-                Object.values(schematic.blocks || {}).forEach(id => {
+                Object.values(schematic.blocks || {}).forEach((id) => {
                     if (typeof id === "number") usedBlockIds.add(id);
                 });
 
                 // Create reverse mapping from mapped ID to original block type info
                 const mappedIdToBlockType = {};
-                Object.entries(blockIdMapping).forEach(([originalId, mappedId]) => {
-                    const blockType = importData.blockTypes?.find(bt => bt.id === parseInt(originalId));
-                    if (blockType) {
-                        mappedIdToBlockType[mappedId] = blockType;
+                Object.entries(blockIdMapping).forEach(
+                    ([originalId, mappedId]) => {
+                        const blockType = importData.blockTypes?.find(
+                            (bt) => bt.id === parseInt(originalId)
+                        );
+                        if (blockType) {
+                            mappedIdToBlockType[mappedId] = blockType;
+                        }
                     }
-                });
+                );
 
                 // Also include blocks that weren't remapped
-                importData.blockTypes?.forEach(blockType => {
+                importData.blockTypes?.forEach((blockType) => {
                     if (!blockIdMapping.hasOwnProperty(blockType.id)) {
                         mappedIdToBlockType[blockType.id] = blockType;
                     }
@@ -2339,11 +2504,16 @@ const BlockToolsSidebar = ({
                         blocksMeta[mappedId] = {
                             id: mappedId,
                             name: blockType.name,
-                            isCustom: !!blockType.isCustom || (mappedId >= 1000 && mappedId < 2000),
+                            isCustom:
+                                !!blockType.isCustom ||
+                                (mappedId >= 1000 && mappedId < 2000),
                             isMultiTexture: !!blockType.isMultiTexture,
                             textureUri: blockType.textureUri || null,
                             sideTextures: blockType.sideTextures || null,
-                            lightLevel: typeof blockType.lightLevel === "number" ? blockType.lightLevel : undefined,
+                            lightLevel:
+                                typeof blockType.lightLevel === "number"
+                                    ? blockType.lightLevel
+                                    : undefined,
                         };
                     } else {
                         // Fallback: try to get from current block registry
@@ -2356,13 +2526,20 @@ const BlockToolsSidebar = ({
                                 isMultiTexture: !!currentBlock.isMultiTexture,
                                 textureUri: currentBlock.textureUri || null,
                                 sideTextures: currentBlock.sideTextures || null,
-                                lightLevel: typeof currentBlock.lightLevel === "number" ? currentBlock.lightLevel : undefined,
+                                lightLevel:
+                                    typeof currentBlock.lightLevel === "number"
+                                        ? currentBlock.lightLevel
+                                        : undefined,
                             };
                         }
                     }
                 });
 
-                console.log(`[COMPONENT_ZIP] ✓ Built blocksMeta with ${Object.keys(blocksMeta).length} entries`);
+                console.log(
+                    `[COMPONENT_ZIP] ✓ Built blocksMeta with ${
+                        Object.keys(blocksMeta).length
+                    } entries`
+                );
 
                 // Build sourceIdToName and countsByName for remapper
                 const sourceIdToName = {};
@@ -2381,16 +2558,23 @@ const BlockToolsSidebar = ({
                 }
 
                 const names = Object.keys(countsByName);
-                console.log(`[COMPONENT_ZIP] Unique block names: ${names.length}`);
+                console.log(
+                    `[COMPONENT_ZIP] Unique block names: ${names.length}`
+                );
                 console.log(`[COMPONENT_ZIP] Block names:`, names);
 
                 // Prime name-based auto mappings
                 primeNameBasedAutoMappings(names);
 
                 const nameFromFile = zipFile.name.replace(/\.[^/.]+$/, "");
-                const name = importData.name || nameFromFile || "Imported Component from ZIP";
+                const name =
+                    importData.name ||
+                    nameFromFile ||
+                    "Imported Component from ZIP";
 
-                console.log("[COMPONENT_ZIP] Step 7: Setting up remapper UI...");
+                console.log(
+                    "[COMPONENT_ZIP] Step 7: Setting up remapper UI..."
+                );
                 setPendingComponentImport({
                     file: zipFile,
                     name,
@@ -2402,52 +2586,86 @@ const BlockToolsSidebar = ({
                 setUnmappedBlocks(names);
                 setBlockCounts(countsByName);
                 setShowBlockRemapper(true);
-                console.log("[COMPONENT_ZIP] ===== ZIP component import setup complete =====");
+                console.log(
+                    "[COMPONENT_ZIP] ===== ZIP component import setup complete ====="
+                );
             } else {
                 throw new Error("No blockTypes found in map.json");
             }
         } catch (err) {
-            console.error("[COMPONENT_ZIP] Error importing ZIP component:", err);
-            alert(`Failed to import ZIP component. See console for details. Error: ${err.message}`);
+            console.error(
+                "[COMPONENT_ZIP] Error importing ZIP component:",
+                err
+            );
+            alert(
+                `Failed to import ZIP component. See console for details. Error: ${err.message}`
+            );
             throw err;
         }
     };
 
     const handleComponentJsonImport = async (file) => {
-        console.log("[COMPONENT_JSON] ===== Starting JSON component import =====");
+        console.log(
+            "[COMPONENT_JSON] ===== Starting JSON component import ====="
+        );
         console.log(`[COMPONENT_JSON] File name: ${file.name}`);
-        
+
         try {
             const text = await file.text();
             let data;
             try {
                 data = JSON.parse(text);
             } catch (parseErr) {
-                console.error("[COMPONENT_JSON] Invalid JSON in component file:", parseErr);
+                console.error(
+                    "[COMPONENT_JSON] Invalid JSON in component file:",
+                    parseErr
+                );
                 alert("Invalid JSON file.");
                 return;
             }
 
             console.log("[COMPONENT_JSON] JSON parsed successfully");
             console.log("[COMPONENT_JSON] Data keys:", Object.keys(data));
-            console.log(`[COMPONENT_JSON] Has blockTypes: ${!!data?.blockTypes}, count: ${data?.blockTypes?.length || 0}`);
-            console.log(`[COMPONENT_JSON] Has blocksMeta: ${!!data?.blocksMeta}`);
-            console.log(`[COMPONENT_JSON] Has blocks: ${!!data?.blocks}, count: ${Object.keys(data?.blocks || {}).length}`);
+            console.log(
+                `[COMPONENT_JSON] Has blockTypes: ${!!data?.blockTypes}, count: ${
+                    data?.blockTypes?.length || 0
+                }`
+            );
+            console.log(
+                `[COMPONENT_JSON] Has blocksMeta: ${!!data?.blocksMeta}`
+            );
+            console.log(
+                `[COMPONENT_JSON] Has blocks: ${!!data?.blocks}, count: ${
+                    Object.keys(data?.blocks || {}).length
+                }`
+            );
 
             // Declare blockIdMapping outside the if block so it's accessible later
             let blockIdMapping = null;
 
             // If this JSON has blockTypes (like a full map export), process custom blocks first
-            if (data?.blockTypes && Array.isArray(data.blockTypes) && data.blockTypes.length > 0) {
-                console.log("[COMPONENT_JSON] Detected blockTypes in JSON - processing custom blocks first");
-                console.log(`[COMPONENT_JSON] Found ${data.blockTypes.length} block types to process`);
-                
+            if (
+                data?.blockTypes &&
+                Array.isArray(data.blockTypes) &&
+                data.blockTypes.length > 0
+            ) {
+                console.log(
+                    "[COMPONENT_JSON] Detected blockTypes in JSON - processing custom blocks first"
+                );
+                console.log(
+                    `[COMPONENT_JSON] Found ${data.blockTypes.length} block types to process`
+                );
+
                 const existingBlocks = getBlockTypes();
-                const existingBlockNames = new Set(existingBlocks.map(b => b.name.toLowerCase()));
-                const existingBlockIds = new Set(existingBlocks.map(b => b.id));
-                
+                const existingBlockNames = new Set(
+                    existingBlocks.map((b) => b.name.toLowerCase())
+                );
+                const existingBlockIds = new Set(
+                    existingBlocks.map((b) => b.id)
+                );
+
                 const existingBlockNameToId = {};
-                existingBlocks.forEach(block => {
+                existingBlocks.forEach((block) => {
                     existingBlockNameToId[block.name.toLowerCase()] = block.id;
                 });
 
@@ -2464,14 +2682,21 @@ const BlockToolsSidebar = ({
                 let remappedCount = 0;
 
                 for (const blockType of data.blockTypes) {
-                    if ((blockType.isCustom || (blockType.id >= 1000 && blockType.id < 2000)) && blockType.textureUri) {
+                    if (
+                        (blockType.isCustom ||
+                            (blockType.id >= 1000 && blockType.id < 2000)) &&
+                        blockType.textureUri
+                    ) {
                         const blockNameLower = blockType.name.toLowerCase();
                         const importedBlockId = blockType.id;
 
                         if (existingBlockNames.has(blockNameLower)) {
-                            const existingBlockId = existingBlockNameToId[blockNameLower];
+                            const existingBlockId =
+                                existingBlockNameToId[blockNameLower];
                             blockIdMapping[importedBlockId] = existingBlockId;
-                            console.log(`[COMPONENT_JSON] Remapping block "${blockType.name}" from imported ID ${importedBlockId} to existing ID ${existingBlockId}`);
+                            console.log(
+                                `[COMPONENT_JSON] Remapping block "${blockType.name}" from imported ID ${importedBlockId} to existing ID ${existingBlockId}`
+                            );
                             remappedCount++;
                             continue;
                         }
@@ -2483,11 +2708,11 @@ const BlockToolsSidebar = ({
                             blockType.isMultiTexture !== undefined
                                 ? blockType.isMultiTexture
                                 : !(
-                                    blockType.textureUri?.endsWith(".png") ||
-                                    blockType.textureUri?.endsWith(".jpg") ||
-                                    blockType.textureUri?.endsWith(".jpeg") ||
-                                    blockType.textureUri?.endsWith(".gif")
-                                );
+                                      blockType.textureUri?.endsWith(".png") ||
+                                      blockType.textureUri?.endsWith(".jpg") ||
+                                      blockType.textureUri?.endsWith(".jpeg") ||
+                                      blockType.textureUri?.endsWith(".gif")
+                                  );
 
                         const processedBlock = {
                             id: newBlockId,
@@ -2507,11 +2732,15 @@ const BlockToolsSidebar = ({
                         existingBlockIds.add(newBlockId);
                         existingBlockNameToId[blockNameLower] = newBlockId;
 
-                        console.log(`[COMPONENT_JSON] Added new custom block "${blockType.name}" with ID ${newBlockId} (imported as ID ${importedBlockId})`);
+                        console.log(
+                            `[COMPONENT_JSON] Added new custom block "${blockType.name}" with ID ${newBlockId} (imported as ID ${importedBlockId})`
+                        );
                     }
                 }
 
-                console.log(`[COMPONENT_JSON] Block processing complete: ${processedCount} new blocks added, ${remappedCount} blocks remapped`);
+                console.log(
+                    `[COMPONENT_JSON] Block processing complete: ${processedCount} new blocks added, ${remappedCount} blocks remapped`
+                );
 
                 // Save custom blocks to database
                 try {
@@ -2521,21 +2750,26 @@ const BlockToolsSidebar = ({
                         "blocks",
                         updatedCustomBlocks
                     );
-                    console.log(`[COMPONENT_JSON] Saved ${updatedCustomBlocks.length} custom blocks to database`);
+                    console.log(
+                        `[COMPONENT_JSON] Saved ${updatedCustomBlocks.length} custom blocks to database`
+                    );
                 } catch (error) {
-                    console.error("[COMPONENT_JSON] Error saving custom blocks:", error);
+                    console.error(
+                        "[COMPONENT_JSON] Error saving custom blocks:",
+                        error
+                    );
                 }
 
                 refreshBlockTools();
 
                 // Handle remaining block mappings for non-custom blocks
                 const currentBlockTypes = getBlockTypes();
-                data.blockTypes.forEach(importedBlockType => {
+                data.blockTypes.forEach((importedBlockType) => {
                     const importedId = importedBlockType.id;
                     if (!blockIdMapping.hasOwnProperty(importedId)) {
                         const blockName = importedBlockType.name.toLowerCase();
-                        const existingBlock = currentBlockTypes.find(block =>
-                            block.name.toLowerCase() === blockName
+                        const existingBlock = currentBlockTypes.find(
+                            (block) => block.name.toLowerCase() === blockName
                         );
                         if (existingBlock) {
                             blockIdMapping[importedId] = existingBlock.id;
@@ -2545,24 +2779,42 @@ const BlockToolsSidebar = ({
                     }
                 });
 
-                console.log(`[COMPONENT_JSON] Block ID mapping created:`, blockIdMapping);
+                console.log(
+                    `[COMPONENT_JSON] Block ID mapping created:`,
+                    blockIdMapping
+                );
 
                 // If this is a full map export (has blocks), remap the block IDs
-                if (data.blocks && typeof data.blocks === 'object') {
-                    console.log("[COMPONENT_JSON] Remapping block IDs in blocks data");
+                if (data.blocks && typeof data.blocks === "object") {
+                    console.log(
+                        "[COMPONENT_JSON] Remapping block IDs in blocks data"
+                    );
                     const remappedBlocks = {};
-                    Object.entries(data.blocks).forEach(([key, importedBlockId]) => {
-                        if (typeof importedBlockId !== 'number' || !Number.isInteger(importedBlockId) || importedBlockId < 0) {
-                            console.warn(`[COMPONENT_JSON] Skipping corrupted block entry at ${key}: invalid block ID "${importedBlockId}"`);
-                            return;
+                    Object.entries(data.blocks).forEach(
+                        ([key, importedBlockId]) => {
+                            if (
+                                typeof importedBlockId !== "number" ||
+                                !Number.isInteger(importedBlockId) ||
+                                importedBlockId < 0
+                            ) {
+                                console.warn(
+                                    `[COMPONENT_JSON] Skipping corrupted block entry at ${key}: invalid block ID "${importedBlockId}"`
+                                );
+                                return;
+                            }
+                            const mappedId =
+                                blockIdMapping[importedBlockId] !== undefined
+                                    ? blockIdMapping[importedBlockId]
+                                    : importedBlockId;
+                            remappedBlocks[key] = mappedId;
                         }
-                        const mappedId = blockIdMapping[importedBlockId] !== undefined
-                            ? blockIdMapping[importedBlockId]
-                            : importedBlockId;
-                        remappedBlocks[key] = mappedId;
-                    });
+                    );
                     data.blocks = remappedBlocks;
-                    console.log(`[COMPONENT_JSON] Remapped ${Object.keys(remappedBlocks).length} block positions`);
+                    console.log(
+                        `[COMPONENT_JSON] Remapped ${
+                            Object.keys(remappedBlocks).length
+                        } block positions`
+                    );
                 }
             }
 
@@ -2571,9 +2823,13 @@ const BlockToolsSidebar = ({
                 alert("JSON does not contain a component schematic.");
                 return;
             }
-            
+
             // If we processed blockTypes and remapped blocks, update schematic to use remapped IDs
-            if (data.blocks && typeof data.blocks === 'object' && Object.keys(data.blocks).length > 0) {
+            if (
+                data.blocks &&
+                typeof data.blocks === "object" &&
+                Object.keys(data.blocks).length > 0
+            ) {
                 // data.blocks has been remapped, ensure schematic uses it
                 if (schematic === data) {
                     // schematic is the same reference as data, so it already has remapped blocks
@@ -2585,57 +2841,77 @@ const BlockToolsSidebar = ({
                     // schematic is just the blocks object
                     schematic = data.blocks;
                 }
-                console.log("[COMPONENT_JSON] Updated schematic to use remapped block IDs");
+                console.log(
+                    "[COMPONENT_JSON] Updated schematic to use remapped block IDs"
+                );
             }
 
             const nameFromFile = file.name.replace(/\.[^/.]+$/, "");
             const name = data?.name || nameFromFile || "Imported Component";
-            
+
             // Build blocksMeta from blockTypes if not present but blockTypes exists
             let blocksMeta = data?.blocksMeta || data?.blockDetails || null;
-            if (!blocksMeta && data?.blockTypes && Array.isArray(data.blockTypes)) {
-                console.log("[COMPONENT_JSON] Building blocksMeta from blockTypes");
+            if (
+                !blocksMeta &&
+                data?.blockTypes &&
+                Array.isArray(data.blockTypes)
+            ) {
+                console.log(
+                    "[COMPONENT_JSON] Building blocksMeta from blockTypes"
+                );
                 blocksMeta = {};
                 const usedBlockIds = new Set();
-                const blocksObj = schematic && schematic.blocks ? schematic.blocks : schematic;
-                Object.values(blocksObj || {}).forEach(id => {
+                const blocksObj =
+                    schematic && schematic.blocks
+                        ? schematic.blocks
+                        : schematic;
+                Object.values(blocksObj || {}).forEach((id) => {
                     if (typeof id === "number") usedBlockIds.add(id);
                 });
-                
+
                 // Use remapped IDs - create mapping from remapped ID to blockType
                 const remappedIdToBlockType = {};
                 if (blockIdMapping && Object.keys(blockIdMapping).length > 0) {
                     // We have a blockIdMapping from processing blockTypes
-                    Object.entries(blockIdMapping).forEach(([originalId, remappedId]) => {
-                        const blockType = data.blockTypes.find(bt => bt.id === parseInt(originalId));
-                        if (blockType) {
-                            remappedIdToBlockType[remappedId] = blockType;
+                    Object.entries(blockIdMapping).forEach(
+                        ([originalId, remappedId]) => {
+                            const blockType = data.blockTypes.find(
+                                (bt) => bt.id === parseInt(originalId)
+                            );
+                            if (blockType) {
+                                remappedIdToBlockType[remappedId] = blockType;
+                            }
                         }
-                    });
+                    );
                     // Also include blocks that weren't remapped (identity mapping)
-                    data.blockTypes.forEach(bt => {
+                    data.blockTypes.forEach((bt) => {
                         if (!blockIdMapping.hasOwnProperty(bt.id)) {
                             remappedIdToBlockType[bt.id] = bt;
                         }
                     });
                 } else {
                     // No remapping happened, use original IDs
-                    data.blockTypes.forEach(bt => {
+                    data.blockTypes.forEach((bt) => {
                         remappedIdToBlockType[bt.id] = bt;
                     });
                 }
-                
+
                 usedBlockIds.forEach((blockId) => {
                     const blockType = remappedIdToBlockType[blockId];
                     if (blockType) {
                         blocksMeta[blockId] = {
                             id: blockId, // Use remapped ID
                             name: blockType.name,
-                            isCustom: !!blockType.isCustom || (blockId >= 1000 && blockId < 2000),
+                            isCustom:
+                                !!blockType.isCustom ||
+                                (blockId >= 1000 && blockId < 2000),
                             isMultiTexture: !!blockType.isMultiTexture,
                             textureUri: blockType.textureUri || null,
                             sideTextures: blockType.sideTextures || null,
-                            lightLevel: typeof blockType.lightLevel === "number" ? blockType.lightLevel : undefined,
+                            lightLevel:
+                                typeof blockType.lightLevel === "number"
+                                    ? blockType.lightLevel
+                                    : undefined,
                         };
                     } else {
                         // Fallback: try to get from current block registry
@@ -2648,14 +2924,21 @@ const BlockToolsSidebar = ({
                                 isMultiTexture: !!currentBlock.isMultiTexture,
                                 textureUri: currentBlock.textureUri || null,
                                 sideTextures: currentBlock.sideTextures || null,
-                                lightLevel: typeof currentBlock.lightLevel === "number" ? currentBlock.lightLevel : undefined,
+                                lightLevel:
+                                    typeof currentBlock.lightLevel === "number"
+                                        ? currentBlock.lightLevel
+                                        : undefined,
                             };
                         }
                     }
                 });
-                console.log(`[COMPONENT_JSON] Built blocksMeta with ${Object.keys(blocksMeta).length} entries`);
+                console.log(
+                    `[COMPONENT_JSON] Built blocksMeta with ${
+                        Object.keys(blocksMeta).length
+                    } entries`
+                );
             }
-            
+
             if (blocksMeta && typeof blocksMeta === "object") {
                 const sourceIdToName = {};
                 Object.keys(blocksMeta).forEach((k) => {
@@ -2796,53 +3079,87 @@ const BlockToolsSidebar = ({
     };
 
     const handleBpFileInputChange = async (e) => {
-        console.log("[COMPONENT_IMPORT] ===== File input change detected =====");
+        console.log(
+            "[COMPONENT_IMPORT] ===== File input change detected ====="
+        );
         console.log("[COMPONENT_IMPORT] Event object:", e);
         console.log("[COMPONENT_IMPORT] Target files:", e.target?.files);
-        console.log("[COMPONENT_IMPORT] handleComponentZipImport function exists:", typeof handleComponentZipImport);
+        console.log(
+            "[COMPONENT_IMPORT] handleComponentZipImport function exists:",
+            typeof handleComponentZipImport
+        );
         const files = Array.from(e.target.files || []);
-        console.log("[COMPONENT_IMPORT] Files received:", files.map(f => ({ name: f.name, type: f.type, size: f.size })));
-        
+        console.log(
+            "[COMPONENT_IMPORT] Files received:",
+            files.map((f) => ({ name: f.name, type: f.type, size: f.size }))
+        );
+
         const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
         const json = files.find((f) => f.name.toLowerCase().endsWith(".json"));
         const zip = files.find((f) => {
             const nameMatch = f.name.toLowerCase().endsWith(".zip");
-            const typeMatch = f.type === "application/zip" || f.type === "application/x-zip-compressed";
-            console.log(`[COMPONENT_IMPORT] Checking file ${f.name}: nameMatch=${nameMatch}, type=${f.type}, typeMatch=${typeMatch}`);
+            const typeMatch =
+                f.type === "application/zip" ||
+                f.type === "application/x-zip-compressed";
+            console.log(
+                `[COMPONENT_IMPORT] Checking file ${f.name}: nameMatch=${nameMatch}, type=${f.type}, typeMatch=${typeMatch}`
+            );
             return nameMatch || typeMatch;
         });
-        
-        console.log("[COMPONENT_IMPORT] File type detection:", { 
-            hasZip: !!zip, 
-            hasBp: !!bp, 
+
+        console.log("[COMPONENT_IMPORT] File type detection:", {
+            hasZip: !!zip,
+            hasBp: !!bp,
             hasJson: !!json,
             zipName: zip?.name,
-            zipType: zip?.type
+            zipType: zip?.type,
         });
-        
+
         try {
             if (zip) {
-                console.log("[COMPONENT_IMPORT] ZIP file detected in file input");
+                console.log(
+                    "[COMPONENT_IMPORT] ZIP file detected in file input"
+                );
                 console.log("[COMPONENT_IMPORT] ZIP file details:", {
                     name: zip.name,
                     type: zip.type,
-                    size: zip.size
+                    size: zip.size,
                 });
-                console.log("[COMPONENT_IMPORT] handleComponentZipImport type:", typeof handleComponentZipImport);
-                
-                if (typeof handleComponentZipImport !== 'function') {
-                    throw new Error("handleComponentZipImport is not a function! This is a bug.");
+                console.log(
+                    "[COMPONENT_IMPORT] handleComponentZipImport type:",
+                    typeof handleComponentZipImport
+                );
+
+                if (typeof handleComponentZipImport !== "function") {
+                    throw new Error(
+                        "handleComponentZipImport is not a function! This is a bug."
+                    );
                 }
-                
-                console.log("[COMPONENT_IMPORT] Calling handleComponentZipImport...");
+
+                console.log(
+                    "[COMPONENT_IMPORT] Calling handleComponentZipImport..."
+                );
                 try {
                     await handleComponentZipImport(zip);
-                    console.log("[COMPONENT_IMPORT] ZIP import completed successfully");
+                    console.log(
+                        "[COMPONENT_IMPORT] ZIP import completed successfully"
+                    );
                 } catch (zipErr) {
-                    console.error("[COMPONENT_IMPORT] Error in handleComponentZipImport:", zipErr);
-                    console.error("[COMPONENT_IMPORT] Error message:", zipErr.message);
-                    console.error("[COMPONENT_IMPORT] Error stack:", zipErr.stack);
-                    alert(`ZIP import failed: ${zipErr.message}. Check console for details.`);
+                    console.error(
+                        "[COMPONENT_IMPORT] Error in handleComponentZipImport:",
+                        zipErr
+                    );
+                    console.error(
+                        "[COMPONENT_IMPORT] Error message:",
+                        zipErr.message
+                    );
+                    console.error(
+                        "[COMPONENT_IMPORT] Error stack:",
+                        zipErr.stack
+                    );
+                    alert(
+                        `ZIP import failed: ${zipErr.message}. Check console for details.`
+                    );
                     throw zipErr; // Re-throw to be caught by outer catch
                 }
             } else if (bp) {
@@ -2879,9 +3196,11 @@ const BlockToolsSidebar = ({
             console.error("[COMPONENT_IMPORT] Error details:", {
                 message: err.message,
                 stack: err.stack,
-                name: err.name
+                name: err.name,
             });
-            alert(`Failed to import file. See console for details. Error: ${err.message}`);
+            alert(
+                `Failed to import file. See console for details. Error: ${err.message}`
+            );
         } finally {
             e.target.value = "";
         }
@@ -2892,34 +3211,51 @@ const BlockToolsSidebar = ({
         e.currentTarget.classList.remove("drag-over");
         console.log("[COMPONENT_IMPORT] ===== Drag & drop detected =====");
         const files = Array.from(e.dataTransfer.files || []);
-        console.log("[COMPONENT_IMPORT] Files received:", files.map(f => ({ name: f.name, type: f.type, size: f.size })));
-        
+        console.log(
+            "[COMPONENT_IMPORT] Files received:",
+            files.map((f) => ({ name: f.name, type: f.type, size: f.size }))
+        );
+
         const bp = files.find((f) => f.name.toLowerCase().endsWith(".bp"));
         const json = files.find((f) => f.name.toLowerCase().endsWith(".json"));
         const zip = files.find((f) => {
             const nameMatch = f.name.toLowerCase().endsWith(".zip");
-            const typeMatch = f.type === "application/zip" || f.type === "application/x-zip-compressed";
-            console.log(`[COMPONENT_IMPORT] Checking file ${f.name}: nameMatch=${nameMatch}, type=${f.type}, typeMatch=${typeMatch}`);
+            const typeMatch =
+                f.type === "application/zip" ||
+                f.type === "application/x-zip-compressed";
+            console.log(
+                `[COMPONENT_IMPORT] Checking file ${f.name}: nameMatch=${nameMatch}, type=${f.type}, typeMatch=${typeMatch}`
+            );
             return nameMatch || typeMatch;
         });
-        
-        console.log("[COMPONENT_IMPORT] File type detection:", { 
-            hasZip: !!zip, 
-            hasBp: !!bp, 
+
+        console.log("[COMPONENT_IMPORT] File type detection:", {
+            hasZip: !!zip,
+            hasBp: !!bp,
             hasJson: !!json,
             zipName: zip?.name,
-            zipType: zip?.type
+            zipType: zip?.type,
         });
-        
+
         try {
             if (zip) {
-                console.log("[COMPONENT_IMPORT] ZIP file detected in drag & drop, calling handleComponentZipImport");
+                console.log(
+                    "[COMPONENT_IMPORT] ZIP file detected in drag & drop, calling handleComponentZipImport"
+                );
                 try {
                     await handleComponentZipImport(zip);
-                    console.log("[COMPONENT_IMPORT] ZIP import completed successfully");
+                    console.log(
+                        "[COMPONENT_IMPORT] ZIP import completed successfully"
+                    );
                 } catch (zipErr) {
-                    console.error("[COMPONENT_IMPORT] Error in handleComponentZipImport:", zipErr);
-                    console.error("[COMPONENT_IMPORT] Error stack:", zipErr.stack);
+                    console.error(
+                        "[COMPONENT_IMPORT] Error in handleComponentZipImport:",
+                        zipErr
+                    );
+                    console.error(
+                        "[COMPONENT_IMPORT] Error stack:",
+                        zipErr.stack
+                    );
                     throw zipErr; // Re-throw to be caught by outer catch
                 }
             } else if (bp) {
@@ -2956,9 +3292,11 @@ const BlockToolsSidebar = ({
             console.error("[COMPONENT_IMPORT] Error details:", {
                 message: err.message,
                 stack: err.stack,
-                name: err.name
+                name: err.name,
             });
-            alert(`Failed to import file. See console for details. Error: ${err.message}`);
+            alert(
+                `Failed to import file. See console for details. Error: ${err.message}`
+            );
         }
     };
 
@@ -2977,7 +3315,7 @@ const BlockToolsSidebar = ({
     const visibleCustomBlocks = customBlocks
         .filter((block) => block.id >= 1000 && block.id < 2000)
         .filter((block) => isMatch(block.name) || isMatch(block.id));
-    
+
     // Get recently used blocks (filtered by search if applicable)
     const visibleRecentlyUsedBlocks = recentlyUsedBlockIds
         .map((blockId) => {
@@ -2989,17 +3327,6 @@ const BlockToolsSidebar = ({
         })
         .filter((block) => block !== undefined)
         .filter((block) => isMatch(block.name) || isMatch(block.id));
-    
-    // Debug logging
-    if (recentlyUsedBlockIds.length > 0) {
-        console.log("[RecentlyUsed] recentlyUsedBlockIds:", recentlyUsedBlockIds);
-        console.log("[RecentlyUsed] visibleRecentlyUsedBlocks:", visibleRecentlyUsedBlocks);
-        console.log("[RecentlyUsed] visibleRecentlyUsedBlocks.length:", visibleRecentlyUsedBlocks.length);
-        console.log("[RecentlyUsed] searchQuery:", searchQuery);
-        console.log("[RecentlyUsed] normalizedQuery:", normalizedQuery);
-        console.log("[RecentlyUsed] blockTypes length:", blockTypes.length);
-        console.log("[RecentlyUsed] customBlocks length:", customBlocks.length);
-    }
 
     // --------- Category Filtering Helpers ---------
     const modelCategoryMatch = (envType) => {
@@ -3189,38 +3516,39 @@ const BlockToolsSidebar = ({
                     <div className="block-buttons-grid">
                         {activeTab === "blocks" ? (
                             <>
-                                {(() => {
-                                    console.log("[RecentlyUsed] Rendering blocks tab");
-                                    console.log("[RecentlyUsed] visibleRecentlyUsedBlocks.length:", visibleRecentlyUsedBlocks.length);
-                                    console.log("[RecentlyUsed] recentlyUsedBlockIds:", recentlyUsedBlockIds);
-                                    console.log("[RecentlyUsed] Will render section?", visibleRecentlyUsedBlocks.length > 0);
-                                    console.log("[RecentlyUsed] visibleRecentlyUsedBlocks:", visibleRecentlyUsedBlocks);
-                                    return null;
-                                })()}
                                 {visibleRecentlyUsedBlocks.length > 0 && (
                                     <>
-                                        {console.log("[RecentlyUsed] RENDERING SECTION!")}
                                         <div className="block-tools-section-label">
-                                            Recently Used ({visibleRecentlyUsedBlocks.length})
+                                            Recently Used (
+                                            {visibleRecentlyUsedBlocks.length})
                                         </div>
-                                        {visibleRecentlyUsedBlocks.map((blockType) => (
-                                            <BlockButton
-                                                key={`recent-${blockType.id}`}
-                                                blockType={blockType}
-                                                isSelected={
-                                                    selectedBlockID === blockType.id
-                                                }
-                                                onSelect={(block) => {
-                                                    handleBlockSelect(block);
-                                                    localStorage.setItem(
-                                                        "selectedBlock",
-                                                        block.id
-                                                    );
-                                                }}
-                                                handleDragStart={handleDragStart}
-                                                needsTexture={blockType.needsTexture}
-                                            />
-                                        ))}
+                                        {visibleRecentlyUsedBlocks.map(
+                                            (blockType) => (
+                                                <BlockButton
+                                                    key={`recent-${blockType.id}`}
+                                                    blockType={blockType}
+                                                    isSelected={
+                                                        selectedBlockID ===
+                                                        blockType.id
+                                                    }
+                                                    onSelect={(block) => {
+                                                        handleBlockSelect(
+                                                            block
+                                                        );
+                                                        localStorage.setItem(
+                                                            "selectedBlock",
+                                                            block.id
+                                                        );
+                                                    }}
+                                                    handleDragStart={
+                                                        handleDragStart
+                                                    }
+                                                    needsTexture={
+                                                        blockType.needsTexture
+                                                    }
+                                                />
+                                            )
+                                        )}
                                         <div className="block-tools-section-label">
                                             Default Blocks (ID: 1-999)
                                         </div>
@@ -3276,7 +3604,9 @@ const BlockToolsSidebar = ({
                                                 >
                                                     <button
                                                         className="w-full px-3 py-2 text-left text-xs text-white hover:bg-white/10 transition-colors flex items-center gap-2"
-                                                        onClick={handleDownloadAllCustom}
+                                                        onClick={
+                                                            handleDownloadAllCustom
+                                                        }
                                                     >
                                                         <FaDownload className="w-3 h-3" />
                                                         Download All
@@ -3486,8 +3816,8 @@ const BlockToolsSidebar = ({
                                             </div>
                                             <div className="drop-zone-text">
                                                 Click or drag Axiom .bp,
-                                                component .json, or map .zip to import as
-                                                components.
+                                                component .json, or map .zip to
+                                                import as components.
                                             </div>
                                         </div>
                                     </div>
