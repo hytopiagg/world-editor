@@ -424,59 +424,80 @@ class SchematicPlacementTool extends BaseTool {
                     // If not found, try with the default model path (for built-in models)
                     if (!modelType) {
                         const defaultPath = `assets/models/environment/${entityName}.gltf`;
-                        modelType = environmentBuilder.getModelType(entityName, defaultPath);
+                        modelType = environmentBuilder.getModelType(
+                            entityName,
+                            defaultPath
+                        );
                     }
 
                     // Try case-insensitive matching as fallback
-                    if (!modelType && environmentBuilder.getAllAvailableModels) {
-                        const availableModels = environmentBuilder.getAllAvailableModels();
+                    if (
+                        !modelType &&
+                        environmentBuilder.getAllAvailableModels
+                    ) {
+                        const availableModels =
+                            environmentBuilder.getAllAvailableModels();
                         const lowerEntityName = entityName.toLowerCase();
                         const matchedModel = availableModels.find(
-                            (model) => model.name.toLowerCase() === lowerEntityName
+                            (model) =>
+                                model.name.toLowerCase() === lowerEntityName
                         );
                         if (matchedModel) {
-                            modelType = environmentBuilder.getModelType(matchedModel.name, matchedModel.modelUrl);
+                            modelType = environmentBuilder.getModelType(
+                                matchedModel.name,
+                                matchedModel.modelUrl
+                            );
                         }
                     }
 
                     return modelType;
                 };
-                
+
                 // First pass: collect entities with their model types and unique models to preload
                 const entitiesWithModelTypes = [];
                 const uniqueModelTypes = new Map();
-                
+
                 for (const entity of this.schematicEntities) {
                     const modelType = findModelType(entity.entityName);
-                    
+
                     if (!modelType) {
                         console.warn(
                             `[SCHEMATIC] Could not find model type for entity: ${entity.entityName}`
                         );
                         continue;
                     }
-                    
+
                     // Store model type for preloading
                     if (!uniqueModelTypes.has(modelType.modelUrl)) {
                         uniqueModelTypes.set(modelType.modelUrl, modelType);
                     }
-                    
+
                     entitiesWithModelTypes.push({ entity, modelType });
                 }
-                
+
                 // Preload all unique models before placement
-                if (uniqueModelTypes.size > 0 && environmentBuilder.ensureModelLoaded) {
-                    const preloadPromises = Array.from(uniqueModelTypes.values()).map(async (modelType) => {
+                if (
+                    uniqueModelTypes.size > 0 &&
+                    environmentBuilder.ensureModelLoaded
+                ) {
+                    const preloadPromises = Array.from(
+                        uniqueModelTypes.values()
+                    ).map(async (modelType) => {
                         try {
-                            return await environmentBuilder.ensureModelLoaded(modelType);
+                            return await environmentBuilder.ensureModelLoaded(
+                                modelType
+                            );
                         } catch (error) {
-                            console.error(`[SCHEMATIC] Error preloading model ${modelType.name}:`, error);
+                            console.error(
+                                `[SCHEMATIC] Error preloading model ${modelType.name}:`,
+                                error
+                            );
                             return false;
                         }
                     });
                     await Promise.allSettled(preloadPromises);
                 }
-                
+
                 // Second pass: place all entities using pre-computed model types
                 for (const { entity, modelType } of entitiesWithModelTypes) {
                     const [relX, relY, relZ] = entity.position;

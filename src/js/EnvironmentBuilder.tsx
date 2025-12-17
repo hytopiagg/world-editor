@@ -31,15 +31,15 @@ export const environmentModels = (() => {
         const result = [];
 
         const modelList = fetchModelList();
-        
+
         // Handle both old format (array of strings) and new format (array of objects with path/thumbnail)
         const isEnhancedFormat = Array.isArray(modelList) && modelList.length > 0 && typeof modelList[0] === 'object' && 'path' in modelList[0];
-        
+
         modelList.forEach((entry) => {
             // Extract path and thumbnail from entry (handles both formats)
             const fileName = isEnhancedFormat ? entry.path : entry;
             const thumbnailPath = isEnhancedFormat ? entry.thumbnail : null;
-            
+
             // Derive category (first folder) and base filename for display name
             const parts = fileName.split("/");
             const baseName = parts.pop().replace(".gltf", "");
@@ -302,11 +302,11 @@ const EnvironmentBuilder = (
     const ensureInstancedMeshesAdded = (modelUrl: string): boolean => {
         const data = instancedMeshes.current.get(modelUrl);
         if (!scene || !data) return false;
-        
+
         // Check if meshes are actually in the current scene
         // Scene can change (new UUID), so we need to re-add meshes even if addedToScene was true
         const meshesInScene = data.meshes.every(mesh => scene.children.includes(mesh));
-        
+
         if (!meshesInScene) {
             data.meshes.forEach((mesh: THREE.InstancedMesh) => {
                 // Remove from old scene if it exists
@@ -505,7 +505,7 @@ const EnvironmentBuilder = (
     // Lazy load a model when it's actually needed (for placement or rendering)
     const ensureModelLoaded = async (model: typeof environmentModels[0]): Promise<boolean> => {
         const modelUrl = model.modelUrl;
-        
+
         // Check if model is already loaded
         if (loadedModels.current.has(modelUrl)) {
             const instancedData = instancedMeshes.current.get(modelUrl);
@@ -513,7 +513,7 @@ const EnvironmentBuilder = (
                 return true; // Already loaded and ready
             }
         }
-        
+
         // Load the model
         try {
             const gltf = await loadModel(modelUrl);
@@ -601,7 +601,7 @@ const EnvironmentBuilder = (
             // 1. User selects a model for placement
             // 2. Camera approaches existing instances that need rendering
             // 3. Environment objects need to be refreshed from DB
-            
+
             // Only refresh environment from DB (this will trigger lazy loading for existing instances)
             await refreshEnvironmentFromDB();
         } catch (error) {
@@ -660,7 +660,7 @@ const EnvironmentBuilder = (
                     if (material.color) {
                         (newMaterial as any).color = material.color.clone();
                     }
-                    
+
                     // Copy emissive properties for PBR materials
                     if ((material as any).emissive) {
                         (newMaterial as any).emissive = (material as any).emissive.clone();
@@ -827,9 +827,9 @@ const EnvironmentBuilder = (
         // Hide preview if SelectionTool is active and has a selected entity
         const toolManager = terrainBuilderRef?.current?.toolManagerRef?.current;
         const activeTool = toolManager?.getActiveTool?.();
-        const shouldHidePreview = activeTool?.name === "selection" && 
-                                  (activeTool?.selectedEntity || activeTool?.hoveredEntity);
-        
+        const shouldHidePreview = activeTool?.name === "selection" &&
+            (activeTool?.selectedEntity || activeTool?.hoveredEntity);
+
         if (shouldHidePreview) {
             removePreview();
             return;
@@ -905,7 +905,7 @@ const EnvironmentBuilder = (
                     });
                 }
             });
-            
+
             // Remove objects that are no longer in the target state
             for (const [compositeKey, obj] of currentObjects) {
                 if (!targetObjects.has(compositeKey)) {
@@ -1257,13 +1257,13 @@ const EnvironmentBuilder = (
         if (!modelData) {
             return [];
         }
-        
+
         // Ensure model is loaded before placing
         const modelLoaded = await ensureModelLoaded(modelData);
         if (!modelLoaded) {
             return [];
         }
-        
+
         const modelUrl = modelData.modelUrl;
         let instancedData = instancedMeshes.current.get(modelUrl);
         if (!instancedData) {
@@ -1441,7 +1441,7 @@ const EnvironmentBuilder = (
             );
             const instanceCount = instancedData.instances.size;
             totalInstancesCount += instanceCount;
-            
+
             instancedData.instances.forEach((data, instanceId) => {
 
                 const serializablePosition = {
@@ -1474,15 +1474,15 @@ const EnvironmentBuilder = (
                 });
             });
         }
-        
+
         const savePromise = DatabaseManager.saveData(STORES.ENVIRONMENT, "current", allObjects);
-        
+
         savePromise.then(() => {
             // Database save completed
-            }).catch((err) => {
+        }).catch((err) => {
             // Database save failed
         });
-        
+
         setTotalEnvironmentObjects(allObjects.length);
     };
 
@@ -1619,7 +1619,7 @@ const EnvironmentBuilder = (
                 STORES.ENVIRONMENT,
                 "current"
             );
-            
+
             if (savedEnv && Object.keys(savedEnv).length > 0) {
                 const envArray = Array.isArray(savedEnv) ? savedEnv : Object.values(savedEnv);
 
@@ -1649,7 +1649,7 @@ const EnvironmentBuilder = (
                 await Promise.all(loadPromises);
 
                 await updateEnvironmentToMatch(envArray);
-                
+
                 // Rebuild all visible instances after loading from database
                 rebuildAllVisibleInstances(cameraPosition);
             } else {
@@ -1714,7 +1714,7 @@ const EnvironmentBuilder = (
     const lastLoadedProjectIdRef = useRef<string | null>(null);
     const lastLoadedSceneRef = useRef<THREE.Scene | null>(null);
     const lastLoadedSceneUUIDRef = useRef<string | null>(null);
-    
+
     // Reset addedToScene flags when scene UUID changes (scene recreated)
     useEffect(() => {
         if (scene && lastLoadedSceneUUIDRef.current && lastLoadedSceneUUIDRef.current !== scene.uuid) {
@@ -1728,7 +1728,7 @@ const EnvironmentBuilder = (
             lastLoadedSceneUUIDRef.current = scene.uuid;
         }
     }, [scene]);
-    
+
     useEffect(() => {
         if (!projectId) return;
         // If scene is ready and models likely loaded, refresh entities for this project
@@ -1773,11 +1773,11 @@ const EnvironmentBuilder = (
                 updateModelPreview(previewPositionFromAppJS);
             }
         };
-        
+
         window.addEventListener("entity-selected", handleEntityStateChange);
         window.addEventListener("entity-deselected", handleEntityStateChange);
         window.addEventListener("entity-hover-changed", handleEntityStateChange);
-        
+
         return () => {
             window.removeEventListener("entity-selected", handleEntityStateChange);
             window.removeEventListener("entity-deselected", handleEntityStateChange);
@@ -1986,7 +1986,7 @@ const EnvironmentBuilder = (
                         instanceId,
                         meshCount: instancedData.meshes.length
                     });
-                    
+
                     instancedData.meshes.forEach((mesh, meshIndex) => {
                         if (mesh && instanceId < mesh.count) {
                             // Update the matrix directly - this should immediately update the visual position
@@ -1996,7 +1996,7 @@ const EnvironmentBuilder = (
                             console.warn(`[EnvironmentBuilder] Cannot update mesh ${meshIndex}: instanceId ${instanceId} >= mesh.count ${mesh?.count}`);
                         }
                     });
-                    
+
                     // Mark instance matrix as needing update - this is critical for Three.js to upload changes
                     instancedData.meshes.forEach((mesh, meshIndex) => {
                         if (mesh) {
@@ -2006,7 +2006,7 @@ const EnvironmentBuilder = (
                             console.log(`[EnvironmentBuilder] Marked mesh ${meshIndex} instanceMatrix.needsUpdate = true`);
                         }
                     });
-                    
+
                     // Rebuild visible instances to ensure old render is cleared and new position is properly rendered
                     // This is necessary to prevent ghost renders at the old position
                     if (cameraPos) {
@@ -2030,24 +2030,24 @@ const EnvironmentBuilder = (
                 }
 
                 const yOffset = getModelYShift(modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
-                
+
                 // Round coordinates to ensure exact matching with spatial grid
                 // The spatial grid uses integer coordinates, so we need to match exactly
                 const oldX = Math.round(oldPosition.x);
                 const oldY = Math.round(oldPosition.y - yOffset);
                 const oldZ = Math.round(oldPosition.z);
-                
+
                 const newX = Math.round(newPosition.x);
                 const newY = Math.round(newPosition.y - yOffset);
                 const newZ = Math.round(newPosition.z);
-                
+
                 console.log(`[EnvironmentBuilder] Updating spatial grid for moved entity`, {
                     modelUrl,
                     oldPosition: { x: oldX, y: oldY, z: oldZ, raw: oldPosition.toArray() },
                     newPosition: { x: newX, y: newY, z: newZ, raw: newPosition.toArray() },
                     yOffset,
                 });
-                
+
                 // Remove old position from spatial grid
                 terrainBuilderRef.current.updateSpatialHashForBlocks([], [{
                     x: oldX,

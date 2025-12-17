@@ -296,17 +296,17 @@ const AIAssistantPanel = ({
             }
 
             const responseData = await response.json();
-            
+
             // Ensure the response has the correct structure
             const schematicData: RawSchematicType = {
                 blocks: responseData.blocks || {},
                 entities: responseData.entities || undefined,
             };
-            
+
             // Check if we have blocks or entities
             const hasBlocks = schematicData.blocks && Object.keys(schematicData.blocks).length > 0;
             const hasEntities = schematicData.entities && schematicData.entities.length > 0;
-            
+
             if (hasBlocks || hasEntities) {
                 const newId = generateUniqueId();
                 const newSchematicValue: SchematicValue = {
@@ -314,7 +314,7 @@ const AIAssistantPanel = ({
                     schematic: schematicData,
                     timestamp: Date.now(),
                 };
-                
+
                 // Preload textures for all blocks in the generated component
                 const blocks = schematicData.blocks;
                 const uniqueBlockIds = new Set<number>();
@@ -323,7 +323,7 @@ const AIAssistantPanel = ({
                         uniqueBlockIds.add(blockId);
                     }
                 }
-                
+
                 try {
                     const blockTypeRegistry = (window as any).BlockTypeRegistry;
                     if (blockTypeRegistry && blockTypeRegistry.instance) {
@@ -340,7 +340,7 @@ const AIAssistantPanel = ({
                     console.error("[AI_BUILDER] Error during texture preloading:", error);
                     // Continue with loading even if preloading fails
                 }
-                
+
                 loadAISchematic(schematicData); // loadAISchematic expects the raw schematic
 
                 try {
@@ -426,13 +426,13 @@ const AIAssistantPanel = ({
             {/* Prevent inputs triggering keyboard shortcuts in the main app */}
             <textarea
                 onKeyDown={(e) => e.stopPropagation()}
-                className="text-xs bg-transparent rounded-md h-20 p-2 ring-0 outline-none border border-white/10 resize-none focus:border-white hover:border-white/20 transition-all duration-200"
+                className="p-2 h-20 text-xs bg-transparent rounded-md border ring-0 transition-all duration-200 outline-none resize-none border-white/10 focus:border-white hover:border-white/20"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Describe what you want to build (e.g., 'a small stone hut', 'a 5 block high brick tower')"
                 disabled={isLoading}
             />
-            <label className="flex items-center gap-2 text-xs text-white/80 cursor-pointer hover:text-white transition-colors">
+            <label className="flex gap-2 items-center text-xs transition-colors cursor-pointer text-white/80 hover:text-white">
                 <input
                     type="checkbox"
                     checked={enableEntities}
