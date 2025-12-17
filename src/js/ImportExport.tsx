@@ -3,7 +3,7 @@ import { getBlockTypes, processCustomBlock } from "./TerrainBuilder";
 import { getCustomBlocks } from "./managers/BlockTypesManager";
 import { environmentModels } from "./EnvironmentBuilder";
 import * as THREE from "three";
-import { version } from "./Constants";
+import { ENVIRONMENT_OBJECT_Y_OFFSET, version } from "./Constants";
 import { loadingManager } from "./managers/LoadingManager";
 import JSZip from "jszip";
 
@@ -570,7 +570,8 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         scaledOffset.applyEuler(euler);
 
                         // Convert centre position (x,y,z) to origin (adjustedX etc.)
-                        const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset).sub(new THREE.Vector3(0.5, 0.5, 0.5));
+                        const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset);
+                        originPos.y += ENVIRONMENT_OBJECT_Y_OFFSET;
 
                         const adjustedX = originPos.x;
                         const adjustedY = originPos.y;
@@ -942,7 +943,9 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                         obj.position.x,
                         obj.position.y,
                         obj.position.z
-                    ).add(new THREE.Vector3(0.5, 0.5, 0.5)).add(scaledOffset);
+                    ).add(scaledOffset);
+                    
+                    adjustedPos.y -= ENVIRONMENT_OBJECT_Y_OFFSET;
 
                     const key = `${adjustedPos.x},${adjustedPos.y},${adjustedPos.z}`;
                     acc[key] = {

@@ -2,7 +2,7 @@
 // @ts-nocheck
 const path = require("path");
 const os = require("os");
-const { app, BrowserWindow, shell, Menu } = require("electron");
+const { app, BrowserWindow, shell, Menu, ipcMain } = require("electron");
 let DiscordClient;
 try {
     DiscordClient = require("@xhayper/discord-rpc").Client;
@@ -186,6 +186,43 @@ function createMainWindow() {
             discordClient.login().catch(() => {});
         }
     } catch (_) {}
+
+    // Handle window close with unsaved changes check
+    let isClosing = false;
+    mainWindow.on("close", (closeEvent) => {
+        if (isClosing) {
+            // Already processing close, allow it
+            return;
+        }
+        
+        // Prevent default close until we get response
+        closeEvent.preventDefault();
+        
+        // Check if renderer process has unsaved changes
+        mainWindow.webContents.send("window-close-request");
+        
+        // Set up a timeout to force close if renderer doesn't respond
+        const timeout = setTimeout(() => {
+            console.warn("Window close timeout - forcing close");
+            isClosing = true;
+            mainWindow.destroy();
+        }, 3000); // 3 second timeout
+        
+        // Listen for response from renderer via IPC
+        const responseHandler = (ipcEvent, canClose) => {
+            clearTimeout(timeout);
+            ipcMain.removeListener("window-close-response", responseHandler);
+            
+            if (canClose) {
+                isClosing = true;
+                mainWindow.destroy();
+            }
+            // If canClose is false, we just don't destroy the window
+            // The preventDefault() on closeEvent will keep it open
+        };
+        
+        ipcMain.once("window-close-response", responseHandler);
+    });
 
     mainWindow.on("closed", () => {
         mainWindow = null;

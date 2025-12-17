@@ -223,40 +223,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
         onOpen(id);
     };
 
-    const handleImport = async (file: File) => {
-        try {
-            const text = await file.text();
-            const data = JSON.parse(text);
-            const created = await DatabaseManager.createProject(data?.meta?.name || file.name.replace(/\.json$/i, ""));
-            const pid = created?.id;
-            if (!pid) return;
-            DatabaseManager.setCurrentProjectId(pid);
-            await DatabaseManager.saveData("terrain", "current", data.terrain || {});
-            await DatabaseManager.saveData("environment", "current", data.environment || []);
-            if (data.settings) {
-                if (data.settings.skybox) await DatabaseManager.saveData("settings", `project:${pid}:selectedSkybox`, data.settings.skybox);
-                if (data.settings.ambientLight) await DatabaseManager.saveData("settings", `project:${pid}:ambientLight`, data.settings.ambientLight);
-                if (data.settings.directionalLight) await DatabaseManager.saveData("settings", `project:${pid}:directionalLight`, data.settings.directionalLight);
-            }
-            if (data.meta?.thumbnailDataUrl) await DatabaseManager.saveProjectThumbnail(pid, data.meta.thumbnailDataUrl);
-            try {
-                const now = Date.now();
-                const metaObj = {
-                    id: pid,
-                    name: (data?.meta?.name || newName || "Imported Project"),
-                    createdAt: (created as any)?.createdAt || now,
-                    updatedAt: now,
-                    lastOpenedAt: now,
-                    thumbnailDataUrl: data?.meta?.thumbnailDataUrl,
-                } as any;
-                setProjects((prev) => [metaObj, ...prev]);
-            } catch (_) { }
-            onOpen(pid);
-        } catch (e) {
-            console.error("Import failed", e);
-        }
-    };
-
     // Apply name filter first, then root/folder filtering at render time.
     const filtered = projects.filter((p) => !query || (p.name || "").toLowerCase().includes(query.toLowerCase()));
 
@@ -336,7 +302,6 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     setViewMode={setViewMode}
                     query={query}
                     setQuery={setQuery}
-                    onImport={handleImport}
                     onCreateFolder={async () => {
                         if (activeNav !== 'my-files' || activeFolderId) return; // Only show on My files root
                         setInputModal({

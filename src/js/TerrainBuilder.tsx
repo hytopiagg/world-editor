@@ -102,6 +102,11 @@ declare global {
         __WE_PLAYER_ACTIVE__?: THREE.AnimationAction;
         __WE_PLAYER_ACTIVE_UPPER__?: THREE.AnimationAction;
         __WE_PLAYER_ACTIVE_LOWER__?: THREE.AnimationAction;
+        electronAPI?: {
+            onWindowClose: (callback: () => void) => void;
+            respondToCloseRequest: (canClose: boolean) => void;
+            removeAllListeners: (channel: string) => void;
+        };
         __WE_PLAYER_MESH__?: THREE.Object3D;
         __WE_PLAYER_MESH_LOADING__?: boolean;
         __WE_DEBUG_JUMP__?: boolean;
@@ -325,25 +330,62 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
             const currentUrl = window.location.href;
 
-            const handleBeforeUnload = (event) => {
+            // Check for unsaved changes
+            const hasUnsavedChanges = () => {
                 if (localStorage.getItem("IS_DATABASE_CLEARING")) {
-                    return;
+                    return false;
                 }
 
                 if (!pendingChangesRef || !pendingChangesRef.current) {
-                    return;
+                    return false;
                 }
 
-                const hasTerrainChanges =
+                return (
                     pendingChangesRef.current.terrain &&
                     (Object.keys(pendingChangesRef.current.terrain.added || {})
                         .length > 0 ||
                         Object.keys(pendingChangesRef.current.terrain.removed || {})
-                            .length > 0);
+                            .length > 0)
+                );
+            };
 
-                if (hasTerrainChanges) {
+            // Handle window close request from Electron main process
+            const handleWindowCloseRequest = async () => {
+                if (hasUnsavedChanges()) {
+                    const shouldClose = window.confirm(
+                        "You have unsaved changes. Are you sure you want to close?"
+                    );
+                    
+                    if (window.electronAPI) {
+                        window.electronAPI.respondToCloseRequest(shouldClose);
+                    }
+                } else {
+                    // No unsaved changes, allow close
+                    if (window.electronAPI) {
+                        window.electronAPI.respondToCloseRequest(true);
+                    }
+                }
+            };
+
+            // Fallback beforeunload for browser (non-Electron) or as backup
+            // Note: In Electron, window closing is handled via IPC above, but beforeunload
+            // may still fire for reloads/navigation. The IPC handler takes precedence for closing.
+            const handleBeforeUnload = (event) => {
+                if (window.electronAPI) {
+                    // In Electron, window close is handled by IPC, but we still check for
+                    // unsaved changes to prevent accidental reloads/navigation
+                    if (hasUnsavedChanges()) {
+                        event.preventDefault();
+                        event.returnValue =
+                            "You have unsaved changes. Are you sure you want to leave?";
+                        return event.returnValue;
+                    }
+                    return;
+                }
+
+                // Browser fallback - use standard beforeunload
+                if (hasUnsavedChanges()) {
                     localStorage.setItem("reload_attempted", "true");
-
                     reloadJustPrevented = true;
                     event.preventDefault();
                     event.returnValue =
@@ -355,9 +397,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             const handlePopState = (event) => {
                 if (reloadJustPrevented) {
                     event.preventDefault();
-
                     reloadJustPrevented = false;
-
                     window.history.pushState(null, document.title, currentUrl);
                     return false;
                 }
@@ -368,12 +408,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     const reloadAttempted =
                         localStorage.getItem("reload_attempted") === "true";
                     if (reloadAttempted) {
-
                         localStorage.removeItem("reload_attempted");
-
                         if (reloadJustPrevented) {
                             reloadJustPrevented = false;
-
                             window.history.pushState(
                                 null,
                                 document.title,
@@ -384,15 +421,22 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 }
             };
 
+            // Set up Electron IPC listener if available
+            if (window.electronAPI) {
+                window.electronAPI.onWindowClose(handleWindowCloseRequest);
+            }
+
             window.addEventListener("beforeunload", handleBeforeUnload);
             window.addEventListener("popstate", handlePopState);
             document.addEventListener("visibilitychange", handleVisibilityChange);
 
             window.history.pushState(null, document.title, currentUrl);
-
             localStorage.removeItem("reload_attempted");
 
             return () => {
+                if (window.electronAPI) {
+                    window.electronAPI.removeAllListeners("window-close-request");
+                }
                 window.removeEventListener("beforeunload", handleBeforeUnload);
                 window.removeEventListener("popstate", handlePopState);
                 document.removeEventListener(

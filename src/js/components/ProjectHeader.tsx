@@ -10,7 +10,6 @@ interface Props {
     setViewMode: (m: 'grid' | 'list') => void;
     query: string;
     setQuery: (q: string) => void;
-    onImport: (file: File) => void;
     onCreate: () => void;
     onCreateFolder?: () => void;
     title?: string;
@@ -18,7 +17,7 @@ interface Props {
     showNewFolder?: boolean;
 }
 
-const ProjectHeader: React.FC<Props> = ({ viewMode, setViewMode, query, setQuery, onImport, onCreate, onCreateFolder, title = 'My Files', breadcrumbs = [], showNewFolder = true }) => {
+const ProjectHeader: React.FC<Props> = ({ viewMode, setViewMode, query, setQuery, onCreate, onCreateFolder, title = 'My Files', breadcrumbs = [], showNewFolder = true }) => {
     return (
         <div className="flex items-center justify-between">
             <div className="flex gap-3 items-center">
@@ -89,10 +88,6 @@ const ProjectHeader: React.FC<Props> = ({ viewMode, setViewMode, query, setQuery
                         className="bg-[#0e131a] border-0 text-[#eaeaea] py-2 px-2 rounded-lg min-w-[240px] pl-[30px] outline-none shadow-none"
                     />
                 </div>
-                <label className="inline-flex items-center justify-center bg-[#1a1e24] text-[#cfd6e4] border border-[#2b2f36] rounded-lg py-2 px-3 cursor-pointer">
-                    Import
-                    <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files && e.target.files[0] && onImport(e.target.files[0])} />
-                </label>
                 <button onClick={onCreate} className="inline-flex items-center justify-center bg-[#2b6aff] text-white rounded-lg py-2 px-3">
                     Create
                 </button>
