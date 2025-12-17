@@ -295,8 +295,19 @@ const AIAssistantPanel = ({
                 );
             }
 
-            const schematicData: RawSchematicType = await response.json();
-            if (schematicData && Object.keys(schematicData).length > 0) {
+            const responseData = await response.json();
+            
+            // Ensure the response has the correct structure
+            const schematicData: RawSchematicType = {
+                blocks: responseData.blocks || {},
+                entities: responseData.entities || undefined,
+            };
+            
+            // Check if we have blocks or entities
+            const hasBlocks = schematicData.blocks && Object.keys(schematicData.blocks).length > 0;
+            const hasEntities = schematicData.entities && schematicData.entities.length > 0;
+            
+            if (hasBlocks || hasEntities) {
                 const newId = generateUniqueId();
                 const newSchematicValue: SchematicValue = {
                     prompt,
@@ -305,8 +316,7 @@ const AIAssistantPanel = ({
                 };
                 
                 // Preload textures for all blocks in the generated component
-                console.log("[AI_BUILDER] Generated component with blocks:", Object.keys(schematicData).length);
-                const blocks = schematicData.blocks || schematicData;
+                const blocks = schematicData.blocks;
                 const uniqueBlockIds = new Set<number>();
                 for (const blockId of Object.values(blocks)) {
                     if (blockId && typeof blockId === 'number' && blockId > 0) {
@@ -314,23 +324,20 @@ const AIAssistantPanel = ({
                     }
                 }
                 
-                console.log(`[AI_BUILDER] Found ${uniqueBlockIds.size} unique block types, preloading textures...`);
                 try {
                     const blockTypeRegistry = (window as any).BlockTypeRegistry;
                     if (blockTypeRegistry && blockTypeRegistry.instance) {
                         const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
                             try {
                                 await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
-                                console.log(`[AI_BUILDER] ✓ Preloaded textures for block ${blockId}`);
                             } catch (error) {
-                                console.error(`[AI_BUILDER] ✗ Failed to preload textures for block ${blockId}:`, error);
+                                console.error(`[AI_BUILDER] Failed to preload textures for block ${blockId}:`, error);
                             }
                         });
                         await Promise.allSettled(preloadPromises);
-                        console.log(`[AI_BUILDER] ✓ Completed texture preloading for generated component`);
                     }
                 } catch (error) {
-                    console.error("[AI_BUILDER] ✗ Error during texture preloading:", error);
+                    console.error("[AI_BUILDER] Error during texture preloading:", error);
                     // Continue with loading even if preloading fails
                 }
                 
@@ -358,7 +365,7 @@ const AIAssistantPanel = ({
                     );
                 }
             } else {
-                setError("AI could not generate a structure for this prompt.");
+                setError("AI could not generate a structure for this prompt. No blocks or entities were generated.");
             }
         } catch (err: any) {
             console.error("Error generating AI structure:", err);

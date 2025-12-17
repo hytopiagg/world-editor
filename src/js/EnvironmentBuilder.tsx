@@ -1912,6 +1912,7 @@ const EnvironmentBuilder = (
             updatePreviewPosition,
             updateEnvironmentToMatch,
             loadModel,
+            ensureModelLoaded,
             refreshEnvironmentFromDB,
             refreshEnvironment,
             beginUndoRedoOperation,

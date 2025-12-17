@@ -416,7 +416,69 @@ class SchematicPlacementTool extends BaseTool {
                 environmentBuilder &&
                 environmentBuilder.placeEnvironmentModelWithoutSaving
             ) {
+                // Helper function to find model type for an entity
+                const findModelType = (entityName) => {
+                    // First try to find by name alone (works for custom models)
+                    let modelType = environmentBuilder.getModelType(entityName);
+
+                    // If not found, try with the default model path (for built-in models)
+                    if (!modelType) {
+                        const defaultPath = `assets/models/environment/${entityName}.gltf`;
+                        modelType = environmentBuilder.getModelType(entityName, defaultPath);
+                    }
+
+                    // Try case-insensitive matching as fallback
+                    if (!modelType && environmentBuilder.getAllAvailableModels) {
+                        const availableModels = environmentBuilder.getAllAvailableModels();
+                        const lowerEntityName = entityName.toLowerCase();
+                        const matchedModel = availableModels.find(
+                            (model) => model.name.toLowerCase() === lowerEntityName
+                        );
+                        if (matchedModel) {
+                            modelType = environmentBuilder.getModelType(matchedModel.name, matchedModel.modelUrl);
+                        }
+                    }
+
+                    return modelType;
+                };
+                
+                // First pass: collect entities with their model types and unique models to preload
+                const entitiesWithModelTypes = [];
+                const uniqueModelTypes = new Map();
+                
                 for (const entity of this.schematicEntities) {
+                    const modelType = findModelType(entity.entityName);
+                    
+                    if (!modelType) {
+                        console.warn(
+                            `[SCHEMATIC] Could not find model type for entity: ${entity.entityName}`
+                        );
+                        continue;
+                    }
+                    
+                    // Store model type for preloading
+                    if (!uniqueModelTypes.has(modelType.modelUrl)) {
+                        uniqueModelTypes.set(modelType.modelUrl, modelType);
+                    }
+                    
+                    entitiesWithModelTypes.push({ entity, modelType });
+                }
+                
+                // Preload all unique models before placement
+                if (uniqueModelTypes.size > 0 && environmentBuilder.ensureModelLoaded) {
+                    const preloadPromises = Array.from(uniqueModelTypes.values()).map(async (modelType) => {
+                        try {
+                            return await environmentBuilder.ensureModelLoaded(modelType);
+                        } catch (error) {
+                            console.error(`[SCHEMATIC] Error preloading model ${modelType.name}:`, error);
+                            return false;
+                        }
+                    });
+                    await Promise.allSettled(preloadPromises);
+                }
+                
+                // Second pass: place all entities using pre-computed model types
+                for (const { entity, modelType } of entitiesWithModelTypes) {
                     const [relX, relY, relZ] = entity.position;
                     const rotatedRel = this.getRotatedRelativePosition(
                         relX,
@@ -439,27 +501,6 @@ class SchematicPlacementTool extends BaseTool {
                             (this.currentRotation * Math.PI) / 2;
                     } else {
                         finalRotation = (this.currentRotation * Math.PI) / 2;
-                    }
-
-                    // Get the model type from the entity name
-                    // First try to find by name alone (works for custom models)
-                    let modelType = environmentBuilder.getModelType(
-                        entity.entityName
-                    );
-
-                    // If not found, try with the default model path (for built-in models)
-                    if (!modelType) {
-                        modelType = environmentBuilder.getModelType(
-                            entity.entityName,
-                            `assets/models/environment/${entity.entityName}.gltf`
-                        );
-                    }
-
-                    if (!modelType) {
-                        console.warn(
-                            `Could not find model type for entity: ${entity.entityName}`
-                        );
-                        continue;
                     }
 
                     // Create a temporary mesh with the position and rotation
@@ -491,7 +532,7 @@ class SchematicPlacementTool extends BaseTool {
                         placedEntities.push(placedEntity);
                     } else {
                         console.warn(
-                            `[SchematicTool] Failed to place entity ${entity.entityName}`
+                            `[SCHEMATIC] Failed to place entity ${entity.entityName}`
                         );
                     }
                 }
