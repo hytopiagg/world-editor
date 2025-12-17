@@ -195,6 +195,7 @@ interface TerrainBuilderRef {
     refreshTerrainFromDB: () => Promise<boolean>;
     forceRebuildSpatialHash: (options?: { showLoadingScreen?: boolean }) => Promise<void>;
     setGridVisible: (visible: boolean) => void;
+    setGridY: (baseY: number) => void;
 }
 
 function optimizeRenderer(gl: THREE.WebGLRenderer | null) {
@@ -276,6 +277,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const placementSizeRef = useRef(placementSize);
         const snapToGridRef = useRef(snapToGrid !== false);
         const originalPixelRatioRef = useRef(null);
+        const baseGridYRef = useRef(0); // Base grid Y position (default 0, will be offset by -0.5)
+        const [baseGridY, setBaseGridYState] = useState(0); // State for JSX reactivity
 
         // GPU-optimized settings state
         const [shadowMapSize, setShadowMapSize] = useState(2048);
@@ -1114,9 +1117,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         const addedBlocksArray = Object.entries(addedBlocks).map(
                             ([posKey, blockId]) => {
                                 const [x, y, z] = posKey.split(",").map(Number);
+                                // Ensure coordinates are integers to avoid chunk bounds errors
                                 return {
                                     id: blockId,
-                                    position: [x, y, z],
+                                    position: [Math.round(x), Math.round(y), Math.round(z)],
                                 };
                             }
                         );
@@ -1175,9 +1179,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             removedBlocks
                         ).map(([posKey, blockId]) => {
                             const [x, y, z] = posKey.split(",").map(Number);
+                            // Ensure coordinates are integers to avoid chunk bounds errors
                             return {
                                 id: 0, // Use 0 for removed blocks
-                                position: [x, y, z],
+                                position: [Math.round(x), Math.round(y), Math.round(z)],
                             };
                         });
                         if (removedBlocksArray.length > 0) {
@@ -1210,7 +1215,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 selectionDistanceRef,
                 recentlyPlacedBlocksRef,
                 isPlacingRef,
-                modeRef
+                modeRef,
+                baseGridYRef
             );
         }, [pointer, scene, threeCamera, threeRaycaster, cameraManager]);
         const updatePreviewPosition = (() => {
@@ -1250,7 +1256,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     blockIntersection.blockId = null;
                 }
 
-                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Plane at y=0
+                const groundY = baseGridYRef.current - 0.5; // Use baseGridY - 0.5 offset
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY); // Plane at baseGridY - 0.5
                 const currentGroundPoint = new THREE.Vector3();
                 // Use center of screen for raycasting in crosshair mode, mouse position in rotate mode
                 const normalizedMouse = cameraManager.isPointerUnlockedMode
@@ -1287,37 +1294,53 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     }
                     potentialNewPosition.copy(blockIntersection.point);
 
-                    const hitBlock = blockIntersection.block || {
-                        x: Math.floor(blockIntersection.point.x),
-                        y: Math.floor(blockIntersection.point.y),
-                        z: Math.floor(blockIntersection.point.z),
-                    };
-                    if (blockIntersection.face && blockIntersection.normal) {
-                        potentialNewPosition.x =
-                            hitBlock.x + blockIntersection.normal.x;
-                        potentialNewPosition.y =
-                            hitBlock.y + blockIntersection.normal.y;
-                        potentialNewPosition.z =
-                            hitBlock.z + blockIntersection.normal.z;
-                        if (
-                            snapToGridRef.current ||
-                            !currentBlockTypeRef.current?.isEnvironment
-                        ) {
-                            potentialNewPosition.x = Math.round(potentialNewPosition.x);
-                            potentialNewPosition.y = Math.round(potentialNewPosition.y);
-                            potentialNewPosition.z = Math.round(potentialNewPosition.z);
-                        }
+                    // Handle ground plane placement first - blocks should be placed ABOVE the grid
+                    if (blockIntersection.isGroundPlane) {
+                        // Grid is at baseGridY - 0.5, blocks should be placed at baseGridY (above the grid)
+                        // Use baseGridYRef directly to avoid floating point precision issues
+                        const blockY = baseGridYRef.current;
+                        potentialNewPosition.y = blockY;
+                        
+                        // Set hitBlock Y to the block position above the grid
+                        const hitBlock = blockIntersection.block || {
+                            x: Math.floor(blockIntersection.point.x),
+                            y: blockY,
+                            z: Math.floor(blockIntersection.point.z),
+                        };
+                        hitBlock.y = blockY;
                     } else {
-                        potentialNewPosition.add(
-                            blockIntersection.normal.clone().multiplyScalar(0.5)
-                        );
-                        if (
-                            snapToGridRef.current ||
-                            !currentBlockTypeRef.current?.isEnvironment
-                        ) {
-                            potentialNewPosition.x = Math.round(potentialNewPosition.x);
-                            potentialNewPosition.y = Math.round(potentialNewPosition.y);
-                            potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                        const hitBlock = blockIntersection.block || {
+                            x: Math.floor(blockIntersection.point.x),
+                            y: Math.floor(blockIntersection.point.y),
+                            z: Math.floor(blockIntersection.point.z),
+                        };
+                        if (blockIntersection.face && blockIntersection.normal) {
+                            potentialNewPosition.x =
+                                hitBlock.x + blockIntersection.normal.x;
+                            potentialNewPosition.y =
+                                hitBlock.y + blockIntersection.normal.y;
+                            potentialNewPosition.z =
+                                hitBlock.z + blockIntersection.normal.z;
+                            if (
+                                snapToGridRef.current ||
+                                !currentBlockTypeRef.current?.isEnvironment
+                            ) {
+                                potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                                potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                                potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                            }
+                        } else {
+                            potentialNewPosition.add(
+                                blockIntersection.normal.clone().multiplyScalar(0.5)
+                            );
+                            if (
+                                snapToGridRef.current ||
+                                !currentBlockTypeRef.current?.isEnvironment
+                            ) {
+                                potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                                potentialNewPosition.y = Math.round(potentialNewPosition.y);
+                                potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                            }
                         }
                     }
 
@@ -1329,6 +1352,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         hitGround
                     ) {
                         potentialNewPosition.copy(currentGroundPoint);
+                        // Still ensure Y is above the grid
+                        potentialNewPosition.y = Math.ceil(baseGridYRef.current - 0.5);
                     }
 
                     // When unsnapped for environment, keep precise X/Z from intersection but snap Y to nearest block level
@@ -1343,23 +1368,20 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         potentialNewPosition.y = Math.round(potentialNewPosition.y);
                     }
 
-                    if (blockIntersection.isGroundPlane) {
-                        potentialNewPosition.y = 0; // Position at y=0 when placing on ground plane
-                    } else {
-                        if (modeRef.current === "remove") {
-                            if (blockIntersection.normal.y === 1) {
-                                potentialNewPosition.y = potentialNewPosition.y - 1;
-                            } else if (blockIntersection.normal.y === -1) {
-                                potentialNewPosition.y = potentialNewPosition.y + 1;
-                            } else if (blockIntersection.normal.x === 1) {
-                                potentialNewPosition.x = potentialNewPosition.x - 1;
-                            } else if (blockIntersection.normal.x === -1) {
-                                potentialNewPosition.x = potentialNewPosition.x + 1;
-                            } else if (blockIntersection.normal.z === 1) {
-                                potentialNewPosition.z = potentialNewPosition.z - 1;
-                            } else if (blockIntersection.normal.z === -1) {
-                                potentialNewPosition.z = potentialNewPosition.z + 1;
-                            }
+                    // Handle remove mode adjustments
+                    if (modeRef.current === "remove" && !blockIntersection.isGroundPlane) {
+                        if (blockIntersection.normal.y === 1) {
+                            potentialNewPosition.y = potentialNewPosition.y - 1;
+                        } else if (blockIntersection.normal.y === -1) {
+                            potentialNewPosition.y = potentialNewPosition.y + 1;
+                        } else if (blockIntersection.normal.x === 1) {
+                            potentialNewPosition.x = potentialNewPosition.x - 1;
+                        } else if (blockIntersection.normal.x === -1) {
+                            potentialNewPosition.x = potentialNewPosition.x + 1;
+                        } else if (blockIntersection.normal.z === 1) {
+                            potentialNewPosition.z = potentialNewPosition.z - 1;
+                        } else if (blockIntersection.normal.z === -1) {
+                            potentialNewPosition.z = potentialNewPosition.z + 1;
                         }
                     }
 
@@ -1501,9 +1523,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
             const addPos = (dx, dz) => {
                 positions.push({
-                    x: centerPos.x + dx,
-                    y: centerPos.y,
-                    z: centerPos.z + dz,
+                    x: Math.round(centerPos.x + dx),
+                    y: Math.round(centerPos.y), // Ensure Y is an integer
+                    z: Math.round(centerPos.z + dz),
                 });
             };
 
@@ -1635,7 +1657,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         0xeafaea
                     ).geometry;
                     gridRef.current.material.opacity = 0.1;
-                    gridRef.current.position.set(0.5, -0.5, 0.5);
+                    const yPosition = baseGridYRef.current - 0.5; // Apply -0.5 offset
+                    gridRef.current.position.set(0.5, yPosition, 0.5);
                 }
                 if (shadowPlaneRef.current.geometry) {
                     shadowPlaneRef.current.geometry.dispose();
@@ -1643,7 +1666,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         gridSizeToUse,
                         gridSizeToUse
                     );
-                    shadowPlaneRef.current.position.set(0.5, -0.5, 0.5);
+                    const yPosition = baseGridYRef.current - 0.5; // Apply -0.5 offset
+                    shadowPlaneRef.current.position.set(0.5, yPosition, 0.5);
                 }
             }
         };
@@ -1881,6 +1905,25 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     }
                 }
                 meshesInitializedRef.current = true;
+                
+                // Load base grid Y position from settings
+                try {
+                    const savedBaseGridY = await DatabaseManager.getData(STORES.SETTINGS, "baseGridY");
+                    if (typeof savedBaseGridY === "number") {
+                        baseGridYRef.current = savedBaseGridY;
+                        setBaseGridYState(savedBaseGridY);
+                        const yPosition = savedBaseGridY - 0.5;
+                        if (gridRef.current) {
+                            gridRef.current.position.y = yPosition;
+                        }
+                        if (shadowPlaneRef.current) {
+                            shadowPlaneRef.current.position.y = yPosition;
+                        }
+                    }
+                } catch (error) {
+                    // Error loading base grid Y, use default (0)
+                }
+                
                 await DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")
                     .then(async (customBlocksData: any) => {
                         if (customBlocksData && Array.isArray(customBlocksData) && customBlocksData.length > 0) {
@@ -2697,6 +2740,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 }
             },
             setGridVisible,
+            setGridY,
         })); // This is the correct syntax with just one closing parenthesis
 
         useEffect(() => {
@@ -2989,18 +3033,20 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 const addedBlocksArray = Object.entries(addedBlocks).map(
                     ([posKey, blockId]) => {
                         const [x, y, z] = posKey.split(",").map(Number);
+                        // Ensure coordinates are integers to avoid chunk bounds errors
                         return {
                             id: blockId,
-                            position: [x, y, z],
+                            position: [Math.round(x), Math.round(y), Math.round(z)],
                         };
                     }
                 );
                 const removedBlocksArray = Object.entries(removedBlocks).map(
                     ([posKey]) => {
                         const [x, y, z] = posKey.split(",").map(Number);
+                        // Ensure coordinates are integers to avoid chunk bounds errors
                         return {
                             id: 0, // Use 0 for removed blocks
-                            position: [x, y, z],
+                            position: [Math.round(x), Math.round(y), Math.round(z)],
                         };
                     }
                 );
@@ -4078,6 +4124,18 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             }
         }
 
+        function setGridY(baseY: number) {
+            baseGridYRef.current = baseY;
+            setBaseGridYState(baseY); // Update state for JSX reactivity
+            const yPosition = baseY - 0.5; // Apply -0.5 offset
+            if (gridRef.current) {
+                gridRef.current.position.y = yPosition;
+            }
+            if (shadowPlaneRef.current) {
+                shadowPlaneRef.current.position.y = yPosition;
+            }
+        }
+
         // Initialize GPU-optimized settings on mount
         useEffect(() => {
             const gpuInfo = detectGPU();
@@ -4163,7 +4221,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 {/* @ts-expect-error - React Three Fiber JSX elements */}
                 <mesh
                     ref={shadowPlaneRef}
-                    position={[0.5, -0.51, 0.5]}
+                    position={[0.5, baseGridY - 0.5, 0.5]}
                     rotation={[-Math.PI / 2, 0, 0]}
                     transparent={true}
                     receiveShadow={true}
@@ -4177,7 +4235,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     {/* @ts-ignore - React Three Fiber JSX closing tag */}
                 </mesh>
                 {/* @ts-expect-error - React Three Fiber JSX elements */}
-                <gridHelper position={[0.5, -0.5, 0.5]} ref={gridRef} />
+                <gridHelper position={[0.5, baseGridY - 0.5, 0.5]} ref={gridRef} />
                 {window.__WE_PREVIEW_VISIBLE__ !== false &&
                     previewPosition &&
                     (modeRef.current === "add" || modeRef.current === "remove") &&

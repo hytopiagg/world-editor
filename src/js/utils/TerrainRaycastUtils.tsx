@@ -12,7 +12,8 @@ const getOptimizedRaycastIntersection = (
     prioritizeBlocks: boolean,
     recentlyPlacedBlocksRef,
     isPlacingRef,
-    modeRef
+    modeRef,
+    baseGridYRef
 ) => {
     if (!scene || !threeCamera || !threeRaycaster) return null;
 
@@ -25,6 +26,7 @@ const getOptimizedRaycastIntersection = (
         spatialGridManagerRef.current &&
         spatialGridManagerRef.current.size > 0
     ) {
+        const groundY = baseGridYRef ? baseGridYRef.current - 0.5 : -0.5; // Use baseGridY - 0.5 offset
         const raycastOptions = {
             maxDistance: selectionDistanceRef.current,
             prioritizeBlocks,
@@ -33,6 +35,7 @@ const getOptimizedRaycastIntersection = (
             isPlacing: isPlacingRef.current,
             mode: modeRef.current,
             debug: false,
+            baseGridY: baseGridYRef ? baseGridYRef.current : 0,
         };
         const gridResult = spatialGridManagerRef.current.raycast(
             threeRaycaster,
@@ -51,8 +54,9 @@ const getOptimizedRaycastIntersection = (
         const rayOrigin = threeRaycaster.ray.origin;
         const rayDirection = threeRaycaster.ray.direction;
 
+        const groundY = baseGridYRef ? baseGridYRef.current - 0.5 : -0.5; // Use baseGridY - 0.5 offset
         const target = new THREE.Vector3();
-        const intersectionDistance = rayOrigin.y / -rayDirection.y;
+        const intersectionDistance = (rayOrigin.y - groundY) / -rayDirection.y;
 
         if (
             intersectionDistance > 0 &&
@@ -69,13 +73,14 @@ const getOptimizedRaycastIntersection = (
             ) {
                 const adjustedX = Math.floor(target.x) + 0.5;
                 const adjustedZ = Math.floor(target.z) + 0.5;
+                const adjustedY = Math.floor(groundY);
 
                 intersection = {
-                    point: new THREE.Vector3(adjustedX, 0, adjustedZ),
+                    point: new THREE.Vector3(adjustedX, groundY, adjustedZ),
                     normal: new THREE.Vector3(0, 1, 0),
                     block: {
                         x: Math.floor(target.x),
-                        y: 0,
+                        y: adjustedY,
                         z: Math.floor(target.z),
                     },
                     blockId: null, 
@@ -99,7 +104,8 @@ const getTerrainRaycastIntersection = (
     selectionDistanceRef,
     recentlyPlacedBlocksRef,
     isPlacingRef,
-    modeRef
+    modeRef,
+    baseGridYRef
 ) => {
     if (!scene || !threeCamera || !threeRaycaster) return null;
 
@@ -131,17 +137,17 @@ const getTerrainRaycastIntersection = (
             true,
             recentlyPlacedBlocksRef,
             isPlacingRef,
-            modeRef
+            modeRef,
+            baseGridYRef
         ); // Always prioritize blocks
     } else {
 
         const rayOrigin = threeRaycaster.ray.origin;
         const rayDirection = threeRaycaster.ray.direction;
 
-
+        const groundY = baseGridYRef ? baseGridYRef.current - 0.5 : -0.5; // Use baseGridY - 0.5 offset
         const target = new THREE.Vector3();
-        const intersectionDistance = rayOrigin.y / -rayDirection.y;
-
+        const intersectionDistance = (rayOrigin.y - groundY) / -rayDirection.y;
 
         if (
             intersectionDistance > 0 &&
@@ -161,16 +167,14 @@ const getTerrainRaycastIntersection = (
 
                 const adjustedX = Math.floor(target.x) + 0.5;
                 const adjustedZ = Math.floor(target.z) + 0.5;
-                
+                const adjustedY = Math.floor(groundY);
 
                 intersection = {
-                    point: new THREE.Vector3(adjustedX, 0, adjustedZ),
+                    point: new THREE.Vector3(adjustedX, groundY, adjustedZ),
                     normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
                     block: {
-
-
                         x: Math.floor(target.x),
-                        y: 0,
+                        y: adjustedY,
                         z: Math.floor(target.z),
                     },
                     blockId: null, // No block here - it's the ground

@@ -28,6 +28,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [moveSpeed, setMoveSpeed] = useState(0.2);
     const [lowResDrag, setLowResDrag] = useState(false);
     const [showGrid, setShowGrid] = useState(true);
+    const [baseGridY, setBaseGridY] = useState(0);
     const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(!cameraManager.isPointerUnlockedMode);
 
     // Load saved sensitivity on mount
@@ -91,6 +92,19 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                 // Floor grid now always defaults to visible; no DB persistence.
                 if (terrainBuilderRef?.current?.setGridVisible) {
                     terrainBuilderRef.current.setGridVisible(true);
+                }
+
+                // Load saved base grid Y position
+                try {
+                    const savedBaseGridY = await DatabaseManager.getData(STORES.SETTINGS, "baseGridY");
+                    if (typeof savedBaseGridY === "number") {
+                        setBaseGridY(savedBaseGridY);
+                        if (terrainBuilderRef?.current?.setGridY) {
+                            terrainBuilderRef.current.setGridY(savedBaseGridY);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading base grid Y:", error);
                 }
 
             } catch (error) {
@@ -202,6 +216,18 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         setShowGrid(checked);
         if (terrainBuilderRef?.current?.setGridVisible) {
             terrainBuilderRef.current.setGridVisible(checked);
+        }
+    };
+
+    const handleBaseGridYChange = async (value: number) => {
+        setBaseGridY(value);
+        if (terrainBuilderRef?.current?.setGridY) {
+            terrainBuilderRef.current.setGridY(value);
+        }
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "baseGridY", value);
+        } catch (error) {
+            console.error("Error saving base grid Y:", error);
         }
     };
 
@@ -350,6 +376,43 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 }}
                             />
 
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex gap-x-2 items-center w-full opacity-0 duration-150 cursor-pointer fade-down" style={{
+                            animationDelay: "0.14s"
+                        }}>
+                            <label className="text-xs text-[#F1F1F1] whitespace-nowrap">Base Grid Y</label>
+                            <input
+                                type="number"
+                                value={baseGridY}
+                                onChange={(e) => handleBaseGridYChange(Number(e.target.value))}
+                                onBlur={(e) => handleBaseGridYChange(Number(e.target.value))}
+                                onKeyDown={(e: any) => {
+                                    e.stopPropagation();
+                                    if (e.key === 'Enter') {
+                                        handleBaseGridYChange(Number(e.target.value));
+                                        e.target.blur();
+                                    }
+                                }}
+                                min={-100}
+                                max={100}
+                                step={1}
+                                className="w-[50px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <input
+                                type="range"
+                                min="-100"
+                                max="100"
+                                step="1"
+                                value={baseGridY}
+                                onChange={(e) => handleBaseGridYChange(Number(e.target.value))}
+                                className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
+                                style={{
+                                    transition: "all 0.3s ease-in-out",
+                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(baseGridY + 100) / 200 * 100}%, rgba(255, 255, 255, 0.1) ${(baseGridY + 100) / 200 * 100}%, rgba(255, 255, 255, 0.1) 100%)`
+                                }}
+                            />
                         </div>
                     </div>
 

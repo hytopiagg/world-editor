@@ -396,6 +396,7 @@ class SpatialGridManager {
             gridSize = 256,
             recentlyPlacedBlocks = new Set(),
             debug = forceDebug, // Enable for detailed debugging
+            baseGridY = 0, // Base grid Y position (default 0, will be offset by -0.5)
         } = options;
 
         if (!this.spatialHashGrid) {
@@ -406,8 +407,9 @@ class SpatialGridManager {
         const rayOrigin = ray.origin;
         const rayDirection = ray.direction;
 
+        const groundY = baseGridY - 0.5; // Use baseGridY - 0.5 offset
         const groundTarget = new THREE.Vector3();
-        const groundIntersectionDistance = rayOrigin.y / -rayDirection.y;
+        const groundIntersectionDistance = (rayOrigin.y - groundY) / -rayDirection.y;
 
         let groundIntersection = null;
         if (
@@ -423,12 +425,15 @@ class SpatialGridManager {
                 Math.abs(groundTarget.x) <= gridSizeHalf &&
                 Math.abs(groundTarget.z) <= gridSizeHalf
             ) {
+                const adjustedY = Math.floor(groundY);
+                // Ensure point.y is exactly at groundY (may have floating point errors)
+                groundTarget.y = groundY;
                 groundIntersection = {
                     point: groundTarget.clone(),
                     normal: new THREE.Vector3(0, 1, 0), // Normal is up for ground plane
                     block: {
                         x: Math.floor(groundTarget.x),
-                        y: 0,
+                        y: adjustedY,
                         z: Math.floor(groundTarget.z),
                     },
                     blockId: null, // No block here - it's the ground
