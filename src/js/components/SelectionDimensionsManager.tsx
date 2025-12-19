@@ -2,7 +2,7 @@
  * SelectionDimensionsManager - Global pub/sub for live selection dimension tips
  */
 export type SelectionDimensionsPayload = {
-    kind: "ground" | "wall" | "selection" | "other";
+    kind: "ground" | "wall" | "selection" | "staircase" | "other";
     width?: number; // X dimension in blocks
     length?: number; // Z dimension in blocks
     height?: number; // Y dimension in blocks

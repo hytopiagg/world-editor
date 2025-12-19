@@ -49,6 +49,7 @@ import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
 import { playPlaceSound } from "./Sound";
 import {
     GroundTool,
+    StaircaseTool,
     SchematicPlacementTool,
     SelectionTool,
     TerrainTool,
@@ -201,6 +202,7 @@ interface TerrainBuilderRef {
     forceRebuildSpatialHash: (options?: { showLoadingScreen?: boolean }) => Promise<void>;
     setGridVisible: (visible: boolean) => void;
     setGridY: (baseY: number) => void;
+    getGridY: () => number;
 }
 
 function optimizeRenderer(gl: THREE.WebGLRenderer | null) {
@@ -846,20 +848,15 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const handleMouseDown = useCallback(
             (e) => {
                 // Set mode based on mouse button
-                // Right-click only removes blocks in crosshair mode (as a shortcut)
                 // Left-click respects the toolbar mode selection
+                // Right-click is only for camera rotation (right-click + drag)
                 if (e.button === 0) {
                     // Respect the toolbar mode for left-click - don't override it
                     mouseButtonDownRef.current = 0;
                 } else if (e.button === 2) {
-                    // Only allow block removal in crosshair mode
-                    if (!cameraManager.isPointerUnlockedMode) {
-                        modeRef.current = "remove";
-                        mouseButtonDownRef.current = 2;
-                    } else {
-                        // In rotate mode, right-click is only for camera rotation
-                        return;
-                    }
+                    // Right-click is only for camera rotation - don't toggle delete mode
+                    // The only way to toggle delete mode is via the bottom toolbar
+                    return;
                 }
 
                 // Low-res sculpting: temporarily drop pixel ratio
@@ -2123,6 +2120,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             toolManagerRef.current.registerTool("wall", wallTool);
             const groundTool = new GroundTool(terrainBuilderProps);
             toolManagerRef.current.registerTool("ground", groundTool);
+            const staircaseTool = new StaircaseTool(terrainBuilderProps);
+            toolManagerRef.current.registerTool("staircase", staircaseTool);
             const schematicPlacementTool = new SchematicPlacementTool(
                 terrainBuilderProps
             );
@@ -2785,6 +2784,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             },
             setGridVisible,
             setGridY,
+            getGridY,
         })); // This is the correct syntax with just one closing parenthesis
 
         useEffect(() => {
@@ -4178,6 +4178,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             if (shadowPlaneRef.current) {
                 shadowPlaneRef.current.position.y = yPosition;
             }
+        }
+
+        function getGridY(): number {
+            return baseGridYRef.current;
         }
 
         // Initialize GPU-optimized settings on mount

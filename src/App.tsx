@@ -127,6 +127,7 @@ function App() {
     const [isCompactMode, setIsCompactMode] = useState(true);
     const [cameraPosition, setCameraPosition] = useState(null);
     const [playerModeEnabled, setPlayerModeEnabled] = useState(false);
+    const lastBaseGridYRef = useRef<number | null>(null);
     const physicsRef = useRef<PhysicsManager | null>(null);
     const cameraAngle = 0;
     const gridSize = 5000;
@@ -457,6 +458,44 @@ function App() {
         };
     }, [playerModeEnabled]);
 
+    // Update physics ground plane when baseGridY changes while in player mode
+    useEffect(() => {
+        if (!playerModeEnabled || !physicsRef.current) {
+            lastBaseGridYRef.current = null; // Reset when player mode is disabled
+            return;
+        }
+        
+        const updateGround = async () => {
+            const physics = physicsRef.current;
+            if (!physics) return;
+            
+            const baseGridY = terrainBuilderRef.current?.getGridY?.() ?? 0;
+            
+            // Only update if baseGridY actually changed
+            if (lastBaseGridYRef.current !== null && lastBaseGridYRef.current === baseGridY) {
+                return;
+            }
+            
+            lastBaseGridYRef.current = baseGridY;
+            const groundY = baseGridY - 0.5; // Grid is at baseGridY - 0.5, matching raycast behavior
+            
+            // Ensure physics is ready before updating ground
+            await physics.ready();
+            // Update ground position synchronously to avoid race conditions
+            physics.updateGroundY(groundY);
+        };
+        
+        // Update immediately
+        updateGround();
+        
+        // Also check periodically in case baseGridY changes externally (e.g., via SettingsMenu)
+        const interval = setInterval(updateGround, 500);
+        
+        return () => {
+            clearInterval(interval);
+        };
+    }, [playerModeEnabled]);
+
     const togglePlayerMode = () => {
         const next = !playerModeEnabled;
         setPlayerModeEnabled(next);
@@ -475,7 +514,10 @@ function App() {
             (window as any).__WE_CAM_OFFSET_YAW__ = (window as any).__WE_CAM_OFFSET_YAW__ ?? (cameraManager.camera?.rotation?.y || 0);
             // No pointer lock
             physics.ready().then(() => {
-                physics.addFlatGround(4000, -0.5);
+                // Get baseGridY from TerrainBuilder, default to 0 if not available
+                const baseGridY = terrainBuilderRef.current?.getGridY?.() ?? 0;
+                const groundY = baseGridY - 0.5; // Grid is at baseGridY - 0.5, matching raycast behavior
+                physics.addFlatGround(4000, groundY);
                 const pos = cameraPosition ?? { x: 0, y: 10, z: 0 } as any;
                 physics.createOrResetPlayer(new Vector3(pos.x ?? 0, pos.y ?? 10, pos.z ?? 0));
             });

@@ -27,6 +27,8 @@ export class PhysicsManager {
     private _playerCollider: RAPIER.Collider | null = null;
     private _options: PlayerControllerOptions;
     private _onUpdatePlayerCamera?: (pos: THREE.Vector3) => void;
+    private _groundBody: RAPIER.RigidBody | null = null;
+    private _groundCollider: RAPIER.Collider | null = null;
 
     private _readyPromise: Promise<void>;
     private _gravity: { x: number; y: number; z: number };
@@ -133,6 +135,15 @@ export class PhysicsManager {
 
     public addFlatGround(size: number = 2000, y: number = 0) {
         if (!this._world) return null;
+        
+        // Remove existing ground if present
+        if (this._groundCollider) {
+            this._world.removeCollider(this._groundCollider, true);
+        }
+        if (this._groundBody) {
+            this._world.removeRigidBody(this._groundBody);
+        }
+        
         const rb = this._world.createRigidBody(
             RAPIER.RigidBodyDesc.fixed().setTranslation(0, y, 0)
         );
@@ -140,7 +151,12 @@ export class PhysicsManager {
         const collider = RAPIER.ColliderDesc.cuboid(half, 0.5, half)
             .setFriction(0.9)
             .setRestitution(0);
-        this._world.createCollider(collider, rb);
+        const colliderHandle = this._world.createCollider(collider, rb);
+        
+        // Store references
+        this._groundBody = rb;
+        this._groundCollider = colliderHandle;
+        
         // Store top surface Y for simple ground-plane checks
         // Rapier cuboid half-height is 0.5, so top surface is y + 0.5
         (this as any)._flatGroundTopY = y + 0.5;
@@ -150,6 +166,28 @@ export class PhysicsManager {
             )._flatGroundTopY;
         } catch {}
         return rb;
+    }
+
+    public updateGroundY(y: number) {
+        if (!this._world) return;
+        
+        // If ground doesn't exist yet, create it
+        if (!this._groundBody) {
+            this.addFlatGround(4000, y);
+            return;
+        }
+        
+        // Update the rigid body translation immediately
+        this._groundBody.setTranslation({ x: 0, y, z: 0 }, true);
+        
+        // Update stored top surface Y immediately (before physics step)
+        // Rapier cuboid half-height is 0.5, so top surface is y + 0.5
+        (this as any)._flatGroundTopY = y + 0.5;
+        try {
+            (window as any).__WE_PM_PLANE_TOP_Y__ = (
+                this as any
+            )._flatGroundTopY;
+        } catch {}
     }
 
     public removeRigidBody(rb: RAPIER.RigidBody) {
@@ -310,24 +348,59 @@ export class PhysicsManager {
             const ceilingY = Math.floor(top + 0.01);
 
             let grounded = false;
+            const planeTopY = (this as any)._flatGroundTopY;
+            
             // Detect ground contact if a solid block is directly below within a small tolerance
             if (newVy <= 0) {
                 const nearTopOfGround = bottom <= groundY + 1 + 0.08; // tolerance 8cm
                 // Use next.x, next.z for ground support check to detect blocks at the position we're moving to
                 const hasVoxelSupport = sampleXZSolid(next.x, groundY, next.z);
-                const planeTopY = (this as any)._flatGroundTopY;
-                const nearFlatPlane =
-                    typeof planeTopY === "number" &&
-                    Math.abs(bottom - planeTopY) <= 0.08 &&
-                    bottom <= planeTopY + 0.08;
+                
+                // Improved ground plane detection with better tolerance for negative values
+                // Check if player is at or near the plane top, accounting for velocity
+                // Use a larger tolerance (0.2) to catch fast-moving players and account for negative values
+                const planeTolerance = 0.2;
+                let nearFlatPlane = false;
+                let willHitPlane = false;
+                
+                if (typeof planeTopY === "number") {
+                    const distanceToPlane = bottom - planeTopY;
+                    // Check if player is currently near the plane (within tolerance above or slightly below)
+                    nearFlatPlane = distanceToPlane <= planeTolerance && distanceToPlane >= -planeTolerance * 0.5;
+                    
+                    // Also check if player is moving downward and will intersect or pass through the plane this frame
+                    // This prevents falling through when moving fast, especially for negative ground planes
+                    if (!nearFlatPlane) {
+                        // Use current velocity (lv.y) before any modifications for prediction
+                        const currentVy = lv.y;
+                        if (currentVy < 0) { // Only check if moving downward
+                            const predictedBottom = bottom + currentVy * dt;
+                            // Check if we'll hit or pass through the plane this frame
+                            // Allow some tolerance to catch fast-moving players
+                            willHitPlane = predictedBottom <= planeTopY + planeTolerance;
+                            // Also check if player is already below the plane (shouldn't happen, but catch it)
+                            if (bottom < planeTopY - 0.1) {
+                                willHitPlane = true; // Force correction if player is below plane
+                            }
+                        }
+                    }
+                }
+                
                 if (nearTopOfGround && hasVoxelSupport) {
                     grounded = true;
                     newVy = 0;
                     next.y = groundY + 1 + halfHeight + 0.001; // small epsilon
-                } else if (nearFlatPlane) {
+                } else if (nearFlatPlane || willHitPlane) {
                     grounded = true;
                     newVy = 0;
-                    next.y = planeTopY + halfHeight + 0.001; // snap to plane top
+                    // Ensure player is positioned exactly on top of the plane
+                    // Use a small epsilon to prevent sinking
+                    const targetY = planeTopY + halfHeight + 0.001;
+                    // Always snap to plane if we detected collision (prevents falling through)
+                    // But only move upward if player is below or at the plane
+                    if (next.y <= targetY || nearFlatPlane || willHitPlane) {
+                        next.y = targetY;
+                    }
                 }
             }
             // Ceiling check (moving up): stop upward motion if intersecting just below ceiling
@@ -349,7 +422,7 @@ export class PhysicsManager {
             );
             // Apply positional snap if changed (prevents sinking)
             // When on flat plane and grounded, always set Y translation to maintain stability
-            const planeTopY = (this as any)._flatGroundTopY;
+            // planeTopY is already declared above, reuse it
             const isOnFlatPlane = typeof planeTopY === "number" && grounded;
             if (next.y !== pos.y || next.x !== pos.x || next.z !== pos.z || isOnFlatPlane) {
                 // Only correct Y snap to avoid fighting integration for XZ

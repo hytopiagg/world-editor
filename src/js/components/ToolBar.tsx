@@ -16,7 +16,8 @@ import {
     FaTrash,
     FaUndo,
     FaWrench,
-    FaHome
+    FaHome,
+    FaArrowUp
 } from "react-icons/fa";
 import pako from "pako";
 import "../../css/ToolBar.css";
@@ -103,7 +104,7 @@ const ToolBar = ({
 
     const [showGlobalRemapModal, setShowGlobalRemapModal] = useState(false);
     const [usedBlockCounts, setUsedBlockCounts] = useState<Record<number, number>>({});
-    const [globalRemapTargets, setGlobalRemapTargets] = useState<Record<number, number>>({});
+    const [globalRemapTargets, setGlobalRemapTargets] = useState<Record<number, number | null>>({});
     const [openSelectorFor, setOpenSelectorFor] = useState<number | null>(null);
     const [remapSearchTerms, setRemapSearchTerms] = useState<Record<number, string>>({});
 
@@ -149,7 +150,7 @@ const ToolBar = ({
                     counts[id] = (counts[id] || 0) + 1;
                 }
             });
-            const initialTargets: Record<number, number> = {};
+            const initialTargets: Record<number, number | null> = {};
             Object.keys(counts).forEach((idStr) => {
                 const id = parseInt(idStr);
                 initialTargets[id] = id; // default to identity mapping
@@ -1473,6 +1474,20 @@ const ToolBar = ({
                                 </button>
                             </Tooltip>
                         )}
+                        {activeTab === 'blocks' && (
+                            <Tooltip text="Staircase Tool - Click to start, click again to place a staircase. Use 1 | 2 to adjust width. Hold Ctrl to erase. Press Escape to cancel.">
+                                <button
+                                    onClick={() => {
+                                        handleToolToggle("staircase");
+                                        setPlacementSize("single");
+                                    }}
+                                    className={`control-button ${activeTool === "staircase" ? "selected" : ""
+                                        }`}
+                                >
+                                    <FaArrowUp className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                                </button>
+                            </Tooltip>
+                        )}
                     </div>
                 </div>
 
@@ -2022,8 +2037,9 @@ const ToolBar = ({
                                 .sort((a, b) => (usedBlockCounts[b] || 0) - (usedBlockCounts[a] || 0))
                                 .map((srcId) => {
                                     const srcBlock = availableBlocks.find((b: any) => b.id === srcId);
-                                    const tgtId = globalRemapTargets[srcId] ?? srcId;
-                                    const tgtBlock = availableBlocks.find((b: any) => b.id === tgtId);
+                                    const tgtId = globalRemapTargets[srcId] !== undefined ? globalRemapTargets[srcId] : srcId;
+                                    const isRemoved = tgtId === null;
+                                    const tgtBlock = !isRemoved ? availableBlocks.find((b: any) => b.id === tgtId) : null;
                                     return (
                                         <div key={srcId} className="axiom-remapper-item">
                                             <div
@@ -2038,11 +2054,17 @@ const ToolBar = ({
                                                         title="Click to change target"
                                                     >
                                                         <span className="arrow-sep">→</span>
-                                                        <img
-                                                            className="mapping-icon"
-                                                            src={pickBlockTexture(tgtBlock)}
-                                                            alt={tgtBlock?.name || `ID ${tgtId}`}
-                                                        />
+                                                        {isRemoved ? (
+                                                            <span className="remove-indicator">
+                                                                Remove
+                                                            </span>
+                                                        ) : (
+                                                            <img
+                                                                className="mapping-icon"
+                                                                src={pickBlockTexture(tgtBlock)}
+                                                                alt={tgtBlock?.name || `ID ${tgtId}`}
+                                                            />
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -2057,6 +2079,16 @@ const ToolBar = ({
                                                         onKeyDown={(e) => e.stopPropagation()}
                                                     />
                                                     <div className="selector-grid icon-only">
+                                                        <button
+                                                            className={`selector-tile remove-tile ${isRemoved ? 'selected' : ''}`}
+                                                            title="Remove block"
+                                                            onClick={() => {
+                                                                setGlobalRemapTargets((prev) => ({ ...prev, [srcId]: null }));
+                                                                setOpenSelectorFor(null);
+                                                            }}
+                                                        >
+                                                            <span className="remove-icon">×</span>
+                                                        </button>
                                                         {getFilteredBlocksFor(srcId).map((blk: any) => (
                                                             <button
                                                                 key={blk.id}
@@ -2093,7 +2125,11 @@ const ToolBar = ({
                                         for (const [posKey, id] of Object.entries(data as Record<string, number>)) {
                                             const srcId = id as number;
                                             const tgtId = globalRemapTargets[srcId];
-                                            if (typeof tgtId === 'number' && tgtId !== srcId) {
+                                            if (tgtId === null) {
+                                                // Map to nothing - remove the block
+                                                removed[posKey] = srcId;
+                                            } else if (typeof tgtId === 'number' && tgtId !== srcId) {
+                                                // Map to a different block
                                                 added[posKey] = tgtId;
                                                 removed[posKey] = srcId;
                                             }

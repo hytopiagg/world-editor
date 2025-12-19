@@ -140,14 +140,9 @@ function handleTerrainMouseDown(
         if (e.button !== 0 && e.button !== 2) return;
     }
 
-    // For the general placement system we proceed only on left-click (button 0) or right-click (button 2)
-    // Right-click only works in crosshair mode (when pointer is not unlocked)
-    if (e.button !== 0 && e.button !== 2) {
-        return;
-    }
-    
-    // Prevent right-click block removal when crosshair mode is off
-    if (e.button === 2 && cameraManager.isPointerUnlockedMode) {
+    // For the general placement system we proceed only on left-click (button 0)
+    // Right-click (button 2) is reserved for camera rotation and handled separately
+    if (e.button !== 0) {
         return;
     }
 

@@ -7,6 +7,7 @@ import BlockOptionsSection from "./BlockOptionsSection";
 import ComponentOptionsSection from "./ComponentOptionsSection";
 import DebugInfo from "./DebugInfo";
 import GroundToolOptionsSection from "./GroundToolOptionsSection";
+import StaircaseToolOptionsSection from "./StaircaseToolOptionsSection";
 import ModelOptionsSection from "./ModelOptionsSection";
 import SettingsMenu from "./SettingsMenu";
 import WallToolOptionsSection from "./WallToolOptionsSection";
@@ -237,6 +238,14 @@ export function BlockToolOptions({
                     <CollapsibleSection title="Wall Tool" animationDelay="0.09s">
                         <WallToolOptionsSection
                             wallTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["wall"]}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTool === "staircase" && (
+                    <CollapsibleSection title="Staircase Tool" animationDelay="0.09s">
+                        <StaircaseToolOptionsSection
+                            staircaseTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["staircase"]}
                             isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>

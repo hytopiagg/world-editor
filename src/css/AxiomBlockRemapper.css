@@ -312,6 +312,51 @@
     padding: 6px; /* tighter */
 }
 
+/* Removal button styling */
+.selector-tile.remove-tile {
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid transparent;
+}
+
+.selector-tile.remove-tile:hover {
+    background: rgba(255, 68, 68, 0.15);
+    border-color: rgba(255, 68, 68, 0.4);
+}
+
+.selector-tile.remove-tile.selected {
+    background: rgba(255, 68, 68, 0.25);
+    border-color: #ff4444;
+}
+
+.remove-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 68, 68, 0.8);
+    font-size: 32px;
+    font-weight: 700;
+    transition: color 0.18s ease;
+}
+
+.selector-tile.remove-tile:hover .remove-icon,
+.selector-tile.remove-tile.selected .remove-icon {
+    color: #ff4444;
+}
+
+.remove-indicator {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    background: rgba(255, 68, 68, 0.15);
+    border: 1px solid rgba(255, 68, 68, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 68, 68, 0.9);
+    font-size: 12px;
+    font-weight: 500;
+}
+
 .entity-pills {
     display: flex;
     flex-wrap: wrap;
