@@ -269,16 +269,18 @@ export class TerrainTool extends BaseTool {
 
     findGroundLevel(x, z) {
         const terrainData = (this.terrainBuilderProps as any).terrainRef.current;
+        const baseGridY = (this.terrainBuilderProps as any).baseGridYRef?.current ?? 0;
 
         // Search downward from a reasonable height to find the ground
-        for (let y = 64; y >= 0; y--) {
+        // Use baseGridY as the lower bound to support negative grid positions
+        for (let y = 64; y >= baseGridY; y--) {
             const key = `${x},${y},${z}`;
             if (terrainData[key]) {
                 return y + 1; // Return one block above the highest solid block
             }
         }
 
-        return 0; // Default to y=0 if no terrain found
+        return baseGridY; // Default to baseGridY if no terrain found
     }
 
     storeOriginalHeights() {
@@ -455,8 +457,9 @@ export class TerrainTool extends BaseTool {
                     // Add blocks up to new height using the currently selected block type from App.tsx
                     const currentBlockType = (this.terrainBuilderProps as any).currentBlockTypeRef?.current;
                     const selectedBlockId = currentBlockType?.id || 1; // Default fallback
+                    const baseGridY = (this.terrainBuilderProps as any).baseGridYRef?.current ?? 0;
 
-                    for (let y = Math.min(oldGroundLevel, 0); y <= newGroundLevel; y++) {
+                    for (let y = Math.min(oldGroundLevel, baseGridY); y <= newGroundLevel; y++) {
                         const blockKey = `${x},${y},${z}`;
                         if (!terrainData[blockKey]) {
                             // Always use the currently selected block type
@@ -561,13 +564,15 @@ export class TerrainTool extends BaseTool {
         if (this.heightMap.size > 0) {
             const terrainData = (this.terrainBuilderProps as any).terrainRef.current;
             const affectedBlocks = [];
+            const baseGridY = (this.terrainBuilderProps as any).baseGridYRef?.current ?? 0;
 
             for (const [heightKey] of this.heightMap.entries()) {
                 const [x, z] = heightKey.split(',').map(Number);
                 const groundLevel = this.findGroundLevel(x, z);
 
                 // Add all blocks in the affected column to spatial hash update
-                for (let y = 0; y <= Math.max(groundLevel + 5, 20); y++) {
+                // Start from baseGridY to support negative grid positions
+                for (let y = baseGridY; y <= Math.max(groundLevel + 5, baseGridY + 20); y++) {
                     const blockKey = `${x},${y},${z}`;
                     if (terrainData[blockKey]) {
                         affectedBlocks.push({

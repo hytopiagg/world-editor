@@ -107,6 +107,7 @@ const PixelEditorCanvas = forwardRef(
             initialTextureObject,
             selectedTool,
             selectedColor,
+            selectedOpacity = 100,
             canvasSize = 480,
             selectedFace,
             onPixelUpdate,
@@ -478,8 +479,31 @@ const PixelEditorCanvas = forwardRef(
             if (!coords || !currentDrawingRef.current) return;
             const { x, y } = coords;
             let changed = false;
+            
+            // Calculate actual alpha based on selectedOpacity (0-100 -> 0-1)
+            const alpha = selectedOpacity / 100;
+            
             if (selectedTool === TOOLS.PENCIL) {
-                const colorRgba = { ...hexToRgb(selectedColor), a: 1 };
+                const colorRgba = { ...hexToRgb(selectedColor), a: alpha };
+                
+                // If alpha < 1, blend with existing color
+                if (alpha < 1 && alpha > 0) {
+                    const existingIndex = (y * GRID_SIZE + x) * 4;
+                    const existingR = currentDrawingRef.current.data[existingIndex];
+                    const existingG = currentDrawingRef.current.data[existingIndex + 1];
+                    const existingB = currentDrawingRef.current.data[existingIndex + 2];
+                    const existingA = currentDrawingRef.current.data[existingIndex + 3] / 255;
+                    
+                    // Alpha blending
+                    const newA = alpha + existingA * (1 - alpha);
+                    if (newA > 0) {
+                        colorRgba.r = Math.round((colorRgba.r * alpha + existingR * existingA * (1 - alpha)) / newA);
+                        colorRgba.g = Math.round((colorRgba.g * alpha + existingG * existingA * (1 - alpha)) / newA);
+                        colorRgba.b = Math.round((colorRgba.b * alpha + existingB * existingA * (1 - alpha)) / newA);
+                        colorRgba.a = newA;
+                    }
+                }
+                
                 updateImageDataPixel(
                     currentDrawingRef.current,
                     x,
@@ -499,7 +523,7 @@ const PixelEditorCanvas = forwardRef(
                 const colorRgba =
                     selectedColor === ERASER_STYLE
                         ? ERASER_COLOR_RGBA
-                        : { ...hexToRgb(selectedColor), a: 1 };
+                        : { ...hexToRgb(selectedColor), a: alpha };
                 changed = floodFillInternal(
                     currentDrawingRef.current,
                     x,
@@ -513,8 +537,25 @@ const PixelEditorCanvas = forwardRef(
                 if (displayCanvas) {
                     const ctx = displayCanvas.getContext("2d");
                     if (ctx && selectedTool === TOOLS.PENCIL) {
-
-                        const colorStyle = selectedColor;
+                        // Draw with alpha for visual feedback
+                        const rgb = hexToRgb(selectedColor);
+                        const colorStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+                        
+                        // First draw checkerboard if partially transparent
+                        if (alpha < 1) {
+                            if ((x + y) % 2 === 0) {
+                                ctx.fillStyle = "#e0e0e0";
+                            } else {
+                                ctx.fillStyle = DEFAULT_BG_COLOR;
+                            }
+                            ctx.fillRect(
+                                x * pixelSize,
+                                y * pixelSize,
+                                pixelSize,
+                                pixelSize
+                            );
+                        }
+                        
                         ctx.fillStyle = colorStyle;
                         ctx.fillRect(
                             x * pixelSize,
@@ -793,6 +834,7 @@ PixelEditorCanvas.propTypes = {
     initialTextureObject: PropTypes.object, // Expect THREE.CanvasTexture
     selectedTool: PropTypes.string.isRequired,
     selectedColor: PropTypes.string.isRequired,
+    selectedOpacity: PropTypes.number, // Opacity from 0-100
     canvasSize: PropTypes.number,
     selectedFace: PropTypes.string.isRequired,
     onPixelUpdate: PropTypes.func, // Expects (face, imageData) => void

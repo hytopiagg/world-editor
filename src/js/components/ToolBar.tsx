@@ -108,6 +108,14 @@ const ToolBar = ({
     const [openSelectorFor, setOpenSelectorFor] = useState<number | null>(null);
     const [remapSearchTerms, setRemapSearchTerms] = useState<Record<number, string>>({});
 
+    // Remove Hidden Blocks modal state
+    const [showRemoveHiddenModal, setShowRemoveHiddenModal] = useState(false);
+    const [removeHiddenOptions, setRemoveHiddenOptions] = useState({
+        includeLiquids: false,
+        preserveNextToTransparent: false,
+        preserveNextToLiquids: false,
+    });
+
     const availableBlocks = useMemo(() => {
         try {
             return getBlockTypes() || [];
@@ -457,251 +465,45 @@ const ToolBar = ({
         }
     };
 
-    // const handleBlockRemapper = async () => {
-    //     if (!terrainBuilderRef?.current?.getCurrentTerrainData) {
-    //         console.error("TerrainBuilder reference not available for block remapping");
-    //         return;
-    //     }
+    /**
+     * Helper to check if a block type is transparent (has any transparent face)
+     */
+    const isBlockTransparent = (blockId: number): boolean => {
+        try {
+            const blockTypeRegistry = (window as any).BlockTypeRegistry;
+            if (!blockTypeRegistry?.instance) return false;
+            const blockType = blockTypeRegistry.instance.getBlockType(blockId);
+            if (!blockType) return false;
+            // Check if any face is transparent
+            const faces = ['top', 'bottom', 'left', 'right', 'front', 'back'];
+            for (const face of faces) {
+                if (blockType.isFaceTransparent?.(face)) return true;
+            }
+            return false;
+        } catch {
+            return false;
+        }
+    };
 
-    //     const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
-    //     if (!terrainData) {
-    //         alert("No terrain data available to remap.");
-    //         return;
-    //     }
+    /**
+     * Helper to check if a block type is liquid
+     */
+    const isBlockLiquid = (blockId: number): boolean => {
+        try {
+            const blockTypeRegistry = (window as any).BlockTypeRegistry;
+            if (!blockTypeRegistry?.instance) return false;
+            const blockType = blockTypeRegistry.instance.getBlockType(blockId);
+            return blockType?.isLiquid ?? false;
+        } catch {
+            return false;
+        }
+    };
 
-    //     // Force texture atlas rebuild to ensure all textures are loaded
-    //     try {
-    //         const { rebuildTextureAtlas } = await import("../chunks/TerrainBuilderIntegration");
-    //         await rebuildTextureAtlas();
-    //     } catch (error) {
-    //         console.warn("Could not rebuild texture atlas:", error);
-    //     }
-
-    //     // Get available block types to convert IDs to names
-    //     const blockTypes = getBlockTypes() || [];
-    //     const blockTypeMap = new Map();
-
-    //     // Ensure block types have proper texture data loaded
-    //     console.log("Block remapper: Starting texture data processing for", blockTypes.length, "block types");
-
-    //     try {
-    //         const BlockTypeRegistry = (await import("../blocks/BlockTypeRegistry")).default;
-    //         console.log("Block remapper: BlockTypeRegistry loaded successfully, instance:", !!BlockTypeRegistry?.instance);
-
-    //         let textureDataLoaded = 0;
-    //         let textureDataMissing = 0;
-
-    //         for (const blockType of blockTypes) {
-    //             if (blockType.id) {
-    //                 const blockTypeAny = blockType as any;
-    //                 const hasInitialTextures = !!(blockTypeAny.sideTextures || blockTypeAny.textureUri);
-
-    //                 console.log(`Block remapper: Processing block ${blockType.id} (${blockType.name}):`, {
-    //                     hasInitialSideTextures: !!blockTypeAny.sideTextures,
-    //                     hasInitialTextureUri: !!blockTypeAny.textureUri,
-    //                     sideTextureKeys: blockTypeAny.sideTextures ? Object.keys(blockTypeAny.sideTextures) : [],
-    //                     initialTextureUri: blockTypeAny.textureUri || "none"
-    //                 });
-
-    //                 // For blocks without proper texture data, try to get it from registry
-    //                 if (BlockTypeRegistry?.instance && (!blockTypeAny.sideTextures || !blockTypeAny.textureUri)) {
-    //                     try {
-    //                         const registryBlock = BlockTypeRegistry.instance.getBlockType(blockType.id);
-    //                         if (registryBlock) {
-    //                             const registryBlockAny = registryBlock as any;
-    //                             console.log(`Block remapper: Found registry data for block ${blockType.id}:`, {
-    //                                 registryHasSideTextures: !!registryBlockAny.sideTextures,
-    //                                 registryHasTextureUri: !!registryBlockAny.textureUri,
-    //                                 registrySideTextureKeys: registryBlockAny.sideTextures ? Object.keys(registryBlockAny.sideTextures) : [],
-    //                                 registryTextureUri: registryBlockAny.textureUri || "none"
-    //                             });
-
-    //                             // Copy over texture data from registry (using any type to avoid strict typing issues)
-    //                             if (registryBlockAny.sideTextures && !blockTypeAny.sideTextures) {
-    //                                 blockTypeAny.sideTextures = registryBlockAny.sideTextures;
-    //                                 console.log(`Block remapper: Copied sideTextures for block ${blockType.id}:`, Object.keys(blockTypeAny.sideTextures));
-    //                             }
-    //                             if (registryBlockAny.textureUri && !blockTypeAny.textureUri) {
-    //                                 blockTypeAny.textureUri = registryBlockAny.textureUri;
-    //                                 console.log(`Block remapper: Copied textureUri for block ${blockType.id}:`, blockTypeAny.textureUri);
-    //                             }
-
-    //                             textureDataLoaded++;
-    //                         } else {
-    //                             console.warn(`Block remapper: No registry data found for block ${blockType.id} (${blockType.name})`);
-    //                             textureDataMissing++;
-    //                         }
-    //                     } catch (registryError) {
-    //                         console.error(`Block remapper: Error loading registry data for block ${blockType.id}:`, registryError);
-    //                         textureDataMissing++;
-    //                     }
-    //                 }
-
-    //                 // Ensure multi-texture blocks have proper flags set
-    //                 if (blockTypeAny.sideTextures && Object.keys(blockTypeAny.sideTextures).length > 1) {
-    //                     blockTypeAny.isMultiTexture = true;
-    //                     console.log(`Block remapper: Marked block ${blockType.id} as multi-texture with ${Object.keys(blockTypeAny.sideTextures).length} faces`);
-    //                 }
-
-    //                 // Log final texture state
-    //                 console.log(`Block remapper: Final texture state for block ${blockType.id} (${blockType.name}):`, {
-    //                     hasSideTextures: !!blockTypeAny.sideTextures,
-    //                     hasTextureUri: !!blockTypeAny.textureUri,
-    //                     isMultiTexture: !!blockTypeAny.isMultiTexture,
-    //                     sideTextureKeys: blockTypeAny.sideTextures ? Object.keys(blockTypeAny.sideTextures) : [],
-    //                     textureUri: blockTypeAny.textureUri || "none"
-    //                 });
-
-    //                 blockTypeMap.set(blockType.id.toString(), blockType);
-    //             }
-    //         }
-
-    //         console.log(`Block remapper: Texture data loading complete - Loaded: ${textureDataLoaded}, Missing: ${textureDataMissing}`);
-    //     } catch (importError) {
-    //         console.error("Block remapper: Could not import BlockTypeRegistry:", importError);
-    //         // Fallback: just process blocks as-is
-    //         blockTypes.forEach(blockType => {
-    //             if (blockType.id) {
-    //                 const blockTypeAny = blockType as any;
-    //                 console.log(`Block remapper: Fallback processing for block ${blockType.id} (${blockType.name}):`, {
-    //                     hasSideTextures: !!blockTypeAny.sideTextures,
-    //                     hasTextureUri: !!blockTypeAny.textureUri,
-    //                     sideTextureKeys: blockTypeAny.sideTextures ? Object.keys(blockTypeAny.sideTextures) : []
-    //                 });
-
-    //                 // Ensure multi-texture blocks have proper flags set
-    //                 if (blockTypeAny.sideTextures && Object.keys(blockTypeAny.sideTextures).length > 1) {
-    //                     blockTypeAny.isMultiTexture = true;
-    //                     console.log(`Block remapper: Fallback marked block ${blockType.id} as multi-texture`);
-    //                 }
-    //                 blockTypeMap.set(blockType.id.toString(), blockType);
-    //             }
-    //         });
-    //     }
-
-    //     // Analyze terrain to get unique block types and counts
-    //     const blockCounts: { [key: string]: number } = {};
-    //     const blockTypesSet = new Set<string>();
-    //     const idToNameMap: { [key: string]: string } = {};
-
-    //     Object.values(terrainData).forEach((blockId) => {
-    //         const id = parseInt(blockId as string);
-    //         if (id && id > 0) {
-    //             const blockType = blockTypeMap.get(id.toString());
-    //             if (blockType && blockType.name) {
-    //                 // Use the exact name from the block registry to ensure texture matching
-    //                 const blockName = blockType.name;
-    //                 blockCounts[blockName] = (blockCounts[blockName] || 0) + 1;
-    //                 blockTypesSet.add(blockName);
-    //                 idToNameMap[id.toString()] = blockName;
-    //             } else {
-    //                 // Fallback for unknown blocks with proper texture fallback
-    //                 const fallbackName = `Unknown Block (ID: ${id})`;
-    //                 blockCounts[fallbackName] = (blockCounts[fallbackName] || 0) + 1;
-    //                 blockTypesSet.add(fallbackName);
-    //                 idToNameMap[id.toString()] = fallbackName;
-    //             }
-    //         }
-    //     });
-
-    //     const uniqueBlocks = Array.from(blockTypesSet);
-
-    //     if (uniqueBlocks.length === 0) {
-    //         alert("No blocks found in the terrain to remap.");
-    //         return;
-    //     }
-
-    //     console.log("Block remapper data:", { uniqueBlocks, blockCounts, idToNameMap });
-
-    //     setRemapperData({
-    //         blocks: uniqueBlocks,
-    //         blockCounts: blockCounts,
-    //         idToNameMap: idToNameMap
-    //     });
-
-    //     setShowBlockRemapperModal(true);
-    // };
-
-    // const handleBlockRemapperConfirm = (mappings) => {
-    //     if (!terrainBuilderRef?.current?.getCurrentTerrainData || !terrainBuilderRef?.current?.updateTerrainBlocks) {
-    //         console.error("TerrainBuilder reference not available for block remapping");
-    //         return;
-    //     }
-
-    //     const terrainData = terrainBuilderRef.current.getCurrentTerrainData();
-    //     if (!terrainData || Object.keys(terrainData).length === 0) {
-    //         alert("No terrain data available to remap.");
-    //         return;
-    //     }
-
-    //     // Get available block types for name-to-ID conversion
-    //     const blockTypes = getBlockTypes() || [];
-    //     const nameToIdMap = new Map();
-    //     blockTypes.forEach(blockType => {
-    //         if (blockType.id && blockType.name) {
-    //             nameToIdMap.set(blockType.name, blockType.id.toString());
-    //         }
-    //     });
-
-    //     // Create reverse mapping from ID to name for current blocks
-    //     const { idToNameMap } = remapperData;
-
-    //     let remappedCount = 0;
-    //     const addedBlocks: { [key: string]: string | number } = {};
-    //     const removedBlocks: { [key: string]: string | number } = {};
-
-    //     // Process each block in the terrain
-    //     Object.entries(terrainData).forEach(([posKey, currentBlockId]) => {
-    //         const blockIdStr = (currentBlockId as string | number).toString();
-    //         const currentBlockName = idToNameMap[blockIdStr];
-
-    //         if (!currentBlockName) return; // Skip if we can't find the block name
-
-    //         const mapping = mappings[currentBlockName];
-
-    //         if (mapping && mapping.action === "map" && mapping.id) {
-    //             // Convert target block ID/name to actual ID
-    //             let targetBlockId = mapping.id;
-
-    //             // If the mapping.id is actually a block name, convert it to ID
-    //             if (isNaN(parseInt(mapping.id))) {
-    //                 targetBlockId = nameToIdMap.get(mapping.id) || mapping.id;
-    //             }
-
-    //             if (targetBlockId && targetBlockId.toString() !== blockIdStr) {
-    //                 // Block needs to be remapped
-    //                 removedBlocks[posKey] = currentBlockId as string | number;
-    //                 addedBlocks[posKey] = targetBlockId;
-    //                 remappedCount++;
-    //             }
-    //         } else if (mapping && mapping.action === "skip") {
-    //             // Block should be removed
-    //             removedBlocks[posKey] = currentBlockId as string | number;
-    //             remappedCount++;
-    //         }
-    //         // If action is "entity" or no mapping, leave the block as is
-    //     });
-
-    //     if (remappedCount === 0) {
-    //         alert("No blocks were changed based on the provided mappings.");
-    //     } else {
-    //         try {
-    //             // Apply the block changes
-    //             terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, removedBlocks, {
-    //                 syncPendingChanges: true
-    //             });
-
-    //             alert(`Block remapping completed! ${remappedCount} blocks were remapped.`);
-    //         } catch (error) {
-    //             console.error("Error applying block remapping:", error);
-    //             alert("An error occurred while remapping blocks. Check console for details.");
-    //         }
-    //     }
-
-    //     setShowBlockRemapperModal(false);
-    // };
-
-    const handleRemoveHiddenBlocks = () => {
+    const handleRemoveHiddenBlocks = (options: {
+        includeLiquids: boolean;
+        preserveNextToTransparent: boolean;
+        preserveNextToLiquids: boolean;
+    }) => {
         if (!terrainBuilderRef?.current?.getCurrentTerrainData) {
             console.error("TerrainBuilder reference not available for removing hidden blocks");
             return;
@@ -711,9 +513,19 @@ const ToolBar = ({
         if (!terrainData) return;
 
         const originalCount = Object.keys(terrainData).length;
-        const removedBlocks = {};
+        const removedBlocks: Record<string, number> = {};
 
         for (const key in terrainData) {
+            const blockId = terrainData[key];
+
+            // Check if this block is a liquid
+            const blockIsLiquid = isBlockLiquid(blockId);
+
+            // If includeLiquids is false and this block is liquid, skip it (don't remove)
+            if (!options.includeLiquids && blockIsLiquid) {
+                continue;
+            }
+
             const [xStr, yStr, zStr] = key.split(",");
             const x = parseInt(xStr);
             const y = parseInt(yStr);
@@ -729,11 +541,30 @@ const ToolBar = ({
             ];
 
             let isHidden = true;
+            let touchesTransparent = false;
+            let touchesLiquid = false;
+
             for (const nKey of neighborKeys) {
                 if (!(nKey in terrainData)) {
+                    // No neighbor at this position - block is exposed
                     isHidden = false;
                     break;
                 }
+
+                const neighborId = terrainData[nKey];
+
+                // Check neighbor properties for preservation options
+                if (options.preserveNextToTransparent && isBlockTransparent(neighborId)) {
+                    touchesTransparent = true;
+                }
+                if (options.preserveNextToLiquids && isBlockLiquid(neighborId)) {
+                    touchesLiquid = true;
+                }
+            }
+
+            // If block touches transparent/liquid and user wants to preserve those, skip
+            if (touchesTransparent || touchesLiquid) {
+                continue;
             }
 
             if (isHidden) {
@@ -744,7 +575,7 @@ const ToolBar = ({
         const removedCount = Object.keys(removedBlocks).length;
 
         if (removedCount === 0) {
-            alert("No hidden blocks found to remove.");
+            alert("No hidden blocks found to remove with the current options.");
             return;
         }
 
@@ -905,8 +736,8 @@ const ToolBar = ({
     const decodePaletteIndices = (longPairs: any[], paletteLen: number, totalBlocks: number) => {
         const longs =
             longPairs &&
-            longPairs.length > 0 &&
-            typeof longPairs[0] === "bigint"
+                longPairs.length > 0 &&
+                typeof longPairs[0] === "bigint"
                 ? longPairs
                 : (longPairs || []).map(decodeLongPairToBigInt);
 
@@ -1183,7 +1014,7 @@ const ToolBar = ({
             if (terrainBuilderRef?.current?.activateTool) {
                 terrainBuilderRef.current.activateTool("schematic", schematic);
             }
-        } catch (_) {}
+        } catch (_) { }
 
         // Clean up
         setShowBlockRemapper(false);
@@ -1571,8 +1402,8 @@ const ToolBar = ({
                                         className="w-fit flex items-center whitespace-nowrap justify-center bg-black/60 text-[#F1F1F1] rounded-md px-2 py-1 border border-white/0 hover:border-white transition-opacity duration-200 cursor-pointer opacity-0 fade-up"
                                         style={{ animationDelay: '0.05s' }}
                                         onClick={() => {
-                                            handleRemoveHiddenBlocks();
-                                            setActiveSubmenu(SubMenuType.NONE); // Close submenu after selection
+                                            setShowRemoveHiddenModal(true);
+                                            setActiveSubmenu(SubMenuType.NONE); // Close submenu
                                         }}
                                     >
                                         {"Remove Hidden Blocks"}
@@ -2138,7 +1969,7 @@ const ToolBar = ({
                                             setShowGlobalRemapModal(false);
                                             return;
                                         }
-                                        
+
                                         // Extract unique block IDs that will be placed
                                         const uniqueBlockIds = new Set<number>();
                                         Object.values(added).forEach(blockId => {
@@ -2146,10 +1977,10 @@ const ToolBar = ({
                                                 uniqueBlockIds.add(blockId);
                                             }
                                         });
-                                        
+
                                         console.log(`[GLOBAL_REMAP] Applying remap with ${Object.keys(added).length} blocks`);
                                         console.log(`[GLOBAL_REMAP] Found ${uniqueBlockIds.size} unique block types to preload:`, Array.from(uniqueBlockIds));
-                                        
+
                                         // Preload textures for all blocks that will be placed
                                         try {
                                             const blockTypeRegistry = (window as any).BlockTypeRegistry;
@@ -2172,7 +2003,7 @@ const ToolBar = ({
                                             console.error("[GLOBAL_REMAP] ✗ Error during texture preloading:", error);
                                             // Continue with remap even if preloading fails
                                         }
-                                        
+
                                         terrainBuilderRef?.current?.updateTerrainBlocks?.(added, removed, { syncPendingChanges: true });
                                         setShowGlobalRemapModal(false);
                                     } catch (e) {
@@ -2182,6 +2013,143 @@ const ToolBar = ({
                                 }}
                             >
                                 Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Remove Hidden Blocks Confirmation Modal */}
+            {showRemoveHiddenModal && (
+                <div
+                    className="modal-overlay"
+                    onClick={(e) => handleModalOverlayClick(e, setShowRemoveHiddenModal)}
+                >
+                    <div className="modal-content" style={{ maxWidth: '480px', textAlign: 'left' }}>
+                        <h3 className="modal-title" style={{ textAlign: 'center' }}>Remove Hidden Blocks</h3>
+                        <p className="modal-description" style={{ textAlign: 'left' }}>
+                            Remove blocks that are completely surrounded by other blocks and not visible.
+                            This can help reduce map file size and improve performance.
+                        </p>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px', marginBottom: '20px' }}>
+                            <label style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '12px',
+                                cursor: 'pointer',
+                                padding: '10px 14px',
+                                borderRadius: '8px',
+                                backgroundColor: 'rgba(255,255,255,0.05)',
+                                transition: 'background-color 0.2s'
+                            }}>
+                                <input
+                                    type="checkbox"
+                                    checked={removeHiddenOptions.includeLiquids}
+                                    onChange={(e) => setRemoveHiddenOptions(prev => ({
+                                        ...prev,
+                                        includeLiquids: e.target.checked
+                                    }))}
+                                    style={{
+                                        width: '18px',
+                                        height: '18px',
+                                        accentColor: '#4CAF50',
+                                        cursor: 'pointer',
+                                        marginTop: '2px',
+                                        flexShrink: 0
+                                    }}
+                                />
+                                <div style={{ textAlign: 'left' }}>
+                                    <div style={{ fontWeight: 500, marginBottom: '2px' }}>Include liquid blocks</div>
+                                    <div style={{ fontSize: '12px', opacity: 0.7, lineHeight: 1.4 }}>
+                                        Also remove hidden water/lava blocks
+                                    </div>
+                                </div>
+                            </label>
+
+                            <label style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '12px',
+                                cursor: 'pointer',
+                                padding: '10px 14px',
+                                borderRadius: '8px',
+                                backgroundColor: 'rgba(255,255,255,0.05)',
+                                transition: 'background-color 0.2s'
+                            }}>
+                                <input
+                                    type="checkbox"
+                                    checked={removeHiddenOptions.preserveNextToTransparent}
+                                    onChange={(e) => setRemoveHiddenOptions(prev => ({
+                                        ...prev,
+                                        preserveNextToTransparent: e.target.checked
+                                    }))}
+                                    style={{
+                                        width: '18px',
+                                        height: '18px',
+                                        accentColor: '#4CAF50',
+                                        cursor: 'pointer',
+                                        marginTop: '2px',
+                                        flexShrink: 0
+                                    }}
+                                />
+                                <div style={{ textAlign: 'left' }}>
+                                    <div style={{ fontWeight: 500, marginBottom: '2px' }}>Preserve blocks near transparent</div>
+                                    <div style={{ fontSize: '12px', opacity: 0.7, lineHeight: 1.4 }}>
+                                        Keep blocks adjacent to glass or other transparent blocks
+                                    </div>
+                                </div>
+                            </label>
+
+                            <label style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '12px',
+                                cursor: 'pointer',
+                                padding: '10px 14px',
+                                borderRadius: '8px',
+                                backgroundColor: 'rgba(255,255,255,0.05)',
+                                transition: 'background-color 0.2s'
+                            }}>
+                                <input
+                                    type="checkbox"
+                                    checked={removeHiddenOptions.preserveNextToLiquids}
+                                    onChange={(e) => setRemoveHiddenOptions(prev => ({
+                                        ...prev,
+                                        preserveNextToLiquids: e.target.checked
+                                    }))}
+                                    style={{
+                                        width: '18px',
+                                        height: '18px',
+                                        accentColor: '#4CAF50',
+                                        cursor: 'pointer',
+                                        marginTop: '2px',
+                                        flexShrink: 0
+                                    }}
+                                />
+                                <div style={{ textAlign: 'left' }}>
+                                    <div style={{ fontWeight: 500, marginBottom: '2px' }}>Preserve blocks near liquids</div>
+                                    <div style={{ fontSize: '12px', opacity: 0.7, lineHeight: 1.4 }}>
+                                        Keep blocks adjacent to water or lava
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                            <button
+                                className="btn-cancel"
+                                onClick={() => setShowRemoveHiddenModal(false)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn-confirm"
+                                onClick={() => {
+                                    handleRemoveHiddenBlocks(removeHiddenOptions);
+                                    setShowRemoveHiddenModal(false);
+                                }}
+                            >
+                                Remove Hidden Blocks
                             </button>
                         </div>
                     </div>

@@ -423,4 +423,113 @@
     border-color: rgba(255, 255, 255, 0.4);
 }
 
+/* Range slider styling for color adjustments */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-track {
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    margin-top: -4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    transition: transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+    transform: scale(0.95);
+}
+
+input[type="range"]::-moz-range-track {
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Opacity slider custom styling */
+.opacity-slider-track {
+    position: relative;
+    height: 16px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.opacity-slider-track::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: 
+        linear-gradient(45deg, #808080 25%, transparent 25%),
+        linear-gradient(-45deg, #808080 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #808080 75%),
+        linear-gradient(-45deg, transparent 75%, #808080 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+/* Color tint picker */
+input[type="color"] {
+    -webkit-appearance: none;
+    appearance: none;
+    border: none;
+    padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+/* Scrollbar styling for the tools panel */
+.max-h-\\[550px\\]::-webkit-scrollbar {
+    width: 6px;
+}
+
+.max-h-\\[550px\\]::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.max-h-\\[550px\\]::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.max-h-\\[550px\\]::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
 

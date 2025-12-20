@@ -9,6 +9,9 @@ import FaceSelector from "./FaceSelector";
 import "../../css/TextureGenerationModal.css"; // We'll create this CSS file next
 import * as THREE from "three"; // Import THREE
 import CustomColorPicker from "./ColorPicker";
+import BaseTexturePicker from "./BaseTexturePicker";
+import TextureAdjustments, { applyColorAdjustments } from "./TextureAdjustments";
+import { FaCube, FaMagic } from "react-icons/fa";
 const FACES = ["all", "top", "bottom", "left", "right", "front", "back"];
 const GRID_SIZE = 24; // Ensure grid size is accessible here
 
@@ -35,12 +38,17 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
     const [selectedTool, setSelectedTool] = useState(TOOLS.PENCIL);
     const [selectedColor, setSelectedColor] = useState("#000000");
+    const [selectedOpacity, setSelectedOpacity] = useState(100);
     const [selectedFace, setSelectedFace] = useState("all");
 
     const pixelCanvasRef = useRef(null);
 
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
+
+    // New state for base texture picker and adjustments
+    const [showBaseTexturePicker, setShowBaseTexturePicker] = useState(false);
+    const [showAdjustments, setShowAdjustments] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -253,6 +261,97 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         console.log("Selected face:", face);
         setSelectedFace(face);
     };
+
+    // Handle base texture selection
+    const handleBaseTextureSelect = useCallback(
+        (faceTextures, isMultiTexture) => {
+            const newTextureObjects = {};
+
+            FACES.forEach((face) => {
+                const texture = createTexture(GRID_SIZE);
+                const ctx = texture.image.getContext("2d");
+
+                // Determine which texture to use for this face
+                let textureDataUrl;
+                if (isMultiTexture && faceTextures[face]) {
+                    textureDataUrl = faceTextures[face];
+                } else if (faceTextures.all) {
+                    textureDataUrl = faceTextures.all;
+                } else {
+                    // Use the first available texture
+                    textureDataUrl = Object.values(faceTextures)[0];
+                }
+
+                if (textureDataUrl) {
+                    const img = new Image();
+                    img.onload = () => {
+                        ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
+                        texture.needsUpdate = true;
+                        setTextureObjects((prev) => ({ ...prev })); // Trigger re-render
+                    };
+                    img.src = textureDataUrl;
+                }
+
+                newTextureObjects[face] = texture;
+            });
+
+            setTextureObjects(newTextureObjects);
+            setCanUndo(false);
+            setCanRedo(false);
+        },
+        []
+    );
+
+    // Handle color adjustments
+    const handleApplyAdjustment = useCallback(
+        (adjustment) => {
+            if (!textureObjects || Object.keys(textureObjects).length === 0) {
+                setError("No texture to adjust. Please create or load a texture first.");
+                return;
+            }
+
+            const facesToAdjust = selectedFace === "all" 
+                ? FACES.filter(f => f !== "all") 
+                : [selectedFace];
+
+            facesToAdjust.forEach((face) => {
+                const texture = textureObjects[face];
+                if (texture && texture.image instanceof HTMLCanvasElement) {
+                    const ctx = texture.image.getContext("2d");
+                    const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
+
+                    // Apply the adjustments
+                    const adjustedData = applyColorAdjustments(imageData, {
+                        hueShift: adjustment.hueShift || 0,
+                        saturation: adjustment.saturation ?? 1,
+                        brightness: adjustment.brightness ?? 1,
+                        tintColor: adjustment.tintColor || "#ffffff",
+                        tintOpacity: adjustment.tintOpacity || 0,
+                    });
+
+                    ctx.putImageData(adjustedData, 0, 0);
+                    texture.needsUpdate = true;
+                }
+            });
+
+            // Trigger re-render
+            setTextureObjects((prev) => ({ ...prev }));
+
+            // Update the pixel canvas if it's viewing the adjusted face
+            if (pixelCanvasRef.current && textureObjects[selectedFace]) {
+                const texture = textureObjects[selectedFace];
+                if (texture && texture.image instanceof HTMLCanvasElement) {
+                    const ctx = texture.image.getContext("2d");
+                    const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
+                    if (pixelCanvasRef.current.onPixelUpdate) {
+                        pixelCanvasRef.current.onPixelUpdate(selectedFace, imageData);
+                    }
+                }
+            }
+        },
+        [textureObjects, selectedFace]
+    );
+
     const handleUseTexture = () => {
         if (onTextureReady && Object.keys(textureObjects).length > 0) {
             const exportData = {};
@@ -363,15 +462,19 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 initialTextureObject={initialCanvasTexture}
                                 selectedTool={selectedTool}
                                 selectedColor={selectedColor}
+                                selectedOpacity={selectedOpacity}
                                 selectedFace={selectedFace}
                                 onPixelUpdate={handlePixelUpdate}
                                 onColorPicked={colorPickerController}
                             />
                         </div>
-                        <div className="flex flex-col gap-2 max-w-fit p-2.5 border border-white/10 rounded-lg">
+                        <div className="flex flex-col gap-2 max-w-fit p-2.5 border border-white/10 rounded-lg overflow-y-auto max-h-[550px]">
                             <CustomColorPicker
                                 value={selectedColor}
                                 onChange={setSelectedColor}
+                                showOpacity={true}
+                                opacity={selectedOpacity}
+                                onOpacityChange={setSelectedOpacity}
                             />
                             <EditorToolbar
                                 selectedTool={selectedTool}
@@ -381,6 +484,36 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 canUndo={canUndo}
                                 canRedo={canRedo}
                             />
+
+                            {/* Base Texture and Adjustments Buttons */}
+                            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
+                                <button
+                                    onClick={() => setShowBaseTexturePicker(true)}
+                                    className="w-full py-2 px-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white text-xs rounded-lg transition-all flex items-center justify-center gap-2"
+                                >
+                                    <FaCube className="text-blue-400" />
+                                    Use Base Texture
+                                </button>
+                                <button
+                                    onClick={() => setShowAdjustments(!showAdjustments)}
+                                    className={`w-full py-2 px-3 border text-white text-xs rounded-lg transition-all flex items-center justify-center gap-2 ${
+                                        showAdjustments 
+                                            ? "bg-purple-600/20 border-purple-500/50 hover:bg-purple-600/30" 
+                                            : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
+                                    }`}
+                                >
+                                    <FaMagic className="text-purple-400" />
+                                    Color Adjustments
+                                </button>
+                            </div>
+
+                            {/* Expandable Adjustments Panel */}
+                            {showAdjustments && (
+                                <TextureAdjustments
+                                    onApplyAdjustment={handleApplyAdjustment}
+                                    disabled={Object.keys(textureObjects).length === 0}
+                                />
+                            )}
                         </div>
                     </div>
                     {/* Bottom Controls Area */}
@@ -511,6 +644,14 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     </Button>
                 </div>
             </div>
+
+            {/* Base Texture Picker Modal */}
+            {showBaseTexturePicker && (
+                <BaseTexturePicker
+                    onSelectTexture={handleBaseTextureSelect}
+                    onClose={() => setShowBaseTexturePicker(false)}
+                />
+            )}
         </div>
     );
 };

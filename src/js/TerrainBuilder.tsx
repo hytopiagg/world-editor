@@ -2114,6 +2114,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 activateTool: (toolName, activationData) =>
                     toolManagerRef.current?.activateTool(toolName, activationData),
                 pendingChangesRef,
+                baseGridYRef, // Add base grid Y reference for terrain tools
             };
             toolManagerRef.current = new ToolManager(terrainBuilderProps);
             const wallTool = new WallTool(terrainBuilderProps);
