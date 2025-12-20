@@ -119,18 +119,22 @@ const TextureAdjustments = ({ onApplyAdjustment, disabled }) => {
                     </label>
                     <span className="text-xs text-white/40">{saturation}%</span>
                 </div>
-                <div className="relative">
+                <div 
+                    className="relative h-2 rounded-full overflow-hidden"
+                    style={{ background: `linear-gradient(to right, #808080, #ff4444)` }}
+                >
                     <input
                         type="range"
                         min="0"
                         max="200"
                         value={saturation}
                         onChange={(e) => setSaturation(parseInt(e.target.value))}
-                        className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                        style={{
-                            background: `linear-gradient(to right, #808080, #ff4444)`,
-                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         disabled={disabled}
+                    />
+                    <div
+                        className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg border-2 border-gray-600 pointer-events-none"
+                        style={{ left: `calc(${(saturation / 200) * 100}% - 8px)` }}
                     />
                 </div>
             </div>
@@ -144,18 +148,22 @@ const TextureAdjustments = ({ onApplyAdjustment, disabled }) => {
                     </label>
                     <span className="text-xs text-white/40">{brightness}%</span>
                 </div>
-                <div className="relative">
+                <div 
+                    className="relative h-2 rounded-full overflow-hidden"
+                    style={{ background: `linear-gradient(to right, #000000, #ffffff)` }}
+                >
                     <input
                         type="range"
                         min="0"
                         max="200"
                         value={brightness}
                         onChange={(e) => setBrightness(parseInt(e.target.value))}
-                        className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                        style={{
-                            background: `linear-gradient(to right, #000000, #ffffff)`,
-                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         disabled={disabled}
+                    />
+                    <div
+                        className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg border-2 border-gray-600 pointer-events-none"
+                        style={{ left: `calc(${(brightness / 200) * 100}% - 8px)` }}
                     />
                 </div>
             </div>
@@ -174,16 +182,55 @@ const TextureAdjustments = ({ onApplyAdjustment, disabled }) => {
                         className="w-8 h-8 rounded cursor-pointer border border-white/20 bg-transparent"
                         disabled={disabled}
                     />
-                    <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={tintOpacity}
-                        onChange={(e) => setTintOpacity(parseInt(e.target.value))}
-                        className="flex-1 h-2 rounded-full appearance-none cursor-pointer bg-white/20"
-                        disabled={disabled}
-                    />
+                    <div 
+                        className="relative flex-1 h-2 rounded-full overflow-hidden"
+                        style={{ 
+                            background: `linear-gradient(to right, rgba(255,255,255,0.1), ${tintColor})` 
+                        }}
+                    >
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={tintOpacity}
+                            onChange={(e) => setTintOpacity(parseInt(e.target.value))}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            disabled={disabled}
+                        />
+                        <div
+                            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg border-2 border-gray-600 pointer-events-none"
+                            style={{ left: `calc(${tintOpacity}% - 8px)` }}
+                        />
+                    </div>
                 </div>
+                {/* Quick tint presets for common colors */}
+                <div className="flex gap-1 flex-wrap mt-1">
+                    {[
+                        { color: "#8B4513", label: "Brown" },
+                        { color: "#228B22", label: "Green" },
+                        { color: "#4169E1", label: "Blue" },
+                        { color: "#DC143C", label: "Red" },
+                        { color: "#FFD700", label: "Gold" },
+                        { color: "#9370DB", label: "Purple" },
+                        { color: "#20B2AA", label: "Teal" },
+                        { color: "#FF6347", label: "Coral" },
+                    ].map((preset) => (
+                        <button
+                            key={preset.color}
+                            onClick={() => {
+                                setTintColor(preset.color);
+                                if (tintOpacity === 0) setTintOpacity(30); // Auto-set to 30% if at 0
+                            }}
+                            className="w-5 h-5 rounded-full border border-white/20 hover:scale-110 transition-transform"
+                            style={{ backgroundColor: preset.color }}
+                            title={preset.label}
+                            disabled={disabled}
+                        />
+                    ))}
+                </div>
+                <p className="text-[10px] text-white/30 mt-1">
+                    Uses overlay blend - works great on gray/stone textures!
+                </p>
             </div>
 
             {/* Apply Button */}
@@ -275,6 +322,17 @@ export const hslToRgb = (h, s, l) => {
     return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
 };
 
+// Overlay blend mode - preserves texture detail while adding color
+// Works great for grayscale/stone textures
+const overlayBlend = (base, blend) => {
+    base /= 255;
+    blend /= 255;
+    const result = base < 0.5 
+        ? 2 * base * blend 
+        : 1 - 2 * (1 - base) * (1 - blend);
+    return Math.round(result * 255);
+};
+
 // Apply adjustments to ImageData
 export const applyColorAdjustments = (imageData, adjustments) => {
     const data = imageData.data;
@@ -308,11 +366,19 @@ export const applyColorAdjustments = (imageData, adjustments) => {
         // Convert back to RGB
         [r, g, b] = hslToRgb(h, s, l);
 
-        // Apply tint overlay
+        // Apply tint using overlay blend mode
+        // This preserves the texture detail while adding color
+        // Perfect for stone, wood, and other grayscale textures
         if (tintOpacity > 0) {
-            r = Math.round(r * (1 - tintOpacity) + tintR * tintOpacity);
-            g = Math.round(g * (1 - tintOpacity) + tintG * tintOpacity);
-            b = Math.round(b * (1 - tintOpacity) + tintB * tintOpacity);
+            // Calculate overlay blend
+            const overlayR = overlayBlend(r, tintR);
+            const overlayG = overlayBlend(g, tintG);
+            const overlayB = overlayBlend(b, tintB);
+            
+            // Interpolate between original and overlay based on opacity
+            r = Math.round(r * (1 - tintOpacity) + overlayR * tintOpacity);
+            g = Math.round(g * (1 - tintOpacity) + overlayG * tintOpacity);
+            b = Math.round(b * (1 - tintOpacity) + overlayB * tintOpacity);
         }
 
         data[i] = Math.min(255, Math.max(0, r));
