@@ -1,6 +1,6 @@
 import React from "react";
 import PropTypes from "prop-types";
-import { FaPencilAlt, FaCube, FaMagic } from "react-icons/fa";
+import { FaPencilAlt, FaCube, FaMagic, FaExchangeAlt } from "react-icons/fa";
 
 const CreationModeSelector = ({ onSelectMode, onClose }) => {
     const modes = [
@@ -21,6 +21,15 @@ const CreationModeSelector = ({ onSelectMode, onClose }) => {
             gradient: "from-blue-500/20 to-blue-600/10",
             borderColor: "border-blue-500/30 hover:border-blue-400/60",
             iconColor: "text-blue-400",
+        },
+        {
+            id: "blend",
+            title: "Blend Textures",
+            description: "Merge two textures with gradient or stepped transitions",
+            icon: FaExchangeAlt,
+            gradient: "from-orange-500/20 to-orange-600/10",
+            borderColor: "border-orange-500/30 hover:border-orange-400/60",
+            iconColor: "text-orange-400",
         },
         {
             id: "ai",
@@ -44,7 +53,7 @@ const CreationModeSelector = ({ onSelectMode, onClose }) => {
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
+            <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
                 {modes.map((mode) => {
                     const Icon = mode.icon;
                     return (

@@ -12,6 +12,7 @@ import TextureAdjustments, { applyColorAdjustments } from "./TextureAdjustments"
 import CreationModeSelector from "./CreationModeSelector";
 import AIGenerateScreen from "./AIGenerateScreen";
 import TexturePickerScreen from "./TexturePickerScreen";
+import TextureBlendScreen from "./TextureBlendScreen";
 import CollapsibleSection from "./CollapsibleSection";
 import { 
     FaPalette, 
@@ -157,6 +158,8 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             setCreationMode("editor");
         } else if (mode === "existing") {
             setCreationMode("existing");
+        } else if (mode === "blend") {
+            setCreationMode("blend");
         } else if (mode === "ai") {
             setCreationMode("ai");
         }
@@ -383,22 +386,32 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     />
                 );
 
+            case "blend":
+                return (
+                    <TextureBlendScreen
+                        onBack={() => setCreationMode("choose")}
+                        onEditTexture={handleAIEditTexture}
+                        onSaveDirectly={handleAISaveDirectly}
+                        onClose={handleClose}
+                    />
+                );
+
             case "editor":
                 return (
                     <div className="flex flex-col gap-3 p-4 min-w-[700px] max-h-[90vh]">
                         {/* Header with Tools */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex gap-3 items-center">
                             {/* Back button */}
                             <button
                                 onClick={() => setCreationMode("choose")}
-                                className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors text-sm"
+                                className="flex gap-1.5 items-center text-sm transition-colors text-white/50 hover:text-white"
                             >
                                 <FaArrowLeft size={12} />
                                 New
                             </button>
 
                             {/* Tool buttons */}
-                            <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+                            <div className="flex gap-1 items-center px-2 py-1 rounded-lg border bg-white/5 border-white/10">
                                 {Object.entries(TOOL_ICONS).map(([tool, Icon]) => (
                                     <button
                                         key={tool}
@@ -413,11 +426,11 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                         <Icon size={14} />
                                     </button>
                                 ))}
-                                <div className="w-px h-5 bg-white/20 mx-1" />
+                                <div className="mx-1 w-px h-5 bg-white/20" />
                                 <button
                                     onClick={handleUndo}
                                     disabled={!canUndo}
-                                    className="p-2 rounded text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    className="p-2 rounded transition-all text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
                                     title="Undo"
                                 >
                                     <FaUndo size={12} />
@@ -425,7 +438,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 <button
                                     onClick={handleRedo}
                                     disabled={!canRedo}
-                                    className="p-2 rounded text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    className="p-2 rounded transition-all text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
                                     title="Redo"
                                 >
                                     <FaRedo size={12} />
@@ -442,7 +455,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 onChange={(e) => setTextureName(e.target.value)}
                                 onKeyDown={(e) => e.stopPropagation()}
                                 placeholder="Texture name..."
-                                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm w-48 focus:outline-none focus:border-blue-500/50"
+                                className="px-3 py-1.5 w-48 text-sm text-white rounded-lg border bg-white/5 border-white/10 focus:outline-none focus:border-blue-500/50"
                             />
 
                             {/* Save button */}
@@ -463,7 +476,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                             {/* Close button */}
                             <button
                                 onClick={handleClose}
-                                className="text-white/50 hover:text-white transition-colors p-2"
+                                className="p-2 transition-colors text-white/50 hover:text-white"
                             >
                                 ✕
                             </button>
@@ -471,7 +484,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
                         {/* Error Display */}
                         {error && (
-                            <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                            <div className="px-3 py-2 text-sm text-red-400 rounded-lg border bg-red-500/10 border-red-500/30">
                                 {error}
                             </div>
                         )}
@@ -479,7 +492,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         {/* Main Editor Area */}
                         <div className="flex gap-4">
                             {/* Left Panel - Preview & Face Selector */}
-                            <div className="flex flex-col gap-3 p-3 border border-white/10 rounded-lg bg-white/5">
+                            <div className="flex flex-col gap-3 p-3 rounded-lg border border-white/10 bg-white/5">
                                 <BlockPreview3D textureObjects={textureObjects} />
                                 <FaceSelector
                                     selectedFace={selectedFace}
@@ -488,7 +501,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                             </div>
 
                             {/* Center - Canvas */}
-                            <div className="flex-1 flex items-center justify-center">
+                            <div className="flex flex-1 justify-center items-center">
                                 <PixelEditorCanvas
                                     ref={pixelCanvasRef}
                                     key={selectedFace}
