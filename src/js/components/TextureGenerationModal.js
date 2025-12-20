@@ -1,19 +1,32 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import Button from "../../js/components/buttons/Button";
 import PropTypes from "prop-types";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
-import EditorToolbar, { TOOLS } from "./EditorToolbar";
+import { TOOLS } from "./EditorToolbar";
 import PixelEditorCanvas from "./PixelEditorCanvas";
 import BlockPreview3D from "./BlockPreview3D";
 import FaceSelector from "./FaceSelector";
-import "../../css/TextureGenerationModal.css"; // We'll create this CSS file next
-import * as THREE from "three"; // Import THREE
+import "../../css/TextureGenerationModal.css";
+import * as THREE from "three";
 import CustomColorPicker from "./ColorPicker";
-import BaseTexturePicker from "./BaseTexturePicker";
 import TextureAdjustments, { applyColorAdjustments } from "./TextureAdjustments";
-import { FaCube, FaMagic } from "react-icons/fa";
+import CreationModeSelector from "./CreationModeSelector";
+import AIGenerateScreen from "./AIGenerateScreen";
+import TexturePickerScreen from "./TexturePickerScreen";
+import CollapsibleSection from "./CollapsibleSection";
+import { 
+    FaPalette, 
+    FaMagic, 
+    FaPencilAlt, 
+    FaFillDrip, 
+    FaEraser, 
+    FaEyeDropper,
+    FaUndo,
+    FaRedo,
+    FaArrowLeft
+} from "react-icons/fa";
+
 const FACES = ["all", "top", "bottom", "left", "right", "front", "back"];
-const GRID_SIZE = 24; // Ensure grid size is accessible here
+const GRID_SIZE = 24;
 
 const createTexture = (size) => {
     const canvas = document.createElement("canvas");
@@ -25,16 +38,22 @@ const createTexture = (size) => {
     texture.generateMipmaps = false;
     return texture;
 };
-const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
-    const [prompt, setPrompt] = useState("");
-    const [textureName, setTextureName] = useState("");
-    const [isLoading, setIsLoading] = useState(false);
 
+// Tool icons mapping
+const TOOL_ICONS = {
+    [TOOLS.PENCIL]: FaPencilAlt,
+    [TOOLS.FILL]: FaFillDrip,
+    [TOOLS.ERASER]: FaEraser,
+    [TOOLS.COLOR_PICKER]: FaEyeDropper,
+};
+
+const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
+    // Creation mode: 'choose' | 'existing' | 'ai' | 'editor'
+    const [creationMode, setCreationMode] = useState("choose");
+    
+    const [textureName, setTextureName] = useState("");
     const [textureObjects, setTextureObjects] = useState({});
     const [error, setError] = useState(null);
-    const [hCaptchaToken, setHCaptchaToken] = useState(null);
-    const [captchaError, setCaptchaError] = useState(null);
-    const hCaptchaRef = useRef(null); // Ref for resetting captcha
 
     const [selectedTool, setSelectedTool] = useState(TOOLS.PENCIL);
     const [selectedColor, setSelectedColor] = useState("#000000");
@@ -45,163 +64,45 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
+    
+    // Which sidebar section is open: 'color' | 'adjustments' | null
+    const [openSection, setOpenSection] = useState("color");
 
-    // New state for base texture picker and adjustments
-    const [showBaseTexturePicker, setShowBaseTexturePicker] = useState(false);
-    const [showAdjustments, setShowAdjustments] = useState(false);
-
-    useEffect(() => {
-        if (isOpen) {
+    // Initialize textures
+    const initializeTextures = useCallback(() => {
             const initialTextures = {};
             FACES.forEach((face) => {
                 initialTextures[face] = createTexture(GRID_SIZE);
             });
             setTextureObjects(initialTextures);
+        setCanUndo(false);
+        setCanRedo(false);
+    }, []);
 
+    useEffect(() => {
+        if (isOpen) {
+            initializeTextures();
+            setCreationMode("choose");
             setSelectedTool(TOOLS.PENCIL);
             setSelectedColor("#000000");
             setSelectedFace("all");
-            setCanUndo(false);
-            setCanRedo(false);
             setError(null);
-            setCaptchaError(null);
-            setPrompt(""); // Clear prompt on open
-            setHCaptchaToken(null);
-
-            if (hCaptchaRef.current) {
-                hCaptchaRef.current.resetCaptcha();
-            }
+            setTextureName("");
         } else {
-            Object.values(textureObjects).forEach((texture) =>
-                texture?.dispose()
-            );
+            Object.values(textureObjects).forEach((texture) => texture?.dispose());
             setTextureObjects({});
         }
 
         return () => {
             if (!isOpen) {
-                Object.values(textureObjects).forEach((texture) =>
-                    texture?.dispose()
-                );
+                Object.values(textureObjects).forEach((texture) => texture?.dispose());
             }
         };
-    }, [isOpen]); // Depend only on isOpen
-
-    const generateTexture = async () => {
-        if (!prompt.trim()) {
-            setError("Please enter a prompt.");
-            return;
-        }
-        setIsLoading(true);
-
-        Object.values(textureObjects).forEach((texture) => texture?.dispose());
-        setTextureObjects({});
-        setError(null);
-        setSelectedFace("all");
-        setCaptchaError(null); // Clear captcha error on new generation attempt
-
-        if (!hCaptchaToken) {
-            setCaptchaError("Please complete the CAPTCHA verification.");
-            setIsLoading(false);
-            return;
-        }
-
-        try {
-            const response = await fetch(
-                `${process.env.REACT_APP_API_URL}/generate_texture`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        prompt: prompt,
-                        hCaptchaToken: hCaptchaToken,
-                    }),
-                }
-            );
-            if (!response.ok) {
-                throw new Error(await response.text());
-            }
-            const data = await response.json();
-            console.log(data);
-            if (data.base64_image) {
-                const imageDataUrl = `data:image/png;base64,${data.base64_image}`;
-
-                const img = new Image();
-                img.onload = () => {
-                    const newTextureObjects = {};
-                    FACES.forEach((face) => {
-                        const texture = createTexture(GRID_SIZE);
-                        const ctx = texture.image.getContext("2d");
-
-                        ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
-                        texture.needsUpdate = true;
-                        newTextureObjects[face] = texture;
-                    });
-                    setTextureObjects(newTextureObjects); // Update state with all textures initialized
-                    setTextureName(prompt); // Default texture name to prompt
-                    setIsLoading(false);
-
-                    setCanUndo(false);
-                    setCanRedo(false);
-                };
-                img.onerror = () => {
-                    console.error("Failed to load generated image");
-                    setError("Failed to load generated image.");
-
-                    setIsLoading(false);
-                };
-                img.src = imageDataUrl;
-            } else {
-                throw new Error("No image data received from API.");
-            }
-        } catch (err) {
-            console.error("API Error:", err);
-            setError(err.message || "Failed to generate texture.");
-
-            setIsLoading(false);
-        } finally {
-            setHCaptchaToken(null);
-            if (hCaptchaRef.current) {
-                hCaptchaRef.current.resetCaptcha();
-            }
-            setIsLoading(false); // Ensure loading is false on errors too
-        }
-    };
-
-    const handleGenerateClick = () => {
-        if (!prompt.trim() || isLoading) return;
-
-        if (hCaptchaToken) {
-            generateTexture();
-            return;
-        }
-
-        setCaptchaError(null);
-        // Execute the captcha verification programmatically
-        if (hCaptchaRef.current) {
-            try {
-                hCaptchaRef.current.execute();
-            } catch (error) {
-                console.error("Failed to execute hCaptcha:", error);
-                setCaptchaError(
-                    "Failed to initiate CAPTCHA. Please try again."
-                );
-            }
-        } else {
-            setCaptchaError("CAPTCHA component not ready. Please try again.");
-        }
-    };
-
-    useEffect(() => {
-        if (hCaptchaToken) {
-            generateTexture();
-        }
-    }, [hCaptchaToken]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
 
     const handleClose = () => {
-        onClose(); // Just call onClose, useEffect handles the rest
+        onClose();
     };
 
     const handlePixelUpdate = useCallback(
@@ -210,7 +111,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 Object.entries(textureObjects).forEach(([key, texture]) => {
                     if (texture && texture.image instanceof HTMLCanvasElement) {
                         const ctx = texture.image.getContext("2d");
-
                         ctx.putImageData(imageData, 0, 0);
                         texture.needsUpdate = true;
                     }
@@ -221,23 +121,14 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     const ctx = texture.image.getContext("2d");
                     ctx.putImageData(imageData, 0, 0);
                     texture.needsUpdate = true;
-                } else {
-                    console.warn(
-                        `Texture object not found or invalid for face: ${face}`
-                    );
                 }
             }
-
             setTextureObjects((prev) => ({ ...prev }));
         },
-        [textureObjects] // Keep dependency on textureObjects
+        [textureObjects]
     );
 
     const handleHistoryChange = useCallback((canUndoNow, canRedoNow) => {
-        console.log("TextureGenerationModal: History changed:", {
-            canUndoNow,
-            canRedoNow,
-        });
         setCanUndo(canUndoNow);
         setCanRedo(canRedoNow);
     }, []);
@@ -245,40 +136,47 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     useEffect(() => {
         if (pixelCanvasRef.current) {
             const originalNotify = pixelCanvasRef.current.notifyHistoryChanged;
-            pixelCanvasRef.current.notifyHistoryChanged = (
-                canUndoNow,
-                canRedoNow
-            ) => {
+            pixelCanvasRef.current.notifyHistoryChanged = (canUndoNow, canRedoNow) => {
                 if (originalNotify) {
                     originalNotify(canUndoNow, canRedoNow);
                 }
-
                 handleHistoryChange(canUndoNow, canRedoNow);
             };
         }
-    }, [pixelCanvasRef.current, handleHistoryChange]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [handleHistoryChange]);
+
     const handleSelectFace = (face) => {
-        console.log("Selected face:", face);
         setSelectedFace(face);
     };
 
-    // Handle base texture selection
+    // Handle mode selection
+    const handleSelectMode = (mode) => {
+        if (mode === "blank") {
+            initializeTextures();
+            setCreationMode("editor");
+        } else if (mode === "existing") {
+            setCreationMode("existing");
+        } else if (mode === "ai") {
+            setCreationMode("ai");
+        }
+    };
+
+    // Handle base texture selection from picker
     const handleBaseTextureSelect = useCallback(
-        (faceTextures, isMultiTexture) => {
+        (faceTextures, isMultiTexture, blockName) => {
             const newTextureObjects = {};
 
             FACES.forEach((face) => {
                 const texture = createTexture(GRID_SIZE);
                 const ctx = texture.image.getContext("2d");
 
-                // Determine which texture to use for this face
                 let textureDataUrl;
                 if (isMultiTexture && faceTextures[face]) {
                     textureDataUrl = faceTextures[face];
                 } else if (faceTextures.all) {
                     textureDataUrl = faceTextures.all;
                 } else {
-                    // Use the first available texture
                     textureDataUrl = Object.values(faceTextures)[0];
                 }
 
@@ -287,7 +185,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     img.onload = () => {
                         ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
                         texture.needsUpdate = true;
-                        setTextureObjects((prev) => ({ ...prev })); // Trigger re-render
+                        setTextureObjects((prev) => ({ ...prev }));
                     };
                     img.src = textureDataUrl;
                 }
@@ -296,17 +194,70 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             });
 
             setTextureObjects(newTextureObjects);
+            setTextureName(blockName ? `${blockName} (modified)` : "");
             setCanUndo(false);
             setCanRedo(false);
+            setCreationMode("editor");
         },
         []
+    );
+
+    // Handle AI texture for editing
+    const handleAIEditTexture = useCallback(
+        (imageDataUrl, name) => {
+            const newTextureObjects = {};
+
+            const img = new Image();
+            img.onload = () => {
+                FACES.forEach((face) => {
+                    const texture = createTexture(GRID_SIZE);
+                    const ctx = texture.image.getContext("2d");
+                    ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
+                    texture.needsUpdate = true;
+                    newTextureObjects[face] = texture;
+                });
+                setTextureObjects(newTextureObjects);
+                setTextureName(name || "");
+                setCanUndo(false);
+                setCanRedo(false);
+                setCreationMode("editor");
+            };
+            img.src = imageDataUrl;
+        },
+        []
+    );
+
+    // Handle AI texture direct save
+    const handleAISaveDirectly = useCallback(
+        (imageDataUrl, name) => {
+            const exportData = {};
+
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                canvas.width = GRID_SIZE;
+                canvas.height = GRID_SIZE;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
+                const dataUrl = canvas.toDataURL();
+
+                FACES.forEach((face) => {
+                    exportData[face] = dataUrl;
+                });
+
+                onTextureReady(exportData, name);
+                onClose();
+            };
+            img.src = imageDataUrl;
+        },
+        [onTextureReady, onClose]
     );
 
     // Handle color adjustments
     const handleApplyAdjustment = useCallback(
         (adjustment) => {
             if (!textureObjects || Object.keys(textureObjects).length === 0) {
-                setError("No texture to adjust. Please create or load a texture first.");
+                setError("No texture to adjust.");
                 return;
             }
 
@@ -320,7 +271,6 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     const ctx = texture.image.getContext("2d");
                     const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
 
-                    // Apply the adjustments
                     const adjustedData = applyColorAdjustments(imageData, {
                         hueShift: adjustment.hueShift || 0,
                         saturation: adjustment.saturation ?? 1,
@@ -334,10 +284,8 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 }
             });
 
-            // Trigger re-render
             setTextureObjects((prev) => ({ ...prev }));
 
-            // Update the pixel canvas if it's viewing the adjusted face
             if (pixelCanvasRef.current && textureObjects[selectedFace]) {
                 const texture = textureObjects[selectedFace];
                 if (texture && texture.image instanceof HTMLCanvasElement) {
@@ -362,58 +310,238 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                     if (texture && texture.image instanceof HTMLCanvasElement) {
                         exportData[face] = texture.image.toDataURL();
                     } else {
-                        console.warn(
-                            `Skipping export for missing/invalid texture on face: ${face}`
-                        );
-
                         exportData[face] = null;
+                        success = false;
                     }
                 });
             } catch (error) {
-                console.error("Error converting textures to DataURLs:", error);
-                setError("Failed to prepare textures for export.");
+                console.error("Error converting textures:", error);
+                setError("Failed to prepare textures.");
                 success = false;
             }
             if (success) {
-                onTextureReady(
-                    exportData,
-                    textureName.trim() || prompt || "generated-texture"
-                );
+                onTextureReady(exportData, textureName.trim() || "custom-texture");
             }
         }
         handleClose();
     };
 
     const handleUndo = () => {
-        console.log("Undo");
         if (pixelCanvasRef.current?.undo) {
-            console.log("Calling undo");
             pixelCanvasRef.current.undo();
         }
     };
+
     const handleRedo = () => {
         if (pixelCanvasRef.current?.redo) {
             pixelCanvasRef.current.redo();
         }
     };
 
-    const colorPickerController = useCallback(
-        {
-            pickColor: (hexColor) => {
-                if (hexColor) {
-                    setSelectedColor(hexColor);
-                }
-            },
-            setTool: (toolName) => {
-                setSelectedTool(toolName);
-            },
+    const colorPickerController = {
+        pickColor: (hexColor) => {
+            if (hexColor) {
+                setSelectedColor(hexColor);
+            }
         },
-        [] // Empty dependency array since the functions only reference state setters
-    );
+        setTool: (toolName) => {
+            setSelectedTool(toolName);
+        },
+    };
 
     if (!isOpen) return null;
 
     const initialCanvasTexture = textureObjects[selectedFace];
+
+    // Render different screens based on creation mode
+    const renderContent = () => {
+        switch (creationMode) {
+            case "choose":
+                return (
+                    <CreationModeSelector
+                        onSelectMode={handleSelectMode}
+                        onClose={handleClose}
+                    />
+                );
+
+            case "existing":
+                return (
+                    <TexturePickerScreen
+                        onSelectTexture={handleBaseTextureSelect}
+                        onBack={() => setCreationMode("choose")}
+                        onClose={handleClose}
+                    />
+                );
+
+            case "ai":
+                return (
+                    <AIGenerateScreen
+                        onBack={() => setCreationMode("choose")}
+                        onEditTexture={handleAIEditTexture}
+                        onSaveDirectly={handleAISaveDirectly}
+                        onClose={handleClose}
+                    />
+                );
+
+            case "editor":
+                return (
+                    <div className="flex flex-col gap-3 p-4 min-w-[700px] max-h-[90vh]">
+                        {/* Header with Tools */}
+                        <div className="flex items-center gap-3">
+                            {/* Back button */}
+                            <button
+                                onClick={() => setCreationMode("choose")}
+                                className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors text-sm"
+                            >
+                                <FaArrowLeft size={12} />
+                                New
+                            </button>
+
+                            {/* Tool buttons */}
+                            <div className="flex items-center gap-1 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+                                {Object.entries(TOOL_ICONS).map(([tool, Icon]) => (
+                                    <button
+                                        key={tool}
+                                        onClick={() => setSelectedTool(tool)}
+                                        className={`p-2 rounded transition-all ${
+                                            selectedTool === tool
+                                                ? "bg-white text-black"
+                                                : "text-white/60 hover:text-white hover:bg-white/10"
+                                        }`}
+                                        title={tool.charAt(0).toUpperCase() + tool.slice(1)}
+                                    >
+                                        <Icon size={14} />
+                                    </button>
+                                ))}
+                                <div className="w-px h-5 bg-white/20 mx-1" />
+                                <button
+                                    onClick={handleUndo}
+                                    disabled={!canUndo}
+                                    className="p-2 rounded text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    title="Undo"
+                                >
+                                    <FaUndo size={12} />
+                                </button>
+                                <button
+                                    onClick={handleRedo}
+                                    disabled={!canRedo}
+                                    className="p-2 rounded text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                    title="Redo"
+                                >
+                                    <FaRedo size={12} />
+                                </button>
+                            </div>
+
+                            {/* Spacer */}
+                            <div className="flex-1" />
+
+                            {/* Texture name input */}
+                            <input
+                                type="text"
+                                value={textureName}
+                                onChange={(e) => setTextureName(e.target.value)}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                placeholder="Texture name..."
+                                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm w-48 focus:outline-none focus:border-blue-500/50"
+                            />
+
+                            {/* Save button */}
+                            <Button
+                                design="primary"
+                                tier={3}
+                                onClick={handleUseTexture}
+                                disabled={Object.keys(textureObjects).length === 0 || !textureName.trim()}
+                                style={{
+                                    fontSize: "12px",
+                                    padding: "6px 16px",
+                                    borderRadius: "8px",
+                                }}
+                            >
+                                Save Texture
+                            </Button>
+
+                            {/* Close button */}
+                            <button
+                                onClick={handleClose}
+                                className="text-white/50 hover:text-white transition-colors p-2"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Error Display */}
+                        {error && (
+                            <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                                {error}
+                            </div>
+                        )}
+
+                        {/* Main Editor Area */}
+                        <div className="flex gap-4">
+                            {/* Left Panel - Preview & Face Selector */}
+                            <div className="flex flex-col gap-3 p-3 border border-white/10 rounded-lg bg-white/5">
+                                <BlockPreview3D textureObjects={textureObjects} />
+                                <FaceSelector
+                                    selectedFace={selectedFace}
+                                    onSelectFace={handleSelectFace}
+                                />
+                            </div>
+
+                            {/* Center - Canvas */}
+                            <div className="flex-1 flex items-center justify-center">
+                                <PixelEditorCanvas
+                                    ref={pixelCanvasRef}
+                                    key={selectedFace}
+                                    initialTextureObject={initialCanvasTexture}
+                                    selectedTool={selectedTool}
+                                    selectedColor={selectedColor}
+                                    selectedOpacity={selectedOpacity}
+                                    selectedFace={selectedFace}
+                                    onPixelUpdate={handlePixelUpdate}
+                                    onColorPicked={colorPickerController}
+                                />
+                            </div>
+
+                            {/* Right Panel - Color & Adjustments */}
+                            <div className="flex flex-col gap-2 w-64">
+                                <CollapsibleSection
+                                    title="Color"
+                                    icon={FaPalette}
+                                    iconColor="text-pink-400"
+                                    isOpen={openSection === "color"}
+                                    onToggle={() => setOpenSection(openSection === "color" ? null : "color")}
+                                >
+                                    <CustomColorPicker
+                                        value={selectedColor}
+                                        onChange={setSelectedColor}
+                                        showOpacity={true}
+                                        opacity={selectedOpacity}
+                                        onOpacityChange={setSelectedOpacity}
+                                    />
+                                </CollapsibleSection>
+
+                                <CollapsibleSection
+                                    title="Adjustments"
+                                    icon={FaMagic}
+                                    iconColor="text-purple-400"
+                                    isOpen={openSection === "adjustments"}
+                                    onToggle={() => setOpenSection(openSection === "adjustments" ? null : "adjustments")}
+                                >
+                                    <TextureAdjustments
+                                        onApplyAdjustment={handleApplyAdjustment}
+                                        disabled={Object.keys(textureObjects).length === 0}
+                                    />
+                                </CollapsibleSection>
+                            </div>
+                        </div>
+                    </div>
+                );
+
+            default:
+                return null;
+        }
+    };
+
     return (
         <div
             onClick={handleClose}
@@ -426,238 +554,21 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         >
             <div
                 onClick={(e) => e.stopPropagation()}
-                className="flex flex-col gap-2 bg-[#0D0D0D]/30 max-h-[90vh] rounded-2xl p-3 backdrop-blur-lg opacity-0 fade-up overflow-scroll"
+                className="flex flex-col bg-[#0D0D0D]/90 rounded-2xl backdrop-blur-lg opacity-0 fade-up border border-white/10"
                 style={{
-                    animationDuration: "0.5s",
+                    animationDuration: "0.4s",
                 }}
             >
-                {/* Top Bar: Title */}
-
-                {/* Main Content Area with Sidebar and Canvas */}
-                <div className="p-3">
-                    <div className="modal-header">
-                        <h2 className="text-white text-2xl font-bold">
-                            Create & Edit Texture
-                        </h2>
-                    </div>
-                    <div className="top-controls-container">
-                        {/* Static Sidebar for Tools and Preview */}
-                        <div className="flex flex-col gap-2 max-w-fit p-2.5 border border-white/10 rounded-lg">
-                            <div className="preview-face-container">
-                                <BlockPreview3D
-                                    textureObjects={textureObjects}
-                                />
-                            </div>
-                            <FaceSelector
-                                selectedFace={selectedFace}
-                                onSelectFace={handleSelectFace}
-                            />
-                        </div>
-
-                        {/* Scalable Canvas Area */}
-                        <div className="flex items-center gap-2 justify-center">
-                            <PixelEditorCanvas
-                                ref={pixelCanvasRef}
-                                key={selectedFace}
-                                initialTextureObject={initialCanvasTexture}
-                                selectedTool={selectedTool}
-                                selectedColor={selectedColor}
-                                selectedOpacity={selectedOpacity}
-                                selectedFace={selectedFace}
-                                onPixelUpdate={handlePixelUpdate}
-                                onColorPicked={colorPickerController}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-2 max-w-fit p-2.5 border border-white/10 rounded-lg overflow-y-auto max-h-[550px]">
-                            <CustomColorPicker
-                                value={selectedColor}
-                                onChange={setSelectedColor}
-                                showOpacity={true}
-                                opacity={selectedOpacity}
-                                onOpacityChange={setSelectedOpacity}
-                            />
-                            <EditorToolbar
-                                selectedTool={selectedTool}
-                                onSelectTool={setSelectedTool}
-                                onUndo={handleUndo}
-                                onRedo={handleRedo}
-                                canUndo={canUndo}
-                                canRedo={canRedo}
-                            />
-
-                            {/* Base Texture and Adjustments Buttons */}
-                            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
-                                <button
-                                    onClick={() => setShowBaseTexturePicker(true)}
-                                    className="w-full py-2 px-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white text-xs rounded-lg transition-all flex items-center justify-center gap-2"
-                                >
-                                    <FaCube className="text-blue-400" />
-                                    Use Base Texture
-                                </button>
-                                <button
-                                    onClick={() => setShowAdjustments(!showAdjustments)}
-                                    className={`w-full py-2 px-3 border text-white text-xs rounded-lg transition-all flex items-center justify-center gap-2 ${
-                                        showAdjustments 
-                                            ? "bg-purple-600/20 border-purple-500/50 hover:bg-purple-600/30" 
-                                            : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
-                                    }`}
-                                >
-                                    <FaMagic className="text-purple-400" />
-                                    Color Adjustments
-                                </button>
-                            </div>
-
-                            {/* Expandable Adjustments Panel */}
-                            {showAdjustments && (
-                                <TextureAdjustments
-                                    onApplyAdjustment={handleApplyAdjustment}
-                                    disabled={Object.keys(textureObjects).length === 0}
-                                />
-                            )}
-                        </div>
-                    </div>
-                    {/* Bottom Controls Area */}
-                    <div className="border border-white/10 bg-white/10 rounded-lg p-2.5 mt-3 flex flex-col gap-2 items-center w-full text-start">
-                        {/* Error Display */}
-                        {error && <div className="error-message">{error}</div>}
-                        <h3 className="text-white text-xs mr-auto">
-                            Generate AI Texture
-                        </h3>
-                        {/* Generation Section - Moved to Bottom */}
-                        <div className="flex gap-2 w-full relative">
-                            <div className="generation-controls">
-                                <textarea
-                                    className="border border-white/10 rounded-lg p-2 w-full resize-none"
-                                    value={prompt}
-                                    onKeyDown={(e) => e.stopPropagation()}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    placeholder="Enter prompt for 24x24 texture (e.g., mossy stone brick)"
-                                    rows="1"
-                                    disabled={isLoading}
-                                />
-                            </div>
-
-                            <div className="generation-buttons">
-                                <Button
-                                    design="primary"
-                                    tier={3}
-                                    onClick={handleGenerateClick}
-                                    style={{
-                                        fontSize: "12px",
-                                        padding: "6px 12px",
-                                        borderRadius: "8px",
-                                    }}
-                                    disabled={isLoading || !prompt.trim()}
-                                >
-                                    {isLoading ? (
-                                        <div className="flex items-center gap-1.5 justify-center">
-                                            Generating
-                                            <div className="w-3.5 h-3.5 border-2 border-black/30 border-t-black/80 rounded-full animate-spin" />
-                                        </div>
-                                    ) : (
-                                        "Generate"
-                                    )}
-                                </Button>
-                            </div>
-
-                            {/* Invisible hCaptcha - always in DOM but hidden */}
-                            <div
-                                style={{
-                                    position: "fixed",
-                                    visibility: "hidden",
-                                    bottom: 0,
-                                    right: 0,
-                                }}
-                            >
-                                <HCaptcha
-                                    ref={hCaptchaRef}
-                                    theme="dark"
-                                    size="invisible"
-                                    sitekey={
-                                        process.env.REACT_APP_HCAPTCHA_SITE_KEY
-                                    }
-                                    onVerify={(token) => {
-                                        setHCaptchaToken(token);
-                                        setCaptchaError(null);
-                                    }}
-                                    onExpire={() => {
-                                        setHCaptchaToken(null);
-                                        setCaptchaError(
-                                            "CAPTCHA expired. Please try again."
-                                        );
-                                    }}
-                                    onError={(err) => {
-                                        setHCaptchaToken(null);
-                                        setCaptchaError(
-                                            `CAPTCHA error: ${err}`
-                                        );
-                                    }}
-                                />
-                            </div>
-
-                            {captchaError && (
-                                <div className="error-message captcha-error">
-                                    {captchaError}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                {/* Action Buttons */}
-                <div className="modal-actions">
-                    <Button
-                        design="tertiary"
-                        tier={3}
-                        onClick={handleClose}
-                        style={{
-                            fontSize: "12px",
-                            padding: "6px 12px",
-                            borderRadius: "8px",
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    {/* Texture name input */}
-                    <input
-                        type="text"
-                        className="texture-name-input"
-                        placeholder="Texture name"
-                        value={textureName}
-                        onChange={(e) => setTextureName(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                    />
-                    <Button
-                        design="primary"
-                        tier={3}
-                        style={{
-                            fontSize: "12px",
-                            padding: "6px 12px",
-                            borderRadius: "8px",
-                        }}
-                        onClick={handleUseTexture}
-                        disabled={
-                            Object.keys(textureObjects).length === 0 ||
-                            !textureName.trim()
-                        }
-                    >
-                        Add Texture
-                    </Button>
-                </div>
+                {renderContent()}
             </div>
-
-            {/* Base Texture Picker Modal */}
-            {showBaseTexturePicker && (
-                <BaseTexturePicker
-                    onSelectTexture={handleBaseTextureSelect}
-                    onClose={() => setShowBaseTexturePicker(false)}
-                />
-            )}
         </div>
     );
 };
+
 TextureGenerationModal.propTypes = {
     isOpen: PropTypes.bool.isRequired,
     onClose: PropTypes.func.isRequired,
     onTextureReady: PropTypes.func.isRequired,
 };
+
 export default TextureGenerationModal;
