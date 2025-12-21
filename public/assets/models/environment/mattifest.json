@@ -448,14 +448,6 @@
     "thumbnail": "thumbnails/Essentials/workbench.png"
   },
   {
-    "path": "Farm/bee-adult.gltf",
-    "thumbnail": "thumbnails/Farm/bee-adult.png"
-  },
-  {
-    "path": "Farm/bee-baby.gltf",
-    "thumbnail": "thumbnails/Farm/bee-baby.png"
-  },
-  {
     "path": "Farm/beehive.gltf",
     "thumbnail": "thumbnails/Farm/beehive.png"
   },
@@ -740,10 +732,6 @@
     "thumbnail": "thumbnails/Farm/eggplant-stage4.png"
   },
   {
-    "path": "Farm/farming-hoe.gltf",
-    "thumbnail": "thumbnails/Farm/farming-hoe.png"
-  },
-  {
     "path": "Farm/iron-watering-can.gltf",
     "thumbnail": "thumbnails/Farm/iron-watering-can.png"
   },
@@ -988,8 +976,8 @@
     "thumbnail": "thumbnails/Gameplay/ladder-wood.png"
   },
   {
-    "path": "Gameplay/portal-gem.gltf",
-    "thumbnail": "thumbnails/Gameplay/portal-gem.png"
+    "path": "Gameplay/missing-model.gltf",
+    "thumbnail": "thumbnails/Gameplay/missing-model.png"
   },
   {
     "path": "Gameplay/question-mark.gltf",
@@ -1404,8 +1392,8 @@
     "thumbnail": "thumbnails/Tropical/beach-volleyball.png"
   },
   {
-    "path": "Tropical/cocomut-pile.gltf",
-    "thumbnail": "thumbnails/Tropical/cocomut-pile.png"
+    "path": "Tropical/coconut-pile.gltf",
+    "thumbnail": "thumbnails/Tropical/coconut-pile.png"
   },
   {
     "path": "Tropical/driftwood.gltf",

@@ -24,7 +24,14 @@ if (!fs.existsSync(manifestPath)) {
     process.exit(1);
 }
 
-const modelList = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+const rawModelList = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+
+// Normalize manifest format - handle both simple array and enhanced object formats
+// Simple format: ["model.gltf", ...]
+// Enhanced format: [{ path: "model.gltf", thumbnail: "..." }, ...]
+const modelList = rawModelList.map((entry) =>
+    typeof entry === "string" ? entry : entry.path
+);
 
 const getThumbnailHTML = (modelPath, baseUrl) => {
     const escapeJsString = (str) => {
