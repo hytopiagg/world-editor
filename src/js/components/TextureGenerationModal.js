@@ -263,6 +263,22 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
         [onTextureReady, onClose]
     );
 
+    // Handle saving multiple textures at once (for blend all directions)
+    const handleSaveMultiple = useCallback(
+        (textures) => {
+            // textures is an array of { dataUrl, name }
+            textures.forEach(({ dataUrl, name }) => {
+                const exportData = {};
+                FACES.forEach((face) => {
+                    exportData[face] = dataUrl;
+                });
+                onTextureReady(exportData, name);
+            });
+            onClose();
+        },
+        [onTextureReady, onClose]
+    );
+
     // Handle color adjustments
     const handleApplyAdjustment = useCallback(
         (adjustment) => {
@@ -505,6 +521,7 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         onBack={() => setCreationMode("choose")}
                         onEditTexture={handleAIEditTexture}
                         onSaveDirectly={handleAISaveDirectly}
+                        onSaveMultiple={handleSaveMultiple}
                         onClose={handleClose}
                     />
                 );

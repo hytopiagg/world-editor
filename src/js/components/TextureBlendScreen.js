@@ -41,11 +41,24 @@ const DIRECTIONS = {
     BOTTOM_RIGHT_TO_TOP_LEFT: "bottom-right-to-top-left",
 };
 
+// Direction labels for texture naming
+const DIRECTION_LABELS = {
+    [DIRECTIONS.LEFT_TO_RIGHT]: "left-to-right",
+    [DIRECTIONS.RIGHT_TO_LEFT]: "right-to-left",
+    [DIRECTIONS.TOP_TO_BOTTOM]: "top-to-bottom",
+    [DIRECTIONS.BOTTOM_TO_TOP]: "bottom-to-top",
+    [DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT]: "corner-tl-br",
+    [DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT]: "corner-tr-bl",
+    [DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT]: "corner-bl-tr",
+    [DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT]: "corner-br-tl",
+};
+
 
 const TextureBlendScreen = ({
     onBack,
     onEditTexture,
     onSaveDirectly,
+    onSaveMultiple,
     onClose,
 }) => {
     const [textureA, setTextureA] = useState(null);
@@ -226,8 +239,8 @@ const TextureBlendScreen = ({
         }
     };
 
-    // Blend two textures
-    const blendTextures = useCallback(() => {
+    // Blend two textures with a specific direction
+    const blendTexturesWithDirection = useCallback((targetDirection) => {
         if (!textureAData || !textureBData) return null;
 
         const result = new ImageData(GRID_SIZE, GRID_SIZE);
@@ -243,7 +256,7 @@ const TextureBlendScreen = ({
                 const normalizedX = x / (GRID_SIZE - 1);
                 const normalizedY = y / (GRID_SIZE - 1);
                 
-                switch (direction) {
+                switch (targetDirection) {
                     // Edge directions
                     case DIRECTIONS.LEFT_TO_RIGHT:
                         progress = normalizedX;
@@ -362,7 +375,42 @@ const TextureBlendScreen = ({
         }
 
         return result;
-    }, [textureAData, textureBData, direction, blendMode, blendStrength]);
+    }, [textureAData, textureBData, blendMode, blendStrength]);
+
+    // Blend with current direction (for preview)
+    const blendTextures = useCallback(() => {
+        return blendTexturesWithDirection(direction);
+    }, [blendTexturesWithDirection, direction]);
+
+    // Generate all 8 directions
+    const handleGenerateAll = useCallback(() => {
+        if (!textureAData || !textureBData || !textureName.trim()) return;
+
+        const textures = [];
+        const baseName = textureName.trim();
+
+        Object.values(DIRECTIONS).forEach((dir) => {
+            const result = blendTexturesWithDirection(dir);
+            if (result) {
+                // Create canvas and get data URL
+                const canvas = document.createElement("canvas");
+                canvas.width = GRID_SIZE;
+                canvas.height = GRID_SIZE;
+                const ctx = canvas.getContext("2d");
+                ctx.putImageData(result, 0, 0);
+                const dataUrl = canvas.toDataURL();
+
+                textures.push({
+                    dataUrl,
+                    name: `${baseName}-${DIRECTION_LABELS[dir]}`,
+                });
+            }
+        });
+
+        if (textures.length > 0 && onSaveMultiple) {
+            onSaveMultiple(textures);
+        }
+    }, [textureAData, textureBData, textureName, blendTexturesWithDirection, onSaveMultiple]);
 
     // Update preview when parameters change
     useEffect(() => {
@@ -465,347 +513,240 @@ const TextureBlendScreen = ({
 
     // Main blend interface
     return (
-        <div className="flex flex-col p-6 w-[500px]">
+        <div className="flex flex-col p-5 w-[560px]">
             {/* Header */}
-            <div className="flex items-center mb-5">
+            <div className="flex items-center mb-4">
                 <button
                     onClick={onBack}
-                    className="flex items-center gap-2 text-white/50 hover:text-white transition-colors"
+                    className="flex items-center gap-2 text-white/50 hover:text-white transition-colors text-sm"
                 >
-                    <FaArrowLeft size={14} />
-                    <span className="text-sm">Back</span>
+                    <FaArrowLeft size={12} />
+                    Back
                 </button>
-                <h2 className="flex-1 text-center text-xl font-bold text-white flex items-center justify-center gap-2">
-                    <FaExchangeAlt className="text-orange-400" />
+                <h2 className="flex-1 text-center text-lg font-bold text-white flex items-center justify-center gap-2">
+                    <FaExchangeAlt className="text-orange-400" size={16} />
                     Blend Textures
                 </h2>
                 <button
                     onClick={onClose}
-                    className="text-white/50 hover:text-white transition-colors w-10 h-10 flex items-center justify-center"
+                    className="text-white/50 hover:text-white transition-colors p-1.5"
                 >
                     ✕
                 </button>
             </div>
 
-            {/* Texture Selection */}
-            <div className="flex items-center gap-3 mb-5">
-                {/* Texture A */}
-                <div className="flex-1">
-                    <label className="text-xs text-white/50 mb-1.5 block">
-                        Texture A
-                    </label>
-                    <button
-                        onClick={() => setSelectingFor("A")}
-                        className={`w-full aspect-square rounded-xl border-2 transition-all flex items-center justify-center overflow-hidden ${
-                            textureA
-                                ? "border-white/20 bg-black/30"
-                                : "border-dashed border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30"
-                        }`}
-                    >
-                        {textureA && loadedTextures[textureA.id] ? (
-                            <img
-                                src={loadedTextures[textureA.id]}
-                                alt={textureA.name}
-                                className="w-full h-full object-contain"
-                                style={{ imageRendering: "pixelated" }}
-                            />
-                        ) : (
-                            <span className="text-white/30 text-sm">
-                                Select
-                            </span>
-                        )}
-                    </button>
-                    {textureA && (
-                        <div className="text-xs text-white/50 mt-1 text-center truncate">
-                            {textureA.name}
+            {/* Main content row: Left (Textures + Preview) | Right (Controls) */}
+            <div className="flex gap-4">
+                {/* Left: Texture Selection + Preview */}
+                <div className="flex flex-col gap-3 items-center">
+                    {/* Texture A & B with swap */}
+                    <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-center">
+                            <label className="text-[10px] text-white/40 mb-1">Texture A</label>
+                            <button
+                                onClick={() => setSelectingFor("A")}
+                                className={`w-20 h-20 rounded-xl border-2 transition-all flex items-center justify-center overflow-hidden ${
+                                    textureA
+                                        ? "border-white/20 bg-black/30"
+                                        : "border-dashed border-white/20 bg-white/5 hover:bg-white/10"
+                                }`}
+                                title={textureA?.name || "Select Texture A"}
+                            >
+                                {textureA && loadedTextures[textureA.id] ? (
+                                    <img
+                                        src={loadedTextures[textureA.id]}
+                                        alt={textureA.name}
+                                        className="w-full h-full object-contain"
+                                        style={{ imageRendering: "pixelated" }}
+                                    />
+                                ) : (
+                                    <span className="text-white/30 text-sm">Select</span>
+                                )}
+                            </button>
                         </div>
-                    )}
-                </div>
-
-                {/* Swap button */}
-                <button
-                    onClick={handleSwapTextures}
-                    disabled={!textureA || !textureB}
-                    className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed mt-4"
-                    title="Swap textures"
-                >
-                    <FaExchangeAlt size={14} />
-                </button>
-
-                {/* Texture B */}
-                <div className="flex-1">
-                    <label className="text-xs text-white/50 mb-1.5 block">
-                        Texture B
-                    </label>
-                    <button
-                        onClick={() => setSelectingFor("B")}
-                        className={`w-full aspect-square rounded-xl border-2 transition-all flex items-center justify-center overflow-hidden ${
-                            textureB
-                                ? "border-white/20 bg-black/30"
-                                : "border-dashed border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30"
-                        }`}
-                    >
-                        {textureB && loadedTextures[textureB.id] ? (
-                            <img
-                                src={loadedTextures[textureB.id]}
-                                alt={textureB.name}
-                                className="w-full h-full object-contain"
-                                style={{ imageRendering: "pixelated" }}
-                            />
-                        ) : (
-                            <span className="text-white/30 text-sm">
-                                Select
-                            </span>
-                        )}
-                    </button>
-                    {textureB && (
-                        <div className="text-xs text-white/50 mt-1 text-center truncate">
-                            {textureB.name}
+                        <button
+                            onClick={handleSwapTextures}
+                            disabled={!textureA || !textureB}
+                            className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 mt-4"
+                            title="Swap textures"
+                        >
+                            <FaExchangeAlt size={12} />
+                        </button>
+                        <div className="flex flex-col items-center">
+                            <label className="text-[10px] text-white/40 mb-1">Texture B</label>
+                            <button
+                                onClick={() => setSelectingFor("B")}
+                                className={`w-20 h-20 rounded-xl border-2 transition-all flex items-center justify-center overflow-hidden ${
+                                    textureB
+                                        ? "border-white/20 bg-black/30"
+                                        : "border-dashed border-white/20 bg-white/5 hover:bg-white/10"
+                                }`}
+                                title={textureB?.name || "Select Texture B"}
+                            >
+                                {textureB && loadedTextures[textureB.id] ? (
+                                    <img
+                                        src={loadedTextures[textureB.id]}
+                                        alt={textureB.name}
+                                        className="w-full h-full object-contain"
+                                        style={{ imageRendering: "pixelated" }}
+                                    />
+                                ) : (
+                                    <span className="text-white/30 text-sm">Select</span>
+                                )}
+                            </button>
                         </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Blend Controls */}
-            {textureA && textureB && (
-                <>
-                    {/* Preview */}
-                    <div className="flex justify-center mb-4">
-                        <div className="relative">
+                    </div>
+                    
+                    {/* Preview below textures */}
+                    {textureA && textureB && (
+                        <div className="flex flex-col items-center">
+                            <label className="text-[10px] text-white/40 mb-1">Preview</label>
                             <canvas
                                 ref={previewCanvasRef}
                                 width={GRID_SIZE}
                                 height={GRID_SIZE}
-                                className="w-32 h-32 rounded-xl border-2 border-white/20"
+                                className="w-24 h-24 rounded-xl border-2 border-white/20"
                                 style={{ imageRendering: "pixelated" }}
                             />
-                            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-xs text-white/40 bg-black/50 px-2 py-0.5 rounded">
-                                Preview
+                        </div>
+                    )}
+                </div>
+
+                {/* Right: Controls */}
+                {textureA && textureB && (
+                    <div className="flex-1 flex flex-col gap-3">
+                        {/* Blend Mode + Direction side by side */}
+                        <div className="flex gap-4">
+                            {/* Blend Mode */}
+                            <div className="flex-1">
+                                <label className="text-xs text-white/50 mb-1.5 block">Blend Mode</label>
+                                <div className="flex gap-1.5">
+                                    {[
+                                        { value: BLEND_MODES.GRADIENT, label: "Gradient" },
+                                        { value: BLEND_MODES.STEPPED, label: "Stepped" },
+                                        { value: BLEND_MODES.DITHER, label: "Dither" },
+                                    ].map((mode) => (
+                                        <button
+                                            key={mode.value}
+                                            onClick={() => setBlendMode(mode.value)}
+                                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs border transition-all ${
+                                                blendMode === mode.value
+                                                    ? "bg-orange-500/20 border-orange-500/50 text-orange-300"
+                                                    : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                            }`}
+                                        >
+                                            {mode.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Direction 3x3 Grid */}
+                            <div>
+                                <label className="text-xs text-white/50 mb-1.5 block">Direction</label>
+                                <div className="grid grid-cols-3 gap-1">
+                                    {[
+                                        { dir: DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT, icon: "↖" },
+                                        { dir: DIRECTIONS.BOTTOM_TO_TOP, icon: <FaArrowUp size={10} /> },
+                                        { dir: DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT, icon: "↗" },
+                                        { dir: DIRECTIONS.RIGHT_TO_LEFT, icon: <FaArrowLeft size={10} /> },
+                                        { dir: null, icon: "•" },
+                                        { dir: DIRECTIONS.LEFT_TO_RIGHT, icon: <FaArrowRight size={10} /> },
+                                        { dir: DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT, icon: "↙" },
+                                        { dir: DIRECTIONS.TOP_TO_BOTTOM, icon: <FaArrowDown size={10} /> },
+                                        { dir: DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT, icon: "↘" },
+                                    ].map((item, idx) => (
+                                        item.dir ? (
+                                            <button
+                                                key={idx}
+                                                onClick={() => setDirection(item.dir)}
+                                                className={`w-8 h-8 rounded-lg text-xs border transition-all flex items-center justify-center ${
+                                                    direction === item.dir
+                                                        ? "bg-blue-500/30 border-blue-500/50 text-blue-300"
+                                                        : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                                                }`}
+                                            >
+                                                {item.icon}
+                                            </button>
+                                        ) : (
+                                            <div key={idx} className="w-8 h-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center text-white/20 text-xs">
+                                                {item.icon}
+                                            </div>
+                                        )
+                                    ))}
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Blend Mode */}
-                    <div className="mb-4">
-                        <label className="text-xs text-white/50 mb-2 block">
-                            Blend Mode
-                        </label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {[
-                                {
-                                    value: BLEND_MODES.GRADIENT,
-                                    label: "Gradient",
-                                    desc: "Smooth transition",
-                                },
-                                {
-                                    value: BLEND_MODES.STEPPED,
-                                    label: "Stepped",
-                                    desc: "Hard edge with noise",
-                                },
-                                {
-                                    value: BLEND_MODES.DITHER,
-                                    label: "Dither",
-                                    desc: "Pixelated pattern",
-                                },
-                            ].map((mode) => (
-                                <button
-                                    key={mode.value}
-                                    onClick={() => setBlendMode(mode.value)}
-                                    className={`py-2 px-3 rounded-lg border text-xs transition-all ${
-                                        blendMode === mode.value
-                                            ? "bg-orange-500/20 border-orange-500/50 text-orange-300"
-                                            : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10"
-                                    }`}
-                                >
-                                    {mode.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Direction */}
-                    <div className="mb-4">
-                        <label className="text-xs text-white/50 mb-2 block">
-                            Direction
-                        </label>
-                        {/* 3x3 Grid for direction selection */}
-                        <div className="grid grid-cols-3 gap-1.5 w-fit mx-auto">
-                            {/* Top row: ↖ ↑ ↗ */}
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Bottom-Right to Top-Left"
-                            >
-                                <span className="text-sm">↖</span>
-                            </button>
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.BOTTOM_TO_TOP)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.BOTTOM_TO_TOP
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Bottom to Top"
-                            >
-                                <FaArrowUp size={14} />
-                            </button>
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Bottom-Left to Top-Right"
-                            >
-                                <span className="text-sm">↗</span>
-                            </button>
-                            
-                            {/* Middle row: ← · → */}
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.RIGHT_TO_LEFT)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.RIGHT_TO_LEFT
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Right to Left"
-                            >
-                                <FaArrowLeft size={14} />
-                            </button>
-                            <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center">
-                                <span className="text-white/20 text-xs">•</span>
+                        {/* Transition Width */}
+                        <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs text-white/50">Transition Width</label>
+                                <span className="text-xs text-white/40">{blendStrength}%</span>
                             </div>
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.LEFT_TO_RIGHT)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.LEFT_TO_RIGHT
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Left to Right"
-                            >
-                                <FaArrowRight size={14} />
-                            </button>
-                            
-                            {/* Bottom row: ↙ ↓ ↘ */}
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Top-Right to Bottom-Left"
-                            >
-                                <span className="text-sm">↙</span>
-                            </button>
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.TOP_TO_BOTTOM)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.TOP_TO_BOTTOM
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Top to Bottom"
-                            >
-                                <FaArrowDown size={14} />
-                            </button>
-                            <button
-                                onClick={() => setDirection(DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT)}
-                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
-                                    direction === DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT
-                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                }`}
-                                title="Top-Left to Bottom-Right"
-                            >
-                                <span className="text-sm">↘</span>
-                            </button>
+                            <div className="relative h-2 rounded-full overflow-hidden" style={{ background: "linear-gradient(to right, #333, #888)" }}>
+                                <input
+                                    type="range"
+                                    min="10"
+                                    max="100"
+                                    value={blendStrength}
+                                    onChange={(e) => setBlendStrength(parseInt(e.target.value))}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                />
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg border-2 border-gray-500 pointer-events-none"
+                                    style={{ left: `calc(${((blendStrength - 10) / 90) * 100}% - 8px)` }}
+                                />
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Blend Strength */}
-                    <div className="mb-5">
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs text-white/50">
-                                Transition Width
-                            </label>
-                            <span className="text-xs text-white/40">
-                                {blendStrength}%
-                            </span>
-                        </div>
-                        <div
-                            className="relative h-2 rounded-full overflow-hidden"
-                            style={{
-                                background:
-                                    "linear-gradient(to right, #333, #888)",
-                            }}
-                        >
+                        {/* Name Input */}
+                        <div>
+                            <label className="text-xs text-white/50 mb-1.5 block">Texture Name</label>
                             <input
-                                type="range"
-                                min="10"
-                                max="100"
-                                value={blendStrength}
-                                onChange={(e) =>
-                                    setBlendStrength(parseInt(e.target.value))
-                                }
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            />
-                            <div
-                                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg border-2 border-gray-600 pointer-events-none"
-                                style={{
-                                    left: `calc(${
-                                        ((blendStrength - 10) / 90) * 100
-                                    }% - 8px)`,
-                                }}
+                                type="text"
+                                value={textureName}
+                                onChange={(e) => setTextureName(e.target.value)}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                placeholder="e.g., grass-to-sand"
+                                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50"
                             />
                         </div>
-                    </div>
 
-                    {/* Name Input */}
-                    <div className="mb-4">
-                        <label className="text-xs text-white/50 mb-1.5 block">
-                            Texture Name
-                        </label>
-                        <input
-                            type="text"
-                            value={textureName}
-                            onChange={(e) => setTextureName(e.target.value)}
-                            onKeyDown={(e) => e.stopPropagation()}
-                            placeholder="e.g., grass-to-sand"
-                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500/50"
-                        />
+                        {/* Actions */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleEdit}
+                                className="p-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 rounded-lg transition-all"
+                                title="Edit in Editor"
+                            >
+                                <FaPencilAlt size={14} />
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                disabled={!textureName.trim()}
+                                className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-all disabled:opacity-40"
+                                title="Save & Use"
+                            >
+                                <FaSave size={14} />
+                            </button>
+                            {onSaveMultiple && (
+                                <button
+                                    onClick={handleGenerateAll}
+                                    disabled={!textureName.trim()}
+                                    className="flex-1 py-2 px-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs rounded-lg transition-all disabled:opacity-40"
+                                >
+                                    Generate All 8 Directions
+                                </button>
+                            )}
+                        </div>
                     </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={handleEdit}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 hover:border-blue-500/60 text-blue-300 text-sm rounded-lg transition-all"
-                        >
-                            <FaPencilAlt size={12} />
-                            Edit This
-                        </button>
-                        <button
-                            onClick={handleSave}
-                            disabled={!textureName.trim()}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 hover:border-emerald-500/60 text-emerald-300 text-sm rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                            <FaSave size={12} />
-                            Save & Use
-                        </button>
-                    </div>
-                </>
-            )}
+                )}
+            </div>
 
             {/* Instructions when textures not selected */}
             {(!textureA || !textureB) && (
-                <div className="text-center text-white/40 text-sm py-8">
+                <div className="text-center text-white/40 text-sm py-6">
                     Select two textures to blend them together
                 </div>
             )}
@@ -817,6 +758,7 @@ TextureBlendScreen.propTypes = {
     onBack: PropTypes.func.isRequired,
     onEditTexture: PropTypes.func.isRequired,
     onSaveDirectly: PropTypes.func.isRequired,
+    onSaveMultiple: PropTypes.func, // Optional - for generating all 8 directions
     onClose: PropTypes.func.isRequired,
 };
 
