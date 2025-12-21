@@ -204,6 +204,18 @@ const processCustomBlocksFromZip = async (zip, importData) => {
     }
 };
 
+// Helper function to extract the relative path from a model URI
+// e.g., "models/environment/City/barrel-wood-1.gltf" -> "City/barrel-wood-1.gltf"
+// e.g., "models/environment/barrel-wood-1.gltf" -> "barrel-wood-1.gltf"
+const getRelativeModelPath = (modelUri: string): string => {
+    return modelUri.replace(/^models\/environment\//, '');
+};
+
+// Helper function to get the filename from a model URI or path
+const getModelFileName = (modelUri: string): string => {
+    return modelUri.split('/').pop() || modelUri;
+};
+
 // Helper function to process custom models from ZIP
 const processCustomModelsFromZip = async (zip, importData) => {
     const modelsFolder = zip.folder("models/environment");
@@ -211,25 +223,40 @@ const processCustomModelsFromZip = async (zip, importData) => {
 
     // For each entity, check if we need to extract its model
     if (importData.entities) {
-        const modelFiles = new Map();
+        const modelFiles = new Map<string, { modelUri: string; relativePath: string; fileName: string }>();
         const customModelsToSave = [];
 
         // Collect all unique model URIs that need to be extracted
         Object.values(importData.entities).forEach((entity: any) => {
             if (entity.modelUri && !entity.modelUri.startsWith('data:') && !entity.modelUri.startsWith('assets/')) {
-                const fileName = entity.modelUri.split('/').pop();
-                if (fileName && !modelFiles.has(fileName)) {
-                    modelFiles.set(fileName, entity.modelUri);
+                const relativePath = getRelativeModelPath(entity.modelUri);
+                const fileName = getModelFileName(entity.modelUri);
+                
+                // Use relativePath as key to handle both flat and folder-based structures
+                if (!modelFiles.has(relativePath)) {
+                    modelFiles.set(relativePath, {
+                        modelUri: entity.modelUri,
+                        relativePath,
+                        fileName
+                    });
                 }
             }
         });
 
         // Extract and process each unique model
-        for (const [fileName, modelUri] of modelFiles) {
-            const modelFile = modelsFolder.file(fileName);
+        for (const [relativePath, modelInfo] of modelFiles) {
+            // Try to find the model file - first with the full relative path (new format with folders)
+            // then fallback to just filename (old flat format)
+            let modelFile = modelsFolder.file(relativePath);
+            
+            // If not found with relative path, try just the filename (backward compatibility)
+            if (!modelFile && relativePath.includes('/')) {
+                modelFile = modelsFolder.file(modelInfo.fileName);
+            }
+            
             if (modelFile) {
                 const arrayBuffer = await modelFile.async("arraybuffer");
-                const modelName = fileName.replace('.gltf', '');
+                const modelName = modelInfo.fileName.replace('.gltf', '');
 
                 // Save to custom models database
                 const modelDataForDB = {
@@ -241,7 +268,7 @@ const processCustomModelsFromZip = async (zip, importData) => {
 
                 // Update all entities using this model to reference by name instead of URI
                 Object.values(importData.entities).forEach((entity: any) => {
-                    if (entity.modelUri === modelUri) {
+                    if (entity.modelUri === modelInfo.modelUri) {
                         // Set the entity to use the model name so it can be found after preload
                         entity.modelName = modelName;
                         // Keep the original URI for now, will be updated after preload
@@ -916,11 +943,15 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     let modelUriForJson: string | undefined;
                     if (entityType.modelUrl && entityType.modelUrl.startsWith('data:')) {
                         modelUriForJson = entityType.modelUrl; // Keep data URI
+                    } else if (entityType.isCustom) {
+                        // Custom models go in the environment root
+                        modelUriForJson = `models/environment/${entityType.name}.gltf`;
                     } else {
-                        modelUriForJson = entityType.isCustom
-                            ? `models/environment/${entityType.name}.gltf` // Standard path for custom models
-                            : `models/environment/${entityType.modelUrl.split('/').pop()}`; // Path for standard models (just filename in models folder)
-
+                        // Default models: preserve their folder structure
+                        // modelUrl is like 'assets/models/environment/City/barrel-wood-1.gltf'
+                        // We want to extract 'City/barrel-wood-1.gltf' and prepend 'models/environment/'
+                        const pathAfterEnvironment = entityType.modelUrl.replace(/^assets\/models\/environment\//, '');
+                        modelUriForJson = `models/environment/${pathAfterEnvironment}`;
                     }
 
                     let localCentreOffset: THREE.Vector3;
@@ -1058,15 +1089,20 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         modelUris.forEach(uri => {
             if (uri && !uri.startsWith('data:') && !fetchedAssetUrls.has(uri)) { // Avoid data URIs and duplicates
                 fetchedAssetUrls.add(uri);
-                let fileName: string | undefined;
                 const matchingModel = environmentModels.find(m => m.modelUrl === uri);
+                
+                let relativePath: string | undefined;
                 if (matchingModel && matchingModel.isCustom) {
-                    fileName = `${matchingModel.name}.gltf`;
+                    // Custom models go in the environment root
+                    relativePath = `${matchingModel.name}.gltf`;
                 } else {
-                    fileName = uri.split('/').pop();
+                    // Default models: preserve their folder structure
+                    // uri is like 'assets/models/environment/City/barrel-wood-1.gltf'
+                    // Extract 'City/barrel-wood-1.gltf'
+                    relativePath = uri.replace(/^assets\/models\/environment\//, '');
                 }
 
-                if (fileName && modelsFolder) {
+                if (relativePath && modelsFolder) {
                     fetchPromises.push(
                         fetch(uri)
                             .then(response => {
@@ -1074,7 +1110,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                                 return response.blob();
                             })
                             .then(blob => {
-                                modelsFolder.file(fileName, blob);
+                                // This will create subfolders automatically if relativePath contains '/'
+                                modelsFolder.file(relativePath, blob);
                             })
                             .catch(error => console.error(`Failed to fetch/add model ${uri}:`, error))
                     );
