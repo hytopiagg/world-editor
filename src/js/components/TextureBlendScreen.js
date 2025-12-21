@@ -27,20 +27,20 @@ const BLEND_MODES = {
     DITHER: "dither",
 };
 
-// Direction options
+// Direction options - edges and corners
 const DIRECTIONS = {
+    // Edge directions
     LEFT_TO_RIGHT: "left-to-right",
     RIGHT_TO_LEFT: "right-to-left",
     TOP_TO_BOTTOM: "top-to-bottom",
     BOTTOM_TO_TOP: "bottom-to-top",
+    // Corner directions
+    TOP_LEFT_TO_BOTTOM_RIGHT: "top-left-to-bottom-right",
+    TOP_RIGHT_TO_BOTTOM_LEFT: "top-right-to-bottom-left",
+    BOTTOM_LEFT_TO_TOP_RIGHT: "bottom-left-to-top-right",
+    BOTTOM_RIGHT_TO_TOP_LEFT: "bottom-right-to-top-left",
 };
 
-const DIRECTION_ICONS = {
-    [DIRECTIONS.LEFT_TO_RIGHT]: FaArrowRight,
-    [DIRECTIONS.RIGHT_TO_LEFT]: FaArrowLeft,
-    [DIRECTIONS.TOP_TO_BOTTOM]: FaArrowDown,
-    [DIRECTIONS.BOTTOM_TO_TOP]: FaArrowUp,
-};
 
 const TextureBlendScreen = ({
     onBack,
@@ -240,21 +240,42 @@ const TextureBlendScreen = ({
 
                 // Calculate blend factor based on direction and position
                 let progress;
+                const normalizedX = x / (GRID_SIZE - 1);
+                const normalizedY = y / (GRID_SIZE - 1);
+                
                 switch (direction) {
+                    // Edge directions
                     case DIRECTIONS.LEFT_TO_RIGHT:
-                        progress = x / (GRID_SIZE - 1);
+                        progress = normalizedX;
                         break;
                     case DIRECTIONS.RIGHT_TO_LEFT:
-                        progress = 1 - x / (GRID_SIZE - 1);
+                        progress = 1 - normalizedX;
                         break;
                     case DIRECTIONS.TOP_TO_BOTTOM:
-                        progress = y / (GRID_SIZE - 1);
+                        progress = normalizedY;
                         break;
                     case DIRECTIONS.BOTTOM_TO_TOP:
-                        progress = 1 - y / (GRID_SIZE - 1);
+                        progress = 1 - normalizedY;
+                        break;
+                    // Corner/diagonal directions
+                    case DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT:
+                        // Distance from top-left corner (0,0) to bottom-right (1,1)
+                        progress = (normalizedX + normalizedY) / 2;
+                        break;
+                    case DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT:
+                        // Distance from top-right corner (1,0) to bottom-left (0,1)
+                        progress = ((1 - normalizedX) + normalizedY) / 2;
+                        break;
+                    case DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT:
+                        // Distance from bottom-left corner (0,1) to top-right (1,0)
+                        progress = (normalizedX + (1 - normalizedY)) / 2;
+                        break;
+                    case DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT:
+                        // Distance from bottom-right corner (1,1) to top-left (0,0)
+                        progress = ((1 - normalizedX) + (1 - normalizedY)) / 2;
                         break;
                     default:
-                        progress = x / (GRID_SIZE - 1);
+                        progress = normalizedX;
                 }
 
                 // Apply blend strength (controls transition width)
@@ -607,24 +628,104 @@ const TextureBlendScreen = ({
                         <label className="text-xs text-white/50 mb-2 block">
                             Direction
                         </label>
-                        <div className="flex gap-2 justify-center">
-                            {Object.entries(DIRECTIONS).map(([key, value]) => {
-                                const Icon = DIRECTION_ICONS[value];
-                                return (
-                                    <button
-                                        key={key}
-                                        onClick={() => setDirection(value)}
-                                        className={`p-3 rounded-lg border transition-all ${
-                                            direction === value
-                                                ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
-                                                : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
-                                        }`}
-                                        title={key.replace(/_/g, " ")}
-                                    >
-                                        <Icon size={16} />
-                                    </button>
-                                );
-                            })}
+                        {/* 3x3 Grid for direction selection */}
+                        <div className="grid grid-cols-3 gap-1.5 w-fit mx-auto">
+                            {/* Top row: ↖ ↑ ↗ */}
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Bottom-Right to Top-Left"
+                            >
+                                <span className="text-sm">↖</span>
+                            </button>
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.BOTTOM_TO_TOP)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.BOTTOM_TO_TOP
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Bottom to Top"
+                            >
+                                <FaArrowUp size={14} />
+                            </button>
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Bottom-Left to Top-Right"
+                            >
+                                <span className="text-sm">↗</span>
+                            </button>
+                            
+                            {/* Middle row: ← · → */}
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.RIGHT_TO_LEFT)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.RIGHT_TO_LEFT
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Right to Left"
+                            >
+                                <FaArrowLeft size={14} />
+                            </button>
+                            <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center">
+                                <span className="text-white/20 text-xs">•</span>
+                            </div>
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.LEFT_TO_RIGHT)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.LEFT_TO_RIGHT
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Left to Right"
+                            >
+                                <FaArrowRight size={14} />
+                            </button>
+                            
+                            {/* Bottom row: ↙ ↓ ↘ */}
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Top-Right to Bottom-Left"
+                            >
+                                <span className="text-sm">↙</span>
+                            </button>
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.TOP_TO_BOTTOM)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.TOP_TO_BOTTOM
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Top to Bottom"
+                            >
+                                <FaArrowDown size={14} />
+                            </button>
+                            <button
+                                onClick={() => setDirection(DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT)}
+                                className={`w-10 h-10 rounded-lg border transition-all flex items-center justify-center ${
+                                    direction === DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT
+                                        ? "bg-blue-500/20 border-blue-500/50 text-blue-300"
+                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10"
+                                }`}
+                                title="Top-Left to Bottom-Right"
+                            >
+                                <span className="text-sm">↘</span>
+                            </button>
                         </div>
                     </div>
 
