@@ -35,6 +35,7 @@ import {
     processCustomBlock,
     createLightVariant,
     getCustomBlocks,
+    loadAndApplyBlockOverrides,
 } from "./managers/BlockTypesManager";
 import { cameraMovementTracker } from "./managers/CameraMovementTracker";
 import { DatabaseManager, STORES } from "./managers/DatabaseManager";
@@ -1963,6 +1964,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     }
                 } catch (error) {
                     // Error loading base grid Y, use default (0)
+                }
+                
+                // Load and apply saved overrides for built-in blocks (e.g., isLiquid)
+                try {
+                    await loadAndApplyBlockOverrides();
+                } catch (error) {
+                    console.warn("Error loading block overrides:", error);
                 }
                 
                 await DatabaseManager.getData(STORES.CUSTOM_BLOCKS, "blocks")

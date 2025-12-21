@@ -808,10 +808,33 @@ const PixelEditorCanvas = forwardRef(
                             "PixelEditorCanvas: Notifying parent of history change:",
                             { canUndoNow, canRedoNow }
                         );
+                    },
 
+                    // Load new image data (e.g., after rotation)
+                    loadFromImageData: (newImageData) => {
+                        if (newImageData) {
+                            // Clone the image data
+                            const clonedData = new ImageData(
+                                new Uint8ClampedArray(newImageData.data),
+                                newImageData.width,
+                                newImageData.height
+                            );
+                            // Add to history
+                            setHistory((prev) => {
+                                const newHistory = prev.slice(0, historyIndex + 1);
+                                newHistory.push(clonedData);
+                                if (newHistory.length > MAX_HISTORY) {
+                                    newHistory.shift();
+                                    return newHistory;
+                                }
+                                return newHistory;
+                            });
+                            setHistoryIndex((prev) => Math.min(prev + 1, MAX_HISTORY - 1));
+                        }
                     },
                 };
             },
+            // eslint-disable-next-line react-hooks/exhaustive-deps
             [historyIndex, history.length]
         );
         return (

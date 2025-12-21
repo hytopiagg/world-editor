@@ -559,6 +559,87 @@ const updateCustomBlockName = async (blockId, newName) => {
     return true; // Indicate success
 };
 
+/**
+ * Save a property override for a built-in block (ID < 1000)
+ * This allows persisting changes like isLiquid for built-in blocks
+ * @param {number} blockId - The ID of the built-in block
+ * @param {Object} overrides - Object containing properties to override (e.g., { isLiquid: true })
+ * @returns {Promise<boolean>} - True if save was successful
+ */
+const saveBlockOverride = async (blockId, overrides) => {
+    const id = parseInt(blockId);
+    if (id >= 1000) {
+        // Custom blocks are handled by CUSTOM_BLOCKS store, not overrides
+        console.warn("saveBlockOverride: Use processCustomBlock for custom blocks (ID >= 1000)");
+        return false;
+    }
+    
+    try {
+        const { DatabaseManager, STORES } = require("./DatabaseManager");
+        
+        // Load existing overrides
+        let allOverrides = await DatabaseManager.getData(STORES.BLOCK_OVERRIDES, "builtin-overrides") || {};
+        
+        // Merge new overrides for this block
+        if (!allOverrides[id]) {
+            allOverrides[id] = {};
+        }
+        allOverrides[id] = { ...allOverrides[id], ...overrides };
+        
+        // Save back to database
+        await DatabaseManager.saveData(STORES.BLOCK_OVERRIDES, "builtin-overrides", allOverrides);
+        
+        return true;
+    } catch (e) {
+        console.error("saveBlockOverride: failed to persist to DB", e);
+        return false;
+    }
+};
+
+/**
+ * Load and apply all saved block overrides for built-in blocks
+ * Should be called during initialization after blockTypesArray is populated
+ * @returns {Promise<void>}
+ */
+const loadAndApplyBlockOverrides = async () => {
+    try {
+        const { DatabaseManager, STORES } = require("./DatabaseManager");
+        
+        const allOverrides = await DatabaseManager.getData(STORES.BLOCK_OVERRIDES, "builtin-overrides");
+        
+        if (!allOverrides || typeof allOverrides !== 'object') {
+            return;
+        }
+        
+        // Apply overrides to blockTypesArray
+        for (const [blockIdStr, overrides] of Object.entries(allOverrides)) {
+            const blockId = parseInt(blockIdStr);
+            const blockIndex = blockTypesArray.findIndex((b) => b.id === blockId);
+            
+            if (blockIndex >= 0 && blockId < 1000) {
+                // Apply each override property
+                Object.entries(overrides).forEach(([key, value]) => {
+                    blockTypesArray[blockIndex][key] = value;
+                });
+                
+                // Also update the BlockTypeRegistry if it exists
+                try {
+                    const reg = window.BlockTypeRegistry?.instance;
+                    if (reg && reg.updateBlockType) {
+                        reg.updateBlockType({ id: blockId, ...overrides });
+                    }
+                } catch (e) {
+                    // Registry may not be initialized yet, that's okay
+                }
+            }
+        }
+        
+        console.log(`Applied block overrides for ${Object.keys(allOverrides).length} built-in block(s)`);
+    } catch (e) {
+        console.error("loadAndApplyBlockOverrides: failed to load from DB", e);
+    }
+};
+
 const blockTypes = blockTypesArray;
 export {
     blockTypes,
@@ -574,6 +655,8 @@ export {
     isCustomBlock,
     placeCustomBlock,
     createLightVariant,
+    saveBlockOverride,
+    loadAndApplyBlockOverrides,
 };
 
 if (typeof window !== "undefined") {

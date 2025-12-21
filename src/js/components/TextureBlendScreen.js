@@ -1,15 +1,21 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import React, {
+    useState,
+    useMemo,
+    useEffect,
+    useRef,
+    useCallback,
+} from "react";
 import PropTypes from "prop-types";
 import { getBlockTypes } from "../managers/BlockTypesManager";
-import { 
-    FaArrowLeft, 
-    FaArrowRight, 
-    FaArrowUp, 
+import {
+    FaArrowLeft,
+    FaArrowRight,
+    FaArrowUp,
     FaArrowDown,
     FaSearch,
     FaExchangeAlt,
     FaPencilAlt,
-    FaSave
+    FaSave,
 } from "react-icons/fa";
 
 const GRID_SIZE = 24;
@@ -36,7 +42,12 @@ const DIRECTION_ICONS = {
     [DIRECTIONS.BOTTOM_TO_TOP]: FaArrowUp,
 };
 
-const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) => {
+const TextureBlendScreen = ({
+    onBack,
+    onEditTexture,
+    onSaveDirectly,
+    onClose,
+}) => {
     const [textureA, setTextureA] = useState(null);
     const [textureB, setTextureB] = useState(null);
     const [textureAData, setTextureAData] = useState(null);
@@ -49,7 +60,7 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
     const [textureName, setTextureName] = useState("");
     const [loadedTextures, setLoadedTextures] = useState({});
     const [blendedResult, setBlendedResult] = useState(null);
-    
+
     const previewCanvasRef = useRef(null);
 
     // Helper to convert relative paths to absolute URLs
@@ -115,11 +126,17 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
                     const dataUrl = canvas.toDataURL();
-                    setLoadedTextures((prev) => ({ ...prev, [block.id]: dataUrl }));
+                    setLoadedTextures((prev) => ({
+                        ...prev,
+                        [block.id]: dataUrl,
+                    }));
                     resolve(dataUrl);
                 };
                 img.onerror = () => {
-                    setLoadedTextures((prev) => ({ ...prev, [block.id]: null }));
+                    setLoadedTextures((prev) => ({
+                        ...prev,
+                        [block.id]: null,
+                    }));
                     resolve(null);
                 };
                 const textureUrl = getBlockTextureUrl(block);
@@ -143,7 +160,9 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
             const loadBatch = async (blocks, batchSize = 10) => {
                 for (let i = 0; i < blocks.length; i += batchSize) {
                     const batch = blocks.slice(i, i + batchSize);
-                    await Promise.all(batch.map((block) => loadTexturePreview(block)));
+                    await Promise.all(
+                        batch.map((block) => loadTexturePreview(block))
+                    );
                 }
             };
             if (blocksToLoad.length > 0) {
@@ -185,7 +204,7 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
         }
         setSelectingFor(null);
         setSearchTerm("");
-        
+
         // Auto-generate name
         if (selectingFor === "A" && textureB) {
             setTextureName(`${block.name}-to-${textureB.name}`);
@@ -250,7 +269,7 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                     const halfWidth = transitionWidth / 2;
                     const start = center - halfWidth;
                     const end = center + halfWidth;
-                    
+
                     if (progress <= start) {
                         blendFactor = 0;
                     } else if (progress >= end) {
@@ -266,15 +285,21 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                 switch (blendMode) {
                     case BLEND_MODES.GRADIENT:
                         // Smooth gradient - use easing
-                        finalBlendFactor = blendFactor * blendFactor * (3 - 2 * blendFactor); // smoothstep
+                        finalBlendFactor =
+                            blendFactor * blendFactor * (3 - 2 * blendFactor); // smoothstep
                         break;
 
                     case BLEND_MODES.STEPPED:
                         // Stepped with progressive edge
                         // Add some randomness at the edge
-                        const noise = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+                        const noise =
+                            (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) %
+                            1;
                         const edgeNoise = (noise - 0.5) * 0.3;
-                        finalBlendFactor = Math.max(0, Math.min(1, blendFactor + edgeNoise));
+                        finalBlendFactor = Math.max(
+                            0,
+                            Math.min(1, blendFactor + edgeNoise)
+                        );
                         // Quantize to create steps
                         finalBlendFactor = finalBlendFactor > 0.5 ? 1 : 0;
                         break;
@@ -285,7 +310,7 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                             [0, 8, 2, 10],
                             [12, 4, 14, 6],
                             [3, 11, 1, 9],
-                            [15, 7, 13, 5]
+                            [15, 7, 13, 5],
                         ];
                         const threshold = ditherMatrix[y % 4][x % 4] / 16;
                         finalBlendFactor = blendFactor > threshold ? 1 : 0;
@@ -296,10 +321,22 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                 }
 
                 // Blend the colors
-                result.data[i] = Math.round(dataA[i] * (1 - finalBlendFactor) + dataB[i] * finalBlendFactor);
-                result.data[i + 1] = Math.round(dataA[i + 1] * (1 - finalBlendFactor) + dataB[i + 1] * finalBlendFactor);
-                result.data[i + 2] = Math.round(dataA[i + 2] * (1 - finalBlendFactor) + dataB[i + 2] * finalBlendFactor);
-                result.data[i + 3] = Math.round(dataA[i + 3] * (1 - finalBlendFactor) + dataB[i + 3] * finalBlendFactor);
+                result.data[i] = Math.round(
+                    dataA[i] * (1 - finalBlendFactor) +
+                        dataB[i] * finalBlendFactor
+                );
+                result.data[i + 1] = Math.round(
+                    dataA[i + 1] * (1 - finalBlendFactor) +
+                        dataB[i + 1] * finalBlendFactor
+                );
+                result.data[i + 2] = Math.round(
+                    dataA[i + 2] * (1 - finalBlendFactor) +
+                        dataB[i + 2] * finalBlendFactor
+                );
+                result.data[i + 3] = Math.round(
+                    dataA[i + 3] * (1 - finalBlendFactor) +
+                        dataB[i + 3] * finalBlendFactor
+                );
             }
         }
 
@@ -341,7 +378,10 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                 {/* Header */}
                 <div className="flex items-center mb-4">
                     <button
-                        onClick={() => { setSelectingFor(null); setSearchTerm(""); }}
+                        onClick={() => {
+                            setSelectingFor(null);
+                            setSearchTerm("");
+                        }}
                         className="flex items-center gap-2 text-white/50 hover:text-white transition-colors"
                     >
                         <FaArrowLeft size={14} />
@@ -355,7 +395,10 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
 
                 {/* Search */}
                 <div className="relative mb-3">
-                    <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={14} />
+                    <FaSearch
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
+                        size={14}
+                    />
                     <input
                         type="text"
                         value={searchTerm}
@@ -385,7 +428,9 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                                         style={{ imageRendering: "pixelated" }}
                                     />
                                 ) : loadedTextures[block.id] === null ? (
-                                    <div className="w-full h-full bg-red-900/30 flex items-center justify-center text-red-400 text-xs">?</div>
+                                    <div className="w-full h-full bg-red-900/30 flex items-center justify-center text-red-400 text-xs">
+                                        ?
+                                    </div>
                                 ) : (
                                     <div className="w-5 h-5 bg-white/10 rounded animate-pulse" />
                                 )}
@@ -425,12 +470,14 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
             <div className="flex items-center gap-3 mb-5">
                 {/* Texture A */}
                 <div className="flex-1">
-                    <label className="text-xs text-white/50 mb-1.5 block">Texture A</label>
+                    <label className="text-xs text-white/50 mb-1.5 block">
+                        Texture A
+                    </label>
                     <button
                         onClick={() => setSelectingFor("A")}
                         className={`w-full aspect-square rounded-xl border-2 transition-all flex items-center justify-center overflow-hidden ${
-                            textureA 
-                                ? "border-white/20 bg-black/30" 
+                            textureA
+                                ? "border-white/20 bg-black/30"
                                 : "border-dashed border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30"
                         }`}
                     >
@@ -442,7 +489,9 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                                 style={{ imageRendering: "pixelated" }}
                             />
                         ) : (
-                            <span className="text-white/30 text-sm">Select</span>
+                            <span className="text-white/30 text-sm">
+                                Select
+                            </span>
                         )}
                     </button>
                     {textureA && (
@@ -464,12 +513,14 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
 
                 {/* Texture B */}
                 <div className="flex-1">
-                    <label className="text-xs text-white/50 mb-1.5 block">Texture B</label>
+                    <label className="text-xs text-white/50 mb-1.5 block">
+                        Texture B
+                    </label>
                     <button
                         onClick={() => setSelectingFor("B")}
                         className={`w-full aspect-square rounded-xl border-2 transition-all flex items-center justify-center overflow-hidden ${
-                            textureB 
-                                ? "border-white/20 bg-black/30" 
+                            textureB
+                                ? "border-white/20 bg-black/30"
                                 : "border-dashed border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30"
                         }`}
                     >
@@ -481,7 +532,9 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                                 style={{ imageRendering: "pixelated" }}
                             />
                         ) : (
-                            <span className="text-white/30 text-sm">Select</span>
+                            <span className="text-white/30 text-sm">
+                                Select
+                            </span>
                         )}
                     </button>
                     {textureB && (
@@ -513,12 +566,26 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
 
                     {/* Blend Mode */}
                     <div className="mb-4">
-                        <label className="text-xs text-white/50 mb-2 block">Blend Mode</label>
+                        <label className="text-xs text-white/50 mb-2 block">
+                            Blend Mode
+                        </label>
                         <div className="grid grid-cols-3 gap-2">
                             {[
-                                { value: BLEND_MODES.GRADIENT, label: "Gradient", desc: "Smooth transition" },
-                                { value: BLEND_MODES.STEPPED, label: "Stepped", desc: "Hard edge with noise" },
-                                { value: BLEND_MODES.DITHER, label: "Dither", desc: "Pixelated pattern" },
+                                {
+                                    value: BLEND_MODES.GRADIENT,
+                                    label: "Gradient",
+                                    desc: "Smooth transition",
+                                },
+                                {
+                                    value: BLEND_MODES.STEPPED,
+                                    label: "Stepped",
+                                    desc: "Hard edge with noise",
+                                },
+                                {
+                                    value: BLEND_MODES.DITHER,
+                                    label: "Dither",
+                                    desc: "Pixelated pattern",
+                                },
                             ].map((mode) => (
                                 <button
                                     key={mode.value}
@@ -537,7 +604,9 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
 
                     {/* Direction */}
                     <div className="mb-4">
-                        <label className="text-xs text-white/50 mb-2 block">Direction</label>
+                        <label className="text-xs text-white/50 mb-2 block">
+                            Direction
+                        </label>
                         <div className="flex gap-2 justify-center">
                             {Object.entries(DIRECTIONS).map(([key, value]) => {
                                 const Icon = DIRECTION_ICONS[value];
@@ -562,31 +631,46 @@ const TextureBlendScreen = ({ onBack, onEditTexture, onSaveDirectly, onClose }) 
                     {/* Blend Strength */}
                     <div className="mb-5">
                         <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs text-white/50">Transition Width</label>
-                            <span className="text-xs text-white/40">{blendStrength}%</span>
+                            <label className="text-xs text-white/50">
+                                Transition Width
+                            </label>
+                            <span className="text-xs text-white/40">
+                                {blendStrength}%
+                            </span>
                         </div>
-                        <div 
+                        <div
                             className="relative h-2 rounded-full overflow-hidden"
-                            style={{ background: "linear-gradient(to right, #333, #888)" }}
+                            style={{
+                                background:
+                                    "linear-gradient(to right, #333, #888)",
+                            }}
                         >
                             <input
                                 type="range"
                                 min="10"
                                 max="100"
                                 value={blendStrength}
-                                onChange={(e) => setBlendStrength(parseInt(e.target.value))}
+                                onChange={(e) =>
+                                    setBlendStrength(parseInt(e.target.value))
+                                }
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
                             <div
                                 className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg border-2 border-gray-600 pointer-events-none"
-                                style={{ left: `calc(${((blendStrength - 10) / 90) * 100}% - 8px)` }}
+                                style={{
+                                    left: `calc(${
+                                        ((blendStrength - 10) / 90) * 100
+                                    }% - 8px)`,
+                                }}
                             />
                         </div>
                     </div>
 
                     {/* Name Input */}
                     <div className="mb-4">
-                        <label className="text-xs text-white/50 mb-1.5 block">Texture Name</label>
+                        <label className="text-xs text-white/50 mb-1.5 block">
+                            Texture Name
+                        </label>
                         <input
                             type="text"
                             value={textureName}
@@ -636,4 +720,3 @@ TextureBlendScreen.propTypes = {
 };
 
 export default TextureBlendScreen;
-

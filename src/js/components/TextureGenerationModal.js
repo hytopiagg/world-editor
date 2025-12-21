@@ -8,22 +8,25 @@ import FaceSelector from "./FaceSelector";
 import "../../css/TextureGenerationModal.css";
 import * as THREE from "three";
 import CustomColorPicker from "./ColorPicker";
-import TextureAdjustments, { applyColorAdjustments } from "./TextureAdjustments";
+import TextureAdjustments, {
+    applyColorAdjustments,
+} from "./TextureAdjustments";
 import CreationModeSelector from "./CreationModeSelector";
 import AIGenerateScreen from "./AIGenerateScreen";
 import TexturePickerScreen from "./TexturePickerScreen";
 import TextureBlendScreen from "./TextureBlendScreen";
 import CollapsibleSection from "./CollapsibleSection";
-import { 
-    FaPalette, 
-    FaMagic, 
-    FaPencilAlt, 
-    FaFillDrip, 
-    FaEraser, 
+import {
+    FaPalette,
+    FaMagic,
+    FaPencilAlt,
+    FaFillDrip,
+    FaEraser,
     FaEyeDropper,
     FaUndo,
     FaRedo,
-    FaArrowLeft
+    FaArrowLeft,
+    FaSyncAlt,
 } from "react-icons/fa";
 
 const FACES = ["all", "top", "bottom", "left", "right", "front", "back"];
@@ -51,7 +54,7 @@ const TOOL_ICONS = {
 const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     // Creation mode: 'choose' | 'existing' | 'ai' | 'editor'
     const [creationMode, setCreationMode] = useState("choose");
-    
+
     const [textureName, setTextureName] = useState("");
     const [textureObjects, setTextureObjects] = useState({});
     const [error, setError] = useState(null);
@@ -65,17 +68,17 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
-    
+
     // Which sidebar section is open: 'color' | 'adjustments' | null
     const [openSection, setOpenSection] = useState("color");
 
     // Initialize textures
     const initializeTextures = useCallback(() => {
-            const initialTextures = {};
-            FACES.forEach((face) => {
-                initialTextures[face] = createTexture(GRID_SIZE);
-            });
-            setTextureObjects(initialTextures);
+        const initialTextures = {};
+        FACES.forEach((face) => {
+            initialTextures[face] = createTexture(GRID_SIZE);
+        });
+        setTextureObjects(initialTextures);
         setCanUndo(false);
         setCanRedo(false);
     }, []);
@@ -90,13 +93,17 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
             setError(null);
             setTextureName("");
         } else {
-            Object.values(textureObjects).forEach((texture) => texture?.dispose());
+            Object.values(textureObjects).forEach((texture) =>
+                texture?.dispose()
+            );
             setTextureObjects({});
         }
 
         return () => {
             if (!isOpen) {
-                Object.values(textureObjects).forEach((texture) => texture?.dispose());
+                Object.values(textureObjects).forEach((texture) =>
+                    texture?.dispose()
+                );
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,7 +144,10 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     useEffect(() => {
         if (pixelCanvasRef.current) {
             const originalNotify = pixelCanvasRef.current.notifyHistoryChanged;
-            pixelCanvasRef.current.notifyHistoryChanged = (canUndoNow, canRedoNow) => {
+            pixelCanvasRef.current.notifyHistoryChanged = (
+                canUndoNow,
+                canRedoNow
+            ) => {
                 if (originalNotify) {
                     originalNotify(canUndoNow, canRedoNow);
                 }
@@ -206,29 +216,26 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
     );
 
     // Handle AI texture for editing
-    const handleAIEditTexture = useCallback(
-        (imageDataUrl, name) => {
-            const newTextureObjects = {};
+    const handleAIEditTexture = useCallback((imageDataUrl, name) => {
+        const newTextureObjects = {};
 
-            const img = new Image();
-            img.onload = () => {
-                FACES.forEach((face) => {
-                    const texture = createTexture(GRID_SIZE);
-                    const ctx = texture.image.getContext("2d");
-                    ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
-                    texture.needsUpdate = true;
-                    newTextureObjects[face] = texture;
-                });
-                setTextureObjects(newTextureObjects);
-                setTextureName(name || "");
-                setCanUndo(false);
-                setCanRedo(false);
-                setCreationMode("editor");
-            };
-            img.src = imageDataUrl;
-        },
-        []
-    );
+        const img = new Image();
+        img.onload = () => {
+            FACES.forEach((face) => {
+                const texture = createTexture(GRID_SIZE);
+                const ctx = texture.image.getContext("2d");
+                ctx.drawImage(img, 0, 0, GRID_SIZE, GRID_SIZE);
+                texture.needsUpdate = true;
+                newTextureObjects[face] = texture;
+            });
+            setTextureObjects(newTextureObjects);
+            setTextureName(name || "");
+            setCanUndo(false);
+            setCanRedo(false);
+            setCreationMode("editor");
+        };
+        img.src = imageDataUrl;
+    }, []);
 
     // Handle AI texture direct save
     const handleAISaveDirectly = useCallback(
@@ -264,15 +271,21 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 return;
             }
 
-            const facesToAdjust = selectedFace === "all" 
-                ? FACES.filter(f => f !== "all") 
-                : [selectedFace];
+            const facesToAdjust =
+                selectedFace === "all"
+                    ? FACES.filter((f) => f !== "all")
+                    : [selectedFace];
 
             facesToAdjust.forEach((face) => {
                 const texture = textureObjects[face];
                 if (texture && texture.image instanceof HTMLCanvasElement) {
                     const ctx = texture.image.getContext("2d");
-                    const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
+                    const imageData = ctx.getImageData(
+                        0,
+                        0,
+                        GRID_SIZE,
+                        GRID_SIZE
+                    );
 
                     const adjustedData = applyColorAdjustments(imageData, {
                         hueShift: adjustment.hueShift || 0,
@@ -293,9 +306,17 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 const texture = textureObjects[selectedFace];
                 if (texture && texture.image instanceof HTMLCanvasElement) {
                     const ctx = texture.image.getContext("2d");
-                    const imageData = ctx.getImageData(0, 0, GRID_SIZE, GRID_SIZE);
+                    const imageData = ctx.getImageData(
+                        0,
+                        0,
+                        GRID_SIZE,
+                        GRID_SIZE
+                    );
                     if (pixelCanvasRef.current.onPixelUpdate) {
-                        pixelCanvasRef.current.onPixelUpdate(selectedFace, imageData);
+                        pixelCanvasRef.current.onPixelUpdate(
+                            selectedFace,
+                            imageData
+                        );
                     }
                 }
             }
@@ -323,11 +344,103 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                 success = false;
             }
             if (success) {
-                onTextureReady(exportData, textureName.trim() || "custom-texture");
+                onTextureReady(
+                    exportData,
+                    textureName.trim() || "custom-texture"
+                );
             }
         }
         handleClose();
     };
+
+    // Rotate texture by specified degrees (90, 180, 270)
+    const handleRotate = useCallback(
+        (degrees) => {
+            if (!textureObjects || Object.keys(textureObjects).length === 0) {
+                return;
+            }
+
+            const facesToRotate =
+                selectedFace === "all"
+                    ? FACES.filter((f) => f !== "all")
+                    : [selectedFace];
+
+            facesToRotate.forEach((face) => {
+                const texture = textureObjects[face];
+                if (texture && texture.image instanceof HTMLCanvasElement) {
+                    const ctx = texture.image.getContext("2d");
+                    const imageData = ctx.getImageData(
+                        0,
+                        0,
+                        GRID_SIZE,
+                        GRID_SIZE
+                    );
+
+                    // Create rotated image data
+                    const rotatedData = new ImageData(GRID_SIZE, GRID_SIZE);
+                    const src = imageData.data;
+                    const dst = rotatedData.data;
+
+                    for (let y = 0; y < GRID_SIZE; y++) {
+                        for (let x = 0; x < GRID_SIZE; x++) {
+                            let newX, newY;
+
+                            switch (degrees) {
+                                case 90:
+                                    newX = GRID_SIZE - 1 - y;
+                                    newY = x;
+                                    break;
+                                case 180:
+                                    newX = GRID_SIZE - 1 - x;
+                                    newY = GRID_SIZE - 1 - y;
+                                    break;
+                                case 270:
+                                    newX = y;
+                                    newY = GRID_SIZE - 1 - x;
+                                    break;
+                                default:
+                                    newX = x;
+                                    newY = y;
+                            }
+
+                            const srcIdx = (y * GRID_SIZE + x) * 4;
+                            const dstIdx = (newY * GRID_SIZE + newX) * 4;
+
+                            dst[dstIdx] = src[srcIdx];
+                            dst[dstIdx + 1] = src[srcIdx + 1];
+                            dst[dstIdx + 2] = src[srcIdx + 2];
+                            dst[dstIdx + 3] = src[srcIdx + 3];
+                        }
+                    }
+
+                    ctx.putImageData(rotatedData, 0, 0);
+                    texture.needsUpdate = true;
+                }
+            });
+
+            // Trigger re-render
+            setTextureObjects((prev) => ({ ...prev }));
+
+            // Update the pixel canvas
+            if (pixelCanvasRef.current && textureObjects[selectedFace]) {
+                const texture = textureObjects[selectedFace];
+                if (texture && texture.image instanceof HTMLCanvasElement) {
+                    const ctx = texture.image.getContext("2d");
+                    const imageData = ctx.getImageData(
+                        0,
+                        0,
+                        GRID_SIZE,
+                        GRID_SIZE
+                    );
+                    // Force canvas to reload the texture
+                    if (pixelCanvasRef.current.loadFromImageData) {
+                        pixelCanvasRef.current.loadFromImageData(imageData);
+                    }
+                }
+            }
+        },
+        [textureObjects, selectedFace]
+    );
 
     const handleUndo = () => {
         if (pixelCanvasRef.current?.undo) {
@@ -412,20 +525,27 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
 
                             {/* Tool buttons */}
                             <div className="flex gap-1 items-center px-2 py-1 rounded-lg border bg-white/5 border-white/10">
-                                {Object.entries(TOOL_ICONS).map(([tool, Icon]) => (
-                                    <button
-                                        key={tool}
-                                        onClick={() => setSelectedTool(tool)}
-                                        className={`p-2 rounded transition-all ${
-                                            selectedTool === tool
-                                                ? "bg-white text-black"
-                                                : "text-white/60 hover:text-white hover:bg-white/10"
-                                        }`}
-                                        title={tool.charAt(0).toUpperCase() + tool.slice(1)}
-                                    >
-                                        <Icon size={14} />
-                                    </button>
-                                ))}
+                                {Object.entries(TOOL_ICONS).map(
+                                    ([tool, Icon]) => (
+                                        <button
+                                            key={tool}
+                                            onClick={() =>
+                                                setSelectedTool(tool)
+                                            }
+                                            className={`p-2 rounded transition-all ${
+                                                selectedTool === tool
+                                                    ? "bg-white text-black"
+                                                    : "text-white/60 hover:text-white hover:bg-white/10"
+                                            }`}
+                                            title={
+                                                tool.charAt(0).toUpperCase() +
+                                                tool.slice(1)
+                                            }
+                                        >
+                                            <Icon size={14} />
+                                        </button>
+                                    )
+                                )}
                                 <div className="mx-1 w-px h-5 bg-white/20" />
                                 <button
                                     onClick={handleUndo}
@@ -442,6 +562,15 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                     title="Redo"
                                 >
                                     <FaRedo size={12} />
+                                </button>
+                                <div className="mx-1 w-px h-5 bg-white/20" />
+                                {/* Rotate 90° button */}
+                                <button
+                                    onClick={() => handleRotate(90)}
+                                    className="p-2 rounded transition-all text-white/60 hover:text-white hover:bg-white/10"
+                                    title="Rotate 90°"
+                                >
+                                    <FaSyncAlt size={12} />
                                 </button>
                             </div>
 
@@ -463,7 +592,10 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                 design="primary"
                                 tier={3}
                                 onClick={handleUseTexture}
-                                disabled={Object.keys(textureObjects).length === 0 || !textureName.trim()}
+                                disabled={
+                                    Object.keys(textureObjects).length === 0 ||
+                                    !textureName.trim()
+                                }
                                 style={{
                                     fontSize: "12px",
                                     padding: "6px 16px",
@@ -493,7 +625,9 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                         <div className="flex gap-4">
                             {/* Left Panel - Preview & Face Selector */}
                             <div className="flex flex-col gap-3 p-3 rounded-lg border border-white/10 bg-white/5">
-                                <BlockPreview3D textureObjects={textureObjects} />
+                                <BlockPreview3D
+                                    textureObjects={textureObjects}
+                                />
                                 <FaceSelector
                                     selectedFace={selectedFace}
                                     onSelectFace={handleSelectFace}
@@ -522,7 +656,13 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                     icon={FaPalette}
                                     iconColor="text-pink-400"
                                     isOpen={openSection === "color"}
-                                    onToggle={() => setOpenSection(openSection === "color" ? null : "color")}
+                                    onToggle={() =>
+                                        setOpenSection(
+                                            openSection === "color"
+                                                ? null
+                                                : "color"
+                                        )
+                                    }
                                 >
                                     <CustomColorPicker
                                         value={selectedColor}
@@ -538,11 +678,22 @@ const TextureGenerationModal = ({ isOpen, onClose, onTextureReady }) => {
                                     icon={FaMagic}
                                     iconColor="text-purple-400"
                                     isOpen={openSection === "adjustments"}
-                                    onToggle={() => setOpenSection(openSection === "adjustments" ? null : "adjustments")}
+                                    onToggle={() =>
+                                        setOpenSection(
+                                            openSection === "adjustments"
+                                                ? null
+                                                : "adjustments"
+                                        )
+                                    }
                                 >
                                     <TextureAdjustments
-                                        onApplyAdjustment={handleApplyAdjustment}
-                                        disabled={Object.keys(textureObjects).length === 0}
+                                        onApplyAdjustment={
+                                            handleApplyAdjustment
+                                        }
+                                        disabled={
+                                            Object.keys(textureObjects)
+                                                .length === 0
+                                        }
                                     />
                                 </CollapsibleSection>
                             </div>

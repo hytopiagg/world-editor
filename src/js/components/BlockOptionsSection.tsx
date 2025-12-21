@@ -117,11 +117,16 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                 reg.updateBlockType({ id: baseId, isLiquid: isLiquid });
                 
                 // Also update the blockTypesArray to persist the change
-                const { getBlockTypes } = require("../managers/BlockTypesManager");
+                const { getBlockTypes, saveBlockOverride } = require("../managers/BlockTypesManager");
                 const allBlocks = getBlockTypes();
                 const blockIndex = allBlocks.findIndex((b: any) => b.id === baseId);
                 if (blockIndex >= 0) {
                     allBlocks[blockIndex].isLiquid = isLiquid;
+                    
+                    // Persist isLiquid for built-in blocks (ID < 1000)
+                    if (baseId < 1000) {
+                        saveBlockOverride(baseId, { isLiquid: isLiquid });
+                    }
                 }
             }
         } catch (e) {

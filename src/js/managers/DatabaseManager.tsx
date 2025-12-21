@@ -12,6 +12,7 @@ export const STORES = {
     SCHEMATICS: "ai-schematics",
     ENVIRONMENT_MODEL_SETTINGS: "environment-model-settings",
     PROJECTS: "projects",
+    BLOCK_OVERRIDES: "block-overrides",
 };
 export class DatabaseManager {
     static DB_NAME = "hytopia-world-editor-db-v" + DB_VERSION;

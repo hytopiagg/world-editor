@@ -25,7 +25,8 @@ const CreationModeSelector = ({ onSelectMode, onClose }) => {
         {
             id: "blend",
             title: "Blend Textures",
-            description: "Merge two textures with gradient or stepped transitions",
+            description:
+                "Merge two textures with gradient or stepped transitions",
             icon: FaExchangeAlt,
             gradient: "from-orange-500/20 to-orange-600/10",
             borderColor: "border-orange-500/30 hover:border-orange-400/60",
@@ -107,4 +108,3 @@ CreationModeSelector.propTypes = {
 };
 
 export default CreationModeSelector;
-
