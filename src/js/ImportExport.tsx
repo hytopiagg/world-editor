@@ -378,7 +378,6 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             // Block name exists, remap to existing block's ID
                             const existingBlockId = existingBlockNameToId[blockNameLower];
                             blockIdMapping[importedBlockId] = existingBlockId;
-                            console.log(`Remapping block "${blockType.name}" from imported ID ${importedBlockId} to existing ID ${existingBlockId}`);
                             remappedCount++;
                             continue;
                         }
@@ -426,7 +425,6 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         existingBlockIds.add(newBlockId);
                         existingBlockNameToId[blockNameLower] = newBlockId;
 
-                        console.log(`Added new custom block "${blockType.name}" with ID ${newBlockId} (imported as ID ${importedBlockId})`);
                     }
                 }
 
@@ -599,9 +597,6 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         }
                     }
                 }
-                if (processedCount > 0) {
-                    console.log(`[IMPORT] Calculated bounding boxes for ${processedCount} models`);
-                }
                 
                 loadingManager.updateLoading(
                     "Processing environment objects...",
@@ -654,22 +649,9 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         const adjustedY = y + ENVIRONMENT_OBJECT_Y_OFFSET - scaledCenterY;
                         const adjustedZ = z;
 
-                        // DEBUG LOGGING - Import
-                        const isPalm = modelName?.toLowerCase().includes('palm');
-                        if (isPalm || true) { // Log all for now to diagnose
-                            console.log(`[IMPORT] Model: ${modelName}`);
-                            console.log(`  - Raw position from JSON (center): (${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)})`);
-                            console.log(`  - Scale: (${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`);
-                            console.log(`  - matchingModel found: ${!!matchingModel}`);
-                            console.log(`  - boundingBoxHeight: ${(matchingModel?.boundingBoxHeight || 0).toFixed(3)}`);
-                            console.log(`  - boundingBoxCenter: ${JSON.stringify(matchingModel?.boundingBoxCenter)}`);
-                            console.log(`  - boundingBoxCenter.y: ${boundingBoxCenterY.toFixed(3)} (used)`);
-                            console.log(`  - boundingBoxCenter.y fallback: ${((matchingModel?.boundingBoxHeight || 1) / 2).toFixed(3)}`);
-                            console.log(`  - scaledCenterY: ${scaledCenterY.toFixed(3)} (center.y * scale)`);
-                            console.log(`  - ENVIRONMENT_OBJECT_Y_OFFSET: ${ENVIRONMENT_OBJECT_Y_OFFSET}`);
-                            console.log(`  - Final adjusted Y: ${adjustedY.toFixed(3)} (formula: ${y.toFixed(3)} + ${ENVIRONMENT_OBJECT_Y_OFFSET} - ${scaledCenterY.toFixed(3)})`);
-                            console.log(`  - Final position (origin): (${adjustedX.toFixed(3)}, ${adjustedY.toFixed(3)}, ${adjustedZ.toFixed(3)})`);
-                            console.log('---');
+                        // Warn if bounding box data is missing
+                        if (!matchingModel?.boundingBoxHeight || !matchingModel?.boundingBoxCenter) {
+                            console.warn(`[IMPORT] Missing bounding box data for ${modelName}`);
                         }
 
                         return {
@@ -770,7 +752,6 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                     const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
                         try {
                             await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
-                            console.log(`[IMPORT] ✓ Preloaded textures for block ${blockId}`);
                         } catch (error) {
                             console.error(`[IMPORT] ✗ Failed to preload textures for block ${blockId}:`, error);
                         }
@@ -902,9 +883,6 @@ export const exportMapFile = async (
                         console.warn(`Failed to calculate bounding box for ${model.name}:`, error);
                     }
                 }
-            }
-            if (processedCount > 0) {
-                console.log(`[EXPORT] Calculated bounding boxes for ${processedCount} models`);
             }
         }
 
@@ -1062,13 +1040,12 @@ export const exportMapFile = async (
                     (model) => model.modelUrl === obj.modelUrl
                 );
                 
-                // DEBUG: Check if model was found and has bounding box data
                 if (!entityType) {
                     console.warn(`[EXPORT] Model not found for URL: ${obj.modelUrl}`);
                     return acc;
                 }
                 
-                if (entityType) {
+                {
                     // ... (keep existing entity processing logic)
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
                     // Extract rotation values - support both THREE.Euler and plain object format
@@ -1118,31 +1095,9 @@ export const exportMapFile = async (
                         obj.position.z
                     );
 
-                    // DEBUG LOGGING - Export
-                    const isPalm = entityType.name?.toLowerCase().includes('palm');
-                    const hasBoundingBoxData = !!(entityType.boundingBoxHeight && entityType.boundingBoxCenter);
-                    
-                    if (isPalm || !hasBoundingBoxData || true) { // Log palms, missing data, or all
-                        console.log(`[EXPORT] Model: ${entityType.name}`);
-                        console.log(`  - modelUrl: ${entityType.modelUrl}`);
-                        console.log(`  - model.id: ${entityType.id}`);
-                        console.log(`  - Raw position (origin): (${obj.position.x.toFixed(3)}, ${obj.position.y.toFixed(3)}, ${obj.position.z.toFixed(3)})`);
-                        console.log(`  - Scale: (${obj.scale.x.toFixed(3)}, ${obj.scale.y.toFixed(3)}, ${obj.scale.z.toFixed(3)})`);
-                        console.log(`  - boundingBoxHeight: ${(entityType.boundingBoxHeight || 0).toFixed(3)}`);
-                        console.log(`  - boundingBoxWidth: ${(entityType.boundingBoxWidth || 0).toFixed(3)}`);
-                        console.log(`  - boundingBoxDepth: ${(entityType.boundingBoxDepth || 0).toFixed(3)}`);
-                        console.log(`  - boundingBoxCenter type: ${typeof entityType.boundingBoxCenter}`);
-                        console.log(`  - boundingBoxCenter: ${entityType.boundingBoxCenter ? (entityType.boundingBoxCenter instanceof THREE.Vector3 ? `Vector3(${entityType.boundingBoxCenter.x.toFixed(3)}, ${entityType.boundingBoxCenter.y.toFixed(3)}, ${entityType.boundingBoxCenter.z.toFixed(3)})` : JSON.stringify(entityType.boundingBoxCenter)) : 'undefined'}`);
-                        console.log(`  - boundingBoxCenter.y: ${boundingBoxCenterY.toFixed(3)} (used)`);
-                        console.log(`  - boundingBoxCenter.y fallback: ${((entityType.boundingBoxHeight || 1) / 2).toFixed(3)}`);
-                        console.log(`  - scaledCenterY: ${scaledCenterY.toFixed(3)} (center.y * scale)`);
-                        console.log(`  - ENVIRONMENT_OBJECT_Y_OFFSET: ${ENVIRONMENT_OBJECT_Y_OFFSET}`);
-                        console.log(`  - Final adjusted Y: ${adjustedPos.y.toFixed(3)} (formula: ${obj.position.y.toFixed(3)} - ${ENVIRONMENT_OBJECT_Y_OFFSET} + ${scaledCenterY.toFixed(3)})`);
-                        console.log(`  - Final position (center): (${adjustedPos.x.toFixed(3)}, ${adjustedPos.y.toFixed(3)}, ${adjustedPos.z.toFixed(3)})`);
-                        if (!hasBoundingBoxData) {
-                            console.warn(`  ⚠️ WARNING: Missing bounding box data for ${entityType.name}!`);
-                        }
-                        console.log('---');
+                    // Warn if bounding box data is missing
+                    if (!entityType.boundingBoxHeight || !entityType.boundingBoxCenter) {
+                        console.warn(`[EXPORT] Missing bounding box data for ${entityType.name}`);
                     }
 
                     const key = `${adjustedPos.x},${adjustedPos.y},${adjustedPos.z}`;
