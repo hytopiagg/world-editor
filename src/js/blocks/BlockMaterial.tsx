@@ -196,11 +196,11 @@ class BlockMaterial {
         // Update both the data store and the shared uniforms
         this._ambientLight.color.copy(ambientColor);
         this._ambientLight.intensity = ambientIntensity;
-        
+
         // Update shared uniform objects - these are referenced by all materials
         this._ambientColorUniform.value.copy(ambientColor);
         this._ambientIntensityUniform.value = ambientIntensity;
-        
+
         if (this._waterShaderUniforms) {
             this._waterShaderUniforms.ambientLightColor.value.copy(ambientColor).multiplyScalar(ambientIntensity);
         }
@@ -251,14 +251,14 @@ class BlockMaterial {
                 if (isTopSurface > 0.5) {
                     pos.y += float(${WATER_SURFACE_Y_OFFSET});
                     ${lowEndOptimizations ?
-                        `float wave = sin(pos.x * 2.0 + time * waveSpeed) * 0.02 * waveIntensity;
+                `float wave = sin(pos.x * 2.0 + time * waveSpeed) * 0.02 * waveIntensity;
                         pos.y += wave;` :
-                        `float wave1 = sin(pos.x * 2.0 + time * waveSpeed) * 0.03;
+                `float wave1 = sin(pos.x * 2.0 + time * waveSpeed) * 0.03;
                         float wave2 = cos(pos.z * 3.0 + time * waveSpeed * 0.7) * 0.02;
                         float wave3 = sin(pos.x * 5.0 + pos.z * 5.0 + time * waveSpeed * 2.0) * 0.01;
                         float combinedWave = (wave1 + wave2 + wave3) * waveIntensity;
                         pos.y += combinedWave;`
-                    }
+            }
                 }
                 gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
             }
@@ -283,8 +283,8 @@ class BlockMaterial {
                 vec3 finalColor = mix(brightColor, waterTint, 0.2);
                 finalColor *= ambientLightColor;
                 ${lowEndOptimizations ?
-                    `gl_FragColor = vec4(finalColor, texColor.a * alpha);` :
-                    `if (vNormal.y > 0.9) {
+                `gl_FragColor = vec4(finalColor, texColor.a * alpha);` :
+                `if (vNormal.y > 0.9) {
                         float waveTime = time * waveSpeed * 2.0;
                         float wave1 = sin(vWorldPosition.x * 8.0 + vWorldPosition.z * 6.0 + waveTime) * 0.5 + 0.5;
                         float wave2 = sin(vWorldPosition.x * 5.0 - vWorldPosition.z * 7.0 + waveTime * 0.8) * 0.5 + 0.5;
@@ -294,7 +294,7 @@ class BlockMaterial {
                         finalColor = mix(finalColor, highlightColor, rippleFactor);
                     }
                     gl_FragColor = vec4(finalColor, texColor.a * alpha);`
-                }
+            }
             }
         `;
 

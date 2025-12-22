@@ -130,13 +130,6 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                     />
                 </div>
             </div>
-
-            {/* Info about SDK-compatible lighting */}
-            <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.02s" }}>
-                <span className="text-[10px] text-[#F1F1F1]/40 text-left leading-tight">
-                    Face shading is baked into block geometry for SDK-compatible rendering.
-                </span>
-            </div>
         </div>
     );
 }
