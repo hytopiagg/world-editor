@@ -19,7 +19,13 @@ export const BlockFaceAxes = {
 export const BlockFaces = Object.keys(BlockFaceEnum);
 
 
-export const DEFAULT_BLOCK_AO_INTENSITY = [0, 0, 0, 0];
+// AO intensity values for 4 occlusion levels (0=fully occluded, 3=no occlusion)
+// These match the SDK's default AO intensity values
+// AO intensity values (amount to SUBTRACT from base color)
+// Index = number of neighboring solid blocks at vertex corner
+// 0 neighbors = no occlusion = subtract 0 = full brightness
+// 3 neighbors = full occlusion = subtract 0.9 = very dark
+export const DEFAULT_BLOCK_AO_INTENSITY = [0, 0.5, 0.7, 0.9];
 
 export const DEFAULT_BLOCK_COLOR = [1.0, 1.0, 1.0, 1.0];
 

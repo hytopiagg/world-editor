@@ -181,7 +181,9 @@ interface TerrainBuilderRef {
     changeSkybox: (skyboxName: string) => void;
     setAmbientLight: (opts?: { color?: string | number; intensity?: number }) => boolean;
     getAmbientLight: () => { color: string; intensity: number } | null;
+    /** @deprecated SDK-compatible lighting removes directional lights. Has no effect. */
     setDirectionalLight: (opts?: { color?: string | number; intensity?: number }) => boolean;
+    /** @deprecated SDK-compatible lighting removes directional lights. Returns null. */
     getDirectionalLight: () => { color: string; intensity: number } | null;
     activateTool: (toolName: string, activationData?: any) => boolean;
     toolManagerRef: { current: any };
@@ -654,8 +656,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         });
         const instancedMeshRef = useRef({});
         const shadowPlaneRef = useRef<THREE.Mesh>(null);
-        const directionalLightRef = useRef<THREE.DirectionalLight>(null);
-        const directionalFillLightRef = useRef<THREE.DirectionalLight>(null);
+        // SDK-compatible: directional lights removed, face-based shading baked into vertex colors
         const terrainRef = useRef<Record<string, number>>({});
         const gridRef = useRef<THREE.GridHelper>(null);
         const mouseMoveAnimationRef = useRef(null);
@@ -2497,36 +2498,25 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 };
             },
             /**
-             * Update directional light color and/or intensity (applies to both key and fill lights if present)
+             * Update directional light color and/or intensity
+             * @deprecated SDK-compatible lighting removes directional lights.
+             * Face-based shading is now baked into vertex colors.
+             * This method is kept for API compatibility but has no effect.
              */
             setDirectionalLight: (opts = {}) => {
-                const key = directionalLightRef?.current;
-                const fill = directionalFillLightRef?.current;
-                const apply = (light) => {
-                    if (!light) return;
-                    if (opts.color !== undefined) {
-                        try {
-                            light.color.set(opts.color);
-                        } catch (_) { }
-                    }
-                    if (opts.intensity !== undefined) {
-                        light.intensity = opts.intensity;
-                    }
-                };
-                apply(key);
-                apply(fill);
-                return !!key || !!fill;
+                // SDK-compatible: directional lights are removed
+                // Face-based shading provides simple directional depth in shaders
+                console.warn('setDirectionalLight() is deprecated. SDK-compatible lighting uses face-based shading baked into vertex colors.');
+                return false;
             },
             /**
-             * Read current directional light settings (key light)
+             * Read current directional light settings
+             * @deprecated SDK-compatible lighting removes directional lights.
+             * Returns null since no directional light exists.
              */
             getDirectionalLight: () => {
-                const key = directionalLightRef?.current;
-                if (!key) return null;
-                return {
-                    color: `#${key.color.getHexString()}`,
-                    intensity: key.intensity,
-                };
+                // SDK-compatible: directional lights are removed
+                return null;
             },
             activateTool: (toolName, activationData) => {
                 if (!toolManagerRef.current) {
@@ -4243,35 +4233,16 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     onChange={handleCameraMove}
                     enabled={!isInputDisabled} // Keep this for OrbitControls mouse input
                 />
-                {/* Shadow directional light */}
-                {/* @ts-expect-error - React Three Fiber JSX elements */}
-                <directionalLight
-                    ref={directionalLightRef}
-                    position={[10, 20, 10]}
-                    intensity={1}
-                    color={0xffffff}
-                    castShadow={true}
-                    shadow-mapSize-width={shadowMapSize}
-                    shadow-mapSize-height={shadowMapSize}
-                    shadow-camera-far={1000}
-                    shadow-camera-near={10}
-                    shadow-camera-left={-100}
-                    shadow-camera-right={100}
-                    shadow-camera-top={100}
-                    shadow-camera-bottom={-100}
-                    shadow-bias={0.00005}
-                    shadow-normalBias={0.1}
-                />
-                {/* Non shadow directional light */}
-                {/* @ts-expect-error - React Three Fiber JSX elements */}
-                <directionalLight
-                    position={[10, 20, 10]}
-                    intensity={1}
-                    color={0xffffff}
-                    castShadow={false}
-                    ref={directionalFillLightRef}
-                />
-                {/* Ambient light (lower intensity so emissive blocks are visible) */}
+                {/* 
+                  SDK-compatible lighting: Three.js lights are removed.
+                  - MeshBasicMaterial doesn't respond to Three.js lighting system
+                  - All lighting is applied manually in shaders via BlockMaterial
+                  - Ambient light color/intensity are stored in BlockMaterial.ambientLight
+                  - Block light levels from emissive blocks are passed as vertex attributes
+                  - Face-based shading is baked into vertex colors
+                  
+                  We keep a dummy ambient light for API compatibility and shadow plane lighting.
+                */}
                 {/* @ts-expect-error - React Three Fiber JSX elements */}
                 <ambientLight ref={ambientRef} intensity={1} />
                 {/* mesh of invisible plane to receive shadows, and grid helper to display grid */}

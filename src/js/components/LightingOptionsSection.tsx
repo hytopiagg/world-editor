@@ -5,12 +5,18 @@ interface LightingOptionsSectionProps {
     terrainBuilderRef: any;
 }
 
+/**
+ * Lighting options panel for the World Editor.
+ * 
+ * SDK-Compatible Lighting:
+ * - Only ambient light is used (no directional lights)
+ * - Face-based shading is baked into vertex colors during mesh generation
+ * - Block light levels (emissive) are handled in shaders
+ */
 export default function LightingOptionsSection({ terrainBuilderRef }: LightingOptionsSectionProps) {
     type LightSettings = { color?: string; intensity?: number };
     const [ambientColor, setAmbientColor] = useState<string>("#ffffff");
     const [ambientIntensity, setAmbientIntensity] = useState<number>(1);
-    const [dirColor, setDirColor] = useState<string>("#ffffff");
-    const [dirIntensity, setDirIntensity] = useState<number>(1);
 
     const clampIntensity = (v: number, min = 0, max = 10) => Math.max(min, Math.min(max, v));
 
@@ -37,26 +43,6 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                     } catch (_) { }
                 }
             } catch (_) { }
-
-            try {
-                const savedDir = (await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:directionalLight`)) as LightSettings | null;
-                if (savedDir && (typeof savedDir.color === "string" || typeof savedDir.intensity === "number")) {
-                    if (typeof savedDir.color === "string") setDirColor(savedDir.color);
-                    if (typeof savedDir.intensity === "number") setDirIntensity(savedDir.intensity);
-                    tb?.setDirectionalLight?.({
-                        color: typeof savedDir.color === "string" ? savedDir.color : undefined,
-                        intensity: typeof savedDir.intensity === "number" ? savedDir.intensity : undefined,
-                    });
-                } else {
-                    try {
-                        const dir = tb?.getDirectionalLight?.();
-                        if (dir) {
-                            setDirColor(dir.color);
-                            setDirIntensity(dir.intensity);
-                        }
-                    } catch (_) { }
-                }
-            } catch (_) { }
         })();
     }, [terrainBuilderRef]);
 
@@ -64,14 +50,10 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
     useEffect(() => {
         const handler = (e: Event) => {
             try {
-                const { ambient, directional } = (e as CustomEvent).detail || {};
+                const { ambient } = (e as CustomEvent).detail || {};
                 if (ambient) {
                     if (typeof ambient.color === "string") setAmbientColor(ambient.color);
                     if (typeof ambient.intensity === "number") setAmbientIntensity(ambient.intensity);
-                }
-                if (directional) {
-                    if (typeof directional.color === "string") setDirColor(directional.color);
-                    if (typeof directional.intensity === "number") setDirIntensity(directional.intensity);
                 }
             } catch (_) { }
         };
@@ -93,25 +75,14 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
             await DatabaseManager.saveData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:ambientLight`, toSave);
         } catch (_) { }
     };
-    const applyDirectional = async (next: { color?: string; intensity?: number }) => {
-        const tb = terrainBuilderRef?.current;
-        tb?.setDirectionalLight?.(next);
-        try {
-            const toSave = {
-                color: next.color !== undefined ? next.color : dirColor,
-                intensity: next.intensity !== undefined ? next.intensity : dirIntensity,
-            };
-            await DatabaseManager.saveData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:directionalLight`, toSave);
-        } catch (_) { }
-    };
 
     return (
         <div className="flex flex-col gap-3">
-            {/* Intensities Group */}
+            {/* Ambient Light Intensity */}
             <div className="flex flex-col gap-2 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.04s" }}>
-                <span className="text-xs text-[#F1F1F1]/60 text-left">Intensities</span>
+                <span className="text-xs text-[#F1F1F1]/60 text-left">Ambient Light</span>
                 <div className="flex gap-x-2 items-center w-full">
-                    <label className={labelCls}>Ambient</label>
+                    <label className={labelCls}>Intensity</label>
                     <input
                         type="number"
                         className={numberInputCls}
@@ -145,46 +116,7 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                     />
                 </div>
                 <div className="flex gap-x-2 items-center w-full">
-                    <label className={labelCls}>Directional</label>
-                    <input
-                        type="number"
-                        className={numberInputCls}
-                        value={dirIntensity}
-                        min={0}
-                        max={10}
-                        step={0.05}
-                        onChange={(e) => {
-                            const v = clampIntensity(Number(e.target.value));
-                            setDirIntensity(v);
-                            applyDirectional({ intensity: v });
-                        }}
-                        onKeyDown={(e: any) => e.stopPropagation()}
-                    />
-                    <input
-                        type="range"
-                        min={0}
-                        max={10}
-                        step={0.05}
-                        value={dirIntensity}
-                        onChange={(e) => {
-                            const v = clampIntensity(Number(e.target.value));
-                            setDirIntensity(v);
-                            applyDirectional({ intensity: v });
-                        }}
-                        className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
-                        style={{
-                            transition: "all 0.3s ease-in-out",
-                            background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(dirIntensity - 0) / (10 - 0) * 100}%, rgba(255, 255, 255, 0.1) ${(dirIntensity - 0) / (10 - 0) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
-                        }}
-                    />
-                </div>
-            </div>
-
-            {/* Colors Group */}
-            <div className="flex flex-col gap-2 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.02s" }}>
-                <span className="text-xs text-[#F1F1F1]/60 text-left">Colors</span>
-                <div className="flex gap-x-2 items-center w-full">
-                    <label className={labelCls}>Ambient</label>
+                    <label className={labelCls}>Color</label>
                     <input
                         type="color"
                         value={ambientColor}
@@ -197,20 +129,13 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                         style={{ width: 24, height: 24 }}
                     />
                 </div>
-                <div className="flex gap-x-2 items-center w-full">
-                    <label className={labelCls}>Directional</label>
-                    <input
-                        type="color"
-                        value={dirColor}
-                        onChange={(e) => {
-                            const value = e.target.value;
-                            setDirColor(value);
-                            applyDirectional({ color: value });
-                        }}
-                        className="p-0 bg-transparent rounded border border-white/20"
-                        style={{ width: 24, height: 24 }}
-                    />
-                </div>
+            </div>
+
+            {/* Info about SDK-compatible lighting */}
+            <div className="flex flex-col gap-1 opacity-0 duration-150 fade-down" style={{ animationDelay: "0.02s" }}>
+                <span className="text-[10px] text-[#F1F1F1]/40 text-left leading-tight">
+                    Face shading is baked into block geometry for SDK-compatible rendering.
+                </span>
             </div>
         </div>
     );

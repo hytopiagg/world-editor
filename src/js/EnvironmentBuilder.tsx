@@ -663,16 +663,9 @@ const EnvironmentBuilder = (
                         (newMaterial as any).color = material.color.clone();
                     }
 
-                    // Copy emissive properties for PBR materials
-                    if ((material as any).emissive) {
-                        (newMaterial as any).emissive = (material as any).emissive.clone();
-                    }
-                    if ((material as any).emissiveMap) {
-                        (newMaterial as any).emissiveMap = (material as any).emissiveMap;
-                    }
-                    if ((material as any).emissiveIntensity !== undefined) {
-                        (newMaterial as any).emissiveIntensity = (material as any).emissiveIntensity;
-                    }
+                    // Note: MeshBasicMaterial doesn't support emissive properties
+                    // SDK-compatible lighting uses shader modifications instead
+                    // Emissive properties are handled via block light levels, not material properties
 
                     const key = newMaterial.uuid;
                     if (!geometriesByMaterial.has(key)) {

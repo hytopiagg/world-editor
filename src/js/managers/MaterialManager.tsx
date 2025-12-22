@@ -112,34 +112,35 @@ export class MaterialManager {
 
     /**
      * Initialize material pools for different material types
+     * All pools use MeshBasicMaterial for SDK-compatible performance
      */
     private initializeMaterialPools(): void {
         // Basic block material pool
         this.materialConfigs.set("block", {
             maxPoolSize: 50,
             createFunction: () => this.createOptimizedBlockMaterial(),
-            resetFunction: (material) => this.resetBlockMaterial(material as THREE.MeshLambertMaterial),
+            resetFunction: (material) => this.resetBlockMaterial(material as THREE.MeshBasicMaterial),
         });
 
         // Environment object material pool
         this.materialConfigs.set("environment", {
             maxPoolSize: 100,
             createFunction: () => this.createOptimizedEnvironmentMaterial(),
-            resetFunction: (material) => this.resetEnvironmentMaterial(material as THREE.MeshLambertMaterial),
+            resetFunction: (material) => this.resetEnvironmentMaterial(material as THREE.MeshBasicMaterial),
         });
 
         // Preview material pool
         this.materialConfigs.set("preview", {
             maxPoolSize: 20,
             createFunction: () => this.createOptimizedPreviewMaterial(),
-            resetFunction: (material) => this.resetPreviewMaterial(material as THREE.MeshLambertMaterial),
+            resetFunction: (material) => this.resetPreviewMaterial(material as THREE.MeshBasicMaterial),
         });
 
         // Transparent material pool
         this.materialConfigs.set("transparent", {
             maxPoolSize: 30,
             createFunction: () => this.createOptimizedTransparentMaterial(),
-            resetFunction: (material) => this.resetTransparentMaterial(material as THREE.MeshLambertMaterial),
+            resetFunction: (material) => this.resetTransparentMaterial(material as THREE.MeshBasicMaterial),
         });
 
         // Initialize empty pools
@@ -151,54 +152,37 @@ export class MaterialManager {
 
     /**
      * Create optimized block material based on GPU capabilities
+     * 
+     * Always uses MeshBasicMaterial for SDK-compatible performance.
+     * MeshBasicMaterial doesn't calculate lighting, making it the cheapest option.
+     * All lighting is applied manually via shader modifications.
      */
     private createOptimizedBlockMaterial(): THREE.Material {
         const settings = this.optimizationSettings;
 
-        let material: THREE.Material;
-
-        switch (settings.preferredMaterialType) {
-            case "Phong":
-                material = new THREE.MeshPhongMaterial({
-                    vertexColors: true,
-                    transparent: true,
-                    alphaTest: settings.alphaTestThreshold,
-                    side: THREE.FrontSide,
-                    shininess: 10,
-                    specular: 0x111111,
-                });
-                break;
-            case "Lambert":
-                material = new THREE.MeshLambertMaterial({
-                    vertexColors: true,
-                    transparent: true,
-                    alphaTest: settings.alphaTestThreshold,
-                    side: THREE.FrontSide,
-                });
-                break;
-            case "Basic":
-            default:
-                material = new THREE.MeshBasicMaterial({
-                    vertexColors: true,
-                    transparent: true,
-                    alphaTest: settings.alphaTestThreshold,
-                    side: THREE.FrontSide,
-                });
-                break;
-        }
+        // Always use MeshBasicMaterial for performance (matches SDK approach)
+        // Lighting is handled manually via shader uniforms, not Three.js lighting system
+        const material = new THREE.MeshBasicMaterial({
+            vertexColors: true,
+            transparent: true,
+            alphaTest: settings.alphaTestThreshold,
+            side: THREE.FrontSide,
+        });
 
         return material;
     }
 
     /**
      * Create optimized environment material
-     * Uses MeshStandardMaterial for better PBR support (emissive textures, etc.)
+     * Uses MeshBasicMaterial for SDK-compatible performance
+     * Lighting is handled manually via shader modifications
      */
     private createOptimizedEnvironmentMaterial(): THREE.Material {
         const settings = this.optimizationSettings;
 
-        // Use MeshStandardMaterial for better PBR support, especially for emissive textures
-        const material = new THREE.MeshStandardMaterial({
+        // Use MeshBasicMaterial for SDK-compatible performance
+        // Emissive effects are handled via shader modifications, not material properties
+        const material = new THREE.MeshBasicMaterial({
             transparent: true,
             alphaTest: settings.alphaTestThreshold,
             side: THREE.FrontSide,
@@ -211,9 +195,10 @@ export class MaterialManager {
 
     /**
      * Create optimized preview material
+     * Uses MeshBasicMaterial for SDK-compatible performance
      */
     private createOptimizedPreviewMaterial(): THREE.Material {
-        const material = new THREE.MeshLambertMaterial({
+        const material = new THREE.MeshBasicMaterial({
             transparent: true,
             opacity: 0.5,
             alphaTest: 0.01,
@@ -227,11 +212,12 @@ export class MaterialManager {
 
     /**
      * Create optimized transparent material
+     * Uses MeshBasicMaterial for SDK-compatible performance
      */
     private createOptimizedTransparentMaterial(): THREE.Material {
         const settings = this.optimizationSettings;
 
-        const material = new THREE.MeshLambertMaterial({
+        const material = new THREE.MeshBasicMaterial({
             transparent: true,
             alphaTest: settings.useAdvancedTransparency ? 0.01 : settings.alphaTestThreshold,
             side: THREE.DoubleSide,
@@ -328,24 +314,15 @@ export class MaterialManager {
         if (options.depthTest !== undefined) {
             material.depthTest = options.depthTest;
         }
-        // Support emissive properties for PBR materials
-        if (options.emissive !== undefined) {
-            (material as any).emissive = options.emissive instanceof THREE.Color 
-                ? options.emissive.clone() 
-                : new THREE.Color(options.emissive);
-        }
-        if (options.emissiveMap !== undefined) {
-            (material as any).emissiveMap = options.emissiveMap;
-        }
-        if (options.emissiveIntensity !== undefined) {
-            (material as any).emissiveIntensity = options.emissiveIntensity;
-        }
+        // Note: Emissive properties are not supported by MeshBasicMaterial
+        // SDK-compatible lighting handles emissive effects via shader modifications
+        // and block light level uniforms, not material properties
     }
 
     /**
      * Reset block material to default state
      */
-    private resetBlockMaterial(material: THREE.MeshLambertMaterial): void {
+    private resetBlockMaterial(material: THREE.MeshBasicMaterial): void {
         material.map = null;
         material.color.setHex(0xffffff);
         material.opacity = 1;
@@ -360,7 +337,7 @@ export class MaterialManager {
     /**
      * Reset environment material to default state
      */
-    private resetEnvironmentMaterial(material: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial): void {
+    private resetEnvironmentMaterial(material: THREE.MeshBasicMaterial): void {
         material.map = null;
         material.color.setHex(0xffffff);
         material.opacity = 1;
@@ -369,23 +346,13 @@ export class MaterialManager {
         material.side = THREE.FrontSide;
         material.depthWrite = true;
         material.depthTest = true;
-        // Reset emissive properties
-        if ((material as any).emissive) {
-            (material as any).emissive.setHex(0x000000);
-        }
-        if ((material as any).emissiveMap) {
-            (material as any).emissiveMap = null;
-        }
-        if ((material as any).emissiveIntensity !== undefined) {
-            (material as any).emissiveIntensity = 1.0;
-        }
         material.needsUpdate = true;
     }
 
     /**
      * Reset preview material to default state
      */
-    private resetPreviewMaterial(material: THREE.MeshLambertMaterial): void {
+    private resetPreviewMaterial(material: THREE.MeshBasicMaterial): void {
         material.map = null;
         material.color.setHex(0xffffff);
         material.opacity = 0.5;
@@ -400,7 +367,7 @@ export class MaterialManager {
     /**
      * Reset transparent material to default state
      */
-    private resetTransparentMaterial(material: THREE.MeshLambertMaterial): void {
+    private resetTransparentMaterial(material: THREE.MeshBasicMaterial): void {
         material.map = null;
         material.color.setHex(0xffffff);
         material.opacity = 1;

@@ -3,7 +3,11 @@ import {
     CHUNK_SIZE,
     CHUNK_INDEX_RANGE,
     MAX_LIGHT_LEVEL,
+    FACE_SHADE_TOP,
+    FACE_SHADE_SIDE,
+    FACE_SHADE_BOTTOM,
 } from "./ChunkConstants";
+import { DEFAULT_BLOCK_AO_INTENSITY } from "../blocks/BlockConstants";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
 /**
  * Represents a chunk in the world
@@ -687,7 +691,8 @@ class Chunk {
                                     { x: vertexX, y: vertexY, z: vertexZ },
                                     blockType,
                                     ao,
-                                    chunkManager
+                                    chunkManager,
+                                    dir // Pass face normal for face-based shading
                                 )
                             );
 
@@ -1026,7 +1031,8 @@ class Chunk {
                             vertexCoordinate,
                             blockType,
                             ao,
-                            chunkManager
+                            chunkManager,
+                            dir // Pass face normal for face-based shading
                         );
                         meshColors.push(...vertexColor);
                     }
@@ -1351,11 +1357,18 @@ class Chunk {
         return hash;
     }
     /**
-     * Calculate vertex color with ambient occlusion
+     * Calculate vertex color with face-based shading and ambient occlusion
+     * Matches SDK's ChunkWorker lighting approach EXACTLY.
+     * 
+     * SDK Formula: (baseColor - ao) * faceShade
+     * - ao values: [0, 0.5, 0.7, 0.9] indexed by neighbor count
+     * - faceShade: 1.0 (top), 0.8 (side), 0.5 (bottom)
+     * 
      * @param {Object} vertexCoordinate - The vertex coordinate
      * @param {BlockType} blockType - The block type
-     * @param {Object} blockFaceAO - The block face AO data
+     * @param {Object} blockFaceAO - The block face AO data { corner, side1, side2 }
      * @param {ChunkManager} chunkManager - The chunk manager
+     * @param {Array} faceNormal - The face normal [x, y, z] for face-based shading
      * @returns {Array} The vertex color [r, g, b, a]
      * @private
      */
@@ -1363,10 +1376,115 @@ class Chunk {
         vertexCoordinate,
         blockType,
         blockFaceAO,
-        chunkManager
+        chunkManager,
+        faceNormal = null
     ) {
         const baseColor = blockType.color;
-        return [...baseColor]; // Return a copy of the base color
+        
+        // === AMBIENT OCCLUSION (SDK-compatible) ===
+        // Count neighboring solid blocks at this vertex corner
+        // aoIntensityLevel: 0=no neighbors, 1=1 neighbor, 2=2 neighbors, 3=3 neighbors
+        let aoIntensityLevel = 0;
+        
+        if (blockFaceAO && this._extendedBlockTypes) {
+            const vx = vertexCoordinate.x;
+            const vy = vertexCoordinate.y;
+            const vz = vertexCoordinate.z;
+            
+            // Check corner neighbor
+            if (blockFaceAO.corner) {
+                const nx = Math.floor(vx + blockFaceAO.corner[0]);
+                const ny = Math.floor(vy + blockFaceAO.corner[1]);
+                const nz = Math.floor(vz + blockFaceAO.corner[2]);
+                const neighbor = this._getGlobalBlockType(nx, ny, nz, chunkManager);
+                if (neighbor && !neighbor.isLiquid) {
+                    aoIntensityLevel++;
+                }
+            }
+            
+            // Check side1 neighbor
+            if (blockFaceAO.side1) {
+                const nx = Math.floor(vx + blockFaceAO.side1[0]);
+                const ny = Math.floor(vy + blockFaceAO.side1[1]);
+                const nz = Math.floor(vz + blockFaceAO.side1[2]);
+                const neighbor = this._getGlobalBlockType(nx, ny, nz, chunkManager);
+                if (neighbor && !neighbor.isLiquid) {
+                    aoIntensityLevel++;
+                }
+            }
+            
+            // Check side2 neighbor
+            if (blockFaceAO.side2) {
+                const nx = Math.floor(vx + blockFaceAO.side2[0]);
+                const ny = Math.floor(vy + blockFaceAO.side2[1]);
+                const nz = Math.floor(vz + blockFaceAO.side2[2]);
+                const neighbor = this._getGlobalBlockType(nx, ny, nz, chunkManager);
+                if (neighbor && !neighbor.isLiquid) {
+                    aoIntensityLevel++;
+                }
+            }
+        }
+        
+        // Get AO amount to subtract (SDK: [0, 0.5, 0.7, 0.9])
+        const aoLevels = blockType.aoIntensity || DEFAULT_BLOCK_AO_INTENSITY;
+        const ao = aoLevels[aoIntensityLevel] || 0;
+        
+        // === FACE-BASED SHADING (SDK-compatible) ===
+        // Determine brightness based on face direction using simple threshold
+        let faceShade = FACE_SHADE_SIDE; // Default: 0.8 for sides
+        
+        if (faceNormal && Array.isArray(faceNormal)) {
+            const ny = faceNormal[1];
+            // SDK uses: ny > 0 ? TOP : ny < 0 ? BOTTOM : SIDE
+            if (ny > 0) {
+                faceShade = FACE_SHADE_TOP;    // 1.0
+            } else if (ny < 0) {
+                faceShade = FACE_SHADE_BOTTOM; // 0.5
+            }
+        }
+        
+        // === SDK FORMULA: (baseColor - ao) * faceShade ===
+        return [
+            (baseColor[0] - ao) * faceShade,
+            (baseColor[1] - ao) * faceShade,
+            (baseColor[2] - ao) * faceShade,
+            baseColor[3]
+        ];
+    }
+    
+    /**
+     * Get block type at global coordinates
+     * @private
+     */
+    _getGlobalBlockType(globalX, globalY, globalZ, chunkManager) {
+        // Convert global to local chunk coordinates
+        const localX = Math.floor(globalX - this.originCoordinate.x);
+        const localY = Math.floor(globalY - this.originCoordinate.y);
+        const localZ = Math.floor(globalZ - this.originCoordinate.z);
+        
+        // Check if within extended block types array (includes +1 border)
+        const ex = localX + 1;
+        const ey = localY + 1;
+        const ez = localZ + 1;
+        
+        if (ex >= 0 && ex < CHUNK_SIZE + 2 &&
+            ey >= 0 && ey < CHUNK_SIZE + 2 &&
+            ez >= 0 && ez < CHUNK_SIZE + 2) {
+            return this._extendedBlockTypes?.[ex]?.[ey]?.[ez] || null;
+        }
+        
+        // If outside extended area, try to get from chunk manager
+        if (chunkManager) {
+            const chunk = chunkManager.getChunkFromCoordinate(globalX, globalY, globalZ);
+            if (chunk) {
+                const chunkLocalX = ((globalX % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+                const chunkLocalY = ((globalY % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+                const chunkLocalZ = ((globalZ % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+                return chunk.getBlockType(chunkLocalX, chunkLocalY, chunkLocalZ);
+            }
+        }
+        
+        return null;
     }
 
     _calculateLightLevel(x, y, z, sources) {

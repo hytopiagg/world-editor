@@ -106,6 +106,8 @@ class ChunkMeshManager {
                 CHUNK_BUFFER_GEOMETRY_NUM_COLOR_COMPONENTS
             )
         );
+        // Add lightLevel attribute for emissive block lighting
+        // SDK-compatible: light levels are stored per-vertex and compared against ambient in shader
         if (lightLevels && lightLevels.length > 0) {
             solidGeometry.setAttribute(
                 'lightLevel',
@@ -120,9 +122,13 @@ class ChunkMeshManager {
         solidMesh.name = chunk.chunkId;
         this._solidMeshes.set(chunk.chunkId, solidMesh);
 
-        // Choose lit vs non-lit material
-        const shouldUseLit = !!(lightLevels && lightLevels.length > 0 && lightLevels.some((v: number) => v > 0));
-        solidMesh.material = shouldUseLit ? BlockMaterial.instance.defaultSolidLit : BlockMaterial.instance.defaultSolidNonLit;
+        // Choose lit vs non-lit material based on whether any vertices have light levels
+        // Lit material includes shader code to handle emissive block lighting
+        // Non-lit material only applies ambient lighting (more efficient when no emissive blocks)
+        const hasEmissiveLighting = !!(lightLevels && lightLevels.length > 0 && lightLevels.some((v: number) => v > 0));
+        solidMesh.material = hasEmissiveLighting 
+            ? BlockMaterial.instance.defaultSolidLit 
+            : BlockMaterial.instance.defaultSolidNonLit;
 
         // Ensure the chosen material has the atlas map bound (lit material may be created lazily)
         if (BlockTextureAtlas.instance.textureAtlas) {
@@ -285,6 +291,10 @@ class ChunkMeshManager {
             geometry.deleteAttribute("normal");
             geometry.deleteAttribute("uv");
             geometry.deleteAttribute("color");
+            // Also clean up lightLevel attribute if present
+            if (geometry.getAttribute("lightLevel")) {
+                geometry.deleteAttribute("lightLevel");
+            }
 
             geometry.setIndex([]);
 

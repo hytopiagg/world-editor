@@ -56,10 +56,10 @@ class BlockType {
     }
     /**
      * Get the ambient occlusion intensity
-     * @returns {Array} The AO intensity values
+     * @returns {Array} The AO intensity values (4 levels: 0=fully occluded to 3=no occlusion)
      */
     get aoIntensity() {
-        return [0, 0, 0, 0]; // Always return zeros to disable AO
+        return this._aoIntensity;
     }
     /**
      * Get the block color
