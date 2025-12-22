@@ -22,7 +22,8 @@ import {
 import pako from "pako";
 import "../../css/ToolBar.css";
 import { DISABLE_ASSET_PACK_IMPORT_EXPORT } from "../Constants";
-import { exportMapFile, importMap } from "../ImportExport";
+import { exportMapFile, importMap, ExportOptions, defaultExportOptions } from "../ImportExport";
+import ModalContainer from "./ModalContainer";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import Tooltip from "./Tooltip";
 import { getBlockTypes } from "../managers/BlockTypesManager";
@@ -114,6 +115,12 @@ const ToolBar = ({
         includeLiquids: false,
         preserveNextToTransparent: false,
         preserveNextToLiquids: false,
+    });
+
+    // Export options modal state
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportOptions, setExportOptions] = useState<ExportOptions>({
+        ...defaultExportOptions
     });
 
     const availableBlocks = useMemo(() => {
@@ -457,8 +464,14 @@ const ToolBar = ({
         }
     };
     const handleExportMap = () => {
+        // Show export options modal
+        setShowExportModal(true);
+    };
+
+    const handleConfirmExport = async () => {
+        setShowExportModal(false);
         try {
-            exportMapFile(terrainBuilderRef, environmentBuilderRef);
+            await exportMapFile(terrainBuilderRef, environmentBuilderRef, exportOptions);
         } catch (error) {
             console.error("Error exporting map:", error);
             alert("Error exporting map. Please try again.");
@@ -2155,6 +2168,135 @@ const ToolBar = ({
                     </div>
                 </div>
             )}
+
+            {/* Export Options Modal */}
+            <ModalContainer
+                title="Export Options"
+                isOpen={showExportModal}
+                onClose={() => setShowExportModal(false)}
+            >
+                <p style={{ marginBottom: '16px', opacity: 0.8, fontSize: '14px' }}>
+                    Choose whether to include default SDK assets in your export. Custom blocks and models are always included.
+                </p>
+
+                <div style={{
+                    marginBottom: '20px',
+                    padding: '10px 14px',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(99, 102, 241, 0.2)',
+                    fontSize: '13px',
+                    opacity: 0.9
+                }}>
+                    💡 <strong>Tip:</strong> The SDK can access default assets and blocks without needing to export them.
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                    <label style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                        cursor: 'pointer',
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        transition: 'all 0.2s'
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={exportOptions.includeBlockTextures}
+                            onChange={(e) => setExportOptions(prev => ({
+                                ...prev,
+                                includeBlockTextures: e.target.checked
+                            }))}
+                            style={{
+                                width: '20px',
+                                height: '20px',
+                                accentColor: '#6366f1',
+                                cursor: 'pointer',
+                                marginTop: '2px',
+                                flexShrink: 0
+                            }}
+                        />
+                        <div style={{ textAlign: 'left' }}>
+                            <div style={{ fontWeight: 600, marginBottom: '4px' }}>Include Default Block Textures</div>
+                            <div style={{ fontSize: '13px', opacity: 0.7, lineHeight: 1.5 }}>
+                                Embed default block texture files in the ZIP. Custom blocks are always included.
+                            </div>
+                        </div>
+                    </label>
+
+                    <label style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                        cursor: 'pointer',
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        transition: 'all 0.2s'
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={exportOptions.includeModels}
+                            onChange={(e) => setExportOptions(prev => ({
+                                ...prev,
+                                includeModels: e.target.checked
+                            }))}
+                            style={{
+                                width: '20px',
+                                height: '20px',
+                                accentColor: '#6366f1',
+                                cursor: 'pointer',
+                                marginTop: '2px',
+                                flexShrink: 0
+                            }}
+                        />
+                        <div style={{ textAlign: 'left' }}>
+                            <div style={{ fontWeight: 600, marginBottom: '4px' }}>Include Default Model Files</div>
+                            <div style={{ fontSize: '13px', opacity: 0.7, lineHeight: 1.5 }}>
+                                Embed default 3D model files (.gltf) in the ZIP. Custom models are always included.
+                            </div>
+                        </div>
+                    </label>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                    <button
+                        onClick={() => setShowExportModal(false)}
+                        style={{
+                            padding: '10px 20px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            backgroundColor: 'transparent',
+                            color: '#cfd6e4',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleConfirmExport}
+                        style={{
+                            padding: '10px 24px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            transition: 'all 0.2s',
+                            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
+                        }}
+                    >
+                        Export Map
+                    </button>
+                </div>
+            </ModalContainer>
         </>
     );
 };

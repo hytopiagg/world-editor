@@ -231,7 +231,7 @@ const processCustomModelsFromZip = async (zip, importData) => {
             if (entity.modelUri && !entity.modelUri.startsWith('data:') && !entity.modelUri.startsWith('assets/')) {
                 const relativePath = getRelativeModelPath(entity.modelUri);
                 const fileName = getModelFileName(entity.modelUri);
-                
+
                 // Use relativePath as key to handle both flat and folder-based structures
                 if (!modelFiles.has(relativePath)) {
                     modelFiles.set(relativePath, {
@@ -248,12 +248,12 @@ const processCustomModelsFromZip = async (zip, importData) => {
             // Try to find the model file - first with the full relative path (new format with folders)
             // then fallback to just filename (old flat format)
             let modelFile = modelsFolder.file(relativePath);
-            
+
             // If not found with relative path, try just the filename (backward compatibility)
             if (!modelFile && relativePath.includes('/')) {
                 modelFile = modelsFolder.file(modelInfo.fileName);
             }
-            
+
             if (modelFile) {
                 const arrayBuffer = await modelFile.async("arraybuffer");
                 const modelName = modelInfo.fileName.replace('.gltf', '');
@@ -752,7 +752,23 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
         else throw error;
     }
 };
-export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) => {
+// Export options interface
+export interface ExportOptions {
+    includeBlockTextures: boolean;
+    includeModels: boolean;
+}
+
+// Default export options (unchecked by default - custom assets are always included)
+export const defaultExportOptions: ExportOptions = {
+    includeBlockTextures: false,
+    includeModels: false,
+};
+
+export const exportMapFile = async (
+    terrainBuilderRef,
+    environmentBuilderRef,
+    options: ExportOptions = defaultExportOptions
+) => {
     try {
         const currentTerrainData = terrainBuilderRef.current.getCurrentTerrainData() || {};
         const hasBlocks = Object.keys(currentTerrainData).length > 0;
@@ -813,21 +829,22 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
 
         // --- Collect Asset URIs ---
         loadingManager.updateLoading("Collecting asset URIs...", 60);
-        // Store texture info: { uri: string, blockName: string | null, isMulti: boolean, fileName: string }
-        const textureInfos = new Set<{ uri: string; blockName: string | null; isMulti: boolean; fileName: string }>();
-        const modelUris = new Set<string>();
+        // Store texture info: { uri: string, blockName: string | null, isMulti: boolean, fileName: string; isCustom: boolean }
+        const textureInfos = new Set<{ uri: string; blockName: string | null; isMulti: boolean; fileName: string; isCustom: boolean }>();
+        const modelUris = new Map<string, boolean>(); // Map of modelUrl -> isCustom
 
         // Iterate over ONLY the used block types to collect textures (including data URIs)
         usedBlockTypes.forEach((block) => {
             const isMulti = block.isMultiTexture || false;
             const sanitizedBlockName = sanitizeName(block.name);
             const blockNameForPath = isMulti ? block.name : null;
+            const isCustomBlock = block.isCustom || (block.id >= 1000 && block.id < 2000);
 
             // Handle main texture URI only for NON-multi-texture blocks
             if (!isMulti && block.textureUri && typeof block.textureUri === "string") {
                 const ext = getFileExtensionFromUri(block.textureUri);
                 const fileName = `${sanitizedBlockName}.${ext}`;
-                textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti, fileName });
+                textureInfos.add({ uri: block.textureUri, blockName: blockNameForPath, isMulti, fileName, isCustom: isCustomBlock });
             }
 
             // For multi-texture blocks, collect each face texture. Single-texture blocks need only the main texture.
@@ -839,7 +856,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                     }
                     const ext = getFileExtensionFromUri(uri);
                     const fileName = `${faceKey}.${ext}`;
-                    textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName });
+                    textureInfos.add({ uri, blockName: blockNameForPath, isMulti, fileName, isCustom: isCustomBlock });
                 });
             }
         });
@@ -850,7 +867,8 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                 (model) => model.modelUrl === obj.modelUrl
             );
             if (entityType && entityType.modelUrl && !entityType.modelUrl.startsWith('data:')) { // Check if modelUrl exists and is not a data URI
-                modelUris.add(entityType.modelUrl);
+                // Track whether the model is custom
+                modelUris.set(entityType.modelUrl, entityType.isCustom || false);
             }
         });
 
@@ -975,7 +993,7 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
                         obj.position.y,
                         obj.position.z
                     ).add(scaledOffset);
-                    
+
                     adjustedPos.y -= ENVIRONMENT_OBJECT_Y_OFFSET;
 
                     const key = `${adjustedPos.x},${adjustedPos.y},${adjustedPos.z}`;
@@ -1008,8 +1026,6 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         // --- Fetch Assets and Create ZIP ---
         loadingManager.updateLoading("Fetching assets...", 80);
         const zip = new JSZip();
-        const blocksRootFolder = zip.folder("blocks"); // Changed from textures to blocks
-        const modelsFolder = zip.folder("models/environment"); // Changed to models/environment
         const fetchPromises: Promise<void>[] = [];
 
         const fetchedAssetUrls = new Set<string>(); // Keep track of URLs already being fetched/added
@@ -1031,93 +1047,125 @@ export const exportMapFile = async (terrainBuilderRef, environmentBuilderRef) =>
         // Cache fetched blobs so duplicate URIs don't trigger network again but all face files are still written.
         const uriBlobCache = new Map<string, Blob>();
 
-        textureInfos.forEach(texInfo => {
-            const fileName = texInfo.fileName;
-            if (!fileName || !blocksRootFolder) return;
+        // Check if we have any block textures to include (custom blocks or default blocks with option enabled)
+        const hasBlockTexturesToInclude = Array.from(textureInfos).some(
+            texInfo => texInfo.isCustom || options.includeBlockTextures
+        );
 
-            const targetFolder = texInfo.isMulti && texInfo.blockName
-                ? blocksRootFolder.folder(texInfo.blockName)
-                : blocksRootFolder;
+        // Only create blocks folder if there's content to add
+        const blocksRootFolder = hasBlockTexturesToInclude ? zip.folder("blocks") : null;
 
-            if (!targetFolder) {
-                console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
-                return;
-            }
-
-            const addFileToZip = (blob: Blob) => {
-                targetFolder.file(fileName, blob);
-            };
-
-            if (!texInfo.uri) {
-                // No texture URI provided – create blank PNG
-                fetchPromises.push(
-                    blankPngBlobPromise().then(addFileToZip)
-                );
-                return;
-            }
-
-            // If we've already fetched this URI, reuse the blob
-            if (uriBlobCache.has(texInfo.uri)) {
-                addFileToZip(uriBlobCache.get(texInfo.uri));
-                return;
-            }
-
-            // Fetch (or convert data URI) then cache and add
-            const fetchPromise = (async () => {
-                let blob: Blob;
-                try {
-                    if (texInfo.uri.startsWith('data:image')) {
-                        const res = await fetch(texInfo.uri);
-                        blob = await res.blob();
-                    } else {
-                        const response = await fetch(texInfo.uri);
-                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${texInfo.uri}`);
-                        blob = await response.blob();
-                    }
-                } catch (error) {
-                    console.warn(`Failed to fetch texture ${texInfo.uri}, using blank PNG.`, error);
-                    blob = await blankPngBlobPromise();
-                }
-                uriBlobCache.set(texInfo.uri, blob);
-                addFileToZip(blob);
-            })();
-
-            fetchPromises.push(fetchPromise);
-        });
-
-
-        modelUris.forEach(uri => {
-            if (uri && !uri.startsWith('data:') && !fetchedAssetUrls.has(uri)) { // Avoid data URIs and duplicates
-                fetchedAssetUrls.add(uri);
-                const matchingModel = environmentModels.find(m => m.modelUrl === uri);
-                
-                let relativePath: string | undefined;
-                if (matchingModel && matchingModel.isCustom) {
-                    // Custom models go in the environment root
-                    relativePath = `${matchingModel.name}.gltf`;
-                } else {
-                    // Default models: preserve their folder structure
-                    // uri is like 'assets/models/environment/City/barrel-wood-1.gltf'
-                    // Extract 'City/barrel-wood-1.gltf'
-                    relativePath = uri.replace(/^assets\/models\/environment\//, '');
+        // Include block textures: always include custom blocks, include default blocks only if option is enabled
+        if (blocksRootFolder) {
+            textureInfos.forEach(texInfo => {
+                // Skip default blocks if option is disabled (custom blocks are always included)
+                if (!texInfo.isCustom && !options.includeBlockTextures) {
+                    return;
                 }
 
-                if (relativePath && modelsFolder) {
+                const fileName = texInfo.fileName;
+                if (!fileName) return;
+
+                const targetFolder = texInfo.isMulti && texInfo.blockName
+                    ? blocksRootFolder.folder(texInfo.blockName)
+                    : blocksRootFolder;
+
+                if (!targetFolder) {
+                    console.error(`Could not get or create texture folder for ${texInfo.blockName || 'root'}`);
+                    return;
+                }
+
+                const addFileToZip = (blob: Blob) => {
+                    targetFolder.file(fileName, blob);
+                };
+
+                if (!texInfo.uri) {
+                    // No texture URI provided – create blank PNG
                     fetchPromises.push(
-                        fetch(uri)
-                            .then(response => {
-                                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${uri}`);
-                                return response.blob();
-                            })
-                            .then(blob => {
-                                // This will create subfolders automatically if relativePath contains '/'
-                                modelsFolder.file(relativePath, blob);
-                            })
-                            .catch(error => console.error(`Failed to fetch/add model ${uri}:`, error))
+                        blankPngBlobPromise().then(addFileToZip)
                     );
+                    return;
                 }
-            }
-        });
+
+                // If we've already fetched this URI, reuse the blob
+                if (uriBlobCache.has(texInfo.uri)) {
+                    addFileToZip(uriBlobCache.get(texInfo.uri));
+                    return;
+                }
+
+                // Fetch (or convert data URI) then cache and add
+                const fetchPromise = (async () => {
+                    let blob: Blob;
+                    try {
+                        if (texInfo.uri.startsWith('data:image')) {
+                            const res = await fetch(texInfo.uri);
+                            blob = await res.blob();
+                        } else {
+                            const response = await fetch(texInfo.uri);
+                            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${texInfo.uri}`);
+                            blob = await response.blob();
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to fetch texture ${texInfo.uri}, using blank PNG.`, error);
+                        blob = await blankPngBlobPromise();
+                    }
+                    uriBlobCache.set(texInfo.uri, blob);
+                    addFileToZip(blob);
+                })();
+
+                fetchPromises.push(fetchPromise);
+            });
+        }
+
+
+        // Check if we have any models to include (custom models or default models with option enabled)
+        const hasModelsToInclude = Array.from(modelUris.entries()).some(
+            ([uri, isCustomModel]) => isCustomModel || options.includeModels
+        );
+
+        // Only create models folder if there's content to add
+        const modelsFolder = hasModelsToInclude ? zip.folder("models/environment") : null;
+
+        // Include models: always include custom models, include default models only if option is enabled
+        if (modelsFolder) {
+            modelUris.forEach((isCustomModel, uri) => {
+                // Skip default models if option is disabled (custom models are always included)
+                if (!isCustomModel && !options.includeModels) {
+                    return;
+                }
+
+                if (uri && !uri.startsWith('data:') && !fetchedAssetUrls.has(uri)) { // Avoid data URIs and duplicates
+                    fetchedAssetUrls.add(uri);
+                    const matchingModel = environmentModels.find(m => m.modelUrl === uri);
+
+                    let relativePath: string | undefined;
+                    if (matchingModel && matchingModel.isCustom) {
+                        // Custom models go in the environment root
+                        relativePath = `${matchingModel.name}.gltf`;
+                    } else {
+                        // Default models: preserve their folder structure
+                        // uri is like 'assets/models/environment/City/barrel-wood-1.gltf'
+                        // Extract 'City/barrel-wood-1.gltf'
+                        relativePath = uri.replace(/^assets\/models\/environment\//, '');
+                    }
+
+                    if (relativePath) {
+                        fetchPromises.push(
+                            fetch(uri)
+                                .then(response => {
+                                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${uri}`);
+                                    return response.blob();
+                                })
+                                .then(blob => {
+                                    // This will create subfolders automatically if relativePath contains '/'
+                                    modelsFolder.file(relativePath, blob);
+                                })
+                                .catch(error => console.error(`Failed to fetch/add model ${uri}:`, error))
+                        );
+                    }
+                }
+            });
+        }
 
         if (typeof selectedSkybox === 'string' && selectedSkybox) {
             const skyboxesRootFolder = zip.folder("skyboxes");
