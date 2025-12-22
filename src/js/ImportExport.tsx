@@ -539,7 +539,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                     "Calculating bounding boxes for import...",
                     60
                 );
-                
+
                 // Ensure all models used in the import have bounding box data calculated
                 const uniqueModelNames = new Set<string>();
                 Object.values(importData.entities).forEach((entity: any) => {
@@ -551,7 +551,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         uniqueModelNames.add(modelName);
                     }
                 });
-                
+
                 // Load models and calculate bounding boxes if missing
                 let processedCount = 0;
                 for (const modelName of uniqueModelNames) {
@@ -560,7 +560,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         try {
                             // Load the model if not already loaded
                             await environmentBuilderRef.current.ensureModelLoaded(model);
-                            
+
                             // If still missing, calculate bounding box directly
                             if (!model.boundingBoxHeight || !model.boundingBoxCenter) {
                                 const gltf = await environmentBuilderRef.current.loadModel(model.modelUrl);
@@ -570,12 +570,12 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                                     gltf.scene.rotation.set(0, 0, 0);
                                     gltf.scene.scale.set(1, 1, 1);
                                     gltf.scene.updateMatrixWorld(true);
-                                    
+
                                     // Use precise = true to match SDK client's bounding box calculation
                                     const bbox = new THREE.Box3().setFromObject(gltf.scene, true);
                                     const size = bbox.getSize(new THREE.Vector3());
                                     const center = bbox.getCenter(new THREE.Vector3());
-                                    
+
                                     // Update the model in environmentModels array
                                     const modelIndex = environmentModels.findIndex(m => m.id === model.id);
                                     if (modelIndex !== -1) {
@@ -597,7 +597,7 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         }
                     }
                 }
-                
+
                 loadingManager.updateLoading(
                     "Processing environment objects...",
                     65
@@ -838,7 +838,7 @@ export const exportMapFile = async (
             loadingManager.updateLoading("Calculating bounding boxes...", 15);
             const uniqueModelUrls = new Set(environmentObjects.map(obj => obj.modelUrl));
             const modelsToProcess = environmentModels.filter(model => uniqueModelUrls.has(model.modelUrl));
-            
+
             // Calculate bounding boxes for models that don't have them
             let processedCount = 0;
             for (const model of modelsToProcess) {
@@ -846,7 +846,7 @@ export const exportMapFile = async (
                     try {
                         // Load the model if not already loaded
                         await environmentBuilderRef.current.ensureModelLoaded(model);
-                        
+
                         // If still missing, calculate bounding box directly
                         if (!model.boundingBoxHeight || !model.boundingBoxCenter) {
                             const gltf = await environmentBuilderRef.current.loadModel(model.modelUrl);
@@ -856,13 +856,13 @@ export const exportMapFile = async (
                                 gltf.scene.rotation.set(0, 0, 0);
                                 gltf.scene.scale.set(1, 1, 1);
                                 gltf.scene.updateMatrixWorld(true);
-                                
+
                                 // Use precise = true to match SDK client's bounding box calculation
                                 // The SDK client uses Box3().setFromObject(model, true) for visual centering
                                 const bbox = new THREE.Box3().setFromObject(gltf.scene, true);
                                 const size = bbox.getSize(new THREE.Vector3());
                                 const center = bbox.getCenter(new THREE.Vector3());
-                                
+
                                 // Update the model in environmentModels array
                                 const modelIndex = environmentModels.findIndex(m => m.id === model.id);
                                 if (modelIndex !== -1) {
@@ -1039,12 +1039,12 @@ export const exportMapFile = async (
                 const entityType = environmentModels.find(
                     (model) => model.modelUrl === obj.modelUrl
                 );
-                
+
                 if (!entityType) {
                     console.warn(`[EXPORT] Model not found for URL: ${obj.modelUrl}`);
                     return acc;
                 }
-                
+
                 {
                     // ... (keep existing entity processing logic)
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
