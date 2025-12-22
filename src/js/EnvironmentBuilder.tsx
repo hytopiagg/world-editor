@@ -613,7 +613,9 @@ const EnvironmentBuilder = (
             return;
         }
 
-        const bbox = new THREE.Box3().setFromObject(gltf.scene);
+        // Use precise = true to match SDK client's bounding box calculation
+        // The SDK client uses Box3().setFromObject(model, true) for visual centering
+        const bbox = new THREE.Box3().setFromObject(gltf.scene, true);
         const size = bbox.getSize(new THREE.Vector3());
         const center = bbox.getCenter(new THREE.Vector3());
         const boundingHeight = size.y;

@@ -538,8 +538,74 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 
             if (importData.entities) {
                 loadingManager.updateLoading(
-                    "Processing environment objects...",
+                    "Calculating bounding boxes for import...",
                     60
+                );
+                
+                // Ensure all models used in the import have bounding box data calculated
+                const uniqueModelNames = new Set<string>();
+                Object.values(importData.entities).forEach((entity: any) => {
+                    const modelName = entity.modelName || entity.modelUri
+                        ?.split("/")
+                        .pop()
+                        ?.replace(".gltf", "");
+                    if (modelName) {
+                        uniqueModelNames.add(modelName);
+                    }
+                });
+                
+                // Load models and calculate bounding boxes if missing
+                let processedCount = 0;
+                for (const modelName of uniqueModelNames) {
+                    const model = environmentModels.find(m => m.name === modelName);
+                    if (model && (!model.boundingBoxHeight || !model.boundingBoxCenter)) {
+                        try {
+                            // Load the model if not already loaded
+                            await environmentBuilderRef.current.ensureModelLoaded(model);
+                            
+                            // If still missing, calculate bounding box directly
+                            if (!model.boundingBoxHeight || !model.boundingBoxCenter) {
+                                const gltf = await environmentBuilderRef.current.loadModel(model.modelUrl);
+                                if (gltf && gltf.scene) {
+                                    // Reset transforms before calculating bounding box
+                                    gltf.scene.position.set(0, 0, 0);
+                                    gltf.scene.rotation.set(0, 0, 0);
+                                    gltf.scene.scale.set(1, 1, 1);
+                                    gltf.scene.updateMatrixWorld(true);
+                                    
+                                    // Use precise = true to match SDK client's bounding box calculation
+                                    const bbox = new THREE.Box3().setFromObject(gltf.scene, true);
+                                    const size = bbox.getSize(new THREE.Vector3());
+                                    const center = bbox.getCenter(new THREE.Vector3());
+                                    
+                                    // Update the model in environmentModels array
+                                    const modelIndex = environmentModels.findIndex(m => m.id === model.id);
+                                    if (modelIndex !== -1) {
+                                        environmentModels[modelIndex] = {
+                                            ...environmentModels[modelIndex],
+                                            boundingBoxHeight: size.y,
+                                            boundingBoxWidth: size.x,
+                                            boundingBoxDepth: size.z,
+                                            boundingBoxCenter: center,
+                                        };
+                                        processedCount++;
+                                    }
+                                }
+                            } else {
+                                processedCount++;
+                            }
+                        } catch (error) {
+                            console.warn(`Failed to calculate bounding box for ${modelName} during import:`, error);
+                        }
+                    }
+                }
+                if (processedCount > 0) {
+                    console.log(`[IMPORT] Calculated bounding boxes for ${processedCount} models`);
+                }
+                
+                loadingManager.updateLoading(
+                    "Processing environment objects...",
+                    65
                 );
                 const instanceIdCounters: Record<string, number> = {};
                 environmentData = Object.entries(
@@ -572,37 +638,39 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                                 (model) => model.name === modelName
                             );
 
-                        // --- Reverse of export: from centre to origin ---
-                        let localCentreOffset: THREE.Vector3;
-                        if (matchingModel?.boundingBoxCenter instanceof THREE.Vector3) {
-                            localCentreOffset = matchingModel.boundingBoxCenter.clone();
-                        } else {
-                            localCentreOffset = new THREE.Vector3(
-                                (matchingModel?.boundingBoxWidth || 1) / 2,
-                                (matchingModel?.boundingBoxHeight || 1) / 2,
-                                (matchingModel?.boundingBoxDepth || 1) / 2
-                            );
-                        }
-
                         // Handle modelScale: support both old format (number) and new format (Vector3 object)
                         const modelScale = entity.modelScale;
                         const scaleX = typeof modelScale === 'number' ? modelScale : (modelScale?.x ?? 1);
                         const scaleY = typeof modelScale === 'number' ? modelScale : (modelScale?.y ?? 1);
                         const scaleZ = typeof modelScale === 'number' ? modelScale : (modelScale?.z ?? 1);
 
-                        // Apply scale
-                        const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(scaleX, scaleY, scaleZ));
+                        // Reverse the export transformation:
+                        // The JSON contains the CENTER position, but the editor stores the ORIGIN position.
+                        // 1. Subtract the scaled bounding box center Y to convert from center back to origin
+                        // 2. Add back ENVIRONMENT_OBJECT_Y_OFFSET (editor's internal Y offset)
+                        const boundingBoxCenterY = matchingModel?.boundingBoxCenter?.y ?? (matchingModel?.boundingBoxHeight || 1) / 2;
+                        const scaledCenterY = boundingBoxCenterY * scaleY;
+                        const adjustedX = x;
+                        const adjustedY = y + ENVIRONMENT_OBJECT_Y_OFFSET - scaledCenterY;
+                        const adjustedZ = z;
 
-                        // Apply full rotation (all three axes)
-                        scaledOffset.applyEuler(euler);
-
-                        // Convert centre position (x,y,z) to origin (adjustedX etc.)
-                        const originPos = new THREE.Vector3(x, y, z).sub(scaledOffset);
-                        originPos.y += ENVIRONMENT_OBJECT_Y_OFFSET;
-
-                        const adjustedX = originPos.x;
-                        const adjustedY = originPos.y;
-                        const adjustedZ = originPos.z;
+                        // DEBUG LOGGING - Import
+                        const isPalm = modelName?.toLowerCase().includes('palm');
+                        if (isPalm || true) { // Log all for now to diagnose
+                            console.log(`[IMPORT] Model: ${modelName}`);
+                            console.log(`  - Raw position from JSON (center): (${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)})`);
+                            console.log(`  - Scale: (${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`);
+                            console.log(`  - matchingModel found: ${!!matchingModel}`);
+                            console.log(`  - boundingBoxHeight: ${(matchingModel?.boundingBoxHeight || 0).toFixed(3)}`);
+                            console.log(`  - boundingBoxCenter: ${JSON.stringify(matchingModel?.boundingBoxCenter)}`);
+                            console.log(`  - boundingBoxCenter.y: ${boundingBoxCenterY.toFixed(3)} (used)`);
+                            console.log(`  - boundingBoxCenter.y fallback: ${((matchingModel?.boundingBoxHeight || 1) / 2).toFixed(3)}`);
+                            console.log(`  - scaledCenterY: ${scaledCenterY.toFixed(3)} (center.y * scale)`);
+                            console.log(`  - ENVIRONMENT_OBJECT_Y_OFFSET: ${ENVIRONMENT_OBJECT_Y_OFFSET}`);
+                            console.log(`  - Final adjusted Y: ${adjustedY.toFixed(3)} (formula: ${y.toFixed(3)} + ${ENVIRONMENT_OBJECT_Y_OFFSET} - ${scaledCenterY.toFixed(3)})`);
+                            console.log(`  - Final position (origin): (${adjustedX.toFixed(3)}, ${adjustedY.toFixed(3)}, ${adjustedZ.toFixed(3)})`);
+                            console.log('---');
+                        }
 
                         return {
                             position: { x: adjustedX, y: adjustedY, z: adjustedZ },
@@ -784,6 +852,62 @@ export const exportMapFile = async (
 
         loadingManager.updateLoading("Retrieving environment data...", 10);
 
+        // Ensure all models used in the map have bounding box data calculated
+        if (environmentObjects && environmentObjects.length > 0) {
+            loadingManager.updateLoading("Calculating bounding boxes...", 15);
+            const uniqueModelUrls = new Set(environmentObjects.map(obj => obj.modelUrl));
+            const modelsToProcess = environmentModels.filter(model => uniqueModelUrls.has(model.modelUrl));
+            
+            // Calculate bounding boxes for models that don't have them
+            let processedCount = 0;
+            for (const model of modelsToProcess) {
+                if (!model.boundingBoxHeight || !model.boundingBoxCenter) {
+                    try {
+                        // Load the model if not already loaded
+                        await environmentBuilderRef.current.ensureModelLoaded(model);
+                        
+                        // If still missing, calculate bounding box directly
+                        if (!model.boundingBoxHeight || !model.boundingBoxCenter) {
+                            const gltf = await environmentBuilderRef.current.loadModel(model.modelUrl);
+                            if (gltf && gltf.scene) {
+                                // Reset transforms before calculating bounding box
+                                gltf.scene.position.set(0, 0, 0);
+                                gltf.scene.rotation.set(0, 0, 0);
+                                gltf.scene.scale.set(1, 1, 1);
+                                gltf.scene.updateMatrixWorld(true);
+                                
+                                // Use precise = true to match SDK client's bounding box calculation
+                                // The SDK client uses Box3().setFromObject(model, true) for visual centering
+                                const bbox = new THREE.Box3().setFromObject(gltf.scene, true);
+                                const size = bbox.getSize(new THREE.Vector3());
+                                const center = bbox.getCenter(new THREE.Vector3());
+                                
+                                // Update the model in environmentModels array
+                                const modelIndex = environmentModels.findIndex(m => m.id === model.id);
+                                if (modelIndex !== -1) {
+                                    environmentModels[modelIndex] = {
+                                        ...environmentModels[modelIndex],
+                                        boundingBoxHeight: size.y,
+                                        boundingBoxWidth: size.x,
+                                        boundingBoxDepth: size.z,
+                                        boundingBoxCenter: center,
+                                    };
+                                    processedCount++;
+                                }
+                            }
+                        } else {
+                            processedCount++;
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to calculate bounding box for ${model.name}:`, error);
+                    }
+                }
+            }
+            if (processedCount > 0) {
+                console.log(`[EXPORT] Calculated bounding boxes for ${processedCount} models`);
+            }
+        }
+
         loadingManager.updateLoading("Processing terrain data...", 30);
         const simplifiedTerrain = Object.entries(currentTerrainData).reduce((acc, [key, value]) => {
             if (key.split(",").length === 3) {
@@ -937,6 +1061,13 @@ export const exportMapFile = async (
                 const entityType = environmentModels.find(
                     (model) => model.modelUrl === obj.modelUrl
                 );
+                
+                // DEBUG: Check if model was found and has bounding box data
+                if (!entityType) {
+                    console.warn(`[EXPORT] Model not found for URL: ${obj.modelUrl}`);
+                    return acc;
+                }
+                
                 if (entityType) {
                     // ... (keep existing entity processing logic)
                     const isThreeEuler = obj.rotation instanceof THREE.Euler;
@@ -947,7 +1078,7 @@ export const exportMapFile = async (
 
                     const hasRotation = Math.abs(rotX) > 0.001 || Math.abs(rotY) > 0.001 || Math.abs(rotZ) > 0.001;
 
-                    // Create euler for offset calculation and quaternion conversion
+                    // Create euler for quaternion conversion
                     const rotationEuler = new THREE.Euler(rotX, rotY, rotZ);
 
                     const quaternion = new THREE.Quaternion();
@@ -972,29 +1103,47 @@ export const exportMapFile = async (
                         modelUriForJson = `models/environment/${pathAfterEnvironment}`;
                     }
 
-                    let localCentreOffset: THREE.Vector3;
-                    if (entityType.boundingBoxCenter instanceof THREE.Vector3) {
-                        localCentreOffset = entityType.boundingBoxCenter.clone();
-                    } else {
-                        localCentreOffset = new THREE.Vector3(
-                            (entityType.boundingBoxWidth || 1) / 2,
-                            (entityType.boundingBoxHeight || 1) / 2,
-                            (entityType.boundingBoxDepth || 1) / 2
-                        );
-                    }
-
-                    const scaledOffset = localCentreOffset.multiply(new THREE.Vector3(obj.scale.x, obj.scale.y, obj.scale.z));
-
-                    // Apply full rotation (all three axes) to match SelectionTool behavior
-                    scaledOffset.applyEuler(rotationEuler);
-
+                    // The SDK expects the CENTER position in map.json (physics position).
+                    // The client calculates modelCenter using Three.js Box3().setFromObject() (same as editor)
+                    // and offsets the visual model by -modelCenter to align center with physics position.
+                    // 
+                    // The editor stores the ORIGIN position (bottom), so we need to:
+                    // 1. Add the scaled bounding box center Y to convert from origin to center
+                    // 2. Compensate for ENVIRONMENT_OBJECT_Y_OFFSET (editor's internal Y offset)
+                    const boundingBoxCenterY = entityType.boundingBoxCenter?.y ?? (entityType.boundingBoxHeight || 1) / 2;
+                    const scaledCenterY = boundingBoxCenterY * obj.scale.y;
                     const adjustedPos = new THREE.Vector3(
                         obj.position.x,
-                        obj.position.y,
+                        obj.position.y - ENVIRONMENT_OBJECT_Y_OFFSET + scaledCenterY,
                         obj.position.z
-                    ).add(scaledOffset);
+                    );
 
-                    adjustedPos.y -= ENVIRONMENT_OBJECT_Y_OFFSET;
+                    // DEBUG LOGGING - Export
+                    const isPalm = entityType.name?.toLowerCase().includes('palm');
+                    const hasBoundingBoxData = !!(entityType.boundingBoxHeight && entityType.boundingBoxCenter);
+                    
+                    if (isPalm || !hasBoundingBoxData || true) { // Log palms, missing data, or all
+                        console.log(`[EXPORT] Model: ${entityType.name}`);
+                        console.log(`  - modelUrl: ${entityType.modelUrl}`);
+                        console.log(`  - model.id: ${entityType.id}`);
+                        console.log(`  - Raw position (origin): (${obj.position.x.toFixed(3)}, ${obj.position.y.toFixed(3)}, ${obj.position.z.toFixed(3)})`);
+                        console.log(`  - Scale: (${obj.scale.x.toFixed(3)}, ${obj.scale.y.toFixed(3)}, ${obj.scale.z.toFixed(3)})`);
+                        console.log(`  - boundingBoxHeight: ${(entityType.boundingBoxHeight || 0).toFixed(3)}`);
+                        console.log(`  - boundingBoxWidth: ${(entityType.boundingBoxWidth || 0).toFixed(3)}`);
+                        console.log(`  - boundingBoxDepth: ${(entityType.boundingBoxDepth || 0).toFixed(3)}`);
+                        console.log(`  - boundingBoxCenter type: ${typeof entityType.boundingBoxCenter}`);
+                        console.log(`  - boundingBoxCenter: ${entityType.boundingBoxCenter ? (entityType.boundingBoxCenter instanceof THREE.Vector3 ? `Vector3(${entityType.boundingBoxCenter.x.toFixed(3)}, ${entityType.boundingBoxCenter.y.toFixed(3)}, ${entityType.boundingBoxCenter.z.toFixed(3)})` : JSON.stringify(entityType.boundingBoxCenter)) : 'undefined'}`);
+                        console.log(`  - boundingBoxCenter.y: ${boundingBoxCenterY.toFixed(3)} (used)`);
+                        console.log(`  - boundingBoxCenter.y fallback: ${((entityType.boundingBoxHeight || 1) / 2).toFixed(3)}`);
+                        console.log(`  - scaledCenterY: ${scaledCenterY.toFixed(3)} (center.y * scale)`);
+                        console.log(`  - ENVIRONMENT_OBJECT_Y_OFFSET: ${ENVIRONMENT_OBJECT_Y_OFFSET}`);
+                        console.log(`  - Final adjusted Y: ${adjustedPos.y.toFixed(3)} (formula: ${obj.position.y.toFixed(3)} - ${ENVIRONMENT_OBJECT_Y_OFFSET} + ${scaledCenterY.toFixed(3)})`);
+                        console.log(`  - Final position (center): (${adjustedPos.x.toFixed(3)}, ${adjustedPos.y.toFixed(3)}, ${adjustedPos.z.toFixed(3)})`);
+                        if (!hasBoundingBoxData) {
+                            console.warn(`  ⚠️ WARNING: Missing bounding box data for ${entityType.name}!`);
+                        }
+                        console.log('---');
+                    }
 
                     const key = `${adjustedPos.x},${adjustedPos.y},${adjustedPos.z}`;
                     acc[key] = {
