@@ -6,6 +6,8 @@ import * as THREE from "three";
 import { ENVIRONMENT_OBJECT_Y_OFFSET, version } from "./Constants";
 import { loadingManager } from "./managers/LoadingManager";
 import JSZip from "jszip";
+import { zoneManager } from "./managers/ZoneManager";
+import { Zone } from "./types/DatabaseTypes";
 
 export const importMap = async (
     file,
@@ -787,6 +789,18 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
             );
             await environmentBuilderRef.current.refreshEnvironmentFromDB();
         }
+
+        // Import zones if present
+        if (importData.zones && Array.isArray(importData.zones)) {
+            loadingManager.updateLoading("Loading zones...", 98);
+            try {
+                zoneManager.importZones(importData.zones as Zone[]);
+                console.log(`[IMPORT] Imported ${importData.zones.length} zones`);
+            } catch (error) {
+                console.warn("[IMPORT] Error importing zones:", error);
+            }
+        }
+
         loadingManager.updateLoading("Import complete!", 100);
 
         setTimeout(() => {
@@ -1124,6 +1138,8 @@ export const exportMapFile = async (
                 }
                 return acc;
             }, {}),
+            // Export zones
+            zones: zoneManager.exportZones(),
             version: version || "1.0.0",
         };
 
@@ -1306,6 +1322,13 @@ export const exportMapFile = async (
 
         // Add map.json to the zip file root
         zip.file("map.json", jsonBlob);
+
+        // Add zones.ts TypeScript file if there are zones
+        const zonesTs = zoneManager.generateZonesTypeScript();
+        if (zonesTs) {
+            const zonesTsBlob = new Blob([zonesTs], { type: "text/typescript" });
+            zip.file("zones.ts", zonesTsBlob);
+        }
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
 

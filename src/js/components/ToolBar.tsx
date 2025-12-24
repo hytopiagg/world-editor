@@ -17,7 +17,8 @@ import {
     FaUndo,
     FaWrench,
     FaHome,
-    FaArrowUp
+    FaArrowUp,
+    FaBorderAll
 } from "react-icons/fa";
 import pako from "pako";
 import "../../css/ToolBar.css";
@@ -1332,6 +1333,19 @@ const ToolBar = ({
                                 </button>
                             </Tooltip>
                         )}
+                        <div className="control-divider-vertical"></div>
+                        <Tooltip text="Zone Tool - Create zones/boundaries for spawn areas, triggers, etc. Click for point, click-drag for box. Press Tab to switch modes.">
+                            <button
+                                onClick={() => {
+                                    handleToolToggle("zone");
+                                    setPlacementSize("single");
+                                }}
+                                className={`control-button ${activeTool === "zone" ? "selected" : ""
+                                    }`}
+                            >
+                                <FaBorderAll className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
                     </div>
                 </div>
 

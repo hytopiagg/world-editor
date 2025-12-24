@@ -1,4 +1,4 @@
-export const DB_VERSION = 3; // Incremented for multi-project support
+export const DB_VERSION = 4; // Incremented for zones and project settings stores
 export const version = "2.0.0";
 export const IS_UNDER_CONSTRUCTION = false;
 export const DISABLE_ASSET_PACK_IMPORT_EXPORT = true;

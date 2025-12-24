@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { DatabaseManager } from "../managers/DatabaseManager";
+import { DatabaseManager, MigrationStatus } from "../managers/DatabaseManager";
 import ProjectActionsMenu from "./ProjectActionsMenu";
 import ProjectGridCard from "./ProjectGridCard";
 import ProjectSidebar from "./ProjectSidebar";
@@ -10,6 +10,102 @@ import { DatabaseManager as DB } from "../managers/DatabaseManager";
 import ProjectFolderCard from "./ProjectFolderCard";
 import ModalContainer from "./ModalContainer";
 import ParticleViewerPage from "./ParticleViewerPage";
+
+// Migration overlay component
+const MigrationOverlay: React.FC<{ status: MigrationStatus }> = ({ status }) => {
+    const progressPercent = status.totalItems > 0 
+        ? Math.round((status.itemsProcessed / status.totalItems) * 100)
+        : 0;
+    
+    const overallProgress = status.totalStores > 0
+        ? Math.round(((status.currentStoreIndex - 1) / status.totalStores) * 100 + (progressPercent / status.totalStores))
+        : 0;
+    
+    return (
+        <div className="fixed inset-0 z-[9999] bg-[#0b0e12] flex flex-col items-center justify-center text-white">
+            {/* Animated background */}
+            <div className="absolute inset-0 overflow-hidden opacity-20">
+                <div className="absolute w-[500px] h-[500px] bg-gradient-to-r from-blue-500 to-purple-600 rounded-full blur-[120px] animate-pulse" 
+                     style={{ top: '20%', left: '10%' }} />
+                <div className="absolute w-[400px] h-[400px] bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full blur-[100px] animate-pulse" 
+                     style={{ top: '50%', right: '15%', animationDelay: '1s' }} />
+            </div>
+            
+            <div className="relative z-10 flex flex-col items-center gap-6 max-w-lg px-8">
+                {/* Logo/Icon */}
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mb-2">
+                    <svg className="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </div>
+                
+                {/* Title */}
+                <h1 className="text-2xl font-semibold text-center">
+                    Upgrading Your Projects
+                </h1>
+                
+                {/* Description */}
+                <p className="text-white/60 text-center text-sm">
+                    We're migrating your data to a new format. This only happens once and may take a few minutes for large projects.
+                </p>
+                
+                {/* Progress container */}
+                <div className="w-full flex flex-col gap-4 mt-4">
+                    {/* Overall progress bar */}
+                    <div className="w-full">
+                        <div className="flex justify-between text-xs text-white/50 mb-2">
+                            <span>Overall Progress</span>
+                            <span>{overallProgress}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300 ease-out rounded-full"
+                                style={{ width: `${overallProgress}%` }}
+                            />
+                        </div>
+                    </div>
+                    
+                    {/* Current store progress */}
+                    {status.currentStore && (
+                        <div className="w-full">
+                            <div className="flex justify-between text-xs text-white/50 mb-2">
+                                <span className="truncate max-w-[200px]">{status.currentStore}</span>
+                                <span>
+                                    {status.itemsProcessed.toLocaleString()} / {status.totalItems.toLocaleString()}
+                                </span>
+                            </div>
+                            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-blue-400 transition-all duration-150 ease-out rounded-full"
+                                    style={{ width: `${progressPercent}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Status message */}
+                <p className="text-white/40 text-xs text-center mt-2 min-h-[20px]">
+                    {status.message}
+                </p>
+                
+                {/* Store counter */}
+                {status.totalStores > 0 && status.currentStore && (
+                    <div className="flex flex-col items-center gap-1 text-xs text-white/30">
+                        <span>Migrating store {status.currentStoreIndex} of {status.totalStores}</span>
+                        <span className="text-white/50 font-medium">{status.currentStore}</span>
+                    </div>
+                )}
+                
+                {/* Warning */}
+                <p className="text-amber-400/70 text-xs text-center mt-4">
+                    ⚠️ Please don't close this tab until migration is complete
+                </p>
+            </div>
+        </div>
+    );
+};
 
 type Project = {
     id: string;
@@ -83,6 +179,33 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             return hash;
         } catch (_) { return 'my-files'; }
     });
+    
+    // Migration status tracking
+    const [migrationStatus, setMigrationStatus] = useState<MigrationStatus | null>(null);
+    
+    useEffect(() => {
+        // Check initial migration status
+        if (DatabaseManager.migrationStatus.inProgress) {
+            setMigrationStatus({ ...DatabaseManager.migrationStatus });
+        }
+        
+        // Listen for migration progress events
+        const handleMigrationProgress = (e: CustomEvent<MigrationStatus>) => {
+            if (e.detail.inProgress) {
+                setMigrationStatus({ ...e.detail });
+            } else {
+                // Migration complete, clear status after a short delay and refresh projects
+                setTimeout(() => {
+                    setMigrationStatus(null);
+                    refresh(); // Refresh projects list after migration
+                }, 500);
+            }
+        };
+        
+        window.addEventListener("db-migration-progress", handleMigrationProgress as EventListener);
+        return () => window.removeEventListener("db-migration-progress", handleMigrationProgress as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Listen for hash changes
     useEffect(() => {
@@ -227,9 +350,21 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     const filtered = projects.filter((p) => !query || (p.name || "").toLowerCase().includes(query.toLowerCase()));
 
     const refresh = async () => {
+        // Don't refresh while migration is in progress
+        if (DatabaseManager.isMigrating()) {
+            return;
+        }
+        
         setLoading(true);
         try {
             try { await (DatabaseManager as any).getDBConnection?.(); } catch (_) { }
+            
+            // Double check migration isn't happening after DB connection
+            if (DatabaseManager.isMigrating()) {
+                setLoading(false);
+                return;
+            }
+            
             const list = await DatabaseManager.listProjects();
             const all = Array.isArray(list) ? list.map((p: any) => ({ ...p })) : [];
             setFolders(all.filter((p: any) => p.type === 'folder'));
@@ -278,6 +413,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
         }
     };
 
+    // Show migration overlay if migration is in progress
+    if (migrationStatus?.inProgress) {
+        return <MigrationOverlay status={migrationStatus} />;
+    }
+    
     return (
         <div className="fixed inset-0 grid [grid-template-columns:280px_1fr] bg-[#0b0e12] text-[#eaeaea]">
             {/* Sidebar */}

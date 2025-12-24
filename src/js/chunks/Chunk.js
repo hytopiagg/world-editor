@@ -6,6 +6,8 @@ import {
     FACE_SHADE_TOP,
     FACE_SHADE_SIDE,
     FACE_SHADE_BOTTOM,
+    SKY_LIGHT_MAX_DISTANCE,
+    SKY_LIGHT_BRIGHTNESS_LUT,
 } from "./ChunkConstants";
 import { DEFAULT_BLOCK_AO_INTENSITY } from "../blocks/BlockConstants";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
@@ -1357,12 +1359,13 @@ class Chunk {
         return hash;
     }
     /**
-     * Calculate vertex color with face-based shading and ambient occlusion
+     * Calculate vertex color with face-based shading, ambient occlusion, and sky light.
      * Matches SDK's ChunkWorker lighting approach EXACTLY.
      * 
-     * SDK Formula: (baseColor - ao) * faceShade
+     * SDK Formula: (baseColor - ao) * faceShade * skyLight
      * - ao values: [0, 0.5, 0.7, 0.9] indexed by neighbor count
      * - faceShade: 1.0 (top), 0.8 (side), 0.5 (bottom)
+     * - skyLight: 0.3-1.0 based on distance to sky (blocks above)
      * 
      * @param {Object} vertexCoordinate - The vertex coordinate
      * @param {BlockType} blockType - The block type
@@ -1380,6 +1383,9 @@ class Chunk {
         faceNormal = null
     ) {
         const baseColor = blockType.color;
+        const vx = vertexCoordinate.x;
+        const vy = vertexCoordinate.y;
+        const vz = vertexCoordinate.z;
         
         // === AMBIENT OCCLUSION (SDK-compatible) ===
         // Count neighboring solid blocks at this vertex corner
@@ -1387,10 +1393,6 @@ class Chunk {
         let aoIntensityLevel = 0;
         
         if (blockFaceAO && this._extendedBlockTypes) {
-            const vx = vertexCoordinate.x;
-            const vy = vertexCoordinate.y;
-            const vz = vertexCoordinate.z;
-            
             // Check corner neighbor
             if (blockFaceAO.corner) {
                 const nx = Math.floor(vx + blockFaceAO.corner[0]);
@@ -1443,13 +1445,63 @@ class Chunk {
             }
         }
         
-        // === SDK FORMULA: (baseColor - ao) * faceShade ===
+        // === SKY LIGHT (SDK-compatible baked lighting) ===
+        // Darken areas that are covered/indoors based on distance to sky
+        const skyLight = this._calculateSkyLight(vx, vy, vz, faceNormal, chunkManager);
+        
+        // === SDK FORMULA: (baseColor - ao) * faceShade * skyLight ===
         return [
-            (baseColor[0] - ao) * faceShade,
-            (baseColor[1] - ao) * faceShade,
-            (baseColor[2] - ao) * faceShade,
+            (baseColor[0] - ao) * faceShade * skyLight,
+            (baseColor[1] - ao) * faceShade * skyLight,
+            (baseColor[2] - ao) * faceShade * skyLight,
             baseColor[3]
         ];
+    }
+    
+    /**
+     * Calculates sky light exposure for a given surface position.
+     * Traces upward from the air space in front of the face to check for sky access.
+     * Uses the face normal to offset the check position so side faces check from
+     * the correct perspective (the air in front of them, not inside the block).
+     * 
+     * @param {number} x - Vertex X coordinate
+     * @param {number} y - Vertex Y coordinate
+     * @param {number} z - Vertex Z coordinate
+     * @param {Array} faceNormal - The face normal [x, y, z]
+     * @param {ChunkManager} chunkManager - The chunk manager
+     * @returns {number} Brightness multiplier (SKY_LIGHT_MIN_BRIGHTNESS to 1.0)
+     * @private
+     */
+    _calculateSkyLight(x, y, z, faceNormal, chunkManager) {
+        // Default to full brightness if no face normal
+        if (!faceNormal || !Array.isArray(faceNormal)) {
+            return 1.0;
+        }
+        
+        // Offset check position by 0.5 in the direction of the face normal
+        // This ensures we check from the air space in front of the face
+        const checkX = Math.floor(x + faceNormal[0] * 0.5);
+        const checkZ = Math.floor(z + faceNormal[2] * 0.5);
+        
+        // For top-facing surfaces, start from current Y
+        // For other surfaces, start from the offset position
+        const startY = Math.floor(y + faceNormal[1] * 0.5);
+        
+        // Trace upward to find first solid block or reach max distance (sky)
+        for (let dy = 1; dy <= SKY_LIGHT_MAX_DISTANCE; dy++) {
+            const checkY = startY + dy;
+            const blockType = this._getGlobalBlockType(checkX, checkY, checkZ, chunkManager);
+            
+            // If we hit a solid block (not air, not liquid), we're under cover
+            // Air returns null/undefined, liquids let light through
+            if (blockType && !blockType.isLiquid) {
+                // Use precomputed LUT to avoid operations in hot path
+                return SKY_LIGHT_BRIGHTNESS_LUT[dy];
+            }
+        }
+        
+        // Clear path to sky - full brightness
+        return 1.0;
     }
     
     /**
@@ -1473,15 +1525,13 @@ class Chunk {
             return this._extendedBlockTypes?.[ex]?.[ey]?.[ez] || null;
         }
         
-        // If outside extended area, try to get from chunk manager
-        if (chunkManager) {
-            const chunk = chunkManager.getChunkFromCoordinate(globalX, globalY, globalZ);
-            if (chunk) {
-                const chunkLocalX = ((globalX % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-                const chunkLocalY = ((globalY % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-                const chunkLocalZ = ((globalZ % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-                return chunk.getBlockType(chunkLocalX, chunkLocalY, chunkLocalZ);
-            }
+        // If outside extended area, use ChunkManager's getGlobalBlockType
+        if (chunkManager && chunkManager.getGlobalBlockType) {
+            return chunkManager.getGlobalBlockType({
+                x: Math.floor(globalX),
+                y: Math.floor(globalY),
+                z: Math.floor(globalZ)
+            }) || null;
         }
         
         return null;

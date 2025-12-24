@@ -58,6 +58,8 @@ import {
     ToolManager,
     WallTool,
 } from "./tools";
+import ZoneTool from "./tools/ZoneTool";
+import { zoneManager } from "./managers/ZoneManager";
 import {
     configureChunkLoading,
     forceChunkUpdate,
@@ -2175,6 +2177,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             // Register replace tool
             const replaceTool = new ReplaceTool(terrainBuilderProps);
             toolManagerRef.current.registerTool("replace", replaceTool);
+
+            // Register zone tool
+            const zoneTool = new ZoneTool(terrainBuilderProps);
+            toolManagerRef.current.registerTool("zone", zoneTool);
+
+            // Initialize zone manager with scene
+            zoneManager.initialize(scene);
 
             initialize();
             const onKeyDownOnce = (event) => {

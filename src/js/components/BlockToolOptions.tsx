@@ -17,6 +17,7 @@ import ReplaceToolOptionsSection from "./ReplaceToolOptionsSection";
 import SkyboxOptionsSection from "./SkyboxOptionsSection";
 import LightingOptionsSection from "./LightingOptionsSection";
 import EntityOptionsSection from "./EntityOptionsSection";
+import ZoneToolOptionsSection from "./ZoneToolOptionsSection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
@@ -283,6 +284,14 @@ export function BlockToolOptions({
                     <CollapsibleSection title="Replace Tool" animationDelay="0.09s">
                         <ReplaceToolOptionsSection
                             replacementTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["replace"]}
+                            isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTool === "zone" && (
+                    <CollapsibleSection title="Zone Tool" animationDelay="0.09s">
+                        <ZoneToolOptionsSection
+                            zoneTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["zone"]}
                             isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>

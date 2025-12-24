@@ -13,11 +13,63 @@ export const STORES = {
     ENVIRONMENT_MODEL_SETTINGS: "environment-model-settings",
     PROJECTS: "projects",
     BLOCK_OVERRIDES: "block-overrides",
+    ZONES: "zones",
+    PROJECT_SETTINGS: "project-settings", // For per-project settings like liquid blocks, etc.
 };
+// Migration status for UI feedback
+export interface MigrationStatus {
+    inProgress: boolean;
+    currentStore: string;
+    currentStoreIndex: number;
+    totalStores: number;
+    itemsProcessed: number;
+    totalItems: number;
+    message: string;
+}
+
 export class DatabaseManager {
     static DB_NAME = "hytopia-world-editor-db-v" + DB_VERSION;
     static dbConnection = null; // Add static property to store connection
     static currentProjectId: string | null = null;
+    static migrationStatus: MigrationStatus = {
+        inProgress: false,
+        currentStore: "",
+        currentStoreIndex: 0,
+        totalStores: 0,
+        itemsProcessed: 0,
+        totalItems: 0,
+        message: "",
+    };
+    static migrationListeners: Set<(status: MigrationStatus) => void> = new Set();
+
+    static addMigrationListener(callback: (status: MigrationStatus) => void) {
+        this.migrationListeners.add(callback);
+    }
+
+    static removeMigrationListener(callback: (status: MigrationStatus) => void) {
+        this.migrationListeners.delete(callback);
+    }
+
+    private static notifyMigrationListeners() {
+        this.migrationListeners.forEach(cb => {
+            try { cb({ ...this.migrationStatus }); } catch (_) { }
+        });
+        // Also dispatch a global event
+        window.dispatchEvent(new CustomEvent("db-migration-progress", { detail: { ...this.migrationStatus } }));
+    }
+
+    private static updateMigrationStatus(updates: Partial<MigrationStatus>) {
+        this.migrationStatus = { ...this.migrationStatus, ...updates };
+        this.notifyMigrationListeners();
+    }
+
+    static isMigrating(): boolean {
+        return this.migrationStatus.inProgress;
+    }
+
+    static getMigrationStatus(): MigrationStatus {
+        return { ...this.migrationStatus };
+    }
 
     // ---------- Project helpers ----------
     static getCurrentProjectId(): string {
@@ -58,6 +110,10 @@ export class DatabaseManager {
         if (this.dbConnection) {
             return Promise.resolve(this.dbConnection);
         }
+
+        // First, check if we need to migrate from an older versioned database
+        await this.migrateFromOlderVersionedDB();
+
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.DB_NAME, DB_VERSION);
             request.onerror = () => {
@@ -65,22 +121,294 @@ export class DatabaseManager {
             };
             request.onupgradeneeded = (event) => {
                 const db = (event.target as IDBOpenDBRequest).result;
+                const oldVersion = event.oldVersion;
+                console.log(`[DB] Upgrading from version ${oldVersion} to ${DB_VERSION}`);
+
+                // Create any missing stores
                 Object.values(STORES).forEach((storeName) => {
                     if (!db.objectStoreNames.contains(storeName)) {
+                        console.log(`[DB] Creating store: ${storeName}`);
                         db.createObjectStore(storeName);
                     }
                 });
             };
             request.onsuccess = async () => {
                 this.dbConnection = request.result;
+
+                // Check if all required stores exist (roll-forward fix for v3->v4)
+                // This handles the case where the DB was created before ZONES store was added
+                const missingStores = Object.values(STORES).filter(
+                    storeName => !this.dbConnection.objectStoreNames.contains(storeName)
+                );
+
+                if (missingStores.length > 0) {
+                    console.log(`[DB] Missing stores detected: ${missingStores.join(', ')}. Triggering roll-forward upgrade...`);
+                    const currentVersion = this.dbConnection.version;
+                    this.dbConnection.close();
+                    this.dbConnection = null;
+
+                    // Reopen with a higher version to trigger onupgradeneeded
+                    const newVersion = currentVersion + 1;
+                    console.log(`[DB] Reopening DB at version ${newVersion} to create missing stores`);
+
+                    try {
+                        await new Promise<void>((resolveUpgrade, rejectUpgrade) => {
+                            const upgradeRequest = indexedDB.open(this.DB_NAME, newVersion);
+                            upgradeRequest.onerror = () => rejectUpgrade(upgradeRequest.error);
+                            upgradeRequest.onupgradeneeded = (event) => {
+                                const db = (event.target as IDBOpenDBRequest).result;
+                                console.log(`[DB] Roll-forward upgrade: Creating missing stores from version ${event.oldVersion} to ${newVersion}`);
+
+                                // Create any missing stores
+                                Object.values(STORES).forEach((storeName) => {
+                                    if (!db.objectStoreNames.contains(storeName)) {
+                                        console.log(`[DB] Creating missing store: ${storeName}`);
+                                        db.createObjectStore(storeName);
+                                    }
+                                });
+                            };
+                            upgradeRequest.onsuccess = () => {
+                                this.dbConnection = upgradeRequest.result;
+                                console.log(`[DB] Roll-forward upgrade complete. All stores now exist at version ${newVersion}.`);
+                                resolveUpgrade();
+                            };
+                        });
+                    } catch (upgradeError) {
+                        console.error("[DB] Error during roll-forward upgrade:", upgradeError);
+                        reject(upgradeError);
+                        return;
+                    }
+                }
+
                 try {
                     await this.migrateLegacyIfNeeded(this.dbConnection);
                 } catch (e) {
                     console.warn("[DB] Migration check failed:", e);
                 }
-                resolve(request.result);
+                resolve(this.dbConnection);
             };
         });
+    }
+
+    /**
+     * Migrate data from older versioned databases (v3 -> v4)
+     * This handles the case where DB_NAME includes version number
+     */
+    static async migrateFromOlderVersionedDB(): Promise<void> {
+        // Check if migration is needed by looking for old databases
+        const oldDbNames = [
+            "hytopia-world-editor-db-v3",
+            "hytopia-world-editor-db-v2",
+            "hytopia-world-editor-db-v1",
+        ];
+
+        // Skip if we're already on current version
+        if (this.DB_NAME === oldDbNames[0]) {
+            return; // We're still on v3, no migration needed
+        }
+
+        // Check localStorage to see if we've already migrated
+        const migrationKey = `db-migration-to-${DB_VERSION}-complete`;
+        try {
+            if (localStorage.getItem(migrationKey) === "true") {
+                return; // Already migrated
+            }
+        } catch (_) { }
+
+        for (const oldDbName of oldDbNames) {
+            if (oldDbName === this.DB_NAME) continue; // Skip current DB
+
+            try {
+                // Check if old DB exists by trying to open it
+                const oldDbExists = await new Promise<boolean>((resolve) => {
+                    const checkRequest = indexedDB.open(oldDbName);
+                    checkRequest.onsuccess = () => {
+                        const db = checkRequest.result;
+                        const hasData = db.objectStoreNames.length > 0;
+                        db.close();
+                        resolve(hasData);
+                    };
+                    checkRequest.onerror = () => resolve(false);
+                });
+
+                if (!oldDbExists) continue;
+
+                console.log(`[DB] Found old database: ${oldDbName}, migrating to ${this.DB_NAME}...`);
+
+                // Start migration - notify UI
+                this.updateMigrationStatus({
+                    inProgress: true,
+                    message: `Found previous database, preparing migration...`,
+                    currentStore: "",
+                    currentStoreIndex: 0,
+                    totalStores: 0,
+                    itemsProcessed: 0,
+                    totalItems: 0,
+                });
+
+                // Open old DB to read data
+                const oldDb = await new Promise<IDBDatabase>((resolve, reject) => {
+                    const req = indexedDB.open(oldDbName);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+
+                // Open/create new DB
+                const newDb = await new Promise<IDBDatabase>((resolve, reject) => {
+                    const req = indexedDB.open(this.DB_NAME, DB_VERSION);
+                    req.onupgradeneeded = (event) => {
+                        const db = (event.target as IDBOpenDBRequest).result;
+                        Object.values(STORES).forEach((storeName) => {
+                            if (!db.objectStoreNames.contains(storeName)) {
+                                db.createObjectStore(storeName);
+                            }
+                        });
+                    };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+
+                // Copy data from each store
+                const storeNames = Array.from(oldDb.objectStoreNames);
+
+                // First pass: identify stores that have data and count their items
+                const storesWithData: Array<{ name: string; itemCount: number }> = [];
+                for (const storeName of storeNames) {
+                    if (!newDb.objectStoreNames.contains(storeName)) {
+                        console.warn(`[DB] Store ${storeName} not in new DB, skipping`);
+                        continue;
+                    }
+                    const itemCount = await new Promise<number>((resolve) => {
+                        const tx = oldDb.transaction(storeName, "readonly");
+                        const store = tx.objectStore(storeName);
+                        const countReq = store.count();
+                        countReq.onsuccess = () => resolve(countReq.result);
+                        countReq.onerror = () => resolve(0);
+                    });
+                    if (itemCount > 0) {
+                        storesWithData.push({ name: storeName, itemCount });
+                    }
+                }
+
+                const totalStores = storesWithData.length;
+
+                this.updateMigrationStatus({
+                    totalStores,
+                    message: `Found ${totalStores} data store${totalStores === 1 ? '' : 's'} to migrate...`,
+                });
+
+                for (let storeIndex = 0; storeIndex < storesWithData.length; storeIndex++) {
+                    const { name: storeName, itemCount } = storesWithData[storeIndex];
+
+                    // Update status - preparing to migrate
+                    this.updateMigrationStatus({
+                        currentStore: storeName,
+                        currentStoreIndex: storeIndex + 1,
+                        message: `Preparing to migrate ${storeName}...`,
+                        itemsProcessed: 0,
+                        totalItems: itemCount,
+                    });
+
+                    this.updateMigrationStatus({
+                        totalItems: itemCount,
+                        message: `Reading ${itemCount.toLocaleString()} item${itemCount === 1 ? '' : 's'} from ${storeName}...`,
+                    });
+
+                    // Phase 1: Read ALL data from old store first (no awaits in cursor callback)
+                    const allData = await new Promise<Array<{ key: IDBValidKey, value: any }>>((resolve) => {
+                        const readTx = oldDb.transaction(storeName, "readonly");
+                        const readStore = readTx.objectStore(storeName);
+                        const items: Array<{ key: IDBValidKey, value: any }> = [];
+                        let readCount = 0;
+
+                        const cursorReq = readStore.openCursor();
+                        cursorReq.onsuccess = (e) => {
+                            const cursor = (e.target as any).result as IDBCursorWithValue;
+                            if (cursor) {
+                                items.push({ key: cursor.key, value: cursor.value });
+                                readCount++;
+
+                                // Update read progress periodically
+                                if (readCount % 10000 === 0) {
+                                    this.updateMigrationStatus({
+                                        itemsProcessed: readCount,
+                                        message: `Reading ${storeName}: ${readCount.toLocaleString()} / ${itemCount.toLocaleString()} items`,
+                                        currentStoreIndex: storeIndex + 1,
+                                    });
+                                }
+
+                                cursor.continue();
+                            } else {
+                                resolve(items);
+                            }
+                        };
+                        cursorReq.onerror = () => resolve(items);
+                    });
+
+                    if (allData.length === 0) continue;
+
+                    // Phase 2: Write data in batches to new store
+                    const BATCH_SIZE = 5000;
+                    let processedCount = 0;
+
+                    this.updateMigrationStatus({
+                        itemsProcessed: 0,
+                        totalItems: allData.length,
+                        message: `Writing ${allData.length.toLocaleString()} item${allData.length === 1 ? '' : 's'} to ${storeName}...`,
+                    });
+
+                    for (let i = 0; i < allData.length; i += BATCH_SIZE) {
+                        const batch = allData.slice(i, i + BATCH_SIZE);
+
+                        await new Promise<void>((resolve, reject) => {
+                            const writeTx = newDb.transaction(storeName, "readwrite");
+                            const writeStore = writeTx.objectStore(storeName);
+                            batch.forEach(({ key, value }) => {
+                                writeStore.put(value, key);
+                            });
+                            writeTx.oncomplete = () => resolve();
+                            writeTx.onerror = () => reject(writeTx.error);
+                        });
+
+                        processedCount += batch.length;
+
+                        // Update progress
+                        this.updateMigrationStatus({
+                            itemsProcessed: processedCount,
+                            totalItems: allData.length,
+                            message: `Writing ${storeName}: ${processedCount.toLocaleString()} / ${allData.length.toLocaleString()} items`,
+                            currentStoreIndex: storeIndex + 1,
+                        });
+                    }
+
+                    console.log(`[DB] Migrated ${processedCount} items from ${storeName}`);
+                }
+
+                oldDb.close();
+                newDb.close();
+
+                console.log(`[DB] Migration from ${oldDbName} complete`);
+
+                // Migration complete
+                this.updateMigrationStatus({
+                    inProgress: false,
+                    message: "Migration complete!",
+                    currentStore: "",
+                    itemsProcessed: 0,
+                    totalItems: 0,
+                });
+
+                // Mark migration as complete
+                try {
+                    localStorage.setItem(migrationKey, "true");
+                } catch (_) { }
+
+                // Only migrate from the most recent old DB
+                break;
+            } catch (e) {
+                console.warn(`[DB] Error checking/migrating from ${oldDbName}:`, e);
+            }
+        }
     }
 
     static async getConnection() {
@@ -95,6 +423,17 @@ export class DatabaseManager {
     }
     static async saveData(storeName: string, key: string, data: any): Promise<void> {
         const db = await this.getConnection();
+
+        // Check if store exists
+        if (!db.objectStoreNames.contains(storeName)) {
+            console.error(`[DB] ERROR: Store '${storeName}' does not exist, cannot save data`);
+            console.error(`[DB] Available stores:`, Array.from(db.objectStoreNames));
+            console.error(`[DB] This indicates a roll-forward migration issue. The store should have been created.`);
+            return Promise.resolve();
+        }
+
+        console.log(`[DB] saveData: Store '${storeName}' exists, saving key '${key}'`);
+
         return new Promise((resolve, reject) => {
             if ((storeName === STORES.TERRAIN || storeName === STORES.ENVIRONMENT) && key === "current") {
                 try {
@@ -117,19 +456,19 @@ export class DatabaseManager {
                         } else {
                             // After deletions, write new data in chunks
                             const entries = Array.isArray(data) ? (data as any[]).map((v, i) => [String(i), v]) : Object.entries(data);
-                        const totalEntries = entries.length;
-                        const CHUNK_SIZE = 500000;
-                        try {
-                            for (let i = 0; i < totalEntries; i += CHUNK_SIZE) {
-                                const chunk = entries.slice(i, i + CHUNK_SIZE);
-                                const chunkNum = i / CHUNK_SIZE + 1;
-                                const totalChunks = Math.ceil(totalEntries / CHUNK_SIZE);
+                            const totalEntries = entries.length;
+                            const CHUNK_SIZE = 500000;
+                            try {
+                                for (let i = 0; i < totalEntries; i += CHUNK_SIZE) {
+                                    const chunk = entries.slice(i, i + CHUNK_SIZE);
+                                    const chunkNum = i / CHUNK_SIZE + 1;
+                                    const totalChunks = Math.ceil(totalEntries / CHUNK_SIZE);
                                     console.log(`[DB] Saving chunk ${chunkNum}/${totalChunks} (${chunk.length} items) for ${storeName} -> project ${projectId}`);
-                                await new Promise<void>((resolveChunk, rejectChunk) => {
+                                    await new Promise<void>((resolveChunk, rejectChunk) => {
                                         const chunkTx = db.transaction(storeName, "readwrite");
                                         const chunkStore = chunkTx.objectStore(storeName);
                                         const promises: Promise<void>[] = [];
-                                    if (storeName === STORES.TERRAIN) {
+                                        if (storeName === STORES.TERRAIN) {
                                             chunk.forEach(([coordKey, blockId]) => {
                                                 promises.push(new Promise<void>((res, rej) => {
                                                     const composed = DatabaseManager.composeKey(String(coordKey), projectId);
@@ -202,12 +541,16 @@ export class DatabaseManager {
                 // This can happen when users are running an older database version that was created before
                 // the store was introduced (e.g. `environment-model-settings`).
                 if (!db.objectStoreNames.contains(storeName)) {
-                    console.warn(
-                        `[DB] Requested store '${storeName}' does not exist on this client. Returning undefined.`
+                    console.error(
+                        `[DB] ERROR: Requested store '${storeName}' does not exist on this client. Returning undefined.`
                     );
+                    console.error(`[DB] Available stores:`, Array.from(db.objectStoreNames));
+                    console.error(`[DB] This indicates a roll-forward migration issue. The store should have been created.`);
                     resolve(undefined);
                     return; // Exit early so we don't attempt to start a transaction on a non-existent store.
                 }
+
+                console.log(`[DB] getData: Store '${storeName}' exists, getting key '${key}'`);
                 const tx = db.transaction(storeName, "readonly");
                 const store = tx.objectStore(storeName);
 
@@ -220,7 +563,7 @@ export class DatabaseManager {
                     const logKey = `DatabaseManager.getData(${storeName})`;
                     const prefix = this.prefixForProject(projectId);
                     const range = this.makePrefixRange(prefix);
-                    
+
                     // Fast-path: Try to count first to detect empty queries quickly
                     // Use count() if available, otherwise fall back to cursor
                     const countReq = store.count(range);
@@ -231,7 +574,7 @@ export class DatabaseManager {
                             resolve(storeName === STORES.TERRAIN ? {} : []);
                             return;
                         }
-                        
+
                         // Non-empty: proceed with cursor iteration
                         const data: any = storeName === STORES.TERRAIN ? {} : [];
                         const cursorReq = store.openCursor(range);
@@ -478,6 +821,11 @@ export class DatabaseManager {
         const deletions = [
             this.deleteAllByPrefix(STORES.TERRAIN, projectId),
             this.deleteAllByPrefix(STORES.ENVIRONMENT, projectId),
+            // Delete zones for this project
+            this.deleteData(STORES.ZONES, `project:${projectId}:zones`).catch(() => { }),
+            // Delete all project settings for this project
+            this.deleteAllProjectSettings(projectId).catch(() => { }),
+            // Delete the project metadata
             new Promise<void>((resolve) => {
                 const tx = db.transaction(STORES.PROJECTS, "readwrite");
                 const store = tx.objectStore(STORES.PROJECTS);
@@ -487,6 +835,37 @@ export class DatabaseManager {
             }),
         ];
         await Promise.all(deletions);
+    }
+
+    /**
+     * Delete all settings for a project
+     */
+    static async deleteAllProjectSettings(projectId: string): Promise<void> {
+        const db = await this.getConnection();
+        if (!db.objectStoreNames.contains(STORES.PROJECT_SETTINGS)) {
+            return;
+        }
+
+        const prefix = `project:${projectId}:`;
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORES.PROJECT_SETTINGS, "readwrite");
+            const store = tx.objectStore(STORES.PROJECT_SETTINGS);
+            const req = store.openKeyCursor();
+
+            req.onsuccess = (e) => {
+                const cursor = (e.target as any).result as IDBCursor;
+                if (cursor) {
+                    const key = String(cursor.key);
+                    if (key.startsWith(prefix)) {
+                        store.delete(cursor.key as IDBValidKey);
+                    }
+                    cursor.continue();
+                } else {
+                    resolve();
+                }
+            };
+            req.onerror = () => resolve();
+        });
     }
     static async deleteFolder(folderId: string): Promise<void> {
         try {
@@ -702,6 +1081,83 @@ export class DatabaseManager {
             return v.toString(16);
         });
     }
+    // ---------- Project Settings ----------
+    /**
+     * Save a project-specific setting (e.g., liquid blocks, zone visibility, etc.)
+     */
+    static async saveProjectSetting(settingKey: string, value: any, projectId?: string): Promise<void> {
+        const pid = projectId || this.getCurrentProjectId();
+        if (!pid) {
+            console.warn("[DB] Cannot save project setting without a project ID");
+            return;
+        }
+        const key = `project:${pid}:${settingKey}`;
+        await this.saveData(STORES.PROJECT_SETTINGS, key, value);
+    }
+
+    /**
+     * Load a project-specific setting
+     */
+    static async getProjectSetting(settingKey: string, projectId?: string): Promise<any> {
+        const pid = projectId || this.getCurrentProjectId();
+        if (!pid) {
+            return undefined;
+        }
+        const key = `project:${pid}:${settingKey}`;
+        return this.getData(STORES.PROJECT_SETTINGS, key);
+    }
+
+    /**
+     * Delete a project-specific setting
+     */
+    static async deleteProjectSetting(settingKey: string, projectId?: string): Promise<void> {
+        const pid = projectId || this.getCurrentProjectId();
+        if (!pid) {
+            return;
+        }
+        const key = `project:${pid}:${settingKey}`;
+        await this.deleteData(STORES.PROJECT_SETTINGS, key);
+    }
+
+    /**
+     * Get all project settings for the current project
+     */
+    static async getAllProjectSettings(projectId?: string): Promise<Record<string, any>> {
+        const pid = projectId || this.getCurrentProjectId();
+        if (!pid) {
+            return {};
+        }
+
+        const db = await this.getConnection();
+        if (!db.objectStoreNames.contains(STORES.PROJECT_SETTINGS)) {
+            return {};
+        }
+
+        const prefix = `project:${pid}:`;
+        const settings: Record<string, any> = {};
+
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORES.PROJECT_SETTINGS, "readonly");
+            const store = tx.objectStore(STORES.PROJECT_SETTINGS);
+            const req = store.openCursor();
+
+            req.onsuccess = (e) => {
+                const cursor = (e.target as any).result as IDBCursorWithValue;
+                if (cursor) {
+                    const key = String(cursor.key);
+                    if (key.startsWith(prefix)) {
+                        const settingKey = key.substring(prefix.length);
+                        settings[settingKey] = cursor.value;
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(settings);
+                }
+            };
+            req.onerror = () => resolve({});
+        });
+    }
+
     static async clearDatabase() {
         const confirmed = window.confirm(
             "Warning: This will clear all data including the terrain, environment, and custom blocks. \n\nAre you sure you want to continue?"

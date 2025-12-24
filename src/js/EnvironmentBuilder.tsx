@@ -656,6 +656,7 @@ const EnvironmentBuilder = (
                         alphaTest: 0.5,
                         depthWrite: true,
                         depthTest: true,
+                        side: material.side, // Preserve double-sided rendering from original material (e.g., volleyball net)
                     });
 
                     // Copy important properties from original material
@@ -766,6 +767,7 @@ const EnvironmentBuilder = (
                                 transparent: true,
                                 depthWrite: false,
                                 depthTest: true,
+                                side: originalMaterial.side, // Preserve double-sided rendering
                             });
                             return previewMaterial;
                         });
@@ -777,6 +779,7 @@ const EnvironmentBuilder = (
                             transparent: true,
                             depthWrite: false,
                             depthTest: true,
+                            side: child.material.side, // Preserve double-sided rendering
                         });
                         child.material = previewMaterial;
                     }

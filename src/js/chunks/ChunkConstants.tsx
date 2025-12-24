@@ -55,3 +55,25 @@ export const FACE_SHADE_SIDE = 0.8;
 
 // Bottom (-Y): darkest - in shadow
 export const FACE_SHADE_BOTTOM = 0.5;
+
+// ============================================================================
+// Sky light constants (SDK-compatible baked lighting)
+// ============================================================================
+
+// Sky light configuration for outdoor/indoor shading
+// Blocks with clear sky access get full brightness, covered areas get darker
+
+// Maximum blocks to check upward for sky access
+export const SKY_LIGHT_MAX_DISTANCE = 16;
+
+// Minimum brightness in fully covered areas (0-1)
+// Areas directly under a block get this brightness
+export const SKY_LIGHT_MIN_BRIGHTNESS = 0.3;
+
+// Precomputed brightness lookup table by ceiling distance
+// Index 0 is unused, indices 1-16 contain brightness values
+// Linear interpolation from MIN_BRIGHTNESS at 1 block to 1.0 at 16+ blocks
+export const SKY_LIGHT_BRIGHTNESS_LUT: number[] = Array.from(
+    { length: SKY_LIGHT_MAX_DISTANCE + 1 },
+    (_, dy) => dy === 0 ? 0 : SKY_LIGHT_MIN_BRIGHTNESS + (1 - SKY_LIGHT_MIN_BRIGHTNESS) * (dy - 1) / (SKY_LIGHT_MAX_DISTANCE - 1)
+);
