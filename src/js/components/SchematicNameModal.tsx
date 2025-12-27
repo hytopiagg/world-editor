@@ -49,7 +49,7 @@ class SchematicNameModalManager {
             resolve: null,
         };
         SchematicNameModalManager.notifyListeners();
-        
+
         if (resolve) {
             resolve(value);
         }
@@ -136,33 +136,31 @@ const SchematicNameModal: React.FC = () => {
     if (!modalState.isOpen || typeof document === "undefined") return null;
 
     const node = (
-        <div 
+        <div
             className="fixed inset-0 z-[1500]"
             onKeyDown={handleKeyDown}
         >
             {/* Backdrop */}
             <div
-                className={`absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-200 ${
-                    entered ? "opacity-100" : "opacity-0"
-                }`}
+                className={`absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity duration-200 ${entered ? "opacity-100" : "opacity-0"
+                    }`}
                 onClick={handleCancel}
             />
-            
+
             {/* Modal */}
             <div className="flex absolute inset-0 justify-center items-center p-4">
                 <div
-                    className={`relative w-full max-w-[480px] rounded-2xl bg-[#0e131a] text-[#cfd6e4] shadow-2xl border border-[#1a1f29] transition-all duration-200 ease-out ${
-                        entered
+                    className={`relative w-full max-w-[480px] rounded-2xl bg-[#0e131a] text-[#cfd6e4] shadow-2xl border border-[#1a1f29] transition-all duration-200 ease-out ${entered
                             ? "opacity-100 translate-y-0"
                             : "opacity-0 translate-y-4"
-                    }`}
+                        }`}
                 >
                     {/* Header */}
                     <div className="px-6 py-4 text-left text-[20px] font-bold leading-normal">
                         Save as Schematic
                     </div>
                     <hr className="w-full border-white/10" />
-                    
+
                     {/* Content */}
                     <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
                         <div className="text-white/70 text-sm">
@@ -192,7 +190,7 @@ const SchematicNameModal: React.FC = () => {
                             </button>
                         </div>
                     </form>
-                    
+
                     {/* Close button */}
                     <button
                         onClick={handleCancel}
