@@ -3,6 +3,7 @@ import BaseTool from "./BaseTool";
 import { ENVIRONMENT_OBJECT_Y_OFFSET } from "../Constants";
 import QuickTipsManager from "../components/QuickTipsManager";
 import ToastManager from "../components/ToastManager";
+import { SchematicNameModalManager } from "../components/SchematicNameModal";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { SchematicData } from "../utils/SchematicPreviewRenderer";
 import { generateUniqueId } from "../components/AIAssistantPanel";
@@ -443,14 +444,17 @@ class SelectionTool extends BaseTool {
         // Handle copy shortcut when entity is selected
         if (this.selectedEntity) {
             // Check for copy (Cmd/Ctrl+C)
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+            if (
+                (event.ctrlKey || event.metaKey) &&
+                event.key.toLowerCase() === "c"
+            ) {
                 // Prevent default browser copy behavior
                 const target = event.target as HTMLElement;
                 const isInput =
                     target.tagName === "INPUT" ||
                     target.tagName === "TEXTAREA" ||
                     target.isContentEditable;
-                
+
                 // Only handle copy if not in an input field
                 if (!isInput) {
                     event.preventDefault();
@@ -459,17 +463,20 @@ class SelectionTool extends BaseTool {
                 }
             }
         }
-        
+
         // Handle paste shortcut (works even when no entity is selected)
         // Check for paste (Cmd/Ctrl+V)
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        if (
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === "v"
+        ) {
             // Prevent default browser paste behavior
             const target = event.target as HTMLElement;
             const isInput =
                 target.tagName === "INPUT" ||
                 target.tagName === "TEXTAREA" ||
                 target.isContentEditable;
-            
+
             // Only handle paste if not in an input field
             if (!isInput) {
                 event.preventDefault();
@@ -477,7 +484,7 @@ class SelectionTool extends BaseTool {
                 return;
             }
         }
-        
+
         // Handle entity-specific keyboard shortcuts when entity is selected
         if (this.selectedEntity) {
             if (event.key === "Escape") {
@@ -1028,8 +1035,14 @@ class SelectionTool extends BaseTool {
             );
         }
         if (this.handleUndoRedoComplete) {
-            window.removeEventListener("undo-complete", this.handleUndoRedoComplete);
-            window.removeEventListener("redo-complete", this.handleUndoRedoComplete);
+            window.removeEventListener(
+                "undo-complete",
+                this.handleUndoRedoComplete
+            );
+            window.removeEventListener(
+                "redo-complete",
+                this.handleUndoRedoComplete
+            );
         }
 
         this.selectionStartPosition = null;
@@ -1345,8 +1358,7 @@ class SelectionTool extends BaseTool {
             return;
         }
 
-        const schematicName = window.prompt(
-            "Enter a name for the schematic:",
+        const schematicName = await SchematicNameModalManager.promptForName(
             "My Schematic"
         );
         if (!schematicName) {
@@ -1839,7 +1851,8 @@ class SelectionTool extends BaseTool {
         }
 
         // Check if the entity still exists in the environment
-        const allObjects = this.environmentBuilderRef.current.getAllEnvironmentObjects();
+        const allObjects =
+            this.environmentBuilderRef.current.getAllEnvironmentObjects();
         const exists = allObjects.some(
             (obj) =>
                 obj.modelUrl === this.selectedEntity.modelUrl &&
@@ -2016,7 +2029,9 @@ class SelectionTool extends BaseTool {
 
         // Show feedback to user
         ToastManager.showToast("Copied", 2000);
-        QuickTipsManager.setToolTip(`Copied "${this.selectedEntity.name}". Press Cmd/Ctrl+V to paste.`);
+        QuickTipsManager.setToolTip(
+            `Copied "${this.selectedEntity.name}". Press Cmd/Ctrl+V to paste.`
+        );
         setTimeout(() => {
             if (this.selectedEntity) {
                 QuickTipsManager.setToolTip(this.tooltip);
@@ -2026,7 +2041,9 @@ class SelectionTool extends BaseTool {
 
     pasteEntity() {
         if (!this.copiedEntity || !this.environmentBuilderRef?.current) {
-            QuickTipsManager.setToolTip("No entity copied. Select an entity and press Cmd/Ctrl+C to copy.");
+            QuickTipsManager.setToolTip(
+                "No entity copied. Select an entity and press Cmd/Ctrl+C to copy."
+            );
             setTimeout(() => {
                 if (this.selectedEntity) {
                     QuickTipsManager.setToolTip(this.tooltip);
@@ -2037,8 +2054,8 @@ class SelectionTool extends BaseTool {
 
         // Calculate offset position (2 blocks offset)
         // Use currently selected entity position if available, otherwise use copied entity position
-        const basePosition = this.selectedEntity 
-            ? this.selectedEntity.currentPosition 
+        const basePosition = this.selectedEntity
+            ? this.selectedEntity.currentPosition
             : this.copiedEntity.position;
         const offset = new THREE.Vector3(2, 0, 2);
         const newPosition = basePosition.clone().add(offset);
@@ -2050,7 +2067,9 @@ class SelectionTool extends BaseTool {
         );
 
         if (!modelType) {
-            QuickTipsManager.setToolTip("Error: Could not find model type for pasted entity.");
+            QuickTipsManager.setToolTip(
+                "Error: Could not find model type for pasted entity."
+            );
             setTimeout(() => {
                 if (this.selectedEntity) {
                     QuickTipsManager.setToolTip(this.tooltip);
@@ -2066,11 +2085,12 @@ class SelectionTool extends BaseTool {
         tempMesh.scale.copy(this.copiedEntity.scale);
 
         // Place the new entity instance (null instanceId means generate new one)
-        const placedInstance = this.environmentBuilderRef.current.placeEnvironmentModelWithoutSaving(
-            modelType,
-            tempMesh,
-            null // Generate new instance ID
-        );
+        const placedInstance =
+            this.environmentBuilderRef.current.placeEnvironmentModelWithoutSaving(
+                modelType,
+                tempMesh,
+                null // Generate new instance ID
+            );
 
         if (!placedInstance) {
             QuickTipsManager.setToolTip("Error: Failed to paste entity.");
@@ -2127,7 +2147,9 @@ class SelectionTool extends BaseTool {
 
         // Show feedback
         ToastManager.showToast("Paste Successful", 2000);
-        QuickTipsManager.setToolTip(`Pasted "${this.copiedEntity.name}". Entity selected.`);
+        QuickTipsManager.setToolTip(
+            `Pasted "${this.copiedEntity.name}". Entity selected.`
+        );
         setTimeout(() => {
             if (this.selectedEntity) {
                 QuickTipsManager.setToolTip(this.tooltip);

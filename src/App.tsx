@@ -17,6 +17,7 @@ import GlobalLoadingScreen from "./js/components/GlobalLoadingScreen";
 import QuickTips from './js/components/QuickTips';
 import ToastManager from './js/components/ToastManager';
 import TextureGenerationModal from "./js/components/TextureGenerationModal";
+import SchematicNameModal from "./js/components/SchematicNameModal";
 import SelectionDimensionsTip from "./js/components/SelectionDimensionsTip";
 import ToolBar from "./js/components/ToolBar";
 import UnderConstruction from "./js/components/UnderConstruction";
@@ -832,6 +833,9 @@ function App() {
                         onTextureReady={handleTextureReady}
                     />
                 )}
+
+                {/* Global modal for schematic naming (triggered from SelectionTool) */}
+                <SchematicNameModal />
 
                 {projectId && <div className="vignette-gradient"></div>}
 

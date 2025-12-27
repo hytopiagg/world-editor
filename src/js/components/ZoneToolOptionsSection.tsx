@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Zone, ZONE_LABEL_PRESETS } from "../types/DatabaseTypes";
 import { zoneManager, getZoneLabelColor } from "../managers/ZoneManager";
 import QuickTipsManager from "./QuickTipsManager";
+import { FaUpload, FaDownload, FaTrash, FaEllipsisV } from "react-icons/fa";
 
 interface ZoneToolOptionsSectionProps {
     zoneTool: any;
@@ -28,8 +29,17 @@ export default function ZoneToolOptionsSection({ zoneTool, isCompactMode }: Zone
     const [editingName, setEditingName] = useState(false);
     const [editNameValue, setEditNameValue] = useState("");
     
+    // Dropdown menu state
+    const [showZoneMenu, setShowZoneMenu] = useState(false);
+    
     // Ref for smooth scrolling
     const sectionRef = useRef<HTMLDivElement>(null);
+    
+    // Ref for file input
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Ref for menu (for click outside detection)
+    const menuRef = useRef<HTMLDivElement>(null);
     
     // Smooth scroll to section when zone tool is activated
     useEffect(() => {
@@ -163,10 +173,129 @@ export default function ZoneToolOptionsSection({ zoneTool, isCompactMode }: Zone
     
     const handleClearAllZones = useCallback(() => {
         if (window.confirm("Are you sure you want to delete all zones? This cannot be undone.")) {
+            // Deselect any selected zone first to remove selection highlight
+            if (zoneTool) {
+                zoneTool.deselectZone();
+            }
+            setSelectedZone(null);
             zoneManager.clearAllZones();
             setZones([]);
         }
+    }, [zoneTool]);
+    
+    const handleImportClick = useCallback(() => {
+        fileInputRef.current?.click();
     }, []);
+    
+    const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const content = e.target?.result as string;
+                let zonesToImport: Zone[] = [];
+                
+                // Check if it's a TypeScript file (exported from this tool or main export)
+                if (file.name.endsWith('.ts')) {
+                    // Extract the zones array from TypeScript content
+                    // The format is: export const zones: Zone[] = [...];
+                    const zonesMatch = content.match(/export\s+const\s+zones\s*:\s*Zone\[\]\s*=\s*\[([\s\S]*?)\];/);
+                    if (zonesMatch) {
+                        // Parse the array content - it's valid JSON-like syntax
+                        const arrayContent = `[${zonesMatch[1]}]`;
+                        // Clean up TypeScript-specific syntax for JSON parsing
+                        const jsonContent = arrayContent
+                            .replace(/(\w+):/g, '"$1":')  // Quote unquoted keys
+                            .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+                            .replace(/'/g, '"'); // Replace single quotes with double quotes
+                        zonesToImport = JSON.parse(jsonContent);
+                    } else {
+                        throw new Error("Could not find zones array in TypeScript file");
+                    }
+                } else {
+                    // Handle JSON format
+                    const parsed = JSON.parse(content);
+                    
+                    // Handle both array format and object with zones property
+                    if (Array.isArray(parsed)) {
+                        zonesToImport = parsed;
+                    } else if (parsed.zones && Array.isArray(parsed.zones)) {
+                        zonesToImport = parsed.zones;
+                    } else {
+                        throw new Error("Invalid format: Expected an array of zones or an object with a 'zones' array");
+                    }
+                }
+                
+                if (zonesToImport.length === 0) {
+                    QuickTipsManager.setToolTip("No zones found in file");
+                    return;
+                }
+                
+                // Append zones to existing
+                const addedCount = zoneManager.appendZones(zonesToImport);
+                setZones(zoneManager.getAllZones());
+                QuickTipsManager.setToolTip(`Imported ${addedCount} zone${addedCount !== 1 ? 's' : ''}`);
+                
+            } catch (error) {
+                console.error("[ZoneToolOptionsSection] Failed to import zones:", error);
+                QuickTipsManager.setToolTip("Failed to import: Invalid file format");
+            }
+        };
+        
+        reader.onerror = () => {
+            QuickTipsManager.setToolTip("Failed to read file");
+        };
+        
+        reader.readAsText(file);
+        
+        // Reset input so same file can be imported again
+        event.target.value = "";
+    }, []);
+    
+    const handleExport = useCallback(() => {
+        const exportedZones = zoneManager.exportZones();
+        
+        if (exportedZones.length === 0) {
+            QuickTipsManager.setToolTip("No zones to export");
+            setShowZoneMenu(false);
+            return;
+        }
+        
+        // Export as TypeScript file to match the main export in ImportExport.tsx
+        const tsContent = zoneManager.generateZonesTypeScript();
+        const blob = new Blob([tsContent], { type: "text/typescript" });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `zones-${new Date().toISOString().split("T")[0]}.ts`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        QuickTipsManager.setToolTip(`Exported ${exportedZones.length} zone${exportedZones.length !== 1 ? 's' : ''}`);
+        setShowZoneMenu(false);
+    }, []);
+    
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setShowZoneMenu(false);
+            }
+        };
+        
+        if (showZoneMenu) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [showZoneMenu]);
     
     // Handle changing zone type for selected zone
     const handleChangeSelectedZoneType = useCallback((newType: "box" | "point") => {
@@ -321,20 +450,70 @@ export default function ZoneToolOptionsSection({ zoneTool, isCompactMode }: Zone
                 </button>
             </div>
             
+            {/* Hidden file input for zone import */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,.ts"
+                onChange={handleFileUpload}
+                className="hidden"
+            />
+            
             {/* Zone List - more compact */}
             <div className="flex flex-col gap-1.5 fade-down opacity-0 duration-150" style={{ animationDelay: "0.2s" }}>
                 <div className="flex items-center justify-between">
                     <div className="text-[10px] text-[#F1F1F1]/50">
                         Zones ({zones.length})
                     </div>
-                    {zones.length > 0 && (
+                    
+                    {/* Three-dot menu */}
+                    <div className="inline-block relative" ref={menuRef}>
                         <button
-                            onClick={handleClearAllZones}
-                            className="text-[9px] text-red-400 hover:text-red-300 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowZoneMenu(!showZoneMenu);
+                            }}
+                            className="p-1 text-white/60 hover:text-white transition-colors"
+                            title="Zone options"
                         >
-                            Clear All
+                            <FaEllipsisV className="w-3 h-3" />
                         </button>
-                    )}
+                        
+                        {showZoneMenu && (
+                            <div 
+                                className="absolute right-0 top-full mt-1 z-50 min-w-[140px] bg-[#1a1a1a] border border-white/20 rounded-md shadow-lg overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <button
+                                    onClick={() => {
+                                        handleImportClick();
+                                        setShowZoneMenu(false);
+                                    }}
+                                    className="flex gap-2 items-center px-3 py-2 w-full text-xs text-left text-white transition-colors hover:bg-white/10"
+                                >
+                                    <FaUpload className="w-3 h-3" />
+                                    Import
+                                </button>
+                                <button
+                                    onClick={handleExport}
+                                    className="flex gap-2 items-center px-3 py-2 w-full text-xs text-left text-white transition-colors hover:bg-white/10"
+                                >
+                                    <FaDownload className="w-3 h-3" />
+                                    Export
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        handleClearAllZones();
+                                        setShowZoneMenu(false);
+                                    }}
+                                    className="flex gap-2 items-center px-3 py-2 w-full text-xs text-left text-red-400 transition-colors hover:bg-white/10"
+                                >
+                                    <FaTrash className="w-3 h-3" />
+                                    Clear All
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 
                 {zones.length === 0 ? (

@@ -7,6 +7,7 @@
 import * as THREE from "three";
 import { DatabaseManager, STORES } from "./DatabaseManager";
 import { Zone, ZonePosition, ZoneDimensions, ZONE_LABEL_PRESETS } from "../types/DatabaseTypes";
+import { getViewDistance } from "../constants/terrain";
 
 // Generate a unique ID for zones
 const generateZoneId = (): string => {
@@ -382,6 +383,49 @@ class ZoneManager {
     toggleVisibility(): boolean {
         this.setVisible(!this.visible);
         return this.visible;
+    }
+    
+    /**
+     * Update zone visibility based on camera distance (view distance culling)
+     * Call this periodically from the render loop
+     */
+    updateDistanceCulling(cameraPos: THREE.Vector3) {
+        if (!this.visible || !cameraPos) return;
+        
+        const viewDistance = getViewDistance();
+        const viewDistanceSquared = viewDistance * viewDistance;
+        
+        this.zones.forEach((zone, zoneId) => {
+            const visual = this.zoneVisuals.get(zoneId);
+            if (!visual) return;
+            
+            // Calculate zone center position
+            let centerX: number, centerY: number, centerZ: number;
+            
+            if (zone.type === "point") {
+                centerX = zone.position.x;
+                centerY = zone.position.y;
+                centerZ = zone.position.z;
+            } else if (zone.dimensions) {
+                // Box zone: use center of the box
+                centerX = zone.position.x + zone.dimensions.width / 2;
+                centerY = zone.position.y + zone.dimensions.height / 2;
+                centerZ = zone.position.z + zone.dimensions.depth / 2;
+            } else {
+                centerX = zone.position.x;
+                centerY = zone.position.y;
+                centerZ = zone.position.z;
+            }
+            
+            // Calculate squared distance (faster than using sqrt)
+            const dx = cameraPos.x - centerX;
+            const dy = cameraPos.y - centerY;
+            const dz = cameraPos.z - centerZ;
+            const distanceSquared = dx * dx + dy * dy + dz * dz;
+            
+            // Show/hide based on distance
+            visual.visible = distanceSquared <= viewDistanceSquared;
+        });
     }
     
     // ========== Visual rendering methods ==========
@@ -860,6 +904,48 @@ export const isPositionInZone = (x: number, y: number, z: number, zone: Zone): b
         this.saveToDatabase();
         this.notifyChange();
         console.log(`[ZoneManager] Imported ${zones.length} zones`);
+    }
+    
+    /**
+     * Append zones to existing zones (used for file upload import)
+     * Generates new IDs to avoid conflicts with existing zones
+     */
+    appendZones(zones: Zone[]) {
+        let addedCount = 0;
+        
+        zones.forEach(zone => {
+            // Generate new ID to avoid conflicts
+            const validZone: Zone = {
+                id: generateZoneId(),
+                name: zone.name,
+                label: zone.label || "custom",
+                type: zone.type || "box",
+                position: zone.position || { x: 0, y: 0, z: 0 },
+                dimensions: zone.dimensions,
+                color: zone.color || getZoneLabelColor(zone.label || "custom"),
+                metadata: zone.metadata,
+            };
+            
+            // Calculate from/to for box zones
+            if (validZone.type === "box" && validZone.dimensions) {
+                validZone.from = { ...validZone.position };
+                validZone.to = {
+                    x: validZone.position.x + validZone.dimensions.width - 1,
+                    y: validZone.position.y + validZone.dimensions.height - 1,
+                    z: validZone.position.z + validZone.dimensions.depth - 1,
+                };
+            }
+            
+            this.zones.set(validZone.id, validZone);
+            this.createZoneVisual(validZone);
+            addedCount++;
+        });
+        
+        this.saveToDatabase();
+        this.notifyChange();
+        console.log(`[ZoneManager] Appended ${addedCount} zones (total: ${this.zones.size})`);
+        
+        return addedCount;
     }
     
     /**

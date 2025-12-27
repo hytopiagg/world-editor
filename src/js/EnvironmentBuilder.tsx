@@ -13,6 +13,7 @@ import { DatabaseManager, STORES } from "./managers/DatabaseManager";
 import { ENVIRONMENT_OBJECT_Y_OFFSET, MAX_ENVIRONMENT_OBJECTS } from "./Constants";
 import { CustomModel } from "./types/DatabaseTypes";
 import { getViewDistance } from "./constants/terrain";
+import { zoneManager } from "./managers/ZoneManager";
 import { getVector3, releaseVector3, getMatrix4, releaseMatrix4, getEuler, releaseEuler, getQuaternion, releaseQuaternion, ObjectPoolManager } from "./utils/ObjectPool";
 export const environmentModels = (() => {
     try {
@@ -1821,6 +1822,8 @@ const EnvironmentBuilder = (
     useEffect(() => {
         if (cameraPosition) {
             throttledUpdateDistanceCulling(cameraPosition);
+            // Also update zone visibility based on camera distance
+            zoneManager.updateDistanceCulling(cameraPosition);
         }
     }, [cameraPosition]);
 
