@@ -38,6 +38,7 @@ import { updateChunkSystemCamera, processChunkRenderQueue, getChunkSystem } from
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { isElectronRuntime } from './js/utils/env';
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
+import { convertComponentToGLTF } from "./js/utils/ComponentToEntityConverter";
 
 function App() {
     // Project state
@@ -465,33 +466,33 @@ function App() {
             lastBaseGridYRef.current = null; // Reset when player mode is disabled
             return;
         }
-        
+
         const updateGround = async () => {
             const physics = physicsRef.current;
             if (!physics) return;
-            
+
             const baseGridY = terrainBuilderRef.current?.getGridY?.() ?? 0;
-            
+
             // Only update if baseGridY actually changed
             if (lastBaseGridYRef.current !== null && lastBaseGridYRef.current === baseGridY) {
                 return;
             }
-            
+
             lastBaseGridYRef.current = baseGridY;
             const groundY = baseGridY - 0.5; // Grid is at baseGridY - 0.5, matching raycast behavior
-            
+
             // Ensure physics is ready before updating ground
             await physics.ready();
             // Update ground position synchronously to avoid race conditions
             physics.updateGroundY(groundY);
         };
-        
+
         // Update immediately
         updateGround();
-        
+
         // Also check periodically in case baseGridY changes externally (e.g., via SettingsMenu)
         const interval = setInterval(updateGround, 500);
-        
+
         return () => {
             clearInterval(interval);
         };
@@ -761,6 +762,101 @@ function App() {
         }
     };
 
+    const handleConvertComponentToEntity = async (component: any) => {
+        if (!component?.schematic) {
+            alert("No component selected or component has no schematic.");
+            return;
+        }
+
+        const componentName = component.name || component.prompt || "Component";
+        const sanitizedName = componentName
+            .replace(/[^a-zA-Z0-9_\-\s]/g, "")
+            .replace(/\s+/g, "_")
+            .substring(0, 64) || "converted_component";
+
+        try {
+            // Convert the component blocks to GLTF
+            const schematic = component.schematic.blocks ? component.schematic : { blocks: component.schematic };
+            const result = await convertComponentToGLTF(schematic, sanitizedName);
+
+            if (!result.success || !result.data) {
+                throw new Error(result.error || "Failed to convert component to GLTF");
+            }
+
+            // Get existing custom models
+            const existingModels = (await DatabaseManager.getData(STORES.CUSTOM_MODELS, "models")) || [];
+
+            // Check for duplicate names
+            const existingNames = new Set([
+                ...(existingModels as any[]).map((m: any) => m.name.toLowerCase()),
+                ...environmentModels.map((m) => m.name.toLowerCase())
+            ]);
+
+            let finalName = sanitizedName;
+            let counter = 1;
+            while (existingNames.has(finalName.toLowerCase())) {
+                finalName = `${sanitizedName}_${counter}`;
+                counter++;
+            }
+
+            // Save to custom models database
+            const modelDataForDB = {
+                name: finalName,
+                data: result.data,
+                timestamp: Date.now(),
+            };
+
+            const updatedModelsForDB = [...(existingModels as any[]), modelDataForDB];
+            await DatabaseManager.saveData(STORES.CUSTOM_MODELS, "models", updatedModelsForDB);
+
+            // Create a blob URL for immediate use
+            const blob = new Blob([result.data], { type: "model/gltf+json" });
+            const fileUrl = URL.createObjectURL(blob);
+
+            // Register in environmentModels for immediate availability
+            const newEnvironmentModel = {
+                id: Math.max(
+                    4999,
+                    ...environmentModels
+                        .filter((model) => model.isCustom)
+                        .map((model) => model.id)
+                ) + 1,
+                name: finalName,
+                modelUrl: fileUrl,
+                thumbnailUrl: null,
+                isEnvironment: true,
+                isCustom: true,
+                category: "Custom",
+                animations: ["idle"],
+                addCollider: true,
+            };
+
+            environmentModels.push(newEnvironmentModel);
+
+            // Load the model into the environment builder
+            if (environmentBuilderRef.current?.loadModel) {
+                try {
+                    await environmentBuilderRef.current.loadModel(fileUrl);
+                } catch (loadError) {
+                    console.error(`Error loading converted model into environment:`, loadError);
+                }
+            }
+
+            // Refresh the sidebar to show the new model
+            refreshBlockTools();
+
+            // Show success message
+            alert(`Component "${componentName}" has been converted to entity "${finalName}"!\n\nYou can now find it in the Models tab under "Custom" category.`);
+
+            // Optionally switch to models tab
+            setActiveTab("models");
+
+        } catch (error) {
+            console.error("Failed to convert component to entity:", error);
+            alert(`Failed to convert component: ${(error as Error).message}`);
+        }
+    };
+
     return (
         <Provider theme={defaultTheme}>
             <div className="App">
@@ -823,6 +919,7 @@ function App() {
                         getAvailableBlocks={handleGetAvailableBlocks}
                         getAvailableEntities={handleGetAvailableEntities}
                         loadAISchematic={handleLoadAISchematic}
+                        onConvertComponentToEntity={handleConvertComponentToEntity}
                     />
                 )}
 

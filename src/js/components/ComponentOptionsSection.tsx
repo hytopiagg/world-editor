@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaSave, FaCog, FaTrash, FaCopy, FaDownload, FaExchangeAlt } from "react-icons/fa";
+import { FaSave, FaCog, FaTrash, FaCopy, FaDownload, FaExchangeAlt, FaCube } from "react-icons/fa";
 import { saveAs } from "file-saver";
 import { getBlockById } from "../managers/BlockTypesManager";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
@@ -10,15 +10,17 @@ interface ComponentOptionsProps {
     isCompactMode: boolean;
     onDeleteComponent?: (comp: any) => void;
     onRenameComponent?: (comp: any, newName: string) => void;
+    onConvertToEntity?: (comp: any) => Promise<void>;
 }
 
-export default function ComponentOptionsSection({ selectedComponent, isCompactMode, onDeleteComponent, onRenameComponent }: ComponentOptionsProps) {
+export default function ComponentOptionsSection({ selectedComponent, isCompactMode, onDeleteComponent, onRenameComponent, onConvertToEntity }: ComponentOptionsProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [editableName, setEditableName] = useState<string>(selectedComponent?.name || "");
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [repeatPlacement, setRepeatPlacement] = useState<boolean>(false);
     const [isRemapping, setIsRemapping] = useState(false);
+    const [isConverting, setIsConverting] = useState(false);
 
     useEffect(() => {
         setEditableName(selectedComponent?.name || "");
@@ -179,6 +181,36 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
         }
     };
 
+    const handleConvertToEntity = async () => {
+        if (!selectedComponent?.schematic || !onConvertToEntity) return;
+        
+        const blocks = selectedComponent.schematic.blocks || selectedComponent.schematic;
+        const blockCount = Object.keys(blocks).length;
+        
+        if (blockCount === 0) {
+            alert("This component has no blocks to convert.");
+            return;
+        }
+        
+        const confirmed = window.confirm(
+            `Convert "${selectedComponent.name || 'Component'}" to an entity?\n\n` +
+            `This will create a new 3D model from ${blockCount} blocks that you can place as a single entity in your world.\n\n` +
+            `The original component will remain unchanged.`
+        );
+        
+        if (!confirmed) return;
+        
+        setIsConverting(true);
+        try {
+            await onConvertToEntity(selectedComponent);
+        } catch (err) {
+            console.error("Failed to convert component to entity:", err);
+            alert("Failed to convert component to entity. See console for details.");
+        } finally {
+            setIsConverting(false);
+        }
+    };
+
     const toggleRepeatPlacement = async (checked: boolean) => {
         setRepeatPlacement(checked);
         localStorage.setItem("schematicRepeatPlacement", checked ? "true" : "false");
@@ -304,6 +336,14 @@ export default function ComponentOptionsSection({ selectedComponent, isCompactMo
                 </div>
 
                 <div className="flex gap-2 justify-end items-center mt-2">
+                    <button 
+                        onClick={handleConvertToEntity} 
+                        disabled={isConverting || !onConvertToEntity} 
+                        className="p-1.5 text-xs border border-white/10 hover:bg-white/20 rounded-md disabled:opacity-50" 
+                        title="Convert to Entity"
+                    >
+                        {isConverting ? <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" /> : <FaCube />}
+                    </button>
                     <button onClick={handleRemap} disabled={isRemapping} className="p-1.5 text-xs border border-white/10 hover:bg-white/20 rounded-md disabled:opacity-50" title="Remap Component">
                         <FaExchangeAlt />
                     </button>

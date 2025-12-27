@@ -39,6 +39,7 @@ interface BlockToolOptionsProps {
     getAvailableBlocks: () => Promise<any> | any;
     getAvailableEntities?: () => Promise<any[]> | any[];
     loadAISchematic: (schematic: any) => void;
+    onConvertComponentToEntity?: (component: any) => Promise<void>;
 }
 
 interface CollapsibleSectionProps {
@@ -100,6 +101,7 @@ export function BlockToolOptions({
     getAvailableBlocks,
     getAvailableEntities,
     loadAISchematic,
+    onConvertComponentToEntity,
 }: BlockToolOptionsProps) {
     const [activeTool, setActiveTool] = useState<string | null>(null);
 
@@ -200,6 +202,7 @@ export function BlockToolOptions({
                         <ComponentOptionsSection
                             selectedComponent={selectedBlock}
                             isCompactMode={isCompactMode}
+                            onConvertToEntity={onConvertComponentToEntity}
                         />
                     </CollapsibleSection>
                 )}
