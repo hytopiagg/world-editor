@@ -3,7 +3,9 @@
     "allow": [
       "Bash(bun install:*)",
       "Bash(bun run:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(xargs cat)",
+      "Bash(cat package.json)"
     ],
     "deny": []
   }

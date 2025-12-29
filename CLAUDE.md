@@ -14,9 +14,17 @@ HYTOPIA World Editor is a 3D voxel building tool (similar to Minecraft's creativ
 - `bun test` - Run tests in watch mode
 - `bun run eject` - Eject from Create React App (one-way operation)
 
+### Electron Desktop App Commands
+- `bun run electron:dev` - Start desktop app in development mode
+- `bun run build:electron` - Build web bundle for Electron (with file:// safe paths)
+- `bun run electron:dist` - Create desktop distributables (outputs to `dist/`)
+- `bun run electron:dist:mac` / `:win` / `:linux` - Platform-specific builds
+
 ### Pre-build Scripts
 - Model manifest generation runs automatically before build/start via `prebuild` and `prestart` scripts
 - `node scripts/generate-model-manifest.js` - Manually generate model manifest
+- `node scripts/update-block-manifest.js` - Update block manifest when adding new block textures
+- `node scripts/generate-manifest-from-commit.js <commit-hash>` - Regenerate manifest from specific commit
 
 ### Package Manager
 This project uses **Bun** as the package manager, not npm or yarn. Always use `bun` commands.
@@ -49,8 +57,11 @@ This project uses **Bun** as the package manager, not npm or yarn. Always use `b
 
 **Persistence (`src/js/managers/DatabaseManager.tsx`)**
 - IndexedDB-based storage for terrain data, custom blocks, and settings
+- Multi-project support with project-scoped data isolation using key prefixes (`projectId::key`)
+- Automatic database migration between versions with progress tracking
 - Automatic save system with manual save option (Ctrl+S)
-- Undo/redo system with 30+ state history
+- Undo/redo system with 30+ state history (per-project stacks)
+- Database stores: TERRAIN, ENVIRONMENT, SETTINGS, CUSTOM_BLOCKS, CUSTOM_MODELS, UNDO, REDO, SCHEMATICS, PROJECTS, ZONES, PROJECT_SETTINGS
 
 ### Key Architecture Patterns
 
@@ -96,9 +107,29 @@ This project uses **Bun** as the package manager, not npm or yarn. Always use `b
 - Uses **Tailwind CSS** for styling
 - **No existing linting/formatting** commands configured beyond CRA defaults
 - The project has both `.js` and `.tsx` files - maintain existing patterns
-- Custom blocks use IDs > 100 to avoid conflicts with built-in blocks
+- Custom blocks use IDs > 100 to avoid conflicts with built-in blocks (built-in blocks use stable IDs from manifest)
+- Environment models use IDs starting at 200, custom models start at 5000+
 - Camera controls are disabled while Cmd/Ctrl is pressed (for shortcuts)
-- The app includes an under-construction mode toggle in Constants.tsx
+- The app includes an under-construction mode toggle in [Constants.tsx](src/js/Constants.tsx)
+- DB_VERSION in [Constants.tsx](src/js/Constants.tsx) controls database schema version
+
+### Block Manifest System
+
+The editor uses a block manifest system ([src/js/blocks/block-manifest.json](src/js/blocks/block-manifest.json)) to ensure stable block IDs across deployments:
+
+- **Stable IDs**: Default blocks maintain their IDs even when new blocks are added
+- **Adding new blocks**:
+  1. Add block texture files to `public/assets/blocks/`
+  2. Run `node scripts/update-block-manifest.js` to update the manifest
+  3. Commit both the new block files and the updated manifest
+- This prevents existing builds from breaking when new blocks are added
+
+### Project System
+
+- The app supports multiple projects with isolated data storage
+- Project switching happens through [ProjectHome](src/js/components/ProjectHome.tsx) component
+- Each project has its own terrain, environment, settings, and undo/redo stacks
+- Project metadata is stored in the PROJECTS IndexedDB store
 
 ## Testing
 
@@ -109,3 +140,20 @@ This project uses **Bun** as the package manager, not npm or yarn. Always use `b
 ## Deployment
 
 The project is deployed to https://build.hytopia.com when changes are merged. All accepted pull requests are automatically deployed for community use.
+
+### Desktop App (Electron)
+
+The editor is also available as a desktop app powered by Electron:
+- Entry point: `electron/main.js`
+- Desktop build sets `PUBLIC_URL=./` for file:// compatibility
+- Web Workers created via `new URL('...worker.js', import.meta.url)` work under Electron
+- External links open in default browser from the Electron app
+- macOS, Windows, and Linux builds available via electron-builder
+
+### Bounty System
+
+The project has a paid bounty system for bug fixes and feature additions:
+- Browse available bounties: https://github.com/hytopiagg/world-editor/labels/BOUNTY
+- Submit new issues/requests via GitHub Issues
+- Accepted PRs receive bounty payments via PayPal
+- Issue submitters receive 10% of bounty when their request becomes a bounty and is fulfilled
