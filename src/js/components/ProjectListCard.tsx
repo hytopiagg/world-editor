@@ -20,6 +20,8 @@ interface Props {
     projects: any;
     setProjects: any;
     setContextMenu: (v: { id: string | null; x: number; y: number; open: boolean }) => void;
+    loadingState?: string;
+    setLoadingProjects: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
 function formatLastEdited(ts?: number) {
@@ -50,7 +52,7 @@ function formatLastEdited(ts?: number) {
     return `Last edited ${months} month${months === 1 ? '' : 's'} ago`;
 }
 
-const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hoveredId, setHoveredId, onSelect, onOpen, projects, setProjects, setContextMenu }) => {
+const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hoveredId, setHoveredId, onSelect, onOpen, projects, setProjects, setContextMenu, loadingState, setLoadingProjects }) => {
     const [menuOpen, setMenuOpen] = useState(false);
 
     useEffect(() => {
@@ -101,25 +103,38 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
                     ) : (
                         <div className="absolute inset-0 bg-[#141821] text-[#7b8496] flex items-center justify-center rounded-lg text-[12px]">No Thumbnail</div>
                     )}
+                    {loadingState && (
+                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-none">
+                            <div className="flex flex-col items-center gap-2">
+                                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <div className="text-white text-[10px] font-medium">{loadingState}</div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
             <div className="flex flex-col gap-1 justify-center items-start">
                 <div className="font-semibold">{p.name || 'Untitled'}</div>
-                <div className="opacity-70 text-[12px]">{formatLastEdited(p.updatedAt || p.createdAt)}</div>
+                <div className="opacity-70 text-[12px]">{loadingState || formatLastEdited(p.updatedAt || p.createdAt)}</div>
             </div>
             <div className="ph-menu relative w-[28px] h-[28px] justify-self-end self-center z-[1100]" onClick={(e) => e.stopPropagation()}>
                 <button
-                    className={`ph-menu-trigger bg-transparent border-0 text-[#cfd6e4] rounded-md w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center ${hoveredId === p.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                    className={`ph-menu-trigger bg-transparent border-0 text-[#cfd6e4] rounded-md w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center transition-opacity ${hoveredId === p.id || menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
                     onClick={() => {
-                        try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
-                        setContextMenu({ id: null, x: 0, y: 0, open: false });
-                        setMenuOpen(true);
+                        if (menuOpen) {
+                            // Close immediately if already open
+                            setMenuOpen(false);
+                        } else {
+                            try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
+                            setContextMenu({ id: null, x: 0, y: 0, open: false });
+                            setMenuOpen(true);
+                        }
                     }}
                 >
                     ⋮
                 </button>
                 <div className={`ph-inline-menu absolute right-0 top-[30px] ${menuOpen ? 'block' : 'hidden'}`} onClick={(e) => e.stopPropagation()}>
-                    <ProjectActionsMenu variant="inline" id={p.id} projects={projects} setProjects={setProjects} setContextMenu={setContextMenu} onOpen={onOpen} onRequestClose={() => setMenuOpen(false)} />
+                    <ProjectActionsMenu variant="inline" id={p.id} projects={projects} setProjects={setProjects} setContextMenu={setContextMenu} onOpen={onOpen} onRequestClose={() => setMenuOpen(false)} setLoadingProjects={setLoadingProjects} />
                 </div>
             </div>
         </div>

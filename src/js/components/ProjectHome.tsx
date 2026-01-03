@@ -179,9 +179,12 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             return hash;
         } catch (_) { return 'my-files'; }
     });
-    
+
     // Migration status tracking
     const [migrationStatus, setMigrationStatus] = useState<MigrationStatus | null>(null);
+
+    // Loading states for project operations
+    const [loadingProjects, setLoadingProjects] = useState<Record<string, string>>({});
     
     useEffect(() => {
         // Check initial migration status
@@ -536,6 +539,8 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         projects={[...folders as any, ...projects as any] as any}
                                         setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
                                         setContextMenu={setContextMenu as any}
+                                        loadingState={loadingProjects[p.id]}
+                                        setLoadingProjects={setLoadingProjects}
                                     />
                                 ))
                         )}
@@ -579,6 +584,8 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                         projects={[...folders as any, ...projects as any] as any}
                                         setProjects={(updater: any) => setProjects((prev) => typeof updater === 'function' ? updater(prev) : updater)}
                                         setContextMenu={setContextMenu as any}
+                                        loadingState={loadingProjects[p.id]}
+                                        setLoadingProjects={setLoadingProjects}
                                     />
                                 ))
                         )}
@@ -662,6 +669,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             entityType={contextMenu.id === '__ROOT__' ? 'root' : (folders.find((f) => f.id === contextMenu.id) ? 'folder' : 'project')}
                             onOpenFolder={(fid) => setActiveFolderId(fid)}
                             folders={folders as any}
+                            setLoadingProjects={setLoadingProjects}
                         />
                     </>
                 )}

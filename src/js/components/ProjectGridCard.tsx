@@ -23,6 +23,8 @@ interface Props {
     projects: ProjectMeta[];
     setProjects: React.Dispatch<React.SetStateAction<ProjectMeta[]>>;
     setContextMenu: (v: { id: string | null; x: number; y: number; open: boolean }) => void;
+    loadingState?: string;
+    setLoadingProjects: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
 function formatLastEdited(ts?: number) {
@@ -53,7 +55,7 @@ function formatLastEdited(ts?: number) {
     return `Last edited ${months} month${months === 1 ? '' : 's'} ago`;
 }
 
-const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hoveredId, setHoveredId, pressedCardId, setPressedCardId, onSelect, onOpen, projects, setProjects, setContextMenu }) => {
+const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hoveredId, setHoveredId, pressedCardId, setPressedCardId, onSelect, onOpen, projects, setProjects, setContextMenu, loadingState, setLoadingProjects }) => {
     const [inlineOpen, setInlineOpen] = useState(false);
 
     useEffect(() => {
@@ -128,6 +130,14 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                         {selected && (
                             <div className="absolute inset-0 bg-white/15 pointer-events-none" />
                         )}
+                        {loadingState && (
+                            <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-none">
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <div className="text-white text-xs font-medium">{loadingState}</div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -135,23 +145,30 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                 <div className="flex items-center justify-between">
                     <div className="text-left">
                         <div className="font-semibold bg-transparent">{p.name || "Untitled"}</div>
-                        <div className="opacity-70 text-[12px] bg-transparent">{formatLastEdited(p.updatedAt || p.createdAt)}</div>
+                        <div className="opacity-70 text-[12px] bg-transparent">
+                            {loadingState || formatLastEdited(p.updatedAt || p.createdAt)}
+                        </div>
                     </div>
                     <div className="ph-menu relative transform-none w-[28px] h-[28px] inline-block z-[1100]" onClick={(e) => e.stopPropagation()}>
                         <button
-                            className={`ph-menu-trigger bg-transparent border-0 text-[#cfd6e4] rounded-md w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center ${hoveredId === p.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                            className={`ph-menu-trigger bg-transparent border-0 text-[#cfd6e4] rounded-md w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center transition-opacity ${hoveredId === p.id || inlineOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
                             onClick={() => {
-                                // Close any other inline menus and the global context menu first
-                                try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
-                                setContextMenu({ id: null, x: 0, y: 0, open: false });
-                                setInlineOpen((v) => !v);
+                                if (inlineOpen) {
+                                    // Close immediately if already open
+                                    setInlineOpen(false);
+                                } else {
+                                    // Close any other inline menus and the global context menu first
+                                    try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
+                                    setContextMenu({ id: null, x: 0, y: 0, open: false });
+                                    setInlineOpen(true);
+                                }
                             }}
                         >
                             ⋮
                         </button>
                         {inlineOpen && (
                             <div className="ph-inline-menu absolute right-0 top-[30px] block" onClick={(e) => e.stopPropagation()}>
-                                <ProjectActionsMenu variant="inline" id={p.id} projects={projects} setProjects={setProjects} setContextMenu={setContextMenu} onOpen={onOpen} onRequestClose={() => setInlineOpen(false)} />
+                                <ProjectActionsMenu variant="inline" id={p.id} projects={projects} setProjects={setProjects} setContextMenu={setContextMenu} onOpen={onOpen} onRequestClose={() => setInlineOpen(false)} setLoadingProjects={setLoadingProjects} />
                             </div>
                         )}
                     </div>

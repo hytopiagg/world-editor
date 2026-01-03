@@ -5,7 +5,8 @@
       "Bash(bun run:*)",
       "Bash(rm:*)",
       "Bash(xargs cat)",
-      "Bash(cat package.json)"
+      "Bash(cat package.json)",
+      "Bash(wait)"
     ],
     "deny": []
   }

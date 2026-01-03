@@ -79,9 +79,10 @@ interface Props {
     entityType?: "project" | "folder" | "root";
     onOpenFolder?: (id: string) => void;
     folders?: { id: string; name: string }[];
+    setLoadingProjects?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
-const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setContextMenu, onOpen, onRequestClose, variant = "inline", x, y, containerClassName = "", containerStyle, entityType, onOpenFolder, folders = [] }) => {
+const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setContextMenu, onOpen, onRequestClose, variant = "inline", x, y, containerClassName = "", containerStyle, entityType, onOpenFolder, folders = [], setLoadingProjects }) => {
     const rootRef = useRef<HTMLDivElement | null>(null);
     const [entered, setEntered] = useState(false);
     const [moveOpen, setMoveOpen] = useState(false);
@@ -136,14 +137,36 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
     };
 
     const handleDuplicate = async () => {
+        // Close menu immediately
+        closeAllMenus();
+
+        // Set loading state
+        setLoadingProjects?.((prev) => ({ ...prev, [id]: 'Duplicating...' }));
+
         try {
             console.log('[Actions] Duplicate start', { id });
             const all = await DatabaseManager.listProjects();
             const src = (projects.find((p) => p.id === id) || all.find((p) => p.id === id)) as any;
-            if (!src) return;
+            if (!src) {
+                setLoadingProjects?.((prev) => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
+                return;
+            }
+
             const copy = await DatabaseManager.createProject(`${src.name} (Copy)`);
             const newId = (copy && (copy as any).id) as string | undefined;
-            if (!newId) return;
+            if (!newId) {
+                setLoadingProjects?.((prev) => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
+                return;
+            }
+
             const original = DatabaseManager.getCurrentProjectId();
             DatabaseManager.setCurrentProjectId(id);
             const tSrc = await DatabaseManager.getData("terrain", "current");
@@ -169,13 +192,25 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
                 lastOpenedAt: now,
             };
             setProjects((prev: any) => [newMeta, ...prev]);
-        } finally {
+
             console.log('[Actions] Duplicate done');
-            closeAllMenus();
+        } catch (error) {
+            console.error('[Actions] Duplicate error', error);
+        } finally {
+            // Clear loading state
+            setLoadingProjects?.((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
         }
     };
 
     const handleExport = async () => {
+        closeAllMenus();
+
+        setLoadingProjects?.((prev) => ({ ...prev, [id]: 'Exporting...' }));
+
         try {
             console.log('[Actions] Export start', { id });
             DatabaseManager.setCurrentProjectId(id);
@@ -195,9 +230,16 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             a.download = `${(meta as any).name || "project"}.json`;
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
-        } finally {
+
             console.log('[Actions] Export done');
-            closeAllMenus();
+        } catch (error) {
+            console.error('[Actions] Export error', error);
+        } finally {
+            setLoadingProjects?.((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
         }
     };
 
@@ -224,13 +266,25 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
     const handleOpenFolder = () => { try { onOpenFolder && onOpenFolder(id); } finally { closeAllMenus(); } };
 
     const performDelete = async () => {
-        if (entityType === 'folder') {
-            await DatabaseManager.deleteFolder(id);
-            // Folders are managed by caller; setProjects here is assumed to update appropriate list (caller decides which setter to pass)
-            setProjects((prev: any[]) => prev.filter((p: any) => p.id !== id));
-        } else {
-            await DatabaseManager.deleteProject(id);
-            setProjects((prev: any[]) => prev.filter((p: any) => p.id !== id));
+        setLoadingProjects?.((prev) => ({ ...prev, [id]: 'Deleting...' }));
+
+        try {
+            if (entityType === 'folder') {
+                await DatabaseManager.deleteFolder(id);
+                // Folders are managed by caller; setProjects here is assumed to update appropriate list (caller decides which setter to pass)
+                setProjects((prev: any[]) => prev.filter((p: any) => p.id !== id));
+            } else {
+                await DatabaseManager.deleteProject(id);
+                setProjects((prev: any[]) => prev.filter((p: any) => p.id !== id));
+            }
+        } catch (error) {
+            console.error('[Actions] Delete error', error);
+        } finally {
+            setLoadingProjects?.((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
         }
     };
 
@@ -267,7 +321,28 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
             : [
                 ...(multi ? [
                     { label: "Move to…", onClick: () => setMoveOpen(true), danger: false },
-                    { label: "Delete all", onClick: async () => { try { await Promise.all(selected.map((pid) => DatabaseManager.deleteProject(pid))); setProjects((prev) => (prev as any).filter((p: any) => !selected.includes(p.id))); } finally { closeAllMenus(); } }, danger: true },
+                    { label: "Delete all", onClick: async () => {
+                        closeAllMenus();
+                        // Set loading state for all selected projects
+                        selected.forEach((pid) => {
+                            setLoadingProjects?.((prev) => ({ ...prev, [pid]: 'Deleting...' }));
+                        });
+                        try {
+                            await Promise.all(selected.map((pid) => DatabaseManager.deleteProject(pid)));
+                            setProjects((prev) => (prev as any).filter((p: any) => !selected.includes(p.id)));
+                        } catch (error) {
+                            console.error('[Actions] Multi-delete error', error);
+                        } finally {
+                            // Clear loading states
+                            selected.forEach((pid) => {
+                                setLoadingProjects?.((prev) => {
+                                    const next = { ...prev };
+                                    delete next[pid];
+                                    return next;
+                                });
+                            });
+                        }
+                    }, danger: true },
                     { label: "Archive all", onClick: async () => { try { await DatabaseManager.setProjectsArchived(selected, true); } finally { closeAllMenus(); } }, danger: false },
                 ] : [
                     { label: "Move to…", onClick: () => setMoveOpen(true), danger: false },
@@ -332,7 +407,13 @@ const ProjectActionsMenu: React.FC<Props> = ({ id, projects, setProjects, setCon
                     title={entityType === 'folder' ? 'Delete folder' : 'Delete project'}
                     message={entityType === 'folder' ? 'This will delete the folder. Projects inside will be moved to root.' : 'This will permanently delete the project.'}
                     onCancel={() => setConfirmOpen(false)}
-                    onConfirm={async () => { await performDelete(); setConfirmOpen(false); closeAllMenus(); }}
+                    onConfirm={async () => {
+                        // Close modal and menus immediately
+                        setConfirmOpen(false);
+                        closeAllMenus();
+                        // Then perform delete with toast feedback
+                        await performDelete();
+                    }}
                 />
             )}
         </div>
