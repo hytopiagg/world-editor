@@ -55,6 +55,7 @@ import {
     SelectionTool,
     TerrainTool,
     ReplaceTool,
+    FindReplaceTool,
     ToolManager,
     WallTool,
 } from "./tools";
@@ -2177,6 +2178,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             // Register replace tool
             const replaceTool = new ReplaceTool(terrainBuilderProps);
             toolManagerRef.current.registerTool("replace", replaceTool);
+
+            // Register find & replace tool
+            const findReplaceTool = new FindReplaceTool(terrainBuilderProps);
+            toolManagerRef.current.registerTool("findreplace", findReplaceTool);
 
             // Register zone tool
             const zoneTool = new ZoneTool(terrainBuilderProps);

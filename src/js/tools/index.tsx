@@ -10,6 +10,7 @@ import SchematicPlacementTool from "./SchematicPlacementTool";
 import SelectionTool from "./SelectionTool";
 import { TerrainTool } from "./TerrainTool";
 import ReplaceTool from "./ReplaceTool";
+import FindReplaceTool from "./FindReplaceTool";
 
 export {
     BaseTool,
@@ -21,4 +22,5 @@ export {
     SelectionTool,
     TerrainTool,
     ReplaceTool,
+    FindReplaceTool,
 };

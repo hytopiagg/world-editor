@@ -14,6 +14,7 @@ import WallToolOptionsSection from "./WallToolOptionsSection";
 import SelectionToolOptionsSection from "./SelectionToolOptionsSection";
 import TerrainToolOptionsSection from "./TerrainToolOptionsSection";
 import ReplaceToolOptionsSection from "./ReplaceToolOptionsSection";
+import FindReplaceToolOptionsSection from "./FindReplaceToolOptionsSection";
 import SkyboxOptionsSection from "./SkyboxOptionsSection";
 import LightingOptionsSection from "./LightingOptionsSection";
 import EntityOptionsSection from "./EntityOptionsSection";
@@ -288,6 +289,19 @@ export function BlockToolOptions({
                         <ReplaceToolOptionsSection
                             replacementTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["replace"]}
                             isCompactMode={isCompactMode}
+                        />
+                    </CollapsibleSection>
+                )}
+                {activeTool === "findreplace" && (
+                    <CollapsibleSection title="Find & Replace" animationDelay="0.09s">
+                        <FindReplaceToolOptionsSection
+                            findReplaceTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["findreplace"]}
+                            isCompactMode={isCompactMode}
+                            getAvailableBlocks={getAvailableBlocks}
+                            onRequestAIGeneration={() => {
+                                // Trigger AI components panel to open
+                                window.dispatchEvent(new CustomEvent("request-ai-component-generation"));
+                            }}
                         />
                     </CollapsibleSection>
                 )}
