@@ -8,12 +8,14 @@ interface StaircaseToolOptionsSectionProps {
 export default function StaircaseToolOptionsSection({ staircaseTool, isCompactMode }: StaircaseToolOptionsSectionProps) {
     const [staircaseWidth, setStaircaseWidth] = useState<number>(staircaseTool?.staircaseWidth ?? 1);
     const [isDeleteMode, setIsDeleteMode] = useState<boolean>(staircaseTool?.isCtrlPressed ?? false);
+    const [fillUnderneath, setFillUnderneath] = useState<boolean>(staircaseTool?.fillUnderneath ?? false);
 
     useEffect(() => {
         if (!staircaseTool) return;
         const interval = setInterval(() => {
             setStaircaseWidth(staircaseTool.staircaseWidth);
             setIsDeleteMode(staircaseTool.isCtrlPressed);
+            setFillUnderneath(staircaseTool.fillUnderneath);
         }, 200);
         return () => clearInterval(interval);
     }, [staircaseTool]);
@@ -36,6 +38,12 @@ export default function StaircaseToolOptionsSection({ staircaseTool, isCompactMo
         staircaseTool.updateStaircasePreviewMaterial?.();
     };
 
+    const toggleFillUnderneath = () => {
+        const newVal = !fillUnderneath;
+        setFillUnderneath(newVal);
+        staircaseTool.setFillUnderneath?.(newVal);
+    };
+
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
@@ -46,6 +54,15 @@ export default function StaircaseToolOptionsSection({ staircaseTool, isCompactMo
                         checked={isDeleteMode}
                         onChange={toggleDeleteMode}
                         className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-red-500 checked:border-red-500"
+                    />
+                </div>
+                <div className="flex items-center justify-between text-xs text-[#F1F1F1]">
+                    <span className="text-xs text-[#F1F1F1] whitespace-nowrap">Fill Underneath (3)</span>
+                    <input
+                        type="checkbox"
+                        checked={fillUnderneath}
+                        onChange={toggleFillUnderneath}
+                        className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                     />
                 </div>
                 <div className="flex gap-x-2 items-center w-full">
@@ -73,6 +90,7 @@ export default function StaircaseToolOptionsSection({ staircaseTool, isCompactMo
             <div className="flex flex-col gap-1 text-[10px] text-[#F1F1F1]/80 mt-1 bg-black/10 -mx-3 px-3 py-3 text-left">
                 <p className="text-xs text-[#F1F1F1]/80 font-bold">Keyboard Shortcuts</p>
                 <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">1</kbd>/<kbd className="px-1 rounded bg-white/20">2</kbd> – Decrease/Increase width</div>
+                <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">3</kbd> – Toggle fill underneath</div>
                 <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">Ctrl</kbd> – Toggle delete mode</div>
                 <div className="flex gap-1 items-center"><kbd className="px-1 rounded bg-white/20">Esc</kbd> – Cancel placement</div>
             </div>

@@ -13,6 +13,7 @@ class StaircaseTool extends BaseTool {
      * Creates a new StaircaseTool instance
      */
     staircaseWidth = 1; // Width of the staircase (perpendicular to direction)
+    fillUnderneath = false; // Whether to fill space underneath the staircase
     isCtrlPressed = false;
     staircaseStartPosition = null;
     staircasePreview = null;
@@ -34,7 +35,7 @@ class StaircaseTool extends BaseTool {
 
         this.name = "StaircaseTool";
         this.tooltip =
-            "Staircase Tool: Click to start, click again to place. Use 1 | 2 to adjust width. Hold Ctrl to erase. Press Escape to cancel.";
+            "Staircase Tool: Click to start, click again to place. Use 1 | 2 to adjust width. Press 3 to toggle fill underneath. Hold Ctrl to erase. Press Escape to cancel.";
         this.staircaseWidth = 1;
         this.staircaseStartPosition = null;
         this.staircasePreview = null;
@@ -223,6 +224,8 @@ class StaircaseTool extends BaseTool {
             this.setStaircaseWidth(this.staircaseWidth - 1);
         } else if (event.key === "2") {
             this.setStaircaseWidth(this.staircaseWidth + 1);
+        } else if (event.key === "3") {
+            this.toggleFillUnderneath();
         } else if (event.key === "Escape") {
             this.removeStaircasePreview();
             this.staircaseStartPosition = null;
@@ -242,6 +245,42 @@ class StaircaseTool extends BaseTool {
      */
     setStaircaseWidth(width) {
         this.staircaseWidth = Math.max(1, width);
+
+        if (
+            this.staircaseStartPosition &&
+            this.previewPositionRef &&
+            this.previewPositionRef.current
+        ) {
+            this.updateStaircasePreview(
+                this.staircaseStartPosition,
+                this.previewPositionRef.current
+            );
+        }
+    }
+
+    /**
+     * Toggles the fill underneath option
+     */
+    toggleFillUnderneath() {
+        this.fillUnderneath = !this.fillUnderneath;
+
+        if (
+            this.staircaseStartPosition &&
+            this.previewPositionRef &&
+            this.previewPositionRef.current
+        ) {
+            this.updateStaircasePreview(
+                this.staircaseStartPosition,
+                this.previewPositionRef.current
+            );
+        }
+    }
+
+    /**
+     * Sets the fill underneath option
+     */
+    setFillUnderneath(value) {
+        this.fillUnderneath = value;
 
         if (
             this.staircaseStartPosition &&
@@ -315,9 +354,16 @@ class StaircaseTool extends BaseTool {
             for (let w = 0; w < this.staircaseWidth; w++) {
                 const x = startX + step * stepX + w * widthDirX;
                 const z = startZ + step * stepZ + w * widthDirZ;
-                const y = stepY;
 
-                blocks.push({ x, y, z });
+                // Add the step block
+                blocks.push({ x, y: stepY, z });
+
+                // If fill underneath is enabled, fill all blocks below this step
+                if (this.fillUnderneath) {
+                    for (let fillY = startY; fillY < stepY; fillY++) {
+                        blocks.push({ x, y: fillY, z });
+                    }
+                }
             }
         }
 

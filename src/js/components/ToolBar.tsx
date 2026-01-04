@@ -1338,7 +1338,7 @@ const ToolBar = ({
                             </Tooltip>
                         )}
                         {activeTab === 'blocks' && (
-                            <Tooltip text="Staircase Tool - Click to start, click again to place a staircase. Use 1 | 2 to adjust width. Hold Ctrl to erase. Press Escape to cancel.">
+                            <Tooltip text="Staircase Tool - Click to start, click again to place a staircase. Use 1 | 2 to adjust width. Press 3 to toggle fill underneath. Hold Ctrl to erase. Press Escape to cancel.">
                                 <button
                                     onClick={() => {
                                         handleToolToggle("staircase");
