@@ -34,11 +34,21 @@ const DIRECTIONS = {
     RIGHT_TO_LEFT: "right-to-left",
     TOP_TO_BOTTOM: "top-to-bottom",
     BOTTOM_TO_TOP: "bottom-to-top",
-    // Corner directions
+    // Corner directions (50/50 diagonal)
     TOP_LEFT_TO_BOTTOM_RIGHT: "top-left-to-bottom-right",
     TOP_RIGHT_TO_BOTTOM_LEFT: "top-right-to-bottom-left",
     BOTTOM_LEFT_TO_TOP_RIGHT: "bottom-left-to-top-right",
     BOTTOM_RIGHT_TO_TOP_LEFT: "bottom-right-to-top-left",
+    // Small corners - texture B appears in small corner area
+    SMALL_CORNER_TL: "small-corner-tl",
+    SMALL_CORNER_TR: "small-corner-tr",
+    SMALL_CORNER_BL: "small-corner-bl",
+    SMALL_CORNER_BR: "small-corner-br",
+    // Small corners inverted - texture A appears in small corner area
+    SMALL_CORNER_TL_INV: "small-corner-tl-inv",
+    SMALL_CORNER_TR_INV: "small-corner-tr-inv",
+    SMALL_CORNER_BL_INV: "small-corner-bl-inv",
+    SMALL_CORNER_BR_INV: "small-corner-br-inv",
 };
 
 // Direction labels for texture naming
@@ -51,6 +61,14 @@ const DIRECTION_LABELS = {
     [DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT]: "corner-tr-bl",
     [DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT]: "corner-bl-tr",
     [DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT]: "corner-br-tl",
+    [DIRECTIONS.SMALL_CORNER_TL]: "small-tl",
+    [DIRECTIONS.SMALL_CORNER_TR]: "small-tr",
+    [DIRECTIONS.SMALL_CORNER_BL]: "small-bl",
+    [DIRECTIONS.SMALL_CORNER_BR]: "small-br",
+    [DIRECTIONS.SMALL_CORNER_TL_INV]: "small-tl-inv",
+    [DIRECTIONS.SMALL_CORNER_TR_INV]: "small-tr-inv",
+    [DIRECTIONS.SMALL_CORNER_BL_INV]: "small-bl-inv",
+    [DIRECTIONS.SMALL_CORNER_BR_INV]: "small-br-inv",
 };
 
 
@@ -73,6 +91,7 @@ const TextureBlendScreen = ({
     const [textureName, setTextureName] = useState("");
     const [loadedTextures, setLoadedTextures] = useState({});
     const [blendedResult, setBlendedResult] = useState(null);
+    const [showSmallCorners, setShowSmallCorners] = useState(false);
 
     const previewCanvasRef = useRef(null);
 
@@ -287,6 +306,32 @@ const TextureBlendScreen = ({
                         // Distance from bottom-right corner (1,1) to top-left (0,0)
                         progress = ((1 - normalizedX) + (1 - normalizedY)) / 2;
                         break;
+                    // Small corners - texture B in small corner area (~1/4)
+                    case DIRECTIONS.SMALL_CORNER_TL:
+                        progress = Math.min(1 - normalizedX, 1 - normalizedY);
+                        break;
+                    case DIRECTIONS.SMALL_CORNER_TR:
+                        progress = Math.min(normalizedX, 1 - normalizedY);
+                        break;
+                    case DIRECTIONS.SMALL_CORNER_BL:
+                        progress = Math.min(1 - normalizedX, normalizedY);
+                        break;
+                    case DIRECTIONS.SMALL_CORNER_BR:
+                        progress = Math.min(normalizedX, normalizedY);
+                        break;
+                    // Small corners inverted - texture A in small corner area (~1/4)
+                    case DIRECTIONS.SMALL_CORNER_TL_INV:
+                        progress = Math.max(normalizedX, normalizedY);
+                        break;
+                    case DIRECTIONS.SMALL_CORNER_TR_INV:
+                        progress = Math.max(1 - normalizedX, normalizedY);
+                        break;
+                    case DIRECTIONS.SMALL_CORNER_BL_INV:
+                        progress = Math.max(normalizedX, 1 - normalizedY);
+                        break;
+                    case DIRECTIONS.SMALL_CORNER_BR_INV:
+                        progress = Math.max(1 - normalizedX, 1 - normalizedY);
+                        break;
                     default:
                         progress = normalizedX;
                 }
@@ -382,17 +427,69 @@ const TextureBlendScreen = ({
         return blendTexturesWithDirection(direction);
     }, [blendTexturesWithDirection, direction]);
 
-    // Generate all 8 directions
+    // Original 8 directions (edges + diagonal corners)
+    const ORIGINAL_DIRECTIONS = [
+        DIRECTIONS.LEFT_TO_RIGHT,
+        DIRECTIONS.RIGHT_TO_LEFT,
+        DIRECTIONS.TOP_TO_BOTTOM,
+        DIRECTIONS.BOTTOM_TO_TOP,
+        DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT,
+        DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT,
+        DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT,
+        DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT,
+    ];
+
+    // Small corner directions (8 total)
+    const SMALL_CORNER_DIRECTIONS = [
+        DIRECTIONS.SMALL_CORNER_TL,
+        DIRECTIONS.SMALL_CORNER_TR,
+        DIRECTIONS.SMALL_CORNER_BL,
+        DIRECTIONS.SMALL_CORNER_BR,
+        DIRECTIONS.SMALL_CORNER_TL_INV,
+        DIRECTIONS.SMALL_CORNER_TR_INV,
+        DIRECTIONS.SMALL_CORNER_BL_INV,
+        DIRECTIONS.SMALL_CORNER_BR_INV,
+    ];
+
+    // Generate original 8 directions
     const handleGenerateAll = useCallback(() => {
         if (!textureAData || !textureBData || !textureName.trim()) return;
 
         const textures = [];
         const baseName = textureName.trim();
 
-        Object.values(DIRECTIONS).forEach((dir) => {
+        ORIGINAL_DIRECTIONS.forEach((dir) => {
             const result = blendTexturesWithDirection(dir);
             if (result) {
-                // Create canvas and get data URL
+                const canvas = document.createElement("canvas");
+                canvas.width = GRID_SIZE;
+                canvas.height = GRID_SIZE;
+                const ctx = canvas.getContext("2d");
+                ctx.putImageData(result, 0, 0);
+                const dataUrl = canvas.toDataURL();
+
+                textures.push({
+                    dataUrl,
+                    name: `${baseName}-${DIRECTION_LABELS[dir]}`,
+                });
+            }
+        });
+
+        if (textures.length > 0 && onSaveMultiple) {
+            onSaveMultiple(textures);
+        }
+    }, [textureAData, textureBData, textureName, blendTexturesWithDirection, onSaveMultiple]);
+
+    // Generate all 16 (8 original + 8 small corners)
+    const handleGenerateWithSmallCorners = useCallback(() => {
+        if (!textureAData || !textureBData || !textureName.trim()) return;
+
+        const textures = [];
+        const baseName = textureName.trim();
+
+        [...ORIGINAL_DIRECTIONS, ...SMALL_CORNER_DIRECTIONS].forEach((dir) => {
+            const result = blendTexturesWithDirection(dir);
+            if (result) {
                 const canvas = document.createElement("canvas");
                 canvas.width = GRID_SIZE;
                 canvas.height = GRID_SIZE;
@@ -678,6 +775,70 @@ const TextureBlendScreen = ({
                             </div>
                         </div>
 
+                        {/* Small Corners Toggle */}
+                        <div>
+                            <button
+                                onClick={() => setShowSmallCorners(!showSmallCorners)}
+                                className="text-xs text-white/50 hover:text-white/70 transition-colors flex items-center gap-1"
+                            >
+                                <span className={`transition-transform ${showSmallCorners ? "rotate-90" : ""}`}>▶</span>
+                                Small Corners
+                            </button>
+                            {showSmallCorners && (
+                                <div className="flex gap-4 mt-2">
+                                    {/* Small corners - B in corner */}
+                                    <div>
+                                        <label className="text-[10px] text-white/40 mb-1 block">B in corner</label>
+                                        <div className="grid grid-cols-2 gap-1">
+                                            {[
+                                                { dir: DIRECTIONS.SMALL_CORNER_TL, icon: "◤" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_TR, icon: "◥" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_BL, icon: "◣" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_BR, icon: "◢" },
+                                            ].map((item, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => setDirection(item.dir)}
+                                                    className={`w-7 h-7 rounded-lg text-xs border transition-all flex items-center justify-center ${
+                                                        direction === item.dir
+                                                            ? "bg-blue-500/30 border-blue-500/50 text-blue-300"
+                                                            : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                                                    }`}
+                                                >
+                                                    {item.icon}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Small corners inverted - A in corner */}
+                                    <div>
+                                        <label className="text-[10px] text-white/40 mb-1 block">A in corner</label>
+                                        <div className="grid grid-cols-2 gap-1">
+                                            {[
+                                                { dir: DIRECTIONS.SMALL_CORNER_TL_INV, icon: "◤" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_TR_INV, icon: "◥" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_BL_INV, icon: "◣" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_BR_INV, icon: "◢" },
+                                            ].map((item, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => setDirection(item.dir)}
+                                                    className={`w-7 h-7 rounded-lg text-xs border transition-all flex items-center justify-center ${
+                                                        direction === item.dir
+                                                            ? "bg-green-500/30 border-green-500/50 text-green-300"
+                                                            : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                                                    }`}
+                                                >
+                                                    {item.icon}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         {/* Transition Width */}
                         <div>
                             <div className="flex items-center justify-between mb-1.5">
@@ -731,13 +892,23 @@ const TextureBlendScreen = ({
                                 <FaSave size={14} />
                             </button>
                             {onSaveMultiple && (
-                                <button
-                                    onClick={handleGenerateAll}
-                                    disabled={!textureName.trim()}
-                                    className="flex-1 py-2 px-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs rounded-lg transition-all disabled:opacity-40"
-                                >
-                                    Generate All 8 Directions
-                                </button>
+                                <>
+                                    <button
+                                        onClick={handleGenerateAll}
+                                        disabled={!textureName.trim()}
+                                        className="flex-1 py-2 px-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs rounded-lg transition-all disabled:opacity-40"
+                                    >
+                                        Generate All 8 Directions
+                                    </button>
+                                    <button
+                                        onClick={handleGenerateWithSmallCorners}
+                                        disabled={!textureName.trim()}
+                                        className="p-2 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/40 text-orange-300 rounded-lg transition-all disabled:opacity-40"
+                                        title="Generate All 16 (8 Directions + 8 Small Corners)"
+                                    >
+                                        <span className="text-xs font-bold">+◢</span>
+                                    </button>
+                                </>
                             )}
                         </div>
                     </div>
