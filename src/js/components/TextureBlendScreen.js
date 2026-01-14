@@ -71,6 +71,30 @@ const DIRECTION_LABELS = {
     [DIRECTIONS.SMALL_CORNER_BR_INV]: "small-br-inv",
 };
 
+// Original 8 directions (edges + diagonal corners)
+const ORIGINAL_DIRECTIONS = [
+    DIRECTIONS.LEFT_TO_RIGHT,
+    DIRECTIONS.RIGHT_TO_LEFT,
+    DIRECTIONS.TOP_TO_BOTTOM,
+    DIRECTIONS.BOTTOM_TO_TOP,
+    DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT,
+    DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT,
+    DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT,
+    DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT,
+];
+
+// Small corner directions (8 total)
+const SMALL_CORNER_DIRECTIONS = [
+    DIRECTIONS.SMALL_CORNER_TL,
+    DIRECTIONS.SMALL_CORNER_TR,
+    DIRECTIONS.SMALL_CORNER_BL,
+    DIRECTIONS.SMALL_CORNER_BR,
+    DIRECTIONS.SMALL_CORNER_TL_INV,
+    DIRECTIONS.SMALL_CORNER_TR_INV,
+    DIRECTIONS.SMALL_CORNER_BL_INV,
+    DIRECTIONS.SMALL_CORNER_BR_INV,
+];
+
 
 const TextureBlendScreen = ({
     onBack,
@@ -427,87 +451,41 @@ const TextureBlendScreen = ({
         return blendTexturesWithDirection(direction);
     }, [blendTexturesWithDirection, direction]);
 
-    // Original 8 directions (edges + diagonal corners)
-    const ORIGINAL_DIRECTIONS = [
-        DIRECTIONS.LEFT_TO_RIGHT,
-        DIRECTIONS.RIGHT_TO_LEFT,
-        DIRECTIONS.TOP_TO_BOTTOM,
-        DIRECTIONS.BOTTOM_TO_TOP,
-        DIRECTIONS.TOP_LEFT_TO_BOTTOM_RIGHT,
-        DIRECTIONS.TOP_RIGHT_TO_BOTTOM_LEFT,
-        DIRECTIONS.BOTTOM_LEFT_TO_TOP_RIGHT,
-        DIRECTIONS.BOTTOM_RIGHT_TO_TOP_LEFT,
-    ];
+    // Shared helper for generating textures in multiple directions
+    const generateTextures = useCallback((directions) => {
+        if (!textureAData || !textureBData || !textureName.trim()) return;
 
-    // Small corner directions (8 total)
-    const SMALL_CORNER_DIRECTIONS = [
-        DIRECTIONS.SMALL_CORNER_TL,
-        DIRECTIONS.SMALL_CORNER_TR,
-        DIRECTIONS.SMALL_CORNER_BL,
-        DIRECTIONS.SMALL_CORNER_BR,
-        DIRECTIONS.SMALL_CORNER_TL_INV,
-        DIRECTIONS.SMALL_CORNER_TR_INV,
-        DIRECTIONS.SMALL_CORNER_BL_INV,
-        DIRECTIONS.SMALL_CORNER_BR_INV,
-    ];
+        const textures = directions
+            .map((dir) => {
+                const result = blendTexturesWithDirection(dir);
+                if (!result) return null;
+
+                const canvas = document.createElement("canvas");
+                canvas.width = GRID_SIZE;
+                canvas.height = GRID_SIZE;
+                canvas.getContext("2d").putImageData(result, 0, 0);
+
+                return {
+                    dataUrl: canvas.toDataURL(),
+                    name: `${textureName.trim()}-${DIRECTION_LABELS[dir]}`,
+                };
+            })
+            .filter(Boolean);
+
+        if (textures.length > 0) {
+            onSaveMultiple?.(textures);
+        }
+    }, [textureAData, textureBData, textureName, blendTexturesWithDirection, onSaveMultiple]);
 
     // Generate original 8 directions
     const handleGenerateAll = useCallback(() => {
-        if (!textureAData || !textureBData || !textureName.trim()) return;
-
-        const textures = [];
-        const baseName = textureName.trim();
-
-        ORIGINAL_DIRECTIONS.forEach((dir) => {
-            const result = blendTexturesWithDirection(dir);
-            if (result) {
-                const canvas = document.createElement("canvas");
-                canvas.width = GRID_SIZE;
-                canvas.height = GRID_SIZE;
-                const ctx = canvas.getContext("2d");
-                ctx.putImageData(result, 0, 0);
-                const dataUrl = canvas.toDataURL();
-
-                textures.push({
-                    dataUrl,
-                    name: `${baseName}-${DIRECTION_LABELS[dir]}`,
-                });
-            }
-        });
-
-        if (textures.length > 0 && onSaveMultiple) {
-            onSaveMultiple(textures);
-        }
-    }, [textureAData, textureBData, textureName, blendTexturesWithDirection, onSaveMultiple]);
+        generateTextures(ORIGINAL_DIRECTIONS);
+    }, [generateTextures]);
 
     // Generate all 16 (8 original + 8 small corners)
     const handleGenerateWithSmallCorners = useCallback(() => {
-        if (!textureAData || !textureBData || !textureName.trim()) return;
-
-        const textures = [];
-        const baseName = textureName.trim();
-
-        [...ORIGINAL_DIRECTIONS, ...SMALL_CORNER_DIRECTIONS].forEach((dir) => {
-            const result = blendTexturesWithDirection(dir);
-            if (result) {
-                const canvas = document.createElement("canvas");
-                canvas.width = GRID_SIZE;
-                canvas.height = GRID_SIZE;
-                const ctx = canvas.getContext("2d");
-                ctx.putImageData(result, 0, 0);
-                const dataUrl = canvas.toDataURL();
-
-                textures.push({
-                    dataUrl,
-                    name: `${baseName}-${DIRECTION_LABELS[dir]}`,
-                });
-            }
-        });
-
-        if (textures.length > 0 && onSaveMultiple) {
-            onSaveMultiple(textures);
-        }
-    }, [textureAData, textureBData, textureName, blendTexturesWithDirection, onSaveMultiple]);
+        generateTextures([...ORIGINAL_DIRECTIONS, ...SMALL_CORNER_DIRECTIONS]);
+    }, [generateTextures]);
 
     // Update preview when parameters change
     useEffect(() => {
@@ -816,10 +794,10 @@ const TextureBlendScreen = ({
                                         <label className="text-[10px] text-white/40 mb-1 block">A in corner</label>
                                         <div className="grid grid-cols-2 gap-1">
                                             {[
-                                                { dir: DIRECTIONS.SMALL_CORNER_TL_INV, icon: "◤" },
-                                                { dir: DIRECTIONS.SMALL_CORNER_TR_INV, icon: "◥" },
-                                                { dir: DIRECTIONS.SMALL_CORNER_BL_INV, icon: "◣" },
-                                                { dir: DIRECTIONS.SMALL_CORNER_BR_INV, icon: "◢" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_TL_INV, icon: "◸" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_TR_INV, icon: "◹" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_BL_INV, icon: "◺" },
+                                                { dir: DIRECTIONS.SMALL_CORNER_BR_INV, icon: "◿" },
                                             ].map((item, idx) => (
                                                 <button
                                                     key={idx}
