@@ -31,3 +31,6 @@ converted/*
 docs/minecraft-default-mappings.json
 public/assets/models/player/player copy.txt
 dist/
+
+# LLM
+CLAUDE.md
