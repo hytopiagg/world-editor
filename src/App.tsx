@@ -522,8 +522,16 @@ function App() {
                 physics.addFlatGround(4000, groundY);
                 const pos = cameraPosition ?? { x: 0, y: 10, z: 0 } as any;
                 physics.createOrResetPlayer(new Vector3(pos.x ?? 0, pos.y ?? 10, pos.z ?? 0));
+                // Register entity colliders for all entities with addCollider enabled
+                if (environmentBuilderRef.current?.registerAllEntityColliders) {
+                    environmentBuilderRef.current.registerAllEntityColliders();
+                }
             });
         } else {
+            // Clear all entity colliders before disabling physics
+            if (environmentBuilderRef.current?.clearAllEntityColliders) {
+                environmentBuilderRef.current.clearAllEntityColliders();
+            }
             try { delete (window as any).__WE_PHYSICS__; } catch (_) { }
             // Reset solid query flag so it can be set up again when player mode is re-enabled
             try { delete (window as any).__WE_SOLID_BOUND__; } catch (_) { }

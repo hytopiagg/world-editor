@@ -73,6 +73,77 @@ const getModelYShift = (modelUrl?: string) => {
     return model && typeof model.yShift === "number" ? model.yShift : 0;
 };
 
+// Helper: get bounding box info for a model
+const getBoundingBoxForModel = (modelUrl: string): {
+    width: number;
+    height: number;
+    depth: number;
+    center: THREE.Vector3;
+} | null => {
+    const model = environmentModels.find((m) => m.modelUrl === modelUrl);
+    if (!model || typeof model.boundingBoxWidth !== "number") return null;
+    return {
+        width: model.boundingBoxWidth,
+        height: model.boundingBoxHeight,
+        depth: model.boundingBoxDepth,
+        center: model.boundingBoxCenter?.clone() || new THREE.Vector3(0, 0, 0),
+    };
+};
+
+// Helper: register entity collider with PhysicsManager
+const registerEntityCollider = (
+    entityId: string,
+    modelUrl: string,
+    position: THREE.Vector3,
+    rotation: THREE.Euler,
+    scale: THREE.Vector3
+): boolean => {
+    const physics = (window as any).__WE_PHYSICS__;
+    if (!physics) return false;
+
+    const boundingBox = getBoundingBoxForModel(modelUrl);
+    if (!boundingBox) return false;
+
+    // Check if model has addCollider enabled
+    const model = environmentModels.find((m) => m.modelUrl === modelUrl);
+    if (!model?.addCollider) return false;
+
+    return physics.addEntityCollider(entityId, position, rotation, scale, boundingBox);
+};
+
+// Helper: remove entity collider from PhysicsManager
+const removeEntityCollider = (entityId: string): boolean => {
+    const physics = (window as any).__WE_PHYSICS__;
+    if (!physics) return false;
+    return physics.removeEntityCollider(entityId);
+};
+
+// Helper: update entity collider in PhysicsManager
+const updateEntityCollider = (
+    entityId: string,
+    modelUrl: string,
+    position: THREE.Vector3,
+    rotation: THREE.Euler,
+    scale: THREE.Vector3
+): boolean => {
+    const physics = (window as any).__WE_PHYSICS__;
+    if (!physics) return false;
+
+    const boundingBox = getBoundingBoxForModel(modelUrl);
+    if (!boundingBox) return false;
+
+    // Check if model has addCollider enabled
+    const model = environmentModels.find((m) => m.modelUrl === modelUrl);
+    if (!model?.addCollider) return false;
+
+    return physics.updateEntityCollider(entityId, position, rotation, scale, boundingBox);
+};
+
+// Helper: create entity ID from modelUrl and instanceId
+const createEntityId = (modelUrl: string, instanceId: number): string => {
+    return `${modelUrl}:${instanceId}`;
+};
+
 const EnvironmentBuilder = (
     {
         scene,
@@ -1050,6 +1121,10 @@ const EnvironmentBuilder = (
             force: true,
         });
 
+        // Register entity collider with physics system if enabled
+        const entityId = createEntityId(modelUrl, instanceId);
+        registerEntityCollider(entityId, modelUrl, position, rotation, scale);
+
         // Lazily attach InstancedMesh group to scene on first use
         ensureInstancedMeshesAdded(modelUrl);
 
@@ -1376,6 +1451,16 @@ const EnvironmentBuilder = (
                 });
                 addedObjects.push(newObject);
 
+                // Register entity collider with physics system if enabled
+                const entityId = createEntityId(modelUrl, instanceId);
+                registerEntityCollider(
+                    entityId,
+                    modelUrl,
+                    new THREE.Vector3(newObject.position.x, newObject.position.y, newObject.position.z),
+                    new THREE.Euler(newObject.rotation.x, newObject.rotation.y, newObject.rotation.z),
+                    new THREE.Vector3(newObject.scale.x, newObject.scale.y, newObject.scale.z)
+                );
+
                 // Release temporary objects after they're copied
                 releaseQuaternion(quaternion);
                 releaseVector3(position);
@@ -1619,6 +1704,10 @@ const EnvironmentBuilder = (
             z: removedObject.position.z,
             blockId: 1000,
         }], { force: true });
+
+        // Remove entity collider from physics system
+        const entityId = createEntityId(modelUrl, instanceId);
+        removeEntityCollider(entityId);
     };
     const refreshEnvironment = async () => {
         const savedEnv = getAllEnvironmentObjects();
@@ -2030,6 +2119,10 @@ const EnvironmentBuilder = (
                     console.warn(`[EnvironmentBuilder] No meshes found for model ${modelUrl}`);
                 }
 
+                // Update entity collider with new position/rotation/scale
+                const entityId = createEntityId(modelUrl, instanceId);
+                updateEntityCollider(entityId, modelUrl, position, rotation, scale);
+
                 // Return old position so caller can update spatial grid
                 return { success: true, oldPosition };
             },
@@ -2113,6 +2206,93 @@ const EnvironmentBuilder = (
 
                 const instanceData = instancedData.instances.get(instanceId);
                 return instanceData?.tag;
+            },
+            /**
+             * Register all entity colliders with the physics system.
+             * Called when player mode is enabled.
+             */
+            registerAllEntityColliders: () => {
+                const physics = (window as any).__WE_PHYSICS__;
+                if (!physics) {
+                    console.warn('[EnvironmentBuilder] Cannot register entity colliders: physics not available');
+                    return 0;
+                }
+
+                let count = 0;
+                for (const [modelUrl, instancedData] of instancedMeshes.current) {
+                    // Check if this model has addCollider enabled
+                    const model = environmentModels.find((m) => m.modelUrl === modelUrl);
+                    if (!model?.addCollider) continue;
+
+                    const boundingBox = getBoundingBoxForModel(modelUrl);
+                    if (!boundingBox) continue;
+
+                    for (const [instanceId, instanceData] of instancedData.instances) {
+                        const entityId = createEntityId(modelUrl, instanceId);
+                        const registered = physics.addEntityCollider(
+                            entityId,
+                            instanceData.position,
+                            instanceData.rotation,
+                            instanceData.scale,
+                            boundingBox
+                        );
+                        if (registered) count++;
+                    }
+                }
+
+                console.log(`[EnvironmentBuilder] Registered ${count} entity colliders`);
+                return count;
+            },
+            /**
+             * Clear all entity colliders from the physics system.
+             * Called when player mode is disabled.
+             */
+            clearAllEntityColliders: () => {
+                const physics = (window as any).__WE_PHYSICS__;
+                if (!physics) return;
+
+                physics.clearAllEntityColliders();
+                console.log('[EnvironmentBuilder] Cleared all entity colliders');
+            },
+            /**
+             * Update colliders for a specific model type when addCollider setting changes.
+             * @param modelUrl The model URL
+             * @param enabled Whether addCollider is now enabled
+             */
+            updateCollidersForModelType: (modelUrl: string, enabled: boolean) => {
+                const physics = (window as any).__WE_PHYSICS__;
+                if (!physics) return; // Player mode not active, nothing to do
+
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData) return;
+
+                const boundingBox = getBoundingBoxForModel(modelUrl);
+
+                if (enabled && boundingBox) {
+                    // Add colliders for all instances of this model
+                    let count = 0;
+                    for (const [instanceId, instanceData] of instancedData.instances) {
+                        const entityId = createEntityId(modelUrl, instanceId);
+                        const registered = physics.addEntityCollider(
+                            entityId,
+                            instanceData.position,
+                            instanceData.rotation,
+                            instanceData.scale,
+                            boundingBox
+                        );
+                        if (registered) count++;
+                    }
+                    console.log(`[EnvironmentBuilder] Added ${count} colliders for model ${modelUrl}`);
+                } else {
+                    // Remove colliders for all instances of this model
+                    let count = 0;
+                    for (const [instanceId] of instancedData.instances) {
+                        const entityId = createEntityId(modelUrl, instanceId);
+                        const removed = physics.removeEntityCollider(entityId);
+                        if (removed) count++;
+                    }
+                    console.log(`[EnvironmentBuilder] Removed ${count} colliders for model ${modelUrl}`);
+                }
             }
         }),
         [scene, currentBlockType, placeholderMeshRef.current]

@@ -161,6 +161,10 @@ export default function ModelOptionsSection({
             if (selectedModel) {
                 selectedModel.addCollider = checked;
             }
+            // Update colliders for existing instances if in player mode
+            if (environmentBuilder?.updateCollidersForModelType) {
+                environmentBuilder.updateCollidersForModelType(selectedModel.modelUrl, checked);
+            }
         } catch (err) {
             console.error("Failed to save collider preference:", err);
         }

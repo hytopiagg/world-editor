@@ -30,6 +30,9 @@ export class PhysicsManager {
     private _groundBody: RAPIER.RigidBody | null = null;
     private _groundCollider: RAPIER.Collider | null = null;
 
+    // Entity colliders for environment objects
+    private _entityBodies: Map<string, { body: RAPIER.RigidBody; collider: RAPIER.Collider }> = new Map();
+
     private _readyPromise: Promise<void>;
     private _gravity: { x: number; y: number; z: number };
     private _isSolidFn: ((x: number, y: number, z: number) => boolean) | null =
@@ -199,6 +202,130 @@ export class PhysicsManager {
         if (!this._playerBody) return null;
         const t = this._playerBody.translation();
         return new THREE.Vector3(t.x, t.y, t.z);
+    }
+
+    /**
+     * Add a collider for an environment entity.
+     * The bounding box center is used to properly position the collider relative to the entity position.
+     */
+    public addEntityCollider(
+        entityId: string,
+        position: THREE.Vector3,
+        rotation: THREE.Euler,
+        scale: THREE.Vector3,
+        boundingBox: {
+            width: number;
+            height: number;
+            depth: number;
+            center: THREE.Vector3;
+        }
+    ): boolean {
+        if (!this._world) return false;
+
+        // Remove existing collider for this entity if any
+        this.removeEntityCollider(entityId);
+
+        // Calculate world position for collider
+        // The bounding box center offset must be scaled with the entity scale
+        const scaledCenter = boundingBox.center.clone().multiply(scale);
+        const worldPos = position.clone().add(scaledCenter);
+
+        // Convert Euler rotation to quaternion for RAPIER
+        const quat = new THREE.Quaternion().setFromEuler(rotation);
+
+        // Create fixed rigid body at the world position with rotation
+        const bodyDesc = RAPIER.RigidBodyDesc.fixed()
+            .setTranslation(worldPos.x, worldPos.y, worldPos.z)
+            .setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w });
+        const body = this._world.createRigidBody(bodyDesc);
+
+        // Half extents for box collider (scaled by entity scale)
+        const halfExtents = {
+            x: (boundingBox.width * scale.x) / 2,
+            y: (boundingBox.height * scale.y) / 2,
+            z: (boundingBox.depth * scale.z) / 2,
+        };
+
+        // Create box collider
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(
+            halfExtents.x,
+            halfExtents.y,
+            halfExtents.z
+        )
+            .setFriction(0.5)
+            .setRestitution(0);
+
+        const collider = this._world.createCollider(colliderDesc, body);
+
+        // Store in map
+        this._entityBodies.set(entityId, { body, collider });
+
+        return true;
+    }
+
+    /**
+     * Remove a collider for an environment entity.
+     */
+    public removeEntityCollider(entityId: string): boolean {
+        if (!this._world) return false;
+
+        const entityData = this._entityBodies.get(entityId);
+        if (!entityData) return false;
+
+        // Remove collider first, then body
+        this._world.removeCollider(entityData.collider, true);
+        this._world.removeRigidBody(entityData.body);
+
+        this._entityBodies.delete(entityId);
+        return true;
+    }
+
+    /**
+     * Update an entity's collider (position, rotation, scale, or bounding box changed).
+     * Implemented as remove + add for simplicity.
+     */
+    public updateEntityCollider(
+        entityId: string,
+        position: THREE.Vector3,
+        rotation: THREE.Euler,
+        scale: THREE.Vector3,
+        boundingBox: {
+            width: number;
+            height: number;
+            depth: number;
+            center: THREE.Vector3;
+        }
+    ): boolean {
+        // Simply remove and re-add
+        return this.addEntityCollider(entityId, position, rotation, scale, boundingBox);
+    }
+
+    /**
+     * Clear all entity colliders.
+     */
+    public clearAllEntityColliders(): void {
+        if (!this._world) return;
+
+        for (const [entityId, entityData] of this._entityBodies) {
+            this._world.removeCollider(entityData.collider, true);
+            this._world.removeRigidBody(entityData.body);
+        }
+
+        this._entityBodies.clear();
+    }
+
+    /**
+     * Check if an entity has a collider registered.
+     */
+    public hasEntityCollider(entityId: string): boolean {
+        return this._entityBodies.has(entityId);
+    }
+
+    /**
+     * Get the number of entity colliders currently registered.
+     */
+    public getEntityColliderCount(): number {
+        return this._entityBodies.size;
     }
 
     public step(
