@@ -104,8 +104,74 @@ const importFromZip = async (file, terrainBuilderRef, environmentBuilderRef) => 
 
             if (skyboxName) {
                 console.log(`Found skybox in import: ${skyboxName}`);
-                // Save to DB so it persists
-                await DatabaseManager.saveData(STORES.SETTINGS, "selectedSkybox", skyboxName);
+
+                // Check if this is a custom skybox (not in default list)
+                const isCustomSkybox = !DEFAULT_SKYBOXES.includes(skyboxName);
+
+                if (isCustomSkybox) {
+                    // Extract face textures and save as custom skybox
+                    const faceKeys = ['+x', '-x', '+y', '-y', '+z', '-z'] as const;
+                    const faceTextures: Record<string, string> = {};
+                    let allFacesFound = true;
+
+                    for (const faceKey of faceKeys) {
+                        const faceFile = skyboxesFolder.file(`${skyboxName}/${faceKey}.png`) ||
+                            skyboxesFolder.file(`${skyboxName}/${faceKey}.jpg`);
+                        if (faceFile) {
+                            try {
+                                const blob = await faceFile.async('blob');
+                                const dataUri = await new Promise<string>((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onload = () => resolve(reader.result as string);
+                                    reader.onerror = reject;
+                                    reader.readAsDataURL(blob);
+                                });
+                                faceTextures[faceKey] = dataUri;
+                            } catch (e) {
+                                console.warn(`Failed to load skybox face ${faceKey}:`, e);
+                                allFacesFound = false;
+                            }
+                        } else {
+                            console.warn(`Skybox face ${faceKey} not found in ZIP`);
+                            allFacesFound = false;
+                        }
+                    }
+
+                    if (allFacesFound) {
+                        // Generate preview for the custom skybox
+                        const { generateSkyboxPreviewFromDataUris } = await import('./utils/SkyboxPreviewRenderer');
+                        let previewDataUrl: string | undefined;
+                        try {
+                            previewDataUrl = await generateSkyboxPreviewFromDataUris(
+                                faceTextures as Record<'+x' | '-x' | '+y' | '-y' | '+z' | '-z', string>,
+                                { width: 64, height: 64 }
+                            );
+                        } catch (e) {
+                            console.warn('Failed to generate preview for imported skybox:', e);
+                        }
+
+                        // Save custom skybox to database
+                        const customSkybox = {
+                            name: skyboxName,
+                            faceTextures,
+                            previewDataUrl
+                        };
+
+                        const existingSkyboxes = (await DatabaseManager.getData(STORES.SETTINGS, 'customSkyboxes') || []) as any[];
+                        // Check if skybox with same name already exists
+                        const existingIndex = existingSkyboxes.findIndex((s: any) => s.name === skyboxName);
+                        if (existingIndex >= 0) {
+                            existingSkyboxes[existingIndex] = customSkybox; // Update existing
+                        } else {
+                            existingSkyboxes.push(customSkybox); // Add new
+                        }
+                        await DatabaseManager.saveData(STORES.SETTINGS, 'customSkyboxes', existingSkyboxes);
+                        console.log(`Saved imported custom skybox: ${skyboxName}`);
+                    }
+                }
+
+                // Save to DB so it persists (project-scoped)
+                await DatabaseManager.saveData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:selectedSkybox`, skyboxName);
 
                 // Apply to current scene
                 if (terrainBuilderRef.current?.changeSkybox) {
@@ -698,6 +764,8 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                                 instanceIdCounters[modelKey] = nextId + 1;
                                 return nextId;
                             })(),
+                            // Preserve tag from imported data if present
+                            ...(entity.tag ? { tag: entity.tag } : {}),
                         };
                     })
                     .filter((obj) => obj !== null);
@@ -819,13 +887,18 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
 export interface ExportOptions {
     includeBlockTextures: boolean;
     includeModels: boolean;
+    includeSkybox: boolean;
 }
 
 // Default export options (unchecked by default - custom assets are always included)
 export const defaultExportOptions: ExportOptions = {
     includeBlockTextures: false,
     includeModels: false,
+    includeSkybox: false,
 };
+
+// List of default skyboxes that come with the SDK
+export const DEFAULT_SKYBOXES = ['partly-cloudy', 'partly-cloudy-alt', 'sunset', 'night'];
 
 export const exportMapFile = async (
     terrainBuilderRef,
@@ -988,8 +1061,8 @@ export const exportMapFile = async (
             }
         });
 
-        // Collect asset URIs
-        const selectedSkybox = await DatabaseManager.getData(STORES.SETTINGS, "selectedSkybox");
+        // Collect asset URIs - use project-scoped key for selected skybox
+        const selectedSkybox = await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:selectedSkybox`);
 
 
         // --- Remap block IDs to 1..254 for SDK compatibility ---
@@ -1125,6 +1198,7 @@ export const exportMapFile = async (
                             z: obj.scale.z,
                         },
                         name: entityType.name,
+                        ...(obj.tag ? { tag: obj.tag } : {}), // Include tag only if set
                         rigidBodyOptions: {
                             type: "fixed",
                             rotation: {
@@ -1287,28 +1361,54 @@ export const exportMapFile = async (
             });
         }
 
+        // Handle skybox export
         if (typeof selectedSkybox === 'string' && selectedSkybox) {
-            const skyboxesRootFolder = zip.folder("skyboxes");
-            if (skyboxesRootFolder) {
-                const skyboxFolder = skyboxesRootFolder.folder(selectedSkybox);
-                const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
-                faceKeys.forEach(faceKey => {
-                    const uri = `assets/skyboxes/${selectedSkybox}/${faceKey}.png`;
-                    if (!fetchedAssetUrls.has(uri)) {
-                        fetchedAssetUrls.add(uri);
-                        fetchPromises.push(
-                            fetch(uri)
-                                .then(response => {
-                                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${uri}`);
-                                    return response.blob();
-                                })
-                                .then(blob => {
+            const isCustomSkybox = !DEFAULT_SKYBOXES.includes(selectedSkybox);
+            const shouldIncludeSkybox = isCustomSkybox || options.includeSkybox;
+
+            if (shouldIncludeSkybox) {
+                const skyboxesRootFolder = zip.folder("skyboxes");
+                if (skyboxesRootFolder) {
+                    const skyboxFolder = skyboxesRootFolder.folder(selectedSkybox);
+                    const faceKeys = ["+x", "-x", "+y", "-y", "+z", "-z"];
+
+                    if (isCustomSkybox) {
+                        // Custom skybox - load from database
+                        const customSkyboxes = (await DatabaseManager.getData(STORES.SETTINGS, 'customSkyboxes') || []) as any[];
+                        const customSkybox = customSkyboxes.find((s: any) => s.name === selectedSkybox);
+
+                        if (customSkybox && customSkybox.faceTextures) {
+                            for (const faceKey of faceKeys) {
+                                const dataUri = customSkybox.faceTextures[faceKey];
+                                if (dataUri) {
+                                    // Convert data URI to blob
+                                    const response = await fetch(dataUri);
+                                    const blob = await response.blob();
                                     skyboxFolder.file(`${faceKey}.png`, blob);
-                                })
-                                .catch(error => console.error(`Failed to fetch/add skybox texture ${uri}:`, error))
-                        );
+                                }
+                            }
+                        }
+                    } else {
+                        // Default skybox - fetch from assets
+                        faceKeys.forEach(faceKey => {
+                            const uri = `assets/skyboxes/${selectedSkybox}/${faceKey}.png`;
+                            if (!fetchedAssetUrls.has(uri)) {
+                                fetchedAssetUrls.add(uri);
+                                fetchPromises.push(
+                                    fetch(uri)
+                                        .then(response => {
+                                            if (!response.ok) throw new Error(`HTTP error! status: ${response.status} for ${uri}`);
+                                            return response.blob();
+                                        })
+                                        .then(blob => {
+                                            skyboxFolder.file(`${faceKey}.png`, blob);
+                                        })
+                                        .catch(error => console.error(`Failed to fetch/add skybox texture ${uri}:`, error))
+                                );
+                            }
+                        });
                     }
-                });
+                }
             }
         }
 

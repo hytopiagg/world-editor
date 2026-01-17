@@ -48,6 +48,7 @@ import { SpatialGridManager } from "./managers/SpatialGridManager";
 import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
 import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
 import { playPlaceSound } from "./Sound";
+import { DEFAULT_SKYBOXES } from "./ImportExport";
 import {
     GroundTool,
     StaircaseTool,
@@ -2414,17 +2415,16 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             forceChunkUpdate, // Direct chunk updating for tools
             forceRefreshAllChunks, // Force refresh of all chunks
             updateGridSize, // Expose for updating grid size when importing maps
-            changeSkybox: (skyboxName) => {
+            changeSkybox: async (skyboxName) => {
                 if (scene && gl) {
                     const FADE_DURATION = 300; // 300ms fade duration
                     const originalBackground = scene.background;
                     let fadeStartTime = Date.now();
                     let newSkyboxLoaded = false;
-                    let newTextureCube = null;
+                    let newTextureCube: THREE.CubeTexture | null = null;
 
-                    // Preload the new skybox
-                    const loader = new THREE.CubeTextureLoader();
-                    loader.setPath(`./assets/skyboxes/${skyboxName}/`);
+                    // Check if this is a custom skybox
+                    const isCustomSkybox = !DEFAULT_SKYBOXES.includes(skyboxName);
 
                     const fadeOverlay = new THREE.Mesh(
                         new THREE.SphereGeometry(500, 32, 16),
@@ -2437,20 +2437,59 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     );
                     scene.add(fadeOverlay);
 
-                    // Load new skybox
-                    newTextureCube = loader.load(
-                        [
-                            "+x.png",
-                            "-x.png",
-                            "+y.png",
-                            "-y.png",
-                            "+z.png",
-                            "-z.png",
-                        ],
-                        () => {
-                            newSkyboxLoaded = true;
+                    // Load skybox
+                    const loader = new THREE.CubeTextureLoader();
+
+                    if (isCustomSkybox) {
+                        // Load custom skybox from database
+                        try {
+                            const customSkyboxes = (await DatabaseManager.getData(STORES.SETTINGS, 'customSkyboxes') || []) as any[];
+                            const customSkybox = customSkyboxes.find((s: any) => s.name === skyboxName);
+
+                            if (customSkybox && customSkybox.faceTextures) {
+                                // Load from data URIs
+                                const urls = [
+                                    customSkybox.faceTextures['+x'],
+                                    customSkybox.faceTextures['-x'],
+                                    customSkybox.faceTextures['+y'],
+                                    customSkybox.faceTextures['-y'],
+                                    customSkybox.faceTextures['+z'],
+                                    customSkybox.faceTextures['-z']
+                                ];
+                                newTextureCube = loader.load(urls, () => {
+                                    newSkyboxLoaded = true;
+                                });
+                            } else {
+                                console.warn(`Custom skybox "${skyboxName}" not found in database`);
+                                scene.remove(fadeOverlay);
+                                fadeOverlay.geometry.dispose();
+                                fadeOverlay.material.dispose();
+                                return;
+                            }
+                        } catch (error) {
+                            console.error('Error loading custom skybox:', error);
+                            scene.remove(fadeOverlay);
+                            fadeOverlay.geometry.dispose();
+                            fadeOverlay.material.dispose();
+                            return;
                         }
-                    );
+                    } else {
+                        // Load default skybox from assets
+                        loader.setPath(`./assets/skyboxes/${skyboxName}/`);
+                        newTextureCube = loader.load(
+                            [
+                                "+x.png",
+                                "-x.png",
+                                "+y.png",
+                                "-y.png",
+                                "+z.png",
+                                "-z.png",
+                            ],
+                            () => {
+                                newSkyboxLoaded = true;
+                            }
+                        );
+                    }
 
                     // Fade animation
                     const fadeAnimation = () => {

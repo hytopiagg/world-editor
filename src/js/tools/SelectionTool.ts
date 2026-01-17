@@ -65,6 +65,7 @@ class SelectionTool extends BaseTool {
         currentPosition: THREE.Vector3;
         currentRotation: THREE.Euler;
         currentScale: THREE.Vector3;
+        currentTag?: string;
     } | null = null;
     selectedEntityBoundingBox: THREE.Group | null = null;
 
@@ -93,6 +94,7 @@ class SelectionTool extends BaseTool {
     handleSidebarPositionChange: ((e: CustomEvent) => void) | null = null;
     handleSidebarRotationChange: ((e: CustomEvent) => void) | null = null;
     handleSidebarScaleChange: ((e: CustomEvent) => void) | null = null;
+    handleSidebarTagChange: ((e: CustomEvent) => void) | null = null;
     handleUndoRedoComplete: (() => void) | null = null;
 
     // Copy/paste properties
@@ -193,6 +195,20 @@ class SelectionTool extends BaseTool {
             }
         };
 
+        this.handleSidebarTagChange = (e: CustomEvent) => {
+            if (this.selectedEntity && this.environmentBuilderRef?.current) {
+                const tag = e.detail.tag;
+                // Update local state
+                this.selectedEntity.currentTag = tag || undefined;
+                // Update in EnvironmentBuilder and save to database
+                this.environmentBuilderRef.current.updateEntityTag(
+                    this.selectedEntity.modelUrl,
+                    this.selectedEntity.instanceId,
+                    tag || undefined
+                );
+            }
+        };
+
         window.addEventListener(
             "entity-position-changed",
             this.handleSidebarPositionChange
@@ -204,6 +220,10 @@ class SelectionTool extends BaseTool {
         window.addEventListener(
             "entity-scale-changed",
             this.handleSidebarScaleChange
+        );
+        window.addEventListener(
+            "entity-tag-changed",
+            this.handleSidebarTagChange
         );
 
         // Listen for undo/redo completion to check if selected entity still exists
@@ -323,6 +343,15 @@ class SelectionTool extends BaseTool {
     }
 
     selectEntity(entityResult: EntityRaycastResult) {
+        // Get the tag from EnvironmentBuilder if available
+        let currentTag: string | undefined = undefined;
+        if (this.environmentBuilderRef?.current?.getEntityTag) {
+            currentTag = this.environmentBuilderRef.current.getEntityTag(
+                entityResult.entity.modelUrl,
+                entityResult.entity.instanceId
+            );
+        }
+
         // Store entity selection
         this.selectedEntity = {
             modelUrl: entityResult.entity.modelUrl,
@@ -334,6 +363,7 @@ class SelectionTool extends BaseTool {
             currentPosition: entityResult.entity.position.clone(),
             currentRotation: entityResult.entity.rotation.clone(),
             currentScale: entityResult.entity.scale.clone(),
+            currentTag,
         };
 
         // Remove hover bounding box and show selected bounding box
@@ -1032,6 +1062,12 @@ class SelectionTool extends BaseTool {
             window.removeEventListener(
                 "entity-scale-changed",
                 this.handleSidebarScaleChange
+            );
+        }
+        if (this.handleSidebarTagChange) {
+            window.removeEventListener(
+                "entity-tag-changed",
+                this.handleSidebarTagChange
             );
         }
         if (this.handleUndoRedoComplete) {

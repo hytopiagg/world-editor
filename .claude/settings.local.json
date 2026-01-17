@@ -6,7 +6,9 @@
       "Bash(rm:*)",
       "Bash(xargs cat)",
       "Bash(cat package.json)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }

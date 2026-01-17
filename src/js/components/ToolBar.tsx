@@ -2293,6 +2293,41 @@ const ToolBar = ({
                             </div>
                         </div>
                     </label>
+
+                    <label style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                        cursor: 'pointer',
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        backgroundColor: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        transition: 'all 0.2s'
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={exportOptions.includeSkybox}
+                            onChange={(e) => setExportOptions(prev => ({
+                                ...prev,
+                                includeSkybox: e.target.checked
+                            }))}
+                            style={{
+                                width: '20px',
+                                height: '20px',
+                                accentColor: '#6366f1',
+                                cursor: 'pointer',
+                                marginTop: '2px',
+                                flexShrink: 0
+                            }}
+                        />
+                        <div style={{ textAlign: 'left' }}>
+                            <div style={{ fontWeight: 600, marginBottom: '4px' }}>Include Skybox Images</div>
+                            <div style={{ fontSize: '13px', opacity: 0.7, lineHeight: 1.5 }}>
+                                Embed skybox image files in the ZIP. Custom skyboxes are always included.
+                            </div>
+                        </div>
+                    </label>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

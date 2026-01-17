@@ -9,6 +9,7 @@ interface EntityOptionsSectionProps {
         currentPosition: THREE.Vector3;
         currentRotation: THREE.Euler;
         currentScale: THREE.Vector3;
+        currentTag?: string;
     } | null;
     onPositionChange?: (position: THREE.Vector3) => void;
     onRotationChange?: (rotation: THREE.Euler) => void;
@@ -26,6 +27,7 @@ export default function EntityOptionsSection({
     const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
     const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
     const [scale, setScale] = useState({ x: 1, y: 1, z: 1 });
+    const [tag, setTag] = useState('');
     // Track focused inputs to allow free typing without forced formatting
     const [focusedInput, setFocusedInput] = useState<string | null>(null);
     // Store raw input values for focused inputs
@@ -49,6 +51,7 @@ export default function EntityOptionsSection({
                 y: selectedEntity.currentScale.y,
                 z: selectedEntity.currentScale.z,
             });
+            setTag(selectedEntity.currentTag || '');
         }
     }, [selectedEntity]);
 
@@ -183,22 +186,22 @@ export default function EntityOptionsSection({
 
     const handleScaleKeyDown = (axis: 'x' | 'y' | 'z', e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
-        
+
         if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault();
             const currentValue = scale[axis];
             const increment = e.key === 'ArrowUp' ? 0.01 : -0.01;
             const newValue = Math.max(0.01, currentValue + increment);
-            
+
             const newScale = { ...scale, [axis]: newValue };
             setScale(newScale);
-            
+
             // Clear raw input value so it shows the new formatted value
             const inputKey = `scale-${axis}`;
             const newRawValues = { ...rawInputValues };
             delete newRawValues[inputKey];
             setRawInputValues(newRawValues);
-            
+
             if (onScaleChange) {
                 onScaleChange(new THREE.Vector3(newScale.x, newScale.y, newScale.z));
             }
@@ -206,6 +209,35 @@ export default function EntityOptionsSection({
             window.dispatchEvent(new CustomEvent('entity-scale-changed', {
                 detail: { scale: new THREE.Vector3(newScale.x, newScale.y, newScale.z) }
             }));
+        }
+    };
+
+    // Tag validation: only allow alphanumeric, underscores, and dashes
+    const validateTag = (value: string): string => {
+        // Remove any characters that aren't alphanumeric, underscore, or dash
+        return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+    };
+
+    const handleTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const validatedTag = validateTag(e.target.value);
+        setTag(validatedTag);
+    };
+
+    const handleTagBlur = () => {
+        // Dispatch event to update entity tag
+        window.dispatchEvent(new CustomEvent('entity-tag-changed', {
+            detail: { tag: tag || undefined }
+        }));
+    };
+
+    const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+            // Commit tag change on Enter
+            window.dispatchEvent(new CustomEvent('entity-tag-changed', {
+                detail: { tag: tag || undefined }
+            }));
+            (e.target as HTMLInputElement).blur();
         }
     };
 
@@ -224,6 +256,22 @@ export default function EntityOptionsSection({
             <div className="flex flex-col gap-1 fade-down opacity-0 duration-150" style={{ animationDelay: "0.05s" }}>
                 <div className="text-xs text-[#F1F1F1]/60 text-left">Entity: {selectedEntity.name}</div>
                 <div className="text-[10px] text-[#F1F1F1]/50 text-left">Instance ID: {selectedEntity.instanceId}</div>
+            </div>
+
+            {/* Tag */}
+            <div className="flex flex-col gap-1.5 fade-down opacity-0 duration-150" style={{ animationDelay: "0.075s" }}>
+                <div className="text-xs text-[#F1F1F1]/80 font-semibold text-left">Tag</div>
+                <input
+                    type="text"
+                    value={tag}
+                    onChange={handleTagChange}
+                    onBlur={handleTagBlur}
+                    onKeyDown={handleTagKeyDown}
+                    className="w-full px-2 py-1 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs outline-none"
+                    placeholder="Enter tag (optional)"
+                    maxLength={64}
+                />
+                <div className="text-[10px] text-[#F1F1F1]/40 text-left">Alphanumeric, underscores, dashes only</div>
             </div>
 
             {/* Position */}

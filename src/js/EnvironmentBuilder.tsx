@@ -359,6 +359,7 @@ const EnvironmentBuilder = (
                         y: instance[1]?.scale?.y,
                         z: instance[1]?.scale?.z,
                     },
+                    tag: instance[1]?.tag, // Include tag if set
                 });
             });
         }
@@ -447,7 +448,8 @@ const EnvironmentBuilder = (
                         rotation,
                         scale,
                         matrix,
-                        isVisible: true
+                        isVisible: true,
+                        tag: (instance as any).tag, // Preserve tag from undo/redo data
                     });
 
                     const yOffsetAdd = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -901,6 +903,7 @@ const EnvironmentBuilder = (
                             obj.scale.y,
                             obj.scale.z
                         ),
+                        tag: obj.tag, // Preserve tag from saved data
                     });
                 }
             });
@@ -933,6 +936,14 @@ const EnvironmentBuilder = (
                                 tempMesh,
                                 obj.instanceId
                             );
+                            // Set tag on the newly created instance if present
+                            if (obj.tag) {
+                                const instancedData = instancedMeshes.current.get(modelType.modelUrl);
+                                if (instancedData && instancedData.instances.has(obj.instanceId)) {
+                                    const instanceData = instancedData.instances.get(obj.instanceId);
+                                    instanceData.tag = obj.tag;
+                                }
+                            }
                         }
                     }
                 }
@@ -1019,6 +1030,7 @@ const EnvironmentBuilder = (
             scale,
             matrix,
             isVisible: true,
+            tag: undefined, // Optional tag for SDK consumption
         });
         const instanceCountAfter = instancedData.instances.size;
 
@@ -1470,6 +1482,7 @@ const EnvironmentBuilder = (
                     position: serializablePosition,
                     rotation: serializableRotation,
                     scale: serializableScale,
+                    ...(data.tag ? { tag: data.tag } : {}), // Include tag only if set
                 });
             });
         }
@@ -2066,6 +2079,40 @@ const EnvironmentBuilder = (
                 }], [], { force: true });
 
                 console.log(`[EnvironmentBuilder] Spatial grid updated successfully`);
+            },
+            updateEntityTag: (
+                modelUrl: string,
+                instanceId: number,
+                tag: string | undefined
+            ) => {
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData || !instancedData.instances.has(instanceId)) {
+                    console.warn(`[EnvironmentBuilder] Cannot update entity tag: ${modelUrl}:${instanceId} not found`);
+                    return false;
+                }
+
+                const instanceData = instancedData.instances.get(instanceId);
+                if (!instanceData) return false;
+
+                // Update tag
+                instanceData.tag = tag;
+
+                // Save to database
+                updateLocalStorage();
+
+                return true;
+            },
+            getEntityTag: (
+                modelUrl: string,
+                instanceId: number
+            ): string | undefined => {
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData || !instancedData.instances.has(instanceId)) {
+                    return undefined;
+                }
+
+                const instanceData = instancedData.instances.get(instanceId);
+                return instanceData?.tag;
             }
         }),
         [scene, currentBlockType, placeholderMeshRef.current]
