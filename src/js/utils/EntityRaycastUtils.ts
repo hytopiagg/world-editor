@@ -59,45 +59,63 @@ export function raycastEntities(
         const bboxDepth = model.boundingBoxDepth || 1;
         const bboxCenter = model.boundingBoxCenter || new THREE.Vector3(0, 0, 0);
 
-        // Create bounding box at entity position
+        // Create entity position vector
         const entityPos = new THREE.Vector3(
             obj.position.x,
             obj.position.y,
             obj.position.z
         );
 
-        // Account for bounding box center offset
-        const worldCenter = entityPos.clone().add(bboxCenter);
-
-        // Create box geometry for intersection test
-        const box = new THREE.Box3();
-        box.setFromCenterAndSize(
-            worldCenter,
-            new THREE.Vector3(bboxWidth, bboxHeight, bboxDepth)
+        // Get entity rotation and scale
+        const entityRotation = new THREE.Euler(
+            obj.rotation.x,
+            obj.rotation.y,
+            obj.rotation.z
+        );
+        const entityScale = new THREE.Vector3(
+            obj.scale.x,
+            obj.scale.y,
+            obj.scale.z
         );
 
-        // Test ray intersection with bounding box
-        const intersectionPoint = new THREE.Vector3();
-        const intersection = raycaster.ray.intersectBox(box, intersectionPoint);
+        // Apply entity scale to bounding box dimensions
+        const scaledWidth = bboxWidth * entityScale.x;
+        const scaledHeight = bboxHeight * entityScale.y;
+        const scaledDepth = bboxDepth * entityScale.z;
+
+        // Apply entity rotation to bounding box center offset (matching visual bounding box)
+        const scaledBboxCenter = bboxCenter.clone().multiply(entityScale);
+        const rotatedOffset = scaledBboxCenter.clone().applyEuler(entityRotation);
+        const worldCenter = entityPos.clone().add(rotatedOffset);
+
+        // Transform ray into entity-local space (inverse rotation) for OBB intersection
+        const quaternion = new THREE.Quaternion().setFromEuler(entityRotation);
+        const inverseQuaternion = quaternion.clone().invert();
+
+        const localRayOrigin = raycaster.ray.origin.clone().sub(worldCenter).applyQuaternion(inverseQuaternion);
+        const localRayDirection = raycaster.ray.direction.clone().applyQuaternion(inverseQuaternion);
+        const localRay = new THREE.Ray(localRayOrigin, localRayDirection);
+
+        // Create local AABB centered at origin with scaled dimensions
+        const halfExtents = new THREE.Vector3(scaledWidth / 2, scaledHeight / 2, scaledDepth / 2);
+        const localBox = new THREE.Box3(
+            halfExtents.clone().negate(),
+            halfExtents
+        );
+
+        // Test ray intersection in local space
+        const localIntersectionPoint = new THREE.Vector3();
+        const intersection = localRay.intersectBox(localBox, localIntersectionPoint);
 
         if (intersection) {
-            const distance = raycaster.ray.origin.distanceTo(intersectionPoint);
-            
+            // Transform intersection point back to world space
+            const worldIntersectionPoint = localIntersectionPoint.clone()
+                .applyQuaternion(quaternion)
+                .add(worldCenter);
+
+            const distance = raycaster.ray.origin.distanceTo(worldIntersectionPoint);
+
             if (distance < maxDistance && distance < closestDistance) {
-                // Create rotation Euler from stored rotation
-                const rotation = new THREE.Euler(
-                    obj.rotation.x,
-                    obj.rotation.y,
-                    obj.rotation.z
-                );
-
-                // Create scale Vector3
-                const scale = new THREE.Vector3(
-                    obj.scale.x,
-                    obj.scale.y,
-                    obj.scale.z
-                );
-
                 closestDistance = distance;
                 closestIntersection = {
                     entity: {
@@ -105,11 +123,11 @@ export function raycastEntities(
                         instanceId: obj.instanceId,
                         name: obj.name,
                         position: entityPos.clone(),
-                        rotation: rotation,
-                        scale: scale,
+                        rotation: entityRotation,
+                        scale: entityScale,
                     },
                     distance: distance,
-                    point: intersectionPoint.clone(),
+                    point: worldIntersectionPoint.clone(),
                 };
             }
         }
