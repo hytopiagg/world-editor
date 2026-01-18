@@ -476,25 +476,25 @@ export class PhysicsManager {
 
             let grounded = false;
             const planeTopY = (this as any)._flatGroundTopY;
-            
+
             // Detect ground contact if a solid block is directly below within a small tolerance
             if (newVy <= 0) {
                 const nearTopOfGround = bottom <= groundY + 1 + 0.08; // tolerance 8cm
                 // Use next.x, next.z for ground support check to detect blocks at the position we're moving to
                 const hasVoxelSupport = sampleXZSolid(next.x, groundY, next.z);
-                
+
                 // Improved ground plane detection with better tolerance for negative values
                 // Check if player is at or near the plane top, accounting for velocity
                 // Use a larger tolerance (0.2) to catch fast-moving players and account for negative values
                 const planeTolerance = 0.2;
                 let nearFlatPlane = false;
                 let willHitPlane = false;
-                
+
                 if (typeof planeTopY === "number") {
                     const distanceToPlane = bottom - planeTopY;
                     // Check if player is currently near the plane (within tolerance above or slightly below)
                     nearFlatPlane = distanceToPlane <= planeTolerance && distanceToPlane >= -planeTolerance * 0.5;
-                    
+
                     // Also check if player is moving downward and will intersect or pass through the plane this frame
                     // This prevents falling through when moving fast, especially for negative ground planes
                     if (!nearFlatPlane) {
@@ -512,7 +512,48 @@ export class PhysicsManager {
                         }
                     }
                 }
-                
+
+                // Check for entity collider ground support using raycast
+                // Cast a ray downward from the player's position to detect entity colliders
+                let hasEntitySupport = false;
+                let entityGroundY: number | null = null;
+                if (this._world && this._entityBodies.size > 0) {
+                    const rayOrigin = { x: next.x, y: pos.y, z: next.z };
+                    const rayDir = { x: 0, y: -1, z: 0 };
+                    // Cast ray downward, max distance is halfHeight + small tolerance
+                    const maxToi = halfHeight + 0.15;
+
+                    const ray = new RAPIER.Ray(rayOrigin, rayDir);
+                    // Use castRay to find the closest intersection
+                    // Exclude the player's own collider by checking the collider handle
+                    const hit = this._world.castRay(
+                        ray,
+                        maxToi,
+                        true, // solid
+                        undefined, // query filter flags
+                        undefined, // filter groups
+                        this._playerCollider ? this._playerCollider : undefined, // exclude player collider
+                        undefined, // exclude rigid body
+                        (collider) => {
+                            // Exclude player collider and ground collider from entity ground check
+                            if (this._playerCollider && collider.handle === this._playerCollider.handle) {
+                                return false;
+                            }
+                            if (this._groundCollider && collider.handle === this._groundCollider.handle) {
+                                return false;
+                            }
+                            return true;
+                        }
+                    );
+
+                    if (hit !== null) {
+                        // Hit an entity collider - we have ground support
+                        hasEntitySupport = true;
+                        // Calculate the Y position of the hit point
+                        entityGroundY = rayOrigin.y - hit.timeOfImpact;
+                    }
+                }
+
                 if (nearTopOfGround && hasVoxelSupport) {
                     grounded = true;
                     newVy = 0;
@@ -528,6 +569,13 @@ export class PhysicsManager {
                     if (next.y <= targetY || nearFlatPlane || willHitPlane) {
                         next.y = targetY;
                     }
+                } else if (hasEntitySupport && entityGroundY !== null) {
+                    // Standing on an entity collider
+                    grounded = true;
+                    newVy = 0;
+                    // Snap player to the top of the entity
+                    const targetY = entityGroundY + halfHeight + 0.001;
+                    next.y = targetY;
                 }
             }
             // Ceiling check (moving up): stop upward motion if intersecting just below ceiling

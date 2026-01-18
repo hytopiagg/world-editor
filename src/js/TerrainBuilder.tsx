@@ -3924,29 +3924,11 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 const running = moving && !!state.sh;
                                 const actions = window.__WE_PLAYER_ANIMS__ || {};
                                 // Grounded / airborne detection for jump animations
-                                const halfH =
-                                    window.__WE_PHYSICS__ &&
-                                        window.__WE_PHYSICS__.getPlayerHalfHeight
-                                        ? window.__WE_PHYSICS__.getPlayerHalfHeight()
-                                        : 0.75;
-                                const bottomY = p.y - halfH;
-                                const isSolidFn =
-                                    (window.__WE_IS_SOLID__ &&
-                                        typeof window.__WE_IS_SOLID__ ===
-                                        "function" &&
-                                        window.__WE_IS_SOLID__) ||
-                                    null;
-                                const bx = Math.floor(p.x);
-                                const by = Math.floor(bottomY - 0.01);
-                                const bz = Math.floor(p.z);
-                                const hasVoxelBelow = isSolidFn
-                                    ? isSolidFn(bx, by, bz)
-                                    : false;
-                                const nearFlatPlane =
-                                    Math.abs(bottomY - 0.0) <= 0.08;
-                                const groundedNow =
-                                    (hasVoxelBelow && bottomY <= by + 1 + 0.08) ||
-                                    nearFlatPlane;
+                                // Use the physics manager's grounded state which properly accounts for:
+                                // - Voxel blocks below
+                                // - Flat ground plane (at any Y level)
+                                // - Entity colliders
+                                const groundedNow = !!(window as any).__WE_PM_GROUNDED__;
                                 const lastPos = window.__WE_LAST_POS__ || p;
                                 const vy = p.y - lastPos.y;
                                 const wasAirborne = !!window.__WE_AIRBORNE__;
