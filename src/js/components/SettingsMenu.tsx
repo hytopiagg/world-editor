@@ -349,30 +349,30 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                                 type="number"
                                 value={viewDistance}
                                 onChange={(e) => handleViewDistanceChange(Number(e.target.value))}
-                                onBlur={(e) => handleViewDistanceChange(Math.max(32, Math.min(256, Number(e.target.value))))}
+                                onBlur={(e) => handleViewDistanceChange(Math.max(32, Math.min(512, Number(e.target.value))))}
                                 onKeyDown={(e: any) => {
                                     e.stopPropagation();
                                     if (e.key === 'Enter') {
-                                        handleViewDistanceChange(Math.max(32, Math.min(256, Number(e.target.value))));
+                                        handleViewDistanceChange(Math.max(32, Math.min(512, Number(e.target.value))));
                                         e.target.blur();
                                     }
                                 }}
                                 min={32}
-                                max={256}
+                                max={512}
                                 step={16}
                                 className="w-[34.5px] px-1 py-0.5 bg-white/10 border border-white/10 hover:border-white/20 focus:border-white rounded text-[#F1F1F1] text-xs text-center outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <input
                                 type="range"
                                 min="32"
-                                max="256"
+                                max="512"
                                 step="16"
                                 value={viewDistance}
                                 onChange={(e) => handleViewDistanceChange(Number(e.target.value))}
                                 className="flex w-[inherit] h-1 bg-white/10 transition-all rounded-sm appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 animate-slider"
                                 style={{
                                     transition: "all 0.3s ease-in-out",
-                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(viewDistance - 32) / (256 - 32) * 100}%, rgba(255, 255, 255, 0.1) ${(viewDistance - 32) / (256 - 32) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
+                                    background: `linear-gradient(to right, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.8) ${(viewDistance - 32) / (512 - 32) * 100}%, rgba(255, 255, 255, 0.1) ${(viewDistance - 32) / (512 - 32) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
                                 }}
                             />
 

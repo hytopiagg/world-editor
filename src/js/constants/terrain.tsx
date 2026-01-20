@@ -18,7 +18,7 @@ export const getSelectionDistance = () => selectionDistance;
 let viewDistance = FRUSTUM_CULLING_DISTANCE; // Store the current value
 export const getViewDistance = () => viewDistance;
 export const setViewDistance = (distance) => {
-    const newDistance = Math.max(32, Math.min(256, distance)); // Clamp between 32 and 256
+    const newDistance = Math.max(32, Math.min(512, distance)); // Clamp between 32 and 512
     viewDistance = newDistance;
     return newDistance;
 };
