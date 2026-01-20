@@ -602,6 +602,50 @@ class SelectionTool extends BaseTool {
         }
     }
 
+    private createBoundingBoxPreview(
+        group: THREE.Group,
+        minX: number,
+        maxX: number,
+        baseY: number,
+        height: number,
+        minZ: number,
+        maxZ: number,
+        color: number
+    ) {
+        const width = maxX - minX + 1;
+        const depth = maxZ - minZ + 1;
+
+        // Create semi-transparent fill box
+        const geometry = new THREE.BoxGeometry(width, height, depth);
+        const material = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(
+            (minX + maxX) / 2,
+            baseY + (height - 1) / 2,
+            (minZ + maxZ) / 2
+        );
+        mesh.renderOrder = 999;
+        group.add(mesh);
+
+        // Add wireframe edges
+        const edgesGeometry = new THREE.EdgesGeometry(geometry);
+        const edgesMaterial = new THREE.LineBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.8,
+        });
+        const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+        edges.position.copy(mesh.position);
+        edges.renderOrder = 1000;
+        group.add(edges);
+    }
+
     updateSelectionPreview(startPos, endPos) {
         if (!startPos || !endPos) return;
 
@@ -699,22 +743,23 @@ class SelectionTool extends BaseTool {
             const maxZ = Math.max(Math.round(startPos.z), Math.round(endPos.z));
             const baseY = Math.round(startPos.y);
 
-            const areaPositions: THREE.Vector3[] = [];
-            for (let x = minX; x <= maxX; x++) {
-                for (let z = minZ; z <= maxZ; z++) {
-                    for (let y = 0; y < this.selectionHeight; y++) {
-                        areaPositions.push(new THREE.Vector3(x, baseY + y, z));
-                    }
-                }
-            }
-
             const color =
                 this.selectionMode === "copy"
                     ? 0xffff00
                     : this.selectionMode === "delete"
                     ? 0xff4e4e
                     : 0x4e8eff;
-            createInstancedPreview(areaPositions, color, 1);
+
+            this.createBoundingBoxPreview(
+                previewGroup,
+                minX,
+                maxX,
+                baseY,
+                this.selectionHeight,
+                minZ,
+                maxZ,
+                color
+            );
         }
 
         this.selectionPreview = previewGroup;
