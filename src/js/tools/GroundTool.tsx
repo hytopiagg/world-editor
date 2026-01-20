@@ -578,26 +578,6 @@ class GroundTool extends BaseTool {
         const maxZ = Math.max(Math.round(startPos.z), Math.round(endPos.z));
         const baseY = Math.round(startPos.y);
 
-        let totalBlocks = 0;
-        for (let x = minX; x <= maxX; x++) {
-            for (let z = minZ; z <= maxZ; z++) {
-                if (
-                    this.isInGroundWall(
-                        x,
-                        z,
-                        minX,
-                        maxX,
-                        minZ,
-                        maxZ,
-                        this.groundEdgeDepth,
-                        this.isCircleShape
-                    )
-                ) {
-                    totalBlocks += this.groundHeight;
-                }
-            }
-        }
-
         // Publish live dimensions
         const width = Math.max(0, maxX - minX + 1);
         const length = Math.max(0, maxZ - minZ + 1);
@@ -613,26 +593,26 @@ class GroundTool extends BaseTool {
             meta: metaParts.join("  •  ") || undefined,
         });
 
-        if (totalBlocks > 0) {
-            const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const color = this.isCtrlPressed ? 0xff4e4e : 0x4e8eff; // Red for erase, blue for add
 
-            const previewMaterial = new THREE.MeshBasicMaterial({
-                color: this.isCtrlPressed ? 0xff4e4e : 0x4e8eff, // Red for erase, blue for add
-                transparent: true,
-                opacity: 0.5,
-                wireframe: false,
-            });
-
-            const instancedMesh = new THREE.InstancedMesh(
-                previewGeometry,
-                previewMaterial,
-                totalBlocks
+        // For solid rectangles, use optimized bounding box rendering
+        if (!this.isCircleShape && this.groundEdgeDepth <= 0) {
+            this.groundPreview = this.createBoundingBoxPreview(
+                minX,
+                maxX,
+                baseY,
+                this.groundHeight,
+                minZ,
+                maxZ,
+                color
             );
-            instancedMesh.frustumCulled = false; // Disable frustum culling for preview
 
-            let instanceIndex = 0;
-            const matrix = new THREE.Matrix4();
-
+            if (this.scene) {
+                this.scene.add(this.groundPreview);
+            }
+        } else {
+            // For circles and hollow shapes, use InstancedMesh to show actual block positions
+            let totalBlocks = 0;
             for (let x = minX; x <= maxX; x++) {
                 for (let z = minZ; z <= maxZ; z++) {
                     if (
@@ -647,20 +627,60 @@ class GroundTool extends BaseTool {
                             this.isCircleShape
                         )
                     ) {
-                        for (let y = 0; y < this.groundHeight; y++) {
-                            matrix.setPosition(x, baseY + y, z);
-                            instancedMesh.setMatrixAt(instanceIndex++, matrix);
-                        }
+                        totalBlocks += this.groundHeight;
                     }
                 }
             }
 
-            instancedMesh.instanceMatrix.needsUpdate = true;
+            if (totalBlocks > 0) {
+                const previewGeometry = new THREE.BoxGeometry(1, 1, 1);
 
-            this.groundPreview = instancedMesh;
+                const previewMaterial = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 0.5,
+                    wireframe: false,
+                });
 
-            if (this.scene) {
-                this.scene.add(this.groundPreview);
+                const instancedMesh = new THREE.InstancedMesh(
+                    previewGeometry,
+                    previewMaterial,
+                    totalBlocks
+                );
+                instancedMesh.frustumCulled = false; // Disable frustum culling for preview
+
+                let instanceIndex = 0;
+                const matrix = new THREE.Matrix4();
+
+                for (let x = minX; x <= maxX; x++) {
+                    for (let z = minZ; z <= maxZ; z++) {
+                        if (
+                            this.isInGroundWall(
+                                x,
+                                z,
+                                minX,
+                                maxX,
+                                minZ,
+                                maxZ,
+                                this.groundEdgeDepth,
+                                this.isCircleShape
+                            )
+                        ) {
+                            for (let y = 0; y < this.groundHeight; y++) {
+                                matrix.setPosition(x, baseY + y, z);
+                                instancedMesh.setMatrixAt(instanceIndex++, matrix);
+                            }
+                        }
+                    }
+                }
+
+                instancedMesh.instanceMatrix.needsUpdate = true;
+
+                this.groundPreview = instancedMesh;
+
+                if (this.scene) {
+                    this.scene.add(this.groundPreview);
+                }
             }
         }
         console.timeEnd("GroundTool-updateGroundPreview");
@@ -677,6 +697,15 @@ class GroundTool extends BaseTool {
 
         if (this.groundPreview.isInstancedMesh) {
             this.groundPreview.material.color.set(color);
+        } else if (this.groundPreview instanceof THREE.Group) {
+            // Update color for bounding box preview
+            this.groundPreview.traverse((child) => {
+                if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+                    if (child.material instanceof THREE.Material) {
+                        (child.material as THREE.MeshBasicMaterial | THREE.LineBasicMaterial).color.set(color);
+                    }
+                }
+            });
         }
     }
     /**
@@ -684,6 +713,15 @@ class GroundTool extends BaseTool {
      */
     removeGroundPreview() {
         if (this.groundPreview) {
+            // Dispose geometry and materials for both InstancedMesh and Group (bounding box)
+            this.groundPreview.traverse((child) => {
+                if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material instanceof THREE.Material) {
+                        child.material.dispose();
+                    }
+                }
+            });
             this.scene.remove(this.groundPreview);
             this.groundPreview = null;
         }
@@ -720,6 +758,56 @@ class GroundTool extends BaseTool {
                 this.previewPositionRef.current
             );
         }
+    }
+
+    /**
+     * Creates a bounding box preview for solid rectangular ground
+     * Uses the same optimized approach as SelectionTool
+     */
+    private createBoundingBoxPreview(
+        minX: number,
+        maxX: number,
+        baseY: number,
+        height: number,
+        minZ: number,
+        maxZ: number,
+        color: number
+    ): THREE.Group {
+        const group = new THREE.Group();
+        const width = maxX - minX + 1;
+        const depth = maxZ - minZ + 1;
+
+        // Create semi-transparent fill box
+        const geometry = new THREE.BoxGeometry(width, height, depth);
+        const material = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.25,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(
+            (minX + maxX) / 2,
+            baseY + (height - 1) / 2,
+            (minZ + maxZ) / 2
+        );
+        mesh.renderOrder = 999;
+        group.add(mesh);
+
+        // Add wireframe edges
+        const edgesGeometry = new THREE.EdgesGeometry(geometry);
+        const edgesMaterial = new THREE.LineBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.8,
+        });
+        const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+        edges.position.copy(mesh.position);
+        edges.renderOrder = 1000;
+        group.add(edges);
+
+        return group;
     }
 }
 

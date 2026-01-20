@@ -278,13 +278,13 @@ class ZoneTool extends BaseTool {
             this.gizmoObject.position.set(zone.position.x, zone.position.y, zone.position.z);
         } else if (zone.dimensions) {
             this.gizmoObject.position.set(
-                zone.position.x + zone.dimensions.width / 2,
-                zone.position.y + zone.dimensions.height / 2,
-                zone.position.z + zone.dimensions.depth / 2
+                zone.position.x + (zone.dimensions.width - 1) / 2,
+                zone.position.y + (zone.dimensions.height - 1) / 2,
+                zone.position.z + (zone.dimensions.depth - 1) / 2
             );
         }
     }
-    
+
     // ========== Zone Creation Methods ==========
     
     private createPointZone(position: THREE.Vector3) {
@@ -380,7 +380,7 @@ class ZoneTool extends BaseTool {
             depthWrite: false,
         });
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(minX + width / 2, baseY + height / 2, minZ + depth / 2);
+        mesh.position.set(minX + (width - 1) / 2, baseY + (height - 1) / 2, minZ + (depth - 1) / 2);
         previewGroup.add(mesh);
         
         // Add wireframe
@@ -409,7 +409,7 @@ class ZoneTool extends BaseTool {
         const texture = new THREE.CanvasTexture(canvas);
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
         const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.position.set(minX + width / 2, baseY + height + 0.5, minZ + depth / 2);
+        sprite.position.set(minX + (width - 1) / 2, baseY + height + 0.5, minZ + (depth - 1) / 2);
         sprite.scale.set(2, 0.5, 1);
         previewGroup.add(sprite);
         
@@ -521,9 +521,9 @@ class ZoneTool extends BaseTool {
             });
             const box = new THREE.Mesh(geometry, material);
             box.position.set(
-                zone.position.x + width / 2,
-                zone.position.y + height / 2,
-                zone.position.z + depth / 2
+                zone.position.x + (width - 1) / 2,
+                zone.position.y + (height - 1) / 2,
+                zone.position.z + (depth - 1) / 2
             );
             group.add(box);
         }
@@ -561,12 +561,12 @@ class ZoneTool extends BaseTool {
             this.gizmoObject.position.set(zone.position.x, zone.position.y, zone.position.z);
         } else if (zone.dimensions) {
             this.gizmoObject.position.set(
-                zone.position.x + zone.dimensions.width / 2,
-                zone.position.y + zone.dimensions.height / 2,
-                zone.position.z + zone.dimensions.depth / 2
+                zone.position.x + (zone.dimensions.width - 1) / 2,
+                zone.position.y + (zone.dimensions.height - 1) / 2,
+                zone.position.z + (zone.dimensions.depth - 1) / 2
             );
         }
-        
+
         this.scene.add(this.gizmoObject);
         
         // Get DOM element
@@ -640,9 +640,9 @@ class ZoneTool extends BaseTool {
             } else if (this.selectedZone.dimensions) {
                 // Gizmo is at center, calculate corner position
                 newPosition = {
-                    x: Math.round(gizmoPos.x - this.selectedZone.dimensions.width / 2),
-                    y: Math.round(gizmoPos.y - this.selectedZone.dimensions.height / 2),
-                    z: Math.round(gizmoPos.z - this.selectedZone.dimensions.depth / 2),
+                    x: Math.round(gizmoPos.x - (this.selectedZone.dimensions.width - 1) / 2),
+                    y: Math.round(gizmoPos.y - (this.selectedZone.dimensions.height - 1) / 2),
+                    z: Math.round(gizmoPos.z - (this.selectedZone.dimensions.depth - 1) / 2),
                 };
             } else {
                 return;
