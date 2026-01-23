@@ -66,6 +66,8 @@ class SelectionTool extends BaseTool {
         currentRotation: THREE.Euler;
         currentScale: THREE.Vector3;
         currentTag?: string;
+        currentEmissiveColor?: { r: number; g: number; b: number } | null;
+        currentEmissiveIntensity?: number | null;
     } | null = null;
     selectedEntityBoundingBox: THREE.Group | null = null;
 
@@ -95,6 +97,8 @@ class SelectionTool extends BaseTool {
     handleSidebarRotationChange: ((e: CustomEvent) => void) | null = null;
     handleSidebarScaleChange: ((e: CustomEvent) => void) | null = null;
     handleSidebarTagChange: ((e: CustomEvent) => void) | null = null;
+    handleEmissiveColorChange: ((e: CustomEvent) => void) | null = null;
+    handleEmissiveIntensityChange: ((e: CustomEvent) => void) | null = null;
     handleUndoRedoComplete: (() => void) | null = null;
 
     // Copy/paste properties
@@ -209,6 +213,36 @@ class SelectionTool extends BaseTool {
             }
         };
 
+        this.handleEmissiveColorChange = (e: CustomEvent) => {
+            if (this.selectedEntity && this.environmentBuilderRef?.current) {
+                const color = e.detail.color; // { r, g, b } or null
+                // Update local state
+                this.selectedEntity.currentEmissiveColor = color;
+                // Update in EnvironmentBuilder and save to database
+                this.environmentBuilderRef.current.setEntityEmissive(
+                    this.selectedEntity.modelUrl,
+                    this.selectedEntity.instanceId,
+                    color,
+                    this.selectedEntity.currentEmissiveIntensity ?? null
+                );
+            }
+        };
+
+        this.handleEmissiveIntensityChange = (e: CustomEvent) => {
+            if (this.selectedEntity && this.environmentBuilderRef?.current) {
+                const intensity = e.detail.intensity; // number or null
+                // Update local state
+                this.selectedEntity.currentEmissiveIntensity = intensity;
+                // Update in EnvironmentBuilder and save to database
+                this.environmentBuilderRef.current.setEntityEmissive(
+                    this.selectedEntity.modelUrl,
+                    this.selectedEntity.instanceId,
+                    this.selectedEntity.currentEmissiveColor ?? null,
+                    intensity
+                );
+            }
+        };
+
         window.addEventListener(
             "entity-position-changed",
             this.handleSidebarPositionChange
@@ -224,6 +258,14 @@ class SelectionTool extends BaseTool {
         window.addEventListener(
             "entity-tag-changed",
             this.handleSidebarTagChange
+        );
+        window.addEventListener(
+            "entity-emissive-color-changed",
+            this.handleEmissiveColorChange
+        );
+        window.addEventListener(
+            "entity-emissive-intensity-changed",
+            this.handleEmissiveIntensityChange
         );
 
         // Listen for undo/redo completion to check if selected entity still exists
@@ -352,6 +394,18 @@ class SelectionTool extends BaseTool {
             );
         }
 
+        // Get emissive properties from EnvironmentBuilder if available
+        let currentEmissiveColor: { r: number; g: number; b: number } | null = null;
+        let currentEmissiveIntensity: number | null = null;
+        if (this.environmentBuilderRef?.current?.getEntityEmissive) {
+            const emissive = this.environmentBuilderRef.current.getEntityEmissive(
+                entityResult.entity.modelUrl,
+                entityResult.entity.instanceId
+            );
+            currentEmissiveColor = emissive.emissiveColor;
+            currentEmissiveIntensity = emissive.emissiveIntensity;
+        }
+
         // Store entity selection
         this.selectedEntity = {
             modelUrl: entityResult.entity.modelUrl,
@@ -364,6 +418,8 @@ class SelectionTool extends BaseTool {
             currentRotation: entityResult.entity.rotation.clone(),
             currentScale: entityResult.entity.scale.clone(),
             currentTag,
+            currentEmissiveColor,
+            currentEmissiveIntensity,
         };
 
         // Remove hover bounding box and show selected bounding box
@@ -1113,6 +1169,18 @@ class SelectionTool extends BaseTool {
             window.removeEventListener(
                 "entity-tag-changed",
                 this.handleSidebarTagChange
+            );
+        }
+        if (this.handleEmissiveColorChange) {
+            window.removeEventListener(
+                "entity-emissive-color-changed",
+                this.handleEmissiveColorChange
+            );
+        }
+        if (this.handleEmissiveIntensityChange) {
+            window.removeEventListener(
+                "entity-emissive-intensity-changed",
+                this.handleEmissiveIntensityChange
             );
         }
         if (this.handleUndoRedoComplete) {

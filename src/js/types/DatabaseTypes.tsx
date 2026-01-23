@@ -15,6 +15,26 @@ export type CustomModel = {
     timestamp: number;
 }
 
+// Emissive color type for entity glow effects
+export interface EmissiveColor {
+    r: number;
+    g: number;
+    b: number;
+}
+
+// Environment entity instance data
+export interface EnvironmentEntityData {
+    position: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+    modelUrl: string;
+    name: string;
+    instanceId: number;
+    tag?: string;
+    emissiveColor?: EmissiveColor | null;
+    emissiveIntensity?: number | null;
+}
+
 // Zone types for demarcating areas in the world
 export type ZoneType = "point" | "box";
 

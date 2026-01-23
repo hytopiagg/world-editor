@@ -3,7 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Vector3 } from 'three';
+import { Vector3, SRGBColorSpace, NoToneMapping } from 'three';
 import "./css/App.css";
 import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
@@ -39,6 +39,7 @@ import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
 import { isElectronRuntime } from './js/utils/env';
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 import { convertComponentToGLTF } from "./js/utils/ComponentToEntityConverter";
+import PostProcessingManager from "./js/components/PostProcessingManager";
 
 function App() {
     // Project state
@@ -131,6 +132,8 @@ function App() {
     const [playerModeEnabled, setPlayerModeEnabled] = useState(false);
     const lastBaseGridYRef = useRef<number | null>(null);
     const physicsRef = useRef<PhysicsManager | null>(null);
+    const [bloomEnabled, setBloomEnabled] = useState(true); // Enabled by default for emissive glow
+    const [ambientLightIntensity, setAmbientLightIntensity] = useState(1.0); // Track ambient light for bloom threshold
     const cameraAngle = 0;
     const gridSize = 5000;
 
@@ -209,6 +212,10 @@ function App() {
                                 color: typeof amb.color === 'string' ? amb.color : undefined,
                                 intensity: typeof amb.intensity === 'number' ? amb.intensity : undefined,
                             });
+                            // Update ambient light intensity for bloom threshold calculation
+                            if (typeof amb.intensity === 'number') {
+                                setAmbientLightIntensity(amb.intensity);
+                            }
                         }
                     } catch (e) {
                         // noop
@@ -233,6 +240,44 @@ function App() {
 
         loadSavedSkybox();
     }, [pageIsLoaded, projectId]); // re-apply per-project
+
+    // Load bloom settings and listen for changes
+    useEffect(() => {
+        const loadBloomSettings = async () => {
+            try {
+                const savedBloom = await DatabaseManager.getData(STORES.SETTINGS, "bloomEnabled");
+                if (typeof savedBloom === "boolean") {
+                    setBloomEnabled(savedBloom);
+                }
+            } catch (error) {
+                console.error("Error loading bloom setting:", error);
+            }
+        };
+
+        loadBloomSettings();
+
+        const handleBloomChange = (e: CustomEvent) => {
+            setBloomEnabled(e.detail.enabled);
+        };
+
+        window.addEventListener("bloom-settings-changed", handleBloomChange as EventListener);
+        return () => {
+            window.removeEventListener("bloom-settings-changed", handleBloomChange as EventListener);
+        };
+    }, []);
+
+    // Listen for ambient light changes to update bloom threshold dynamically
+    useEffect(() => {
+        const handleAmbientChange = (e: CustomEvent) => {
+            if (e.detail?.intensity !== undefined) {
+                setAmbientLightIntensity(e.detail.intensity);
+            }
+        };
+        window.addEventListener("ambient-light-changed", handleAmbientChange as EventListener);
+        return () => {
+            window.removeEventListener("ambient-light-changed", handleAmbientChange as EventListener);
+        };
+    }, []);
 
     useEffect(() => {
         if (!projectId) return; // Only load these once a project is open
@@ -1041,12 +1086,16 @@ function App() {
 
                 {projectId && (
                     <Canvas
+                        flat  // Disables automatic sRGB encoding and tone mapping - we handle this via PostProcessingManager
                         key={projectId}
                         shadows
                         className="canvas-container"
                         gl={contextAttributes}
                         camera={{ fov: 75, near: 0.1, far: 1000 }}
-                        onCreated={() => {
+                        onCreated={({ gl }) => {
+                            // Match SDK renderer configuration exactly to prevent bloom washout
+                            gl.outputColorSpace = SRGBColorSpace;
+                            gl.toneMapping = NoToneMapping;
                         }}
                     >
                         <TerrainBuilder
@@ -1085,6 +1134,14 @@ function App() {
                             terrainBuilderRef={terrainBuilderRef}
                             cameraPosition={cameraPosition}
                         />
+                        {bloomEnabled && (
+                            <PostProcessingManager
+                                enabled={bloomEnabled}
+                                bloomStrength={0.5}
+                                bloomRadius={0.4}
+                                ambientLightIntensity={ambientLightIntensity}
+                            />
+                        )}
                     </Canvas>
                 )}
 

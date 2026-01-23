@@ -10,6 +10,8 @@ interface EntityOptionsSectionProps {
         currentRotation: THREE.Euler;
         currentScale: THREE.Vector3;
         currentTag?: string;
+        currentEmissiveColor?: { r: number; g: number; b: number } | null;
+        currentEmissiveIntensity?: number | null;
     } | null;
     onPositionChange?: (position: THREE.Vector3) => void;
     onRotationChange?: (rotation: THREE.Euler) => void;
@@ -28,10 +30,35 @@ export default function EntityOptionsSection({
     const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
     const [scale, setScale] = useState({ x: 1, y: 1, z: 1 });
     const [tag, setTag] = useState('');
+    // Emissive glow settings
+    const [emissiveEnabled, setEmissiveEnabled] = useState(false);
+    const [emissiveColor, setEmissiveColor] = useState('#ffffff');
+    const [emissiveIntensity, setEmissiveIntensity] = useState(1.0);
     // Track focused inputs to allow free typing without forced formatting
     const [focusedInput, setFocusedInput] = useState<string | null>(null);
     // Store raw input values for focused inputs
     const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
+
+    // Helper: convert RGB object (0-1 range) to hex string
+    const rgbToHex = (color: { r: number; g: number; b: number }): string => {
+        const r = Math.round(color.r * 255).toString(16).padStart(2, '0');
+        const g = Math.round(color.g * 255).toString(16).padStart(2, '0');
+        const b = Math.round(color.b * 255).toString(16).padStart(2, '0');
+        return `#${r}${g}${b}`;
+    };
+
+    // Helper: convert hex string to RGB object (0-1 range)
+    const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        if (result) {
+            return {
+                r: parseInt(result[1], 16) / 255,
+                g: parseInt(result[2], 16) / 255,
+                b: parseInt(result[3], 16) / 255,
+            };
+        }
+        return { r: 1, g: 1, b: 1 };
+    };
 
     // Update local state when selectedEntity changes
     useEffect(() => {
@@ -52,6 +79,18 @@ export default function EntityOptionsSection({
                 z: selectedEntity.currentScale.z,
             });
             setTag(selectedEntity.currentTag || '');
+
+            // Initialize emissive state
+            const hasEmissive = selectedEntity.currentEmissiveColor != null &&
+                               selectedEntity.currentEmissiveIntensity != null &&
+                               selectedEntity.currentEmissiveIntensity > 0;
+            setEmissiveEnabled(hasEmissive);
+            if (selectedEntity.currentEmissiveColor) {
+                setEmissiveColor(rgbToHex(selectedEntity.currentEmissiveColor));
+            } else {
+                setEmissiveColor('#ffffff');
+            }
+            setEmissiveIntensity(selectedEntity.currentEmissiveIntensity ?? 1.0);
         }
     }, [selectedEntity]);
 
@@ -241,6 +280,50 @@ export default function EntityOptionsSection({
         }
     };
 
+    // Emissive handlers
+    const handleEmissiveToggle = (enabled: boolean) => {
+        setEmissiveEnabled(enabled);
+        if (enabled) {
+            // Enable emissive with current color and intensity
+            const rgb = hexToRgb(emissiveColor);
+            window.dispatchEvent(new CustomEvent('entity-emissive-color-changed', {
+                detail: { color: rgb }
+            }));
+            window.dispatchEvent(new CustomEvent('entity-emissive-intensity-changed', {
+                detail: { intensity: emissiveIntensity }
+            }));
+        } else {
+            // Disable emissive
+            window.dispatchEvent(new CustomEvent('entity-emissive-color-changed', {
+                detail: { color: null }
+            }));
+            window.dispatchEvent(new CustomEvent('entity-emissive-intensity-changed', {
+                detail: { intensity: null }
+            }));
+        }
+    };
+
+    const handleEmissiveColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newColor = e.target.value;
+        setEmissiveColor(newColor);
+        if (emissiveEnabled) {
+            const rgb = hexToRgb(newColor);
+            window.dispatchEvent(new CustomEvent('entity-emissive-color-changed', {
+                detail: { color: rgb }
+            }));
+        }
+    };
+
+    const handleEmissiveIntensityChange = (value: number) => {
+        const clampedValue = Math.max(0, Math.min(5, value));
+        setEmissiveIntensity(clampedValue);
+        if (emissiveEnabled) {
+            window.dispatchEvent(new CustomEvent('entity-emissive-intensity-changed', {
+                detail: { intensity: clampedValue }
+            }));
+        }
+    };
+
     // Helper function to round to maximum decimal places (removes trailing zeros)
     const roundToMaxDecimals = (value: number, maxDecimals: number): string => {
         // Round to maxDecimals places, then remove trailing zeros
@@ -395,6 +478,52 @@ export default function EntityOptionsSection({
                         placeholder="Z"
                     />
                 </div>
+            </div>
+
+            {/* Emissive Glow */}
+            <div className="flex flex-col gap-1.5 fade-down opacity-0 duration-150" style={{ animationDelay: "0.25s" }}>
+                <div className="flex items-center justify-between">
+                    <div className="text-xs text-[#F1F1F1]/80 font-semibold text-left">Emissive Glow</div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={emissiveEnabled}
+                            onChange={(e) => handleEmissiveToggle(e.target.checked)}
+                            className="w-4 h-4 accent-[#6366f1] cursor-pointer"
+                        />
+                        <span className="text-xs text-[#F1F1F1]/60">{emissiveEnabled ? 'On' : 'Off'}</span>
+                    </label>
+                </div>
+                {emissiveEnabled && (
+                    <div className="flex flex-col gap-2 mt-1">
+                        {/* Emissive Color */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-[#F1F1F1]/60 w-14">Color</span>
+                            <input
+                                type="color"
+                                value={emissiveColor}
+                                onChange={handleEmissiveColorChange}
+                                className="w-8 h-6 cursor-pointer border border-white/10 rounded bg-transparent"
+                            />
+                            <span className="text-xs text-[#F1F1F1]/50">{emissiveColor.toUpperCase()}</span>
+                        </div>
+                        {/* Emissive Intensity */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-[#F1F1F1]/60 w-14">Intensity</span>
+                            <input
+                                type="range"
+                                min="0"
+                                max="5"
+                                step="0.1"
+                                value={emissiveIntensity}
+                                onChange={(e) => handleEmissiveIntensityChange(parseFloat(e.target.value))}
+                                className="flex-1 h-1 cursor-pointer accent-[#6366f1]"
+                            />
+                            <span className="text-xs text-[#F1F1F1]/50 w-8 text-right">{emissiveIntensity.toFixed(1)}</span>
+                        </div>
+                    </div>
+                )}
+                <div className="text-[10px] text-[#F1F1F1]/40 text-left">Makes entity glow (visible with bloom enabled)</div>
             </div>
         </div>
     );

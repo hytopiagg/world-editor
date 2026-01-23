@@ -766,6 +766,9 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             })(),
                             // Preserve tag from imported data if present
                             ...(entity.tag ? { tag: entity.tag } : {}),
+                            // Preserve emissive properties from imported data if present
+                            ...(entity.emissiveColor ? { emissiveColor: entity.emissiveColor } : {}),
+                            ...(entity.emissiveIntensity != null ? { emissiveIntensity: entity.emissiveIntensity } : {}),
                         };
                     })
                     .filter((obj) => obj !== null);
@@ -1199,6 +1202,8 @@ export const exportMapFile = async (
                         },
                         name: entityType.name,
                         ...(obj.tag ? { tag: obj.tag } : {}), // Include tag only if set
+                        ...(obj.emissiveColor ? { emissiveColor: obj.emissiveColor } : {}), // Include emissive color only if set
+                        ...(obj.emissiveIntensity != null && obj.emissiveIntensity > 0 ? { emissiveIntensity: obj.emissiveIntensity } : {}), // Include emissive intensity only if set
                         rigidBodyOptions: {
                             type: "fixed",
                             rotation: {

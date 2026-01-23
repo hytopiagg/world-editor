@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils";
-import BlockMaterial from "./blocks/BlockMaterial";
+import EmissiveMeshBasicMaterial from "./materials/EmissiveMeshBasicMaterial";
 import {
     useEffect,
     useRef,
@@ -431,6 +431,8 @@ const EnvironmentBuilder = (
                         z: instance[1]?.scale?.z,
                     },
                     tag: instance[1]?.tag, // Include tag if set
+                    emissiveColor: instance[1]?.emissiveColor || null, // Include emissive color if set
+                    emissiveIntensity: instance[1]?.emissiveIntensity ?? null, // Include emissive intensity if set
                 });
             });
         }
@@ -521,6 +523,8 @@ const EnvironmentBuilder = (
                         matrix,
                         isVisible: true,
                         tag: (instance as any).tag, // Preserve tag from undo/redo data
+                        emissiveColor: (instance as any).emissiveColor || null, // Preserve emissive from undo/redo data
+                        emissiveIntensity: (instance as any).emissiveIntensity ?? null,
                     });
 
                     const yOffsetAdd = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -722,25 +726,44 @@ const EnvironmentBuilder = (
                     ? object.material
                     : [object.material];
                 materials.forEach((material, materialIndex) => {
-                    // Use optimized material from BlockMaterial manager
                     const hasTexture = material.map !== null;
-                    const newMaterial = BlockMaterial.instance.getEnvironmentMaterial({
-                        map: hasTexture ? material.map : null,
-                        transparent: true,
-                        alphaTest: 0.5,
-                        depthWrite: true,
-                        depthTest: true,
-                        side: material.side, // Preserve double-sided rendering from original material (e.g., volleyball net)
-                    });
 
-                    // Copy important properties from original material
-                    if (material.color) {
-                        (newMaterial as any).color = material.color.clone();
+                    // Check if material has significant emissive color
+                    // For emissive materials to not bloom at intensity 1.0, the diffuse/base color
+                    // should be black. If the GLTF model has non-black diffuse on emissive parts,
+                    // we set it to black to prevent unwanted bloom.
+                    const hasSignificantEmissive = material.emissive &&
+                        (material.emissive.r > 0.01 || material.emissive.g > 0.01 || material.emissive.b > 0.01);
+
+                    // For emissive-only materials, use black diffuse color to prevent bloom at intensity 1.0
+                    // This matches the expected behavior: emissive at intensity 1.0 should be visible but not bloom
+                    // Bloom only kicks in when emissive intensity > 1.0, pushing luminance above threshold
+                    let materialColor = material.color ? material.color.clone() : undefined;
+                    if (hasSignificantEmissive && materialColor) {
+                        // Set diffuse to black for emissive materials so only emissive contributes
+                        // This prevents combined (diffuse + emissive) from exceeding bloom threshold
+                        materialColor.setRGB(0, 0, 0);
                     }
 
-                    // Note: MeshBasicMaterial doesn't support emissive properties
-                    // SDK-compatible lighting uses shader modifications instead
-                    // Emissive properties are handled via block light levels, not material properties
+                    // Use EmissiveMeshBasicMaterial for ALL materials (matching SDK GLTFManager behavior)
+                    // This ensures consistent rendering whether or not material has emissive properties
+                    // Non-emissive materials will have emissive = black (0,0,0) which adds nothing
+                    // Bloom only kicks in when emissive luminance > threshold (1.01 at ambient 1.0)
+                    const newMaterial = new EmissiveMeshBasicMaterial({
+                        map: hasTexture ? material.map : null,
+                        // Use original GLTF values instead of forcing transparent/alphaTest (matching SDK)
+                        transparent: material.transparent ?? false,
+                        alphaTest: material.alphaTest ?? 0,
+                        depthWrite: true,
+                        depthTest: true,
+                        side: material.side,
+                        color: materialColor,
+                        opacity: material.opacity ?? 1.0,
+                        // Pass emissive values directly from GLTF (let EmissiveMeshBasicMaterial handle defaults)
+                        emissive: material.emissive ? material.emissive.clone() : undefined,
+                        emissiveIntensity: material.emissiveIntensity, // Let it be undefined if not set
+                        emissiveMap: material.emissiveMap ?? null,
+                    });
 
                     const key = newMaterial.uuid;
                     if (!geometriesByMaterial.has(key)) {
@@ -831,31 +854,41 @@ const EnvironmentBuilder = (
             const previewModel = gltf.scene.clone(true);
             previewModel.traverse((child) => {
                 if (child.isMesh) {
-                    // Use optimized preview materials
-                    if (Array.isArray(child.material)) {
-                        child.material = child.material.map((originalMaterial) => {
-                            const previewMaterial = BlockMaterial.instance.getPreviewMaterial({
-                                map: originalMaterial.map,
-                                color: originalMaterial.color,
-                                opacity: 0.5,
-                                transparent: true,
-                                depthWrite: false,
-                                depthTest: true,
-                                side: originalMaterial.side, // Preserve double-sided rendering
-                            });
-                            return previewMaterial;
-                        });
-                    } else {
-                        const previewMaterial = BlockMaterial.instance.getPreviewMaterial({
-                            map: child.material.map,
-                            color: child.material.color,
+                    // Helper to create preview material - use EmissiveMeshBasicMaterial for ALL materials
+                    // (matching SDK approach) to ensure consistent rendering
+                    const createPreviewMaterial = (originalMaterial: any) => {
+                        // Use original emissive intensity, dimmed for preview transparency
+                        const emissiveIntensity = originalMaterial.emissiveIntensity !== undefined
+                            ? originalMaterial.emissiveIntensity * 0.5
+                            : 0.5;
+
+                        // For emissive materials, use black diffuse color (same fix as main materials)
+                        const hasSignificantEmissive = originalMaterial.emissive &&
+                            (originalMaterial.emissive.r > 0.01 || originalMaterial.emissive.g > 0.01 || originalMaterial.emissive.b > 0.01);
+                        let previewColor = originalMaterial.color;
+                        if (hasSignificantEmissive && previewColor) {
+                            previewColor = previewColor.clone();
+                            previewColor.setRGB(0, 0, 0);
+                        }
+
+                        return new EmissiveMeshBasicMaterial({
+                            map: originalMaterial.map,
+                            color: previewColor,
                             opacity: 0.5,
                             transparent: true,
                             depthWrite: false,
                             depthTest: true,
-                            side: child.material.side, // Preserve double-sided rendering
+                            side: originalMaterial.side,
+                            emissive: originalMaterial.emissive ? originalMaterial.emissive.clone() : undefined,
+                            emissiveIntensity: emissiveIntensity,
+                            emissiveMap: originalMaterial.emissiveMap ?? null,
                         });
-                        child.material = previewMaterial;
+                    };
+
+                    if (Array.isArray(child.material)) {
+                        child.material = child.material.map(createPreviewMaterial);
+                    } else {
+                        child.material = createPreviewMaterial(child.material);
                     }
                     child.castShadow = true;
                     child.receiveShadow = true;
@@ -2206,6 +2239,84 @@ const EnvironmentBuilder = (
 
                 const instanceData = instancedData.instances.get(instanceId);
                 return instanceData?.tag;
+            },
+            /**
+             * Set emissive properties for a specific entity instance.
+             * @param modelUrl The model URL
+             * @param instanceId The instance ID
+             * @param color The emissive color { r, g, b } (0-1 range) or null to disable
+             * @param intensity The emissive intensity or null to disable
+             */
+            setEntityEmissive: (
+                modelUrl: string,
+                instanceId: number,
+                color: { r: number; g: number; b: number } | null,
+                intensity: number | null
+            ) => {
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData || !instancedData.instances.has(instanceId)) {
+                    console.warn(`[EnvironmentBuilder] Cannot update entity emissive: ${modelUrl}:${instanceId} not found`);
+                    return false;
+                }
+
+                const instanceData = instancedData.instances.get(instanceId);
+                if (!instanceData) return false;
+
+                // Update emissive properties in instance data
+                instanceData.emissiveColor = color;
+                instanceData.emissiveIntensity = intensity;
+
+                // Actually apply emissive to the mesh materials
+                // Note: This affects ALL instances of this model type since InstancedMesh uses shared materials
+                if (instancedData.meshes && instancedData.meshes.length > 0) {
+                    instancedData.meshes.forEach((mesh: THREE.InstancedMesh) => {
+                        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                        materials.forEach((mat) => {
+                            if (mat instanceof EmissiveMeshBasicMaterial) {
+                                if (color) {
+                                    mat.customEmissive.setRGB(color.r, color.g, color.b);
+                                    mat.customEmissiveIntensity = intensity ?? 2.0;
+                                } else {
+                                    // Reset to default (no emissive glow)
+                                    mat.customEmissive.setRGB(0, 0, 0);
+                                    mat.customEmissiveIntensity = 0;
+                                }
+                                mat.needsUpdate = true;
+                            }
+                        });
+                    });
+                }
+
+                // Save to database
+                updateLocalStorage();
+
+                // Dispatch event to notify other systems
+                window.dispatchEvent(new CustomEvent('entity-emissive-updated', {
+                    detail: { modelUrl, instanceId, emissiveColor: color, emissiveIntensity: intensity }
+                }));
+
+                return true;
+            },
+            /**
+             * Get emissive properties for a specific entity instance.
+             * @param modelUrl The model URL
+             * @param instanceId The instance ID
+             * @returns Object with emissiveColor and emissiveIntensity, or null values if not set
+             */
+            getEntityEmissive: (
+                modelUrl: string,
+                instanceId: number
+            ): { emissiveColor: { r: number; g: number; b: number } | null; emissiveIntensity: number | null } => {
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData || !instancedData.instances.has(instanceId)) {
+                    return { emissiveColor: null, emissiveIntensity: null };
+                }
+
+                const instanceData = instancedData.instances.get(instanceId);
+                return {
+                    emissiveColor: instanceData?.emissiveColor || null,
+                    emissiveIntensity: instanceData?.emissiveIntensity ?? null
+                };
             },
             /**
              * Register all entity colliders with the physics system.

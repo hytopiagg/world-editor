@@ -73,6 +73,11 @@ export default function LightingOptionsSection({ terrainBuilderRef }: LightingOp
                 intensity: next.intensity !== undefined ? next.intensity : ambientIntensity,
             };
             await DatabaseManager.saveData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:ambientLight`, toSave);
+
+            // Dispatch event for bloom threshold updates
+            window.dispatchEvent(new CustomEvent("ambient-light-changed", {
+                detail: { color: toSave.color, intensity: toSave.intensity }
+            }));
         } catch (_) { }
     };
 

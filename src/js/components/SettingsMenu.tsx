@@ -30,6 +30,7 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
     const [showGrid, setShowGrid] = useState(true);
     const [baseGridY, setBaseGridY] = useState(0);
     const [isPointerUnlockedMode, setIsPointerUnlockedMode] = useState(!cameraManager.isPointerUnlockedMode);
+    const [bloomEnabled, setBloomEnabled] = useState(true); // Enabled by default for emissive glow
 
     // Load saved sensitivity on mount
     useEffect(() => {
@@ -105,6 +106,20 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     }
                 } catch (error) {
                     console.error("Error loading base grid Y:", error);
+                }
+
+                // Load saved bloom setting
+                try {
+                    const savedBloom = await DatabaseManager.getData(STORES.SETTINGS, "bloomEnabled");
+                    if (typeof savedBloom === "boolean") {
+                        setBloomEnabled(savedBloom);
+                        // Dispatch event to update PostProcessingManager
+                        window.dispatchEvent(new CustomEvent('bloom-settings-changed', {
+                            detail: { enabled: savedBloom }
+                        }));
+                    }
+                } catch (error) {
+                    console.error("Error loading bloom setting:", error);
                 }
 
             } catch (error) {
@@ -231,6 +246,19 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         }
     };
 
+    const handleBloomToggle = async (checked: boolean) => {
+        setBloomEnabled(checked);
+        try {
+            await DatabaseManager.saveData(STORES.SETTINGS, "bloomEnabled", checked);
+            // Dispatch event to update PostProcessingManager
+            window.dispatchEvent(new CustomEvent('bloom-settings-changed', {
+                detail: { enabled: checked }
+            }));
+        } catch (error) {
+            console.error("Error saving bloom setting:", error);
+        }
+    };
+
     return (
         <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-1">
@@ -321,6 +349,17 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                             type="checkbox"
                             checked={showGrid}
                             onChange={(e) => handleGridToggle(e.target.checked)}
+                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
+                        animationDelay: "0.12s"
+                    }}>
+                        <span>Bloom Effect</span>
+                        <input
+                            type="checkbox"
+                            checked={bloomEnabled}
+                            onChange={(e) => handleBloomToggle(e.target.checked)}
                             className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
                         />
                     </label>
