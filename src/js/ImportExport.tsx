@@ -766,8 +766,12 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                             })(),
                             // Preserve tag from imported data if present
                             ...(entity.tag ? { tag: entity.tag } : {}),
-                            // Preserve emissive properties from imported data if present
-                            ...(entity.emissiveColor ? { emissiveColor: entity.emissiveColor } : {}),
+                            // Convert emissive color from SDK format (0-255) to internal format (0-1)
+                            ...(entity.emissiveColor ? { emissiveColor: {
+                                r: entity.emissiveColor.r / 255,
+                                g: entity.emissiveColor.g / 255,
+                                b: entity.emissiveColor.b / 255,
+                            } } : {}),
                             ...(entity.emissiveIntensity != null ? { emissiveIntensity: entity.emissiveIntensity } : {}),
                         };
                     })
@@ -1202,7 +1206,12 @@ export const exportMapFile = async (
                         },
                         name: entityType.name,
                         ...(obj.tag ? { tag: obj.tag } : {}), // Include tag only if set
-                        ...(obj.emissiveColor ? { emissiveColor: obj.emissiveColor } : {}), // Include emissive color only if set
+                        // Convert emissive color from 0-1 range to 0-255 range for SDK compatibility
+                        ...(obj.emissiveColor ? { emissiveColor: {
+                            r: Math.round(obj.emissiveColor.r * 255),
+                            g: Math.round(obj.emissiveColor.g * 255),
+                            b: Math.round(obj.emissiveColor.b * 255),
+                        } } : {}),
                         ...(obj.emissiveIntensity != null && obj.emissiveIntensity > 0 ? { emissiveIntensity: obj.emissiveIntensity } : {}), // Include emissive intensity only if set
                         rigidBodyOptions: {
                             type: "fixed",

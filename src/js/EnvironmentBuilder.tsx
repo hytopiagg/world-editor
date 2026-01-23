@@ -335,6 +335,13 @@ const EnvironmentBuilder = (
                 }
             }
 
+            // Get emissive attribute and original material values for syncing
+            const emissiveAttr = mesh.geometry.getAttribute('instanceEmissive') as THREE.InstancedBufferAttribute;
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            const emissiveMat = materials.find(m => m instanceof EmissiveMeshBasicMaterial) as EmissiveMeshBasicMaterial | undefined;
+            const origEmissive = emissiveMat ? (emissiveMat as any)._originalEmissive : null;
+            const origIntensity = emissiveMat ? (emissiveMat as any)._originalEmissiveIntensity : 0;
+
             instances.forEach(([instanceId, data]) => {
                 if (data.isVisible) {
                     // Set the normal matrix for visible instances
@@ -347,9 +354,22 @@ const EnvironmentBuilder = (
                     releaseMatrix4(hiddenMatrix);
                     hiddenCount++;
                 }
+
+                // Sync per-instance emissive attribute
+                if (emissiveAttr) {
+                    if (data.emissiveColor) {
+                        emissiveAttr.setXYZW(instanceId, data.emissiveColor.r, data.emissiveColor.g, data.emissiveColor.b, data.emissiveIntensity ?? 2.0);
+                    } else if (origEmissive) {
+                        // Restore original glTF emissive values
+                        emissiveAttr.setXYZW(instanceId, origEmissive.r, origEmissive.g, origEmissive.b, origIntensity);
+                    }
+                }
             });
 
             mesh.instanceMatrix.needsUpdate = true;
+            if (emissiveAttr) {
+                emissiveAttr.needsUpdate = true;
+            }
         });
 
     };
@@ -804,6 +824,25 @@ const EnvironmentBuilder = (
                 instancedMesh.frustumCulled = false; // Disable Three.js frustum culling - we handle our own distance culling
                 instancedMesh.renderOrder = 1;
                 instancedMesh.count = 0;
+
+                // Add per-instance emissive attribute (vec4: rgb = color, a = intensity)
+                // Initialize with original material emissive values
+                const emissiveArray = new Float32Array(initialCapacity * 4);
+                if (material instanceof EmissiveMeshBasicMaterial) {
+                    const origColor = material.customEmissive;
+                    const origIntensity = material.customEmissiveIntensity;
+                    for (let i = 0; i < initialCapacity; i++) {
+                        emissiveArray[i * 4] = origColor.r;
+                        emissiveArray[i * 4 + 1] = origColor.g;
+                        emissiveArray[i * 4 + 2] = origColor.b;
+                        emissiveArray[i * 4 + 3] = origIntensity;
+                    }
+                    // Enable per-instance emissive mode on material
+                    material.useInstancedEmissive = true;
+                }
+                const emissiveAttribute = new THREE.InstancedBufferAttribute(emissiveArray, 4);
+                instancedMesh.geometry.setAttribute('instanceEmissive', emissiveAttribute);
+
                 mergedGeometry.computeBoundingBox();
                 mergedGeometry.computeBoundingSphere();
                 instancedMeshArray.push(instancedMesh);
@@ -2266,23 +2305,29 @@ const EnvironmentBuilder = (
                 instanceData.emissiveColor = color;
                 instanceData.emissiveIntensity = intensity;
 
-                // Actually apply emissive to the mesh materials
-                // Note: This affects ALL instances of this model type since InstancedMesh uses shared materials
+                // Update per-instance emissive attribute on each mesh
                 if (instancedData.meshes && instancedData.meshes.length > 0) {
                     instancedData.meshes.forEach((mesh: THREE.InstancedMesh) => {
-                        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-                        materials.forEach((mat) => {
-                            if (mat instanceof EmissiveMeshBasicMaterial) {
-                                if (color) {
-                                    mat.customEmissive.setRGB(color.r, color.g, color.b);
-                                    mat.customEmissiveIntensity = intensity ?? 2.0;
+                        const emissiveAttr = mesh.geometry.getAttribute('instanceEmissive') as THREE.InstancedBufferAttribute;
+                        if (emissiveAttr) {
+                            if (color) {
+                                emissiveAttr.setXYZW(instanceId, color.r, color.g, color.b, intensity ?? 2.0);
+                            } else {
+                                // Restore original GLTF emissive values (matching SDK behavior)
+                                const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                                const mat = materials.find(m => m instanceof EmissiveMeshBasicMaterial) as EmissiveMeshBasicMaterial | undefined;
+                                if (mat) {
+                                    // Use a temporary restore to get original values
+                                    const origColor = (mat as any)._originalEmissive;
+                                    const origIntensity = (mat as any)._originalEmissiveIntensity;
+                                    emissiveAttr.setXYZW(instanceId, origColor.r, origColor.g, origColor.b, origIntensity);
                                 } else {
-                                    // Restore original GLTF emissive values (matching SDK behavior)
-                                    mat.restoreOriginalEmissive();
+                                    // Fallback: set to black/0
+                                    emissiveAttr.setXYZW(instanceId, 0, 0, 0, 0);
                                 }
-                                mat.needsUpdate = true;
                             }
-                        });
+                            emissiveAttr.needsUpdate = true;
+                        }
                     });
                 }
 
