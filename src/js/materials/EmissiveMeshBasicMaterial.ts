@@ -20,6 +20,10 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
   private _customEmissiveMap: Texture | null;
   private _shaderProcessors: ShaderProcessor[] = [];
 
+  // Store original glTF emissive values for restoration
+  private _originalEmissive: Color;
+  private _originalEmissiveIntensity: number;
+
   constructor(parameters?: MeshBasicMaterialParameters & {
     emissive?: Color | string | number;
     emissiveIntensity?: number;
@@ -32,6 +36,11 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
     this._customEmissive = new Color(emissive ?? 0x000000);
     this._customEmissiveIntensity = emissiveIntensity ?? 1.0;
     this._customEmissiveMap = emissiveMap ?? null;
+
+    // Cache original glTF values for later restoration (matching SDK behavior)
+    this._originalEmissive = this._customEmissive.clone();
+    this._originalEmissiveIntensity = this._customEmissiveIntensity;
+
     // Hack for update defines
     this.customEmissiveMap = this._customEmissiveMap;
 
@@ -62,6 +71,16 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
       delete this.defines![DEFINE_USE_CUSTOM_EMISSIVEMAP];
     }
     this.needsUpdate = true;
+  }
+
+  /**
+   * Restore original glTF emissive values (matching SDK behavior).
+   * When emissive is disabled, this restores the original baked-in values
+   * rather than setting to black/0.
+   */
+  restoreOriginalEmissive(): void {
+    this._customEmissive.copy(this._originalEmissive);
+    this._customEmissiveIntensity = this._originalEmissiveIntensity;
   }
 
   addShaderProcessor(processor: ShaderProcessor, atEnd: boolean = false): void {
@@ -148,6 +167,9 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
     this._customEmissive.copy(source._customEmissive);
     this._customEmissiveIntensity = source._customEmissiveIntensity;
     this.customEmissiveMap = source._customEmissiveMap;
+    // Copy original values for proper restoration behavior
+    this._originalEmissive.copy(source._originalEmissive);
+    this._originalEmissiveIntensity = source._originalEmissiveIntensity;
     return this;
   }
 }

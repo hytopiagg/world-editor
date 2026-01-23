@@ -2277,9 +2277,8 @@ const EnvironmentBuilder = (
                                     mat.customEmissive.setRGB(color.r, color.g, color.b);
                                     mat.customEmissiveIntensity = intensity ?? 2.0;
                                 } else {
-                                    // Reset to default (no emissive glow)
-                                    mat.customEmissive.setRGB(0, 0, 0);
-                                    mat.customEmissiveIntensity = 0;
+                                    // Restore original GLTF emissive values (matching SDK behavior)
+                                    mat.restoreOriginalEmissive();
                                 }
                                 mat.needsUpdate = true;
                             }
