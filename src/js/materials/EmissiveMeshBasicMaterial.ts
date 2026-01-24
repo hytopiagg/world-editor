@@ -11,6 +11,7 @@ export type ShaderProcessor = (params: WebGLProgramParametersWithUniforms, rende
 
 const DEFINE_USE_CUSTOM_EMISSIVEMAP = 'USE_CUSTOM_EMISSIVEMAP';
 const DEFINE_USE_INSTANCED_EMISSIVE = 'USE_INSTANCED_EMISSIVE';
+const DEFINE_USE_INSTANCED_OPACITY = 'USE_INSTANCED_OPACITY';
 const UNIFORM_CUSTOM_EMISSIVE = 'customEmissive';
 const UNIFORM_CUSTOM_EMISSIVE_INTENSITY = 'customEmissiveIntensity';
 const UNIFORM_CUSTOM_EMISSIVEMAP = 'customEmissiveMap';
@@ -21,6 +22,7 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
   private _customEmissiveMap: Texture | null;
   private _shaderProcessors: ShaderProcessor[] = [];
   private _useInstancedEmissive: boolean = false;
+  private _useInstancedOpacity: boolean = false;
 
   // Store original glTF emissive values for restoration
   private _originalEmissive: Color;
@@ -31,8 +33,9 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
     emissiveIntensity?: number;
     emissiveMap?: Texture | null;
     useInstancedEmissive?: boolean;
+    useInstancedOpacity?: boolean;
   }) {
-    const { emissive, emissiveIntensity, emissiveMap, useInstancedEmissive, ...basicParams } = parameters || {};
+    const { emissive, emissiveIntensity, emissiveMap, useInstancedEmissive, useInstancedOpacity, ...basicParams } = parameters || {};
     super(basicParams);
 
     this.defines = this.defines || {};
@@ -40,6 +43,7 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
     this._customEmissiveIntensity = emissiveIntensity ?? 1.0;
     this._customEmissiveMap = emissiveMap ?? null;
     this._useInstancedEmissive = useInstancedEmissive ?? false;
+    this._useInstancedOpacity = useInstancedOpacity ?? false;
 
     // Cache original glTF values for later restoration (matching SDK behavior)
     this._originalEmissive = this._customEmissive.clone();
@@ -48,6 +52,7 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
     // Set up defines
     this.customEmissiveMap = this._customEmissiveMap;
     this.useInstancedEmissive = this._useInstancedEmissive;
+    this.useInstancedOpacity = this._useInstancedOpacity;
 
     this._shaderProcessors.push(this._createEmissiveProcessor());
   }
@@ -102,6 +107,20 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
     this.needsUpdate = true;
   }
 
+  public get useInstancedOpacity(): boolean {
+    return this._useInstancedOpacity;
+  }
+
+  public set useInstancedOpacity(value: boolean) {
+    this._useInstancedOpacity = value;
+    if (value) {
+      this.defines![DEFINE_USE_INSTANCED_OPACITY] = '';
+    } else {
+      delete this.defines![DEFINE_USE_INSTANCED_OPACITY];
+    }
+    this.needsUpdate = true;
+  }
+
   addShaderProcessor(processor: ShaderProcessor, atEnd: boolean = false): void {
     if (atEnd) {
       this._shaderProcessors.push(processor);
@@ -146,6 +165,10 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
               attribute vec4 instanceEmissive;
               varying vec4 vInstanceEmissive;
             #endif
+            #ifdef ${DEFINE_USE_INSTANCED_OPACITY}
+              attribute float instanceOpacity;
+              varying float vInstanceOpacity;
+            #endif
 
             void main() {
               #ifdef ${DEFINE_USE_CUSTOM_EMISSIVEMAP}
@@ -153,6 +176,9 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
               #endif
               #ifdef ${DEFINE_USE_INSTANCED_EMISSIVE}
                 vInstanceEmissive = instanceEmissive;
+              #endif
+              #ifdef ${DEFINE_USE_INSTANCED_OPACITY}
+                vInstanceOpacity = instanceOpacity;
               #endif
           `
         );
@@ -170,6 +196,9 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
             #ifdef ${DEFINE_USE_INSTANCED_EMISSIVE}
               varying vec4 vInstanceEmissive;
             #endif
+            #ifdef ${DEFINE_USE_INSTANCED_OPACITY}
+              varying float vInstanceOpacity;
+            #endif
             void main() {
           `,
         )
@@ -185,6 +214,9 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
               emissiveColor *= texture2D(${UNIFORM_CUSTOM_EMISSIVEMAP}, vCustomEmissiveMapUv).rgb;
             #endif
             outgoingLight += emissiveColor;
+            #ifdef ${DEFINE_USE_INSTANCED_OPACITY}
+              diffuseColor.a *= vInstanceOpacity;
+            #endif
             #include <opaque_fragment>
           `,
         );
@@ -201,6 +233,7 @@ export default class EmissiveMeshBasicMaterial extends MeshBasicMaterial {
     this._customEmissiveIntensity = source._customEmissiveIntensity;
     this.customEmissiveMap = source._customEmissiveMap;
     this.useInstancedEmissive = source._useInstancedEmissive;
+    this.useInstancedOpacity = source._useInstancedOpacity;
     // Copy original values for proper restoration behavior
     this._originalEmissive.copy(source._originalEmissive);
     this._originalEmissiveIntensity = source._originalEmissiveIntensity;

@@ -335,12 +335,16 @@ const EnvironmentBuilder = (
                 }
             }
 
-            // Get emissive attribute and original material values for syncing
+            // Get emissive and opacity attributes and original material values for syncing
             const emissiveAttr = mesh.geometry.getAttribute('instanceEmissive') as THREE.InstancedBufferAttribute;
+            const opacityAttr = mesh.geometry.getAttribute('instanceOpacity') as THREE.InstancedBufferAttribute;
             const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
             const emissiveMat = materials.find(m => m instanceof EmissiveMeshBasicMaterial) as EmissiveMeshBasicMaterial | undefined;
             const origEmissive = emissiveMat ? (emissiveMat as any)._originalEmissive : null;
             const origIntensity = emissiveMat ? (emissiveMat as any)._originalEmissiveIntensity : 0;
+
+            // Track if any instance has opacity < 1 to enable transparency
+            let hasTransparentInstance = false;
 
             instances.forEach(([instanceId, data]) => {
                 if (data.isVisible) {
@@ -364,11 +368,30 @@ const EnvironmentBuilder = (
                         emissiveAttr.setXYZW(instanceId, origEmissive.r, origEmissive.g, origEmissive.b, origIntensity);
                     }
                 }
+
+                // Sync per-instance opacity attribute
+                if (opacityAttr) {
+                    const opacity = data.opacity ?? 1.0;
+                    opacityAttr.setX(instanceId, opacity);
+                    if (opacity < 1.0) {
+                        hasTransparentInstance = true;
+                    }
+                }
             });
 
             mesh.instanceMatrix.needsUpdate = true;
             if (emissiveAttr) {
                 emissiveAttr.needsUpdate = true;
+            }
+            if (opacityAttr) {
+                opacityAttr.needsUpdate = true;
+            }
+
+            // Enable/disable transparency on material based on instance opacity values
+            const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+            if (material && hasTransparentInstance !== material.transparent) {
+                material.transparent = hasTransparentInstance;
+                material.needsUpdate = true;
             }
         });
 
@@ -453,6 +476,7 @@ const EnvironmentBuilder = (
                     tag: instance[1]?.tag, // Include tag if set
                     emissiveColor: instance[1]?.emissiveColor || null, // Include emissive color if set
                     emissiveIntensity: instance[1]?.emissiveIntensity ?? null, // Include emissive intensity if set
+                    opacity: instance[1]?.opacity ?? 1.0, // Include opacity (default 1.0)
                 });
             });
         }
@@ -545,6 +569,7 @@ const EnvironmentBuilder = (
                         tag: (instance as any).tag, // Preserve tag from undo/redo data
                         emissiveColor: (instance as any).emissiveColor || null, // Preserve emissive from undo/redo data
                         emissiveIntensity: (instance as any).emissiveIntensity ?? null,
+                        opacity: (instance as any).opacity ?? 1.0, // Preserve opacity from undo/redo data
                     });
 
                     const yOffsetAdd = getModelYShift(instance.modelUrl) + ENVIRONMENT_OBJECT_Y_OFFSET;
@@ -828,6 +853,8 @@ const EnvironmentBuilder = (
                 // Add per-instance emissive attribute (vec4: rgb = color, a = intensity)
                 // Initialize with original material emissive values
                 const emissiveArray = new Float32Array(initialCapacity * 4);
+                // Add per-instance opacity attribute (float: 0-1, default 1.0)
+                const opacityArray = new Float32Array(initialCapacity);
                 if (material instanceof EmissiveMeshBasicMaterial) {
                     const origColor = material.customEmissive;
                     const origIntensity = material.customEmissiveIntensity;
@@ -836,12 +863,21 @@ const EnvironmentBuilder = (
                         emissiveArray[i * 4 + 1] = origColor.g;
                         emissiveArray[i * 4 + 2] = origColor.b;
                         emissiveArray[i * 4 + 3] = origIntensity;
+                        opacityArray[i] = 1.0; // Default fully opaque
                     }
-                    // Enable per-instance emissive mode on material
+                    // Enable per-instance emissive and opacity mode on material
                     material.useInstancedEmissive = true;
+                    material.useInstancedOpacity = true;
+                } else {
+                    // Initialize opacity to 1.0 for all instances
+                    for (let i = 0; i < initialCapacity; i++) {
+                        opacityArray[i] = 1.0;
+                    }
                 }
                 const emissiveAttribute = new THREE.InstancedBufferAttribute(emissiveArray, 4);
                 instancedMesh.geometry.setAttribute('instanceEmissive', emissiveAttribute);
+                const opacityAttribute = new THREE.InstancedBufferAttribute(opacityArray, 1);
+                instancedMesh.geometry.setAttribute('instanceOpacity', opacityAttribute);
 
                 mergedGeometry.computeBoundingBox();
                 mergedGeometry.computeBoundingSphere();
@@ -1047,6 +1083,9 @@ const EnvironmentBuilder = (
                             obj.scale.z
                         ),
                         tag: obj.tag, // Preserve tag from saved data
+                        emissiveColor: obj.emissiveColor || null, // Preserve emissive color from saved data
+                        emissiveIntensity: obj.emissiveIntensity ?? null, // Preserve emissive intensity from saved data
+                        opacity: obj.opacity ?? 1.0, // Preserve opacity from saved data
                     });
                 }
             });
@@ -1079,12 +1118,21 @@ const EnvironmentBuilder = (
                                 tempMesh,
                                 obj.instanceId
                             );
-                            // Set tag on the newly created instance if present
-                            if (obj.tag) {
-                                const instancedData = instancedMeshes.current.get(modelType.modelUrl);
-                                if (instancedData && instancedData.instances.has(obj.instanceId)) {
-                                    const instanceData = instancedData.instances.get(obj.instanceId);
+                            // Set tag, emissive, and opacity on the newly created instance if present
+                            const instancedData = instancedMeshes.current.get(modelType.modelUrl);
+                            if (instancedData && instancedData.instances.has(obj.instanceId)) {
+                                const instanceData = instancedData.instances.get(obj.instanceId);
+                                if (obj.tag) {
                                     instanceData.tag = obj.tag;
+                                }
+                                if (obj.emissiveColor) {
+                                    instanceData.emissiveColor = obj.emissiveColor;
+                                }
+                                if (obj.emissiveIntensity != null) {
+                                    instanceData.emissiveIntensity = obj.emissiveIntensity;
+                                }
+                                if (obj.opacity != null) {
+                                    instanceData.opacity = obj.opacity;
                                 }
                             }
                         }
@@ -1174,6 +1222,7 @@ const EnvironmentBuilder = (
             matrix,
             isVisible: true,
             tag: undefined, // Optional tag for SDK consumption
+            opacity: 1.0, // Default fully opaque (0-1 range)
         });
         const instanceCountAfter = instancedData.instances.size;
 
@@ -1640,6 +1689,11 @@ const EnvironmentBuilder = (
                     rotation: serializableRotation,
                     scale: serializableScale,
                     ...(data.tag ? { tag: data.tag } : {}), // Include tag only if set
+                    // FIX: Include emissive properties in persistence
+                    ...(data.emissiveColor ? { emissiveColor: data.emissiveColor } : {}),
+                    ...(data.emissiveIntensity != null ? { emissiveIntensity: data.emissiveIntensity } : {}),
+                    // Include opacity only if not default (1.0)
+                    ...(data.opacity != null && data.opacity !== 1.0 ? { opacity: data.opacity } : {}),
                 });
             });
         }
@@ -2361,6 +2415,88 @@ const EnvironmentBuilder = (
                     emissiveColor: instanceData?.emissiveColor || null,
                     emissiveIntensity: instanceData?.emissiveIntensity ?? null
                 };
+            },
+            /**
+             * Set opacity for a specific entity instance.
+             * @param modelUrl The model URL
+             * @param instanceId The instance ID
+             * @param opacity The opacity value (0-1, where 0 = fully transparent, 1 = fully opaque)
+             * @returns true if successful, false otherwise
+             */
+            setEntityOpacity: (
+                modelUrl: string,
+                instanceId: number,
+                opacity: number
+            ): boolean => {
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData || !instancedData.instances.has(instanceId)) {
+                    console.warn(`[EnvironmentBuilder] Cannot set opacity: instance not found (${modelUrl}:${instanceId})`);
+                    return false;
+                }
+
+                const instanceData = instancedData.instances.get(instanceId);
+                if (!instanceData) return false;
+
+                // Clamp opacity to valid range
+                const clampedOpacity = Math.max(0, Math.min(1, opacity));
+
+                // Update opacity in instance data
+                instanceData.opacity = clampedOpacity;
+
+                // Update per-instance opacity attribute on each mesh
+                if (instancedData.meshes && instancedData.meshes.length > 0) {
+                    // Check if any instance has opacity < 1 for transparency toggle
+                    let hasTransparentInstance = false;
+                    for (const [, data] of instancedData.instances) {
+                        if ((data.opacity ?? 1.0) < 1.0) {
+                            hasTransparentInstance = true;
+                            break;
+                        }
+                    }
+
+                    instancedData.meshes.forEach((mesh: THREE.InstancedMesh) => {
+                        const opacityAttr = mesh.geometry.getAttribute('instanceOpacity') as THREE.InstancedBufferAttribute;
+                        if (opacityAttr) {
+                            opacityAttr.setX(instanceId, clampedOpacity);
+                            opacityAttr.needsUpdate = true;
+                        }
+
+                        // Enable/disable transparency on material based on instance opacity values
+                        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+                        if (material && hasTransparentInstance !== material.transparent) {
+                            material.transparent = hasTransparentInstance;
+                            material.needsUpdate = true;
+                        }
+                    });
+                }
+
+                // Save to database
+                updateLocalStorage();
+
+                // Dispatch event to notify other systems
+                window.dispatchEvent(new CustomEvent('entity-opacity-updated', {
+                    detail: { modelUrl, instanceId, opacity: clampedOpacity }
+                }));
+
+                return true;
+            },
+            /**
+             * Get opacity for a specific entity instance.
+             * @param modelUrl The model URL
+             * @param instanceId The instance ID
+             * @returns The opacity value (0-1), or 1.0 if not set/found
+             */
+            getEntityOpacity: (
+                modelUrl: string,
+                instanceId: number
+            ): number => {
+                const instancedData = instancedMeshes.current.get(modelUrl);
+                if (!instancedData || !instancedData.instances.has(instanceId)) {
+                    return 1.0;
+                }
+
+                const instanceData = instancedData.instances.get(instanceId);
+                return instanceData?.opacity ?? 1.0;
             },
             /**
              * Register all entity colliders with the physics system.

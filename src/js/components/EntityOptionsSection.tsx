@@ -12,6 +12,7 @@ interface EntityOptionsSectionProps {
         currentTag?: string;
         currentEmissiveColor?: { r: number; g: number; b: number } | null;
         currentEmissiveIntensity?: number | null;
+        currentOpacity?: number;
     } | null;
     onPositionChange?: (position: THREE.Vector3) => void;
     onRotationChange?: (rotation: THREE.Euler) => void;
@@ -34,6 +35,8 @@ export default function EntityOptionsSection({
     const [emissiveEnabled, setEmissiveEnabled] = useState(false);
     const [emissiveColor, setEmissiveColor] = useState('#ffffff');
     const [emissiveIntensity, setEmissiveIntensity] = useState(1.0);
+    // Opacity setting (0-1, 1 = fully opaque)
+    const [opacity, setOpacity] = useState(1.0);
     // Track focused inputs to allow free typing without forced formatting
     const [focusedInput, setFocusedInput] = useState<string | null>(null);
     // Store raw input values for focused inputs
@@ -91,6 +94,9 @@ export default function EntityOptionsSection({
                 setEmissiveColor('#ffffff');
             }
             setEmissiveIntensity(selectedEntity.currentEmissiveIntensity ?? 1.0);
+
+            // Initialize opacity state
+            setOpacity(selectedEntity.currentOpacity ?? 1.0);
         }
     }, [selectedEntity]);
 
@@ -324,6 +330,15 @@ export default function EntityOptionsSection({
         }
     };
 
+    // Opacity handler
+    const handleOpacityChange = (value: number) => {
+        const clampedValue = Math.max(0, Math.min(1, value));
+        setOpacity(clampedValue);
+        window.dispatchEvent(new CustomEvent('entity-opacity-changed', {
+            detail: { opacity: clampedValue }
+        }));
+    };
+
     // Helper function to round to maximum decimal places (removes trailing zeros)
     const roundToMaxDecimals = (value: number, maxDecimals: number): string => {
         // Round to maxDecimals places, then remove trailing zeros
@@ -524,6 +539,24 @@ export default function EntityOptionsSection({
                     </div>
                 )}
                 <div className="text-[10px] text-[#F1F1F1]/40 text-left">Makes entity glow (visible with bloom enabled)</div>
+            </div>
+
+            {/* Opacity */}
+            <div className="flex flex-col gap-1.5 fade-down opacity-0 duration-150" style={{ animationDelay: "0.3s" }}>
+                <div className="text-xs text-[#F1F1F1]/80 font-semibold text-left">Opacity</div>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={opacity}
+                        onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
+                        className="flex-1 h-1 cursor-pointer accent-[#6366f1]"
+                    />
+                    <span className="text-xs text-[#F1F1F1]/50 w-10 text-right">{Math.round(opacity * 100)}%</span>
+                </div>
+                <div className="text-[10px] text-[#F1F1F1]/40 text-left">0% = transparent, 100% = opaque</div>
             </div>
         </div>
     );

@@ -68,6 +68,7 @@ class SelectionTool extends BaseTool {
         currentTag?: string;
         currentEmissiveColor?: { r: number; g: number; b: number } | null;
         currentEmissiveIntensity?: number | null;
+        currentOpacity?: number;
     } | null = null;
     selectedEntityBoundingBox: THREE.Group | null = null;
 
@@ -99,6 +100,7 @@ class SelectionTool extends BaseTool {
     handleSidebarTagChange: ((e: CustomEvent) => void) | null = null;
     handleEmissiveColorChange: ((e: CustomEvent) => void) | null = null;
     handleEmissiveIntensityChange: ((e: CustomEvent) => void) | null = null;
+    handleOpacityChange: ((e: CustomEvent) => void) | null = null;
     handleUndoRedoComplete: (() => void) | null = null;
 
     // Copy/paste properties
@@ -243,6 +245,20 @@ class SelectionTool extends BaseTool {
             }
         };
 
+        this.handleOpacityChange = (e: CustomEvent) => {
+            if (this.selectedEntity && this.environmentBuilderRef?.current) {
+                const opacity = e.detail.opacity; // number 0-1
+                // Update local state
+                this.selectedEntity.currentOpacity = opacity;
+                // Update in EnvironmentBuilder and save to database
+                this.environmentBuilderRef.current.setEntityOpacity(
+                    this.selectedEntity.modelUrl,
+                    this.selectedEntity.instanceId,
+                    opacity
+                );
+            }
+        };
+
         window.addEventListener(
             "entity-position-changed",
             this.handleSidebarPositionChange
@@ -266,6 +282,10 @@ class SelectionTool extends BaseTool {
         window.addEventListener(
             "entity-emissive-intensity-changed",
             this.handleEmissiveIntensityChange
+        );
+        window.addEventListener(
+            "entity-opacity-changed",
+            this.handleOpacityChange
         );
 
         // Listen for undo/redo completion to check if selected entity still exists
@@ -406,6 +426,15 @@ class SelectionTool extends BaseTool {
             currentEmissiveIntensity = emissive.emissiveIntensity;
         }
 
+        // Get opacity from EnvironmentBuilder if available
+        let currentOpacity: number = 1.0;
+        if (this.environmentBuilderRef?.current?.getEntityOpacity) {
+            currentOpacity = this.environmentBuilderRef.current.getEntityOpacity(
+                entityResult.entity.modelUrl,
+                entityResult.entity.instanceId
+            );
+        }
+
         // Store entity selection
         this.selectedEntity = {
             modelUrl: entityResult.entity.modelUrl,
@@ -420,6 +449,7 @@ class SelectionTool extends BaseTool {
             currentTag,
             currentEmissiveColor,
             currentEmissiveIntensity,
+            currentOpacity,
         };
 
         // Remove hover bounding box and show selected bounding box
@@ -1181,6 +1211,12 @@ class SelectionTool extends BaseTool {
             window.removeEventListener(
                 "entity-emissive-intensity-changed",
                 this.handleEmissiveIntensityChange
+            );
+        }
+        if (this.handleOpacityChange) {
+            window.removeEventListener(
+                "entity-opacity-changed",
+                this.handleOpacityChange
             );
         }
         if (this.handleUndoRedoComplete) {

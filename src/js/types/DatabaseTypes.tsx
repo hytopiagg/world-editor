@@ -33,6 +33,7 @@ export interface EnvironmentEntityData {
     tag?: string;
     emissiveColor?: EmissiveColor | null;
     emissiveIntensity?: number | null;
+    opacity?: number; // 0-1, default 1.0 (fully opaque). SDK serializes as 'o'.
 }
 
 // Zone types for demarcating areas in the world

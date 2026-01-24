@@ -773,6 +773,9 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                                 b: entity.emissiveColor.b / 255,
                             } } : {}),
                             ...(entity.emissiveIntensity != null ? { emissiveIntensity: entity.emissiveIntensity } : {}),
+                            // Import opacity (SDK uses 'o' shorthand, but map.json uses 'opacity')
+                            ...(entity.opacity != null ? { opacity: entity.opacity } : {}),
+                            ...(entity.o != null ? { opacity: entity.o } : {}),
                         };
                     })
                     .filter((obj) => obj !== null);
@@ -1213,6 +1216,8 @@ export const exportMapFile = async (
                             b: Math.round(obj.emissiveColor.b * 255),
                         } } : {}),
                         ...(obj.emissiveIntensity != null && obj.emissiveIntensity > 0 ? { emissiveIntensity: obj.emissiveIntensity } : {}), // Include emissive intensity only if set
+                        // Include opacity only if not fully opaque (1.0)
+                        ...(obj.opacity != null && obj.opacity !== 1.0 ? { opacity: obj.opacity } : {}),
                         rigidBodyOptions: {
                             type: "fixed",
                             rotation: {
