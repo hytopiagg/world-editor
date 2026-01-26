@@ -15,6 +15,15 @@ import { CustomModel } from "./types/DatabaseTypes";
 import { getViewDistance } from "./constants/terrain";
 import { zoneManager } from "./managers/ZoneManager";
 import { getVector3, releaseVector3, getMatrix4, releaseMatrix4, getEuler, releaseEuler, getQuaternion, releaseQuaternion, ObjectPoolManager } from "./utils/ObjectPool";
+import { updateAABB } from "./utils/TransparentSort";
+
+const ORIGINAL_MATERIAL_DATA = 'originalData';
+
+type OriginalMaterialData = {
+    alphaTest: number;
+    opacity: number;
+    transparent: boolean;
+};
 export const environmentModels = (() => {
     try {
         const fetchModelList = () => {
@@ -389,10 +398,20 @@ const EnvironmentBuilder = (
 
             // Enable/disable transparency on material based on instance opacity values
             const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-            if (material && hasTransparentInstance !== material.transparent) {
-                material.transparent = hasTransparentInstance;
-                material.needsUpdate = true;
+            if (material) {
+                const originalData = material.userData?.[ORIGINAL_MATERIAL_DATA] as OriginalMaterialData | undefined;
+                // Material should be transparent if any instance has reduced opacity,
+                // OR if the original GLTF material was transparent
+                const shouldBeTransparent = hasTransparentInstance || (originalData?.transparent ?? false);
+                if (shouldBeTransparent !== material.transparent) {
+                    material.transparent = shouldBeTransparent;
+                    material.depthWrite = !shouldBeTransparent;
+                    material.needsUpdate = true;
+                }
             }
+
+            // Update AABB for transparent sorting
+            updateAABB(mesh);
         });
 
     };
@@ -794,21 +813,49 @@ const EnvironmentBuilder = (
                     // This ensures consistent rendering whether or not material has emissive properties
                     // Non-emissive materials will have emissive = black (0,0,0) which adds nothing
                     // Bloom only kicks in when emissive luminance > threshold (1.01 at ambient 1.0)
+                    const gltfAlphaTest = material.alphaTest ?? 0;
+                    const gltfOpacity = material.opacity ?? 1.0;
+                    let gltfTransparent = material.transparent ?? false;
+
+                    // Apply SDK's GLTFAlphaBlendingAndClippingMaterialPlugin logic:
+                    // When Alpha Clipping (alphaTest) is enabled but transparent is not,
+                    // check if the material's final alpha values would result in semi-transparency.
+                    // If so, enable Alpha Blending (transparent = true) alongside Alpha Clipping.
+                    const hasTextureTransparency = material.userData?.hasTransparency === true;
+                    if (gltfAlphaTest > 0 && (
+                        (!hasTexture && gltfOpacity >= gltfAlphaTest && gltfOpacity < 1.0) ||
+                        (hasTexture && gltfOpacity > 0 && hasTextureTransparency)
+                    )) {
+                        gltfTransparent = true;
+                    }
+
                     const newMaterial = new EmissiveMeshBasicMaterial({
                         map: hasTexture ? material.map : null,
-                        // Use original GLTF values instead of forcing transparent/alphaTest (matching SDK)
-                        transparent: material.transparent ?? false,
-                        alphaTest: material.alphaTest ?? 0,
-                        depthWrite: true,
+                        alphaMap: material.alphaMap ?? null,
+                        transparent: gltfTransparent,
+                        alphaTest: gltfAlphaTest,
+                        depthWrite: !gltfTransparent,
                         depthTest: true,
                         side: material.side,
                         color: materialColor,
-                        opacity: material.opacity ?? 1.0,
+                        opacity: gltfOpacity,
                         // Pass emissive values directly from GLTF (let EmissiveMeshBasicMaterial handle defaults)
                         emissive: material.emissive ? material.emissive.clone() : undefined,
                         emissiveIntensity: material.emissiveIntensity, // Let it be undefined if not set
                         emissiveMap: material.emissiveMap ?? null,
                     });
+
+                    // Copy userData from GLTF material (preserves transparency metadata etc.)
+                    if (material.userData) {
+                        Object.assign(newMaterial.userData, material.userData);
+                    }
+
+                    // Store original material data for correct restoration when opacity resets
+                    newMaterial.userData[ORIGINAL_MATERIAL_DATA] = {
+                        alphaTest: gltfAlphaTest,
+                        opacity: gltfOpacity,
+                        transparent: gltfTransparent,
+                    } as OriginalMaterialData;
 
                     const key = newMaterial.uuid;
                     if (!geometriesByMaterial.has(key)) {
@@ -881,6 +928,10 @@ const EnvironmentBuilder = (
 
                 mergedGeometry.computeBoundingBox();
                 mergedGeometry.computeBoundingSphere();
+
+                // Initialize AABB sort data for transparent sorting
+                updateAABB(instancedMesh);
+
                 instancedMeshArray.push(instancedMesh);
             }
         }
@@ -2463,9 +2514,27 @@ const EnvironmentBuilder = (
 
                         // Enable/disable transparency on material based on instance opacity values
                         const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-                        if (material && hasTransparentInstance !== material.transparent) {
-                            material.transparent = hasTransparentInstance;
-                            material.needsUpdate = true;
+                        if (material) {
+                            const originalData = material.userData?.[ORIGINAL_MATERIAL_DATA] as OriginalMaterialData | undefined;
+                            // Material should be transparent if any instance has reduced opacity,
+                            // OR if the original GLTF material was transparent
+                            const shouldBeTransparent = hasTransparentInstance || (originalData?.transparent ?? false);
+                            if (shouldBeTransparent !== material.transparent) {
+                                material.transparent = shouldBeTransparent;
+                                material.depthWrite = !shouldBeTransparent;
+                                material.needsUpdate = true;
+                            }
+
+                            // Adjust alphaTest when all instances are fully transparent (matching SDK)
+                            if (originalData && originalData.alphaTest > 0) {
+                                if (clampedOpacity === 0 && !hasTransparentInstance) {
+                                    // All instances at opacity 0 — set alphaTest very low so alpha testing
+                                    // stays active but all pixels effectively fail
+                                    material.alphaTest = 0.0001;
+                                } else {
+                                    material.alphaTest = originalData.alphaTest;
+                                }
+                            }
                         }
                     });
                 }

@@ -49,6 +49,7 @@ import { spatialHashUpdateManager } from "./managers/SpatialHashUpdateManager";
 import TerrainUndoRedoManager from "./managers/TerrainUndoRedoManager";
 import { playPlaceSound } from "./Sound";
 import { DEFAULT_SKYBOXES } from "./ImportExport";
+import { getTransparentSortKey } from "./utils/TransparentSort";
 import {
     GroundTool,
     StaircaseTool,
@@ -232,6 +233,30 @@ function optimizeRenderer(gl: THREE.WebGLRenderer | null) {
         // This will be picked up by lights that check renderer settings
         (gl as any).userData = (gl as any).userData || {};
         (gl as any).userData.recommendedShadowMapSize = settings.shadowMapSize;
+
+        // Install SDK-aligned custom transparent sort function using AABB-based back-to-front sorting
+        const _viewDir = new THREE.Vector3();
+        gl.setTransparentSort((a: any, b: any): number => {
+            if (a.groupOrder !== b.groupOrder) {
+                return a.groupOrder - b.groupOrder;
+            } else if (a.renderOrder !== b.renderOrder) {
+                return a.renderOrder - b.renderOrder;
+            }
+
+            const camera = (gl as any).userData.camera as THREE.Camera | undefined;
+            if (camera) {
+                camera.getWorldDirection(_viewDir);
+                const frame = gl.info.render.frame;
+                const keyA = getTransparentSortKey(a.object, camera.position, _viewDir, frame);
+                const keyB = getTransparentSortKey(b.object, camera.position, _viewDir, frame);
+
+                if (keyA !== keyB) {
+                    return keyB - keyA; // Back-to-front
+                }
+            }
+
+            return a.id - b.id;
+        });
 
         // Note: powerPreference must be set at context creation time, not here
         // It's now properly configured in the Canvas component gl prop
@@ -580,8 +605,13 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             if (threeCamera) {
                 currentCameraRef.current = threeCamera;
                 cameraRef.current = threeCamera; // Also update our camera ref for frustum culling
+                // Keep renderer's camera ref in sync for transparent sort function
+                if (gl) {
+                    (gl as any).userData = (gl as any).userData || {};
+                    (gl as any).userData.camera = threeCamera;
+                }
             }
-        }, [threeCamera]);
+        }, [threeCamera, gl]);
         const updateChunkSystemWithCamera = () => {
             if (!currentCameraRef.current) {
                 return false;
@@ -3244,6 +3274,11 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
         useEffect(() => {
             optimizeRenderer(gl);
+            // Store camera ref on renderer userData so transparent sort function can access it
+            if (gl && threeCamera) {
+                (gl as any).userData = (gl as any).userData || {};
+                (gl as any).userData.camera = threeCamera;
+            }
             try {
                 window.__WE_SCENE__ = scene;
                 // Initialize camera control globals so first entry to player mode works without key presses
