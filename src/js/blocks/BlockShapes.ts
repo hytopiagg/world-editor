@@ -95,8 +95,8 @@ export function buildTrimeshTriangleData(
     const triangles: TrimeshTriangleData[] = [];
     for (let i = 0; i < indices.length; i += 3) {
         const i0 = indices[i] * 3;
-        const i1 = indices[i + 2] * 3;
-        const i2 = indices[i + 1] * 3;
+        const i1 = indices[i + 1] * 3;
+        const i2 = indices[i + 2] * 3;
 
         const v0: [number, number, number] = [vertices[i0], vertices[i0 + 1], vertices[i0 + 2]];
         const v1: [number, number, number] = [vertices[i1], vertices[i1 + 1], vertices[i1 + 2]];
@@ -142,17 +142,17 @@ const HALF_SLAB_VERTICES = v([
 ]);
 const HALF_SLAB_INDICES = idx([
     // Bottom
-    0,2,1, 0,3,2,
+    0,1,2, 0,2,3,
     // Top
-    4,5,6, 4,6,7,
+    4,6,5, 4,7,6,
     // Front (z=1)
-    3,6,2, 3,7,6,
+    3,2,6, 3,6,7,
     // Back (z=0)
-    0,1,5, 0,5,4,
+    0,5,1, 0,4,5,
     // Left (x=0)
-    0,4,7, 0,7,3,
+    0,7,4, 0,3,7,
     // Right (x=1)
-    1,2,6, 1,6,5,
+    1,6,2, 1,5,6,
 ]);
 
 // --- WEDGE 45° (ramp from bottom-back to top-front) ---
@@ -164,15 +164,15 @@ const WEDGE_45_VERTICES = v([
 ]);
 const WEDGE_45_INDICES = idx([
     // Bottom
-    0,2,1, 0,3,2,
+    0,1,2, 0,2,3,
     // Front (z=1, vertical)
-    3,5,2, 3,4,5,
+    3,2,5, 3,5,4,
     // Slope (from back-bottom to front-top)
-    0,1,5, 0,5,4,
+    0,5,1, 0,4,5,
     // Left triangle
-    0,4,3,
+    0,3,4,
     // Right triangle
-    1,2,5,
+    1,5,2,
 ]);
 
 // --- 2-STEP STAIRS ---
@@ -186,23 +186,23 @@ const STAIRS_2_VERTICES = v([
 ]);
 const STAIRS_2_INDICES = idx([
     // Bottom
-    0,2,1, 0,3,2,
+    0,1,2, 0,2,3,
     // Step 1 top
-    4,5,6, 4,6,7,
+    4,6,5, 4,7,6,
     // Step 2 top
-    8,9,10, 8,10,11,
+    8,10,9, 8,11,10,
     // Front face (z=1)
-    3,6,2, 3,7,6,
+    3,2,6, 3,6,7,
     // Back face (z=0)
-    0,1,9, 0,9,8,
+    0,9,1, 0,8,9,
     // Left face
-    0,8,11, 0,11,4, 0,4,7, 0,7,3,
+    0,11,8, 0,4,11, 0,7,4, 0,3,7,
     // Right face
-    1,2,6, 1,6,5, 1,5,10, 1,10,9,
+    1,6,2, 1,5,6, 1,10,5, 1,9,10,
     // Step 1 riser (z=0.5, y=0 to y=0.5)
-    4,5,1, 4,1,0,  // reuse: connects bottom back to step 1 -- actually this needs to be the riser
+    4,1,5, 4,0,1,  // reuse: connects bottom back to step 1 -- actually this needs to be the riser
     // Step 2 riser (z=0.5, y=0.5 to y=1)
-    11,10,5, 11,5,4,
+    11,5,10, 11,4,5,
 ]);
 
 // --- 3-STEP STAIRS ---
@@ -218,27 +218,27 @@ const STAIRS_3_VERTICES = v([
 ]);
 const STAIRS_3_INDICES = idx([
     // Bottom
-    0,2,1, 0,3,2,
+    0,1,2, 0,2,3,
     // Step 1 top
-    4,5,6, 4,6,7,
+    4,6,5, 4,7,6,
     // Step 2 top
-    8,9,10, 8,10,11,
+    8,10,9, 8,11,10,
     // Step 3 top
-    12,13,14, 12,14,15,
+    12,14,13, 12,15,14,
     // Front (z=1)
-    3,6,2, 3,7,6,
+    3,2,6, 3,6,7,
     // Back (z=0)
-    0,1,13, 0,13,12,
+    0,13,1, 0,12,13,
     // Left
-    0,12,15, 0,15,8, 0,8,11, 0,11,4, 0,4,7, 0,7,3,
+    0,15,12, 0,8,15, 0,11,8, 0,4,11, 0,7,4, 0,3,7,
     // Right
-    1,2,6, 1,6,5, 1,5,10, 1,10,9, 1,9,14, 1,14,13,
+    1,6,2, 1,5,6, 1,10,5, 1,9,10, 1,14,9, 1,13,14,
     // Riser 1 (z=2/3)
-    4,5,0, 5,1,0, // bottom to step1 — this is a simplification
+    4,0,5, 5,0,1, // bottom to step1 — this is a simplification
     // Riser 2 (z=1/3)
-    11,10,5, 11,5,4,
+    11,5,10, 11,4,5,
     // Riser 3
-    15,14,9, 15,9,8,
+    15,9,14, 15,8,9,
 ]);
 
 // --- QUARTER BLOCK (1x1x1 corner piece, lower-front-left quarter: x=0..0.5, y=0..0.5, z=0.5..1) ---
@@ -248,17 +248,17 @@ const QUARTER_VERTICES = v([
 ]);
 const QUARTER_INDICES = idx([
     // Bottom
-    0,2,1, 0,3,2,
+    0,1,2, 0,2,3,
     // Top
-    4,5,6, 4,6,7,
+    4,6,5, 4,7,6,
     // Front (z=1)
-    3,6,2, 3,7,6,
+    3,2,6, 3,6,7,
     // Back (z=0.5)
-    0,1,5, 0,5,4,
+    0,5,1, 0,4,5,
     // Left (x=0)
-    0,4,7, 0,7,3,
+    0,7,4, 0,3,7,
     // Right (x=0.5)
-    1,2,6, 1,6,5,
+    1,6,2, 1,5,6,
 ]);
 
 // --- FENCE POST (centered 0.25x1x0.25) ---
@@ -270,17 +270,17 @@ const FENCE_POST_VERTICES = v([
 ]);
 const FENCE_POST_INDICES = idx([
     // Bottom
-    0,2,1, 0,3,2,
+    0,1,2, 0,2,3,
     // Top
-    4,5,6, 4,6,7,
+    4,6,5, 4,7,6,
     // Front
-    3,6,2, 3,7,6,
+    3,2,6, 3,6,7,
     // Back
-    0,1,5, 0,5,4,
+    0,5,1, 0,4,5,
     // Left
-    0,4,7, 0,7,3,
+    0,7,4, 0,3,7,
     // Right
-    1,2,6, 1,6,5,
+    1,6,2, 1,5,6,
 ]);
 
 // --- CROSS (two intersecting planes, like flowers/grass) ---
@@ -292,13 +292,13 @@ const CROSS_VERTICES = v([
 ]);
 const CROSS_INDICES = idx([
     // Plane 1 front
-    0,1,3, 0,3,2,
+    0,3,1, 0,2,3,
     // Plane 1 back
-    1,0,2, 1,2,3,
+    1,2,0, 1,3,2,
     // Plane 2 front
-    4,5,7, 4,7,6,
+    4,7,5, 4,6,7,
     // Plane 2 back
-    5,4,6, 5,6,7,
+    5,6,4, 5,7,6,
 ]);
 
 // --- FENCE WITH 1 HORIZONTAL BAR (post + bar at mid-height on +Z side) ---
@@ -312,27 +312,27 @@ const FENCE_1H_VERTICES = v([
 ]);
 const FENCE_1H_INDICES = idx([
     // Post bottom
-    0,2,1, 0,3,2,
+    0,1,2, 0,2,3,
     // Post top
-    4,5,6, 4,6,7,
+    4,6,5, 4,7,6,
     // Post front
-    3,6,2, 3,7,6,
+    3,2,6, 3,6,7,
     // Post back
-    0,1,5, 0,5,4,
+    0,5,1, 0,4,5,
     // Post left
-    0,4,7, 0,7,3,
+    0,7,4, 0,3,7,
     // Post right
-    1,2,6, 1,6,5,
+    1,6,2, 1,5,6,
     // Bar bottom
-    8,10,9, 8,11,10,
+    8,9,10, 8,10,11,
     // Bar top
-    12,13,14, 12,14,15,
+    12,14,13, 12,15,14,
     // Bar front (z=1)
-    11,14,10, 11,15,14,
+    11,10,14, 11,14,15,
     // Bar left (x=FP_MIN)
-    8,12,15, 8,15,11,
+    8,15,12, 8,11,15,
     // Bar right (x=FP_MAX)
-    9,10,14, 9,14,13,
+    9,14,10, 9,13,14,
 ]);
 
 // --- FENCE WITH 2 HORIZONTAL BARS ---
@@ -349,17 +349,17 @@ const FENCE_2H_VERTICES = v([
 ]);
 const FENCE_2H_INDICES = idx([
     // Post
-    0,2,1, 0,3,2,  4,5,6, 4,6,7,
-    3,6,2, 3,7,6,  0,1,5, 0,5,4,
-    0,4,7, 0,7,3,  1,2,6, 1,6,5,
+    0,1,2, 0,2,3,  4,6,5, 4,7,6,
+    3,2,6, 3,6,7,  0,5,1, 0,4,5,
+    0,7,4, 0,3,7,  1,6,2, 1,5,6,
     // Lower bar
-    8,10,9, 8,11,10,  12,13,14, 12,14,15,
-    11,14,10, 11,15,14,
-    8,12,15, 8,15,11,  9,10,14, 9,14,13,
+    8,9,10, 8,10,11,  12,14,13, 12,15,14,
+    11,10,14, 11,14,15,
+    8,15,12, 8,11,15,  9,14,10, 9,13,14,
     // Upper bar
-    16,18,17, 16,19,18,  20,21,22, 20,22,23,
-    19,22,18, 19,23,22,
-    16,20,23, 16,23,19,  17,18,22, 17,22,21,
+    16,17,18, 16,18,19,  20,22,21, 20,23,22,
+    19,18,22, 19,22,23,
+    16,23,20, 16,19,23,  17,22,18, 17,21,22,
 ]);
 
 // --- OUTER CORNER STAIRS (2-step, corner piece) ---
@@ -394,25 +394,25 @@ const OCS2_VERTICES = v([
 ]);
 const OCS2_INDICES = idx([
     // Bottom face (y=0) — entire base quad
-    0,4,2, 0,5,4,
+    0,2,4, 0,4,5,
     // Step 1 top (y=0.5, z=0.5..1)
-    8,10,11, 8,11,12,
+    8,11,10, 8,12,11,
     // Step 2 top (y=1, x=0..0.5, z=0..0.5)
-    13,14,15, 13,15,16,
+    13,15,14, 13,16,15,
     // Front face (z=1, y 0→0.5)
-    5,11,4, 5,12,11,
+    5,4,11, 5,11,12,
     // Back face (z=0, x∈[0,0.5], y 0→1) — vertical wall
-    0,1,14, 0,14,13,
+    0,14,1, 0,13,14,
     // Left face (x=0) — L-shaped, fan from vertex 0
-    0,13,16, 0,16,8, 0,8,12, 0,12,5,
+    0,16,13, 0,8,16, 0,12,8, 0,5,12,
     // Right face (x=1, z∈[0.5,1], y 0→0.5)
-    3,4,11, 3,11,10,
+    3,11,4, 3,10,11,
     // Z-riser lower (z=0.5, y 0→0.5, facing -z) — full width x∈[0,1]
-    6,7,9, 6,9,8, 7,3,10, 7,10,9,
+    6,9,7, 6,8,9, 7,10,3, 7,9,10,
     // Z-riser upper (z=0.5, x∈[0,0.5], y 0.5→1, facing -z)
-    8,9,15, 8,15,16,
+    8,15,9, 8,16,15,
     // X-riser (x=0.5, z∈[0,0.5], y 0→1, facing +x) — vertical wall
-    1,7,15, 1,15,14,
+    1,15,7, 1,14,15,
 ]);
 
 // --- OUTER CORNER STAIRS (3-step) ---
@@ -471,33 +471,33 @@ const OCS3_VERTICES = v([
 ]);
 const OCS3_INDICES = idx([
     // Bottom face (y=0) — entire base
-    0,6,3, 0,7,6,
+    0,3,6, 0,6,7,
     // Step 1 top (y=T, z∈[TT,1])
-    14,17,18, 14,18,19,
+    14,18,17, 14,19,18,
     // Step 2 top (y=TT, z∈[T,TT], x∈[0,TT])
-    20,22,23, 20,23,24,
+    20,23,22, 20,24,23,
     // Step 3 top (y=1, z∈[0,T], x∈[0,T])
-    25,26,27, 25,27,28,
+    25,27,26, 25,28,27,
     // Front face (z=1, y 0→T)
-    7,18,6, 7,19,18,
+    7,6,18, 7,18,19,
     // Back face (z=0, x∈[0,T], y 0→1)
-    0,1,26, 0,26,25,
+    0,26,1, 0,25,26,
     // Left face (x=0) — L-shaped fan from vertex 0
-    0,25,28, 0,28,20, 0,20,24, 0,24,14, 0,14,19, 0,19,7,
+    0,28,25, 0,20,28, 0,24,20, 0,14,24, 0,19,14, 0,7,19,
     // Right face (x=1, z∈[TT,1], y 0→T)
-    5,6,18, 5,18,17,
+    5,18,6, 5,17,18,
     // Z-riser at z=TT (y 0→T, full width, facing -z)
-    8,13,15, 8,15,14, 13,12,16, 13,16,15, 12,5,17, 12,17,16,
+    8,15,13, 8,14,15, 13,16,12, 13,15,16, 12,17,5, 12,16,17,
     // Z-riser at z=TT (y T→TT, x∈[0,TT], facing -z)
-    14,16,23, 14,23,24,
+    14,23,16, 14,24,23,
     // Z-riser at z=T (y 0→TT, x∈[0,TT], facing -z)
-    9,10,21, 9,21,20, 10,11,22, 10,22,21,
+    9,21,10, 9,20,21, 10,22,11, 10,21,22,
     // Z-riser at z=T (y TT→1, x∈[0,T], facing -z)
-    20,21,27, 20,27,28,
+    20,27,21, 20,28,27,
     // X-riser at x=TT (z∈[T,TT], y 0→TT, facing +x)
-    11,12,23, 11,23,22,
+    11,23,12, 11,22,23,
     // X-riser at x=T (z∈[0,T], y 0→1, facing +x)
-    1,10,27, 1,27,26,
+    1,27,10, 1,26,27,
 ]);
 
 /**
