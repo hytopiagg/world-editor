@@ -6,7 +6,15 @@ export type UndoRedoState = {
     environment: {
         added: any[];
         removed: any[];
-    }
+    };
+    rotations?: {
+        added: Record<string, number>;
+        removed: Record<string, number>;
+    };
+    shapes?: {
+        added: Record<string, string>;
+        removed: Record<string, string>;
+    };
 }
 
 export type CustomModel = {

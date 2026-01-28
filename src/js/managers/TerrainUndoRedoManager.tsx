@@ -3,7 +3,8 @@ import { DatabaseManager, STORES } from "./DatabaseManager";
 class TerrainUndoRedoManager {
     terrainRef: React.MutableRefObject<any>;
     totalBlocksRef: React.MutableRefObject<any>;
-    importedUpdateTerrainBlocks: (added: any, removed: any) => void;
+    rotationsRef: React.MutableRefObject<Record<string, number>>;
+    importedUpdateTerrainBlocks: (added: any, removed: any, rotationData?: any) => void;
     updateSpatialHashForBlocks: (added: any, removed: any, options: any) => void;
     customBlocks: any;
     BlockTextureAtlas: any;
@@ -11,6 +12,7 @@ class TerrainUndoRedoManager {
     constructor({
         terrainRef,
         totalBlocksRef,
+        rotationsRef,
         importedUpdateTerrainBlocks,
         updateSpatialHashForBlocks,
         customBlocks,
@@ -18,6 +20,7 @@ class TerrainUndoRedoManager {
     }) {
         this.terrainRef = terrainRef;
         this.totalBlocksRef = totalBlocksRef;
+        this.rotationsRef = rotationsRef || { current: {} };
         this.importedUpdateTerrainBlocks = importedUpdateTerrainBlocks;
         this.updateSpatialHashForBlocks = updateSpatialHashForBlocks;
         this.customBlocks = customBlocks;
@@ -31,6 +34,14 @@ class TerrainUndoRedoManager {
                 environment: {
                     added: [],
                     removed: [],
+                },
+                rotations: {
+                    added: {},
+                    removed: {},
+                },
+                shapes: {
+                    added: {},
+                    removed: {},
                 },
             },
         };
@@ -50,6 +61,14 @@ class TerrainUndoRedoManager {
                 environment: {
                     added: [],
                     removed: [],
+                },
+                rotations: {
+                    added: {},
+                    removed: {},
+                },
+                shapes: {
+                    added: {},
+                    removed: {},
                 },
             };
         }
@@ -100,6 +119,14 @@ class TerrainUndoRedoManager {
             environment: {
                 added: [],
                 removed: [],
+            },
+            rotations: {
+                added: {},
+                removed: {},
+            },
+            shapes: {
+                added: {},
+                removed: {},
             },
         };
     }

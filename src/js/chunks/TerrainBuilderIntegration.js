@@ -101,7 +101,9 @@ export const processChunkRenderQueue = () => {
 export const updateTerrainChunks = (
     terrainData,
     onlyVisibleChunks = false,
-    environmentBuilderRef = null
+    environmentBuilderRef = null,
+    rotationData = null,
+    shapeData = null
 ) => {
     if (!chunkSystem) {
         console.error(
@@ -124,7 +126,7 @@ export const updateTerrainChunks = (
         chunkSystem.setBulkLoadingMode(false);
     }
 
-    chunkSystem.updateFromTerrainData(terrainData);
+    chunkSystem.updateFromTerrainData(terrainData, rotationData || undefined, shapeData || undefined);
 
     if (!updateTerrainChunks.spatialHashUpdating) {
         updateTerrainChunks.spatialHashUpdating = true;
@@ -187,7 +189,7 @@ export const updateTerrainChunks = (
  * @param {Object} addedBlocks - The blocks that were added
  * @param {Object} removedBlocks - The blocks that were removed
  */
-export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
+export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}, rotationData = {}, shapeData = {}) => {
     if (!chunkSystem) {
         console.warn(
             "Chunk system not initialized, skipping updateTerrainBlocks"
@@ -204,10 +206,21 @@ export const updateTerrainBlocks = (addedBlocks = {}, removedBlocks = {}) => {
     const addedBlocksArray = Object.entries(addedBlocks).map(
         ([posKey, blockId]) => {
             const [x, y, z] = posKey.split(",").map(Number);
-            return {
+            const entry = {
                 id: blockId,
                 position: [x, y, z],
             };
+            // Attach rotation if provided
+            const rot = rotationData[posKey];
+            if (typeof rot === 'number' && rot > 0) {
+                entry.rotation = rot;
+            }
+            // Attach shape if provided
+            const shape = shapeData[posKey];
+            if (shape && shape !== 'cube') {
+                entry.shape = shape;
+            }
+            return entry;
         }
     );
 

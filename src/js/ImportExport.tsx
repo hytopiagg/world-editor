@@ -562,10 +562,27 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
             }
 
 
-            terrainData = Object.entries(importData.blocks as { [key: string]: number }).reduce(
-                (acc, [key, importedBlockId]) => {
+            const importedRotations: Record<string, number> = {};
+            const importedShapes: Record<string, string> = {};
+            terrainData = Object.entries(importData.blocks as { [key: string]: number | { i: number; r?: number; s?: string } }).reduce(
+                (acc, [key, blockValue]) => {
+                    // Support both plain number and {i, r, s} block format
+                    let importedBlockId: number;
+                    let rotationIndex = 0;
+                    let shapeType = 'cube';
+                    if (typeof blockValue === 'object' && blockValue !== null && typeof blockValue.i === 'number') {
+                        importedBlockId = blockValue.i;
+                        rotationIndex = typeof blockValue.r === 'number' ? blockValue.r : 0;
+                        shapeType = typeof blockValue.s === 'string' ? blockValue.s : 'cube';
+                    } else if (typeof blockValue === 'number') {
+                        importedBlockId = blockValue;
+                    } else {
+                        console.warn(`Skipping corrupted block entry at ${key}: invalid block value "${blockValue}"`);
+                        return acc;
+                    }
+
                     // Validate that importedBlockId is a valid number
-                    if (typeof importedBlockId !== 'number' || !Number.isInteger(importedBlockId) || importedBlockId < 0) {
+                    if (!Number.isInteger(importedBlockId) || importedBlockId < 0) {
                         console.warn(`Skipping corrupted block entry at ${key}: invalid block ID "${importedBlockId}"`);
                         return acc; // Skip this entry
                     }
@@ -575,10 +592,33 @@ const processImportData = async (importData, terrainBuilderRef, environmentBuild
                         : importedBlockId;
 
                     acc[key] = mappedId;
+
+                    // Store rotation if non-zero
+                    if (rotationIndex > 0 && rotationIndex < 24) {
+                        importedRotations[key] = rotationIndex;
+                    }
+
+                    // Store shape if non-cube
+                    if (shapeType && shapeType !== 'cube') {
+                        importedShapes[key] = shapeType;
+                    }
+
                     return acc;
                 },
                 {}
             );
+
+            // Apply imported rotations to the rotation ref
+            if (Object.keys(importedRotations).length > 0 && terrainBuilderRef?.current?.getCurrentRotationData) {
+                const rotData = terrainBuilderRef.current.getCurrentRotationData();
+                Object.assign(rotData, importedRotations);
+            }
+
+            // Apply imported shapes to the shape ref
+            if (Object.keys(importedShapes).length > 0 && terrainBuilderRef?.current?.getCurrentShapeData) {
+                const shpData = terrainBuilderRef.current.getCurrentShapeData();
+                Object.assign(shpData, importedShapes);
+            }
 
             if (
                 Object.keys(terrainData).length > 0 &&
@@ -1092,12 +1132,27 @@ export const exportMapFile = async (
             originalToExportId.set(originalId, nextExportId++);
         }
 
+        // Get rotation data for export
+        const rotationData: Record<string, number> = terrainBuilderRef?.current?.getCurrentRotationData?.() || {};
+        // Get shape data for export
+        const shapeData: Record<string, string> = terrainBuilderRef?.current?.getCurrentShapeData?.() || {};
+
         const remappedTerrain = Object.entries(simplifiedTerrain).reduce((acc, [key, value]) => {
             const originalId = typeof value === 'number' ? value : Number(value);
             const mappedId = originalToExportId.get(originalId) ?? originalId;
-            acc[key] = mappedId;
+            const rotation = rotationData[key] || 0;
+            const shape = shapeData[key] || 'cube';
+            // Use {i, r, s} format for blocks with rotation/shape, plain number otherwise
+            if (rotation > 0 || (shape && shape !== 'cube')) {
+                const entry: any = { i: mappedId };
+                if (rotation > 0) entry.r = rotation;
+                if (shape && shape !== 'cube') entry.s = shape;
+                (acc as any)[key] = entry;
+            } else {
+                (acc as any)[key] = mappedId;
+            }
             return acc;
-        }, {} as Record<string, number>);
+        }, {} as Record<string, number | { i: number; r?: number; s?: string }>);
 
 
         loadingManager.updateLoading("Building export data structure...", 70);
@@ -1121,6 +1176,20 @@ export const exportMapFile = async (
 
 
 
+                // Build customColliderOptions for trimesh block types
+                let customColliderOptions: any = undefined;
+                try {
+                    const BlockTypeRegistryMod = require('./blocks/BlockTypeRegistry').default;
+                    const registeredType = BlockTypeRegistryMod.instance?.getBlockType(block.id);
+                    if (registeredType?.isTrimesh && registeredType.trimeshVertices && registeredType.trimeshIndices) {
+                        customColliderOptions = {
+                            shape: 'trimesh',
+                            vertices: Array.from(registeredType.trimeshVertices),
+                            indices: Array.from(registeredType.trimeshIndices),
+                        };
+                    }
+                } catch (_) {}
+
                 return {
                     id: originalToExportId.get(block.id) ?? block.id,
                     name: block.name,
@@ -1129,6 +1198,7 @@ export const exportMapFile = async (
                     isMultiTexture: isMulti,
                     lightLevel: (block as any).lightLevel,
                     isLiquid: (block as any).isLiquid === true, // Export isLiquid flag if set to true
+                    ...(customColliderOptions ? { customColliderOptions } : {}),
                 };
             }),
             blocks: remappedTerrain,

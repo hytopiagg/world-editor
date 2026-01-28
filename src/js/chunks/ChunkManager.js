@@ -724,6 +724,18 @@ class ChunkManager {
                 chunkData.originCoordinate,
                 chunkData.blocks
             );
+            // Apply rotation data if provided
+            if (chunkData.rotations instanceof Map) {
+                for (const [blockIndex, rotationIndex] of chunkData.rotations) {
+                    chunk._blockRotations.set(blockIndex, rotationIndex);
+                }
+            }
+            // Apply shape data if provided
+            if (chunkData.shapes instanceof Map) {
+                for (const [blockIndex, shapeType] of chunkData.shapes) {
+                    chunk._blockShapes.set(blockIndex, shapeType);
+                }
+            }
             this._chunks.set(chunk.chunkId, chunk);
         }
     }

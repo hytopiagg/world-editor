@@ -55,12 +55,14 @@ class ChunkSystem {
         this._chunkManager.processRenderQueue();
     }
 
-    updateFromTerrainData(terrainData: Object) {
+    updateFromTerrainData(terrainData: Object, rotationData?: Record<string, number>, shapeData?: Record<string, string>) {
         if (!this._initialized) {
             return;
         }
         let chunks = [];
         const chunkBlocks = new Map();
+        const chunkRotations = new Map<string, Map<number, number>>(); // chunkId → (blockIndex → rotationIndex)
+        const chunkShapes = new Map<string, Map<number, string>>(); // chunkId → (blockIndex → shapeType)
 
         for (const [posKey, blockId] of Object.entries(terrainData)) {
             const [x, y, z] = posKey.split(",").map(Number);
@@ -81,6 +83,22 @@ class ChunkSystem {
             const localZ = z - originCoordinate.z;
             const index = localX + CHUNK_SIZE * (localY + CHUNK_SIZE * localZ);
             chunkBlocks.get(chunkId)[index] = blockId;
+
+            // Store rotation data for this block if present
+            if (rotationData && rotationData[posKey] && rotationData[posKey] > 0) {
+                if (!chunkRotations.has(chunkId)) {
+                    chunkRotations.set(chunkId, new Map());
+                }
+                chunkRotations.get(chunkId)!.set(index, rotationData[posKey]);
+            }
+
+            // Store shape data for this block if present
+            if (shapeData && shapeData[posKey] && shapeData[posKey] !== 'cube') {
+                if (!chunkShapes.has(chunkId)) {
+                    chunkShapes.set(chunkId, new Map());
+                }
+                chunkShapes.get(chunkId)!.set(index, shapeData[posKey]);
+            }
         }
 
         for (const [chunkId, blocks] of chunkBlocks.entries()) {
@@ -88,6 +106,8 @@ class ChunkSystem {
             chunks.push({
                 originCoordinate: { x, y, z },
                 blocks,
+                rotations: chunkRotations.get(chunkId),
+                shapes: chunkShapes.get(chunkId),
             });
         }
 
@@ -266,6 +286,32 @@ class ChunkSystem {
                 },
                 block.id
             );
+
+            // Set block rotation if provided
+            if (typeof block.rotation === 'number' && block.rotation > 0) {
+                chunk.setBlockRotation(
+                    { x: localX, y: localY, z: localZ },
+                    block.rotation
+                );
+            } else {
+                chunk.setBlockRotation(
+                    { x: localX, y: localY, z: localZ },
+                    0
+                );
+            }
+
+            // Set block shape if provided
+            if (block.shape && block.shape !== 'cube') {
+                chunk.setBlockShape(
+                    { x: localX, y: localY, z: localZ },
+                    block.shape
+                );
+            } else {
+                chunk.setBlockShape(
+                    { x: localX, y: localY, z: localZ },
+                    'cube'
+                );
+            }
 
             // Newly placed blocks may expose/occlude neighbouring faces; clear a smaller cache radius
             this._chunkManager.clearBlockTypeCache({ x, y, z }, 1);

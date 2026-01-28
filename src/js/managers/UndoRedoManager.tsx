@@ -113,16 +113,7 @@ function UndoRedoManager(
     const undo = async () => {
         try {
             const undoStates =
-                (await DatabaseManager.getData(STORES.UNDO, "states")) as {
-                    terrain: {
-                        added: any[];
-                        removed: any[];
-                    };
-                    environment: {
-                        added: any[];
-                        removed: any[];
-                    };
-                }[] || [];
+                (await DatabaseManager.getData(STORES.UNDO, "states")) as any[] || [];
             if (undoStates.length === 0) {
                 return null;
             }
@@ -130,7 +121,7 @@ function UndoRedoManager(
             const redoStates =
                 (await DatabaseManager.getData(STORES.REDO, "states")) as UndoRedoState[] || [];
 
-            const redoChanges = {
+            const redoChanges: any = {
                 terrain: currentUndo.terrain
                     ? {
                         added: currentUndo.terrain.removed,
@@ -144,6 +135,20 @@ function UndoRedoManager(
                     }
                     : null,
             };
+            // Reverse rotation changes for redo
+            if (currentUndo.rotations) {
+                redoChanges.rotations = {
+                    added: currentUndo.rotations.removed || {},
+                    removed: currentUndo.rotations.added || {},
+                };
+            }
+            // Reverse shape changes for redo
+            if (currentUndo.shapes) {
+                redoChanges.shapes = {
+                    added: currentUndo.shapes.removed || {},
+                    removed: currentUndo.shapes.added || {},
+                };
+            }
 
 
             try {
@@ -187,7 +192,7 @@ function UndoRedoManager(
             const undoStates =
                 (await DatabaseManager.getData(STORES.UNDO, "states")) as UndoRedoState[] || [];
 
-            const undoChanges = {
+            const undoChanges: any = {
                 terrain: currentRedo.terrain
                     ? {
                         added: currentRedo.terrain.removed,
@@ -201,6 +206,20 @@ function UndoRedoManager(
                     }
                     : null,
             };
+            // Reverse rotation changes for undo
+            if (currentRedo.rotations) {
+                undoChanges.rotations = {
+                    added: currentRedo.rotations.removed || {},
+                    removed: currentRedo.rotations.added || {},
+                };
+            }
+            // Reverse shape changes for undo
+            if (currentRedo.shapes) {
+                undoChanges.shapes = {
+                    added: currentRedo.shapes.removed || {},
+                    removed: currentRedo.shapes.added || {},
+                };
+            }
             await Promise.all([
                 DatabaseManager.saveData(STORES.REDO, "states", remainingRedo),
                 DatabaseManager.saveData(STORES.UNDO, "states", [
@@ -295,13 +314,27 @@ function UndoRedoManager(
             }
         }
 
+        // Build rotation data for undo: restore removed rotations, clear added rotations
+        const rotationData = changeData.rotations ? {
+            // Rotations that were originally removed → need to be restored (added back)
+            added: changeData.rotations.removed || {},
+            // Rotations that were originally added → handled implicitly by block removal
+            removed: changeData.rotations.added || {},
+        } : undefined;
+
+        // Build shape data for undo: restore removed shapes, clear added shapes
+        const shapeData = changeData.shapes ? {
+            added: changeData.shapes.removed || {},
+            removed: changeData.shapes.added || {},
+        } : undefined;
+
         // Update terrain builder
         try {
             if (terrainBuilderRef.current.updateTerrainBlocks) {
                 terrainBuilderRef.current.updateTerrainBlocks(
                     added,
                     removed,
-                    { syncPendingChanges: true, skipUndoSave: true }
+                    { syncPendingChanges: true, skipUndoSave: true, rotationData, shapeData }
                 );
 
                 const addedBlocksCount = Object.keys(added).length;
@@ -390,6 +423,8 @@ function UndoRedoManager(
                         added: undoneChanges.terrain.added,
                         removed: undoneChanges.terrain.removed,
                         builderRef: terrainBuilderRef,
+                        rotations: undoneChanges.rotations || null,
+                        shapes: undoneChanges.shapes || null,
                     };
                     await processTerrainUndo(terrainChangeData);
                 }
@@ -505,13 +540,28 @@ function UndoRedoManager(
             }
         }
 
+        // Build rotation data for redo
+        // For redo, changeData is the redo state (which was the reversed undo state)
+        // changeData.removed = blocks to re-add, changeData.added = blocks to re-remove
+        // Rotation data flows through directly from the stored state
+        const rotationData = changeData.rotations ? {
+            added: changeData.rotations.removed || {},
+            removed: changeData.rotations.added || {},
+        } : undefined;
+
+        // Build shape data for redo
+        const shapeData = changeData.shapes ? {
+            added: changeData.shapes.removed || {},
+            removed: changeData.shapes.added || {},
+        } : undefined;
+
         // Update terrain builder
         try {
             if (terrainBuilderRef.current.updateTerrainBlocks) {
                 terrainBuilderRef.current.updateTerrainBlocks(
                     added,
                     removed,
-                    { syncPendingChanges: true, skipUndoSave: true }
+                    { syncPendingChanges: true, skipUndoSave: true, rotationData, shapeData }
                 );
 
                 const addedBlocksCount = Object.keys(added).length;
@@ -599,11 +649,13 @@ function UndoRedoManager(
                         added: redoneChanges.terrain.added,
                         removed: redoneChanges.terrain.removed,
                         builderRef: terrainBuilderRef,
+                        rotations: redoneChanges.rotations || null,
+                        shapes: redoneChanges.shapes || null,
                     };
                     await processTerrainRedo(terrainChangeData);
                 }
 
-                // Process environment changes if they exist  
+                // Process environment changes if they exist
                 if (isEnvironmentChange) {
                     const environmentChangeData = {
                         store: STORES.ENVIRONMENT,

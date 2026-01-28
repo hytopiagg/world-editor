@@ -11,6 +11,8 @@ import {
 } from "./ChunkConstants";
 import { DEFAULT_BLOCK_AO_INTENSITY } from "../blocks/BlockConstants";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
+import { rotateAroundBlockCenter, rotateDirection, BLOCK_ROTATION_MATRICES } from "../blocks/BlockRotations";
+import { getShapeDefinition, buildTrimeshTriangleData } from "../blocks/BlockShapes";
 /**
  * Represents a chunk in the world
  */
@@ -28,6 +30,8 @@ class Chunk {
         }
         this.originCoordinate = originCoordinate;
         this._blocks = blocks;
+        this._blockRotations = new Map(); // blockIndex → rotationIndex (sparse, only non-zero)
+        this._blockShapes = new Map(); // blockIndex → shapeType string (sparse, only non-cube)
         this._liquidMesh = undefined;
         this._solidMesh = undefined;
         this._visible = true;
@@ -361,18 +365,142 @@ class Chunk {
                         continue;
                     }
 
+                    // Get rotation for this block
+                    const blockRotation = this.getBlockRotation({ x, y, z });
+
+                    // === TRIMESH BLOCK RENDERING ===
+                    // Check per-instance shape first, then fallback to BlockType's intrinsic shape
+                    const instanceShape = this.getBlockShape({ x, y, z });
+                    const isInstanceTrimesh = instanceShape !== 'cube';
+                    let triangleData = null;
+
+                    if (isInstanceTrimesh) {
+                        triangleData = this._getTrimeshTriangleDataForShape(instanceShape);
+                    } else if (blockType.isTrimesh) {
+                        triangleData = blockType.trimeshTriangleData;
+                    }
+
+                    if (triangleData) {
+                        const meshPositions = solidMeshPositions;
+                        const meshNormals = solidMeshNormals;
+                        const meshUvs = solidMeshUvs;
+                        const meshIndices = solidMeshIndices;
+                        const meshColors = solidMeshColors;
+
+                        let blockLightLevel = null;
+
+                        for (const tri of triangleData) {
+                            const ndx = meshPositions.length / 3;
+
+                            // Get texture for the face this triangle belongs to (unrotated)
+                            const actualTextureUri = blockType.getTexturePath(tri.blockFace);
+
+                            // Rotate normal
+                            const rn = blockRotation > 0
+                                ? rotateDirection(tri.normal, blockRotation)
+                                : tri.normal;
+
+                            // Process each vertex of the triangle
+                            const triVerts = [
+                                { pos: tri.v0, uv: tri.uv0 },
+                                { pos: tri.v1, uv: tri.uv1 },
+                                { pos: tri.v2, uv: tri.uv2 },
+                            ];
+                            for (const { pos, uv } of triVerts) {
+                                // Rotate vertex around block center if needed
+                                const rp = blockRotation > 0
+                                    ? rotateAroundBlockCenter(pos, blockRotation)
+                                    : pos;
+
+                                const vertexX = globalX + rp[0] - 0.5;
+                                const vertexY = globalY + rp[1] - 0.5;
+                                const vertexZ = globalZ + rp[2] - 0.5;
+                                meshPositions.push(vertexX, vertexY, vertexZ);
+                                meshNormals.push(rn[0], rn[1], rn[2]);
+
+                                // UV lookup from atlas
+                                let texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                    blockType.name, tri.blockFace, uv
+                                );
+                                if (!texCoords) {
+                                    texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        actualTextureUri, uv
+                                    );
+                                }
+                                if (!texCoords) {
+                                    texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        "./assets/blocks/error.png", uv
+                                    );
+                                }
+                                if (!texCoords) texCoords = [0, 0, 1, 1];
+                                meshUvs.push(texCoords[0], texCoords[1]);
+
+                                // Vertex color (simplified for trimesh: no AO data)
+                                meshColors.push(
+                                    ...this._calculateVertexColor(
+                                        { x: vertexX, y: vertexY, z: vertexZ },
+                                        blockType,
+                                        null, // no AO for trimesh
+                                        chunkManager,
+                                        rn
+                                    )
+                                );
+
+                                // Light level
+                                if (blockLightLevel === null) {
+                                    blockLightLevel = this._calculateLightLevel(
+                                        globalX, globalY, globalZ, nearbySources
+                                    );
+                                }
+                                const normalized = blockLightLevel / MAX_LIGHT_LEVEL;
+                                solidMeshLightLevels.push(normalized);
+                                if (normalized > 0) solidMeshHasLightLevel = true;
+                            }
+
+                            // 3 indices per triangle
+                            meshIndices.push(ndx, ndx + 1, ndx + 2);
+                        }
+                        continue; // Skip standard face-based loop for trimesh blocks
+                    }
+
+                    // === STANDARD CUBE BLOCK RENDERING (with optional rotation) ===
                     for (const blockFace of blockType.faces) {
                         const { normal: dir, vertices } =
                             blockType.faceGeometries[blockFace];
 
-                        const ex = x + 1 + dir[0];
-                        const ey = y + 1 + dir[1];
-                        const ez = z + 1 + dir[2];
+                        // For rotated cubes, rotate the face normal for neighbor culling
+                        const actualDir = blockRotation > 0
+                            ? rotateDirection(dir, blockRotation)
+                            : dir;
+
+                        // Round to nearest integer for neighbor lookup
+                        const dnx = Math.round(actualDir[0]);
+                        const dny = Math.round(actualDir[1]);
+                        const dnz = Math.round(actualDir[2]);
+
+                        const ex = x + 1 + dnx;
+                        const ey = y + 1 + dny;
+                        const ez = z + 1 + dnz;
                         const neighborBlockType =
+                            this._extendedBlockTypes[ex] &&
+                            this._extendedBlockTypes[ex][ey] &&
                             this._extendedBlockTypes[ex][ey][ez];
+
+                        // Check if neighbor is a per-instance trimesh shape
+                        const neighborLocalX = x + dnx;
+                        const neighborLocalY = y + dny;
+                        const neighborLocalZ = z + dnz;
+                        const neighborIsLocalTrimesh =
+                            neighborLocalX >= 0 && neighborLocalX < CHUNK_SIZE &&
+                            neighborLocalY >= 0 && neighborLocalY < CHUNK_SIZE &&
+                            neighborLocalZ >= 0 && neighborLocalZ < CHUNK_SIZE &&
+                            this.getBlockShape({ x: neighborLocalX, y: neighborLocalY, z: neighborLocalZ }) !== 'cube';
+                        const neighborIsTrimesh = neighborIsLocalTrimesh ||
+                            (neighborBlockType && neighborBlockType.isTrimesh);
 
                         const shouldCullFace =
                             neighborBlockType &&
+                            !neighborIsTrimesh && // never cull against trimesh neighbors
                             (neighborBlockType.isLiquid ||
                                 !neighborBlockType.isFaceTransparent(
                                     blockFace
@@ -403,11 +531,15 @@ class Chunk {
 
                         let blockLightLevel = null;
                         for (const { pos, uv, ao } of vertices) {
-                            const vertexX = globalX + pos[0] - 0.5;
-                            const vertexY = globalY + pos[1] - 0.5;
-                            const vertexZ = globalZ + pos[2] - 0.5;
+                            // Rotate vertex if needed
+                            const rp = blockRotation > 0
+                                ? rotateAroundBlockCenter(pos, blockRotation)
+                                : pos;
+                            const vertexX = globalX + rp[0] - 0.5;
+                            const vertexY = globalY + rp[1] - 0.5;
+                            const vertexZ = globalZ + rp[2] - 0.5;
                             meshPositions.push(vertexX, vertexY, vertexZ);
-                            meshNormals.push(...dir);
+                            meshNormals.push(actualDir[0], actualDir[1], actualDir[2]);
 
                             const actualTextureUri =
                                 blockType.getTexturePath(blockFace);
@@ -694,7 +826,7 @@ class Chunk {
                                     blockType,
                                     ao,
                                     chunkManager,
-                                    dir // Pass face normal for face-based shading
+                                    actualDir // Pass rotated face normal for face-based shading
                                 )
                             );
 
@@ -895,17 +1027,84 @@ class Chunk {
                 if (!blockType) {
                     continue;
                 }
+
+                // Get rotation for this block
+                const blockRotation = this.getBlockRotation({ x, y, z });
+
+                // === TRIMESH BLOCK RENDERING (partial) ===
+                if (blockType.isTrimesh) {
+                    const triangleData = blockType.trimeshTriangleData;
+                    if (triangleData) {
+                        for (const tri of triangleData) {
+                            const ndx = solidMeshPositions.length / 3;
+                            const actualTextureUri = blockType.getTexturePath(tri.blockFace);
+                            const rn = blockRotation > 0
+                                ? rotateDirection(tri.normal, blockRotation)
+                                : tri.normal;
+                            const triVerts = [
+                                { pos: tri.v0, uv: tri.uv0 },
+                                { pos: tri.v1, uv: tri.uv1 },
+                                { pos: tri.v2, uv: tri.uv2 },
+                            ];
+                            for (const { pos, uv } of triVerts) {
+                                const rp = blockRotation > 0
+                                    ? rotateAroundBlockCenter(pos, blockRotation)
+                                    : pos;
+                                const vertexX = globalX + rp[0] - 0.5;
+                                const vertexY = globalY + rp[1] - 0.5;
+                                const vertexZ = globalZ + rp[2] - 0.5;
+                                solidMeshPositions.push(vertexX, vertexY, vertexZ);
+                                solidMeshNormals.push(rn[0], rn[1], rn[2]);
+                                let texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                    blockType.name, tri.blockFace, uv
+                                );
+                                if (!texCoords) {
+                                    texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        actualTextureUri, uv
+                                    );
+                                }
+                                if (!texCoords) {
+                                    texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(
+                                        "./assets/blocks/error.png", uv
+                                    );
+                                }
+                                if (!texCoords) texCoords = [0, 0, 1, 1];
+                                solidMeshUvs.push(texCoords[0], texCoords[1]);
+                                solidMeshColors.push(
+                                    ...this._calculateVertexColor(
+                                        { x: vertexX, y: vertexY, z: vertexZ },
+                                        blockType, null, chunkManager, rn
+                                    )
+                                );
+                            }
+                            solidMeshIndices.push(ndx, ndx + 1, ndx + 2);
+                        }
+                    }
+                    continue;
+                }
+
+                // === STANDARD CUBE BLOCK RENDERING (partial, with rotation) ===
                 for (const blockFace of blockType.faces) {
                     const { normal: dir, vertices } =
                         blockType.faceGeometries[blockFace];
 
-                    const ex = x + 1 + dir[0];
-                    const ey = y + 1 + dir[1];
-                    const ez = z + 1 + dir[2];
+                    const actualDir = blockRotation > 0
+                        ? rotateDirection(dir, blockRotation)
+                        : dir;
+                    const dnx = Math.round(actualDir[0]);
+                    const dny = Math.round(actualDir[1]);
+                    const dnz = Math.round(actualDir[2]);
+
+                    const ex = x + 1 + dnx;
+                    const ey = y + 1 + dny;
+                    const ez = z + 1 + dnz;
                     const neighborBlockType =
+                        this._extendedBlockTypes[ex] &&
+                        this._extendedBlockTypes[ex][ey] &&
                         this._extendedBlockTypes[ex][ey][ez];
                     if (
                         neighborBlockType &&
+                        !neighborBlockType.isTrimesh &&
                         (neighborBlockType.isLiquid ||
                             !neighborBlockType.isFaceTransparent(blockFace)) &&
                         (!neighborBlockType.isLiquid ||
@@ -931,11 +1130,14 @@ class Chunk {
                     const ndx = meshPositions.length / 3;
 
                     for (const { pos, uv, ao } of vertices) {
-                        const vertexX = globalX + pos[0] - 0.5;
-                        const vertexY = globalY + pos[1] - 0.5;
-                        const vertexZ = globalZ + pos[2] - 0.5;
+                        const rp = blockRotation > 0
+                            ? rotateAroundBlockCenter(pos, blockRotation)
+                            : pos;
+                        const vertexX = globalX + rp[0] - 0.5;
+                        const vertexY = globalY + rp[1] - 0.5;
+                        const vertexZ = globalZ + rp[2] - 0.5;
                         meshPositions.push(vertexX, vertexY, vertexZ);
-                        meshNormals.push(...dir);
+                        meshNormals.push(actualDir[0], actualDir[1], actualDir[2]);
 
                         const actualTextureUri =
                             blockType.getTexturePath(blockFace);
@@ -1034,7 +1236,7 @@ class Chunk {
                             blockType,
                             ao,
                             chunkManager,
-                            dir // Pass face normal for face-based shading
+                            actualDir // Pass rotated face normal for face-based shading
                         );
                         meshColors.push(...vertexColor);
                     }
@@ -1150,6 +1352,10 @@ class Chunk {
         }
         const prev = this._blocks[blockIndex];
         this._blocks[blockIndex] = blockId;
+        // Clear rotation when block is removed (set to air)
+        if (blockId === 0) {
+            this._blockRotations.delete(blockIndex);
+        }
         try {
             const oldType = BlockTypeRegistry.instance.getBlockType(prev);
             const newType = BlockTypeRegistry.instance.getBlockType(blockId);
@@ -1159,6 +1365,68 @@ class Chunk {
         } catch (e) {}
     }
 
+    /**
+     * Get the rotation index for a block at a local coordinate.
+     * Returns 0 (no rotation) if not set.
+     * @param {Object} localCoordinate - The local coordinate
+     * @returns {number} The rotation index (0-23)
+     */
+    getBlockRotation(localCoordinate) {
+        const idx = this._getIndex(localCoordinate);
+        return this._blockRotations.get(idx) || 0;
+    }
+    /**
+     * Set the rotation index for a block at a local coordinate.
+     * Only stores non-zero rotations (sparse).
+     * @param {Object} localCoordinate - The local coordinate
+     * @param {number} rotationIndex - The rotation index (0-23)
+     */
+    setBlockRotation(localCoordinate, rotationIndex) {
+        const idx = this._getIndex(localCoordinate);
+        if (rotationIndex > 0 && rotationIndex < 24) {
+            this._blockRotations.set(idx, rotationIndex);
+        } else {
+            this._blockRotations.delete(idx);
+        }
+    }
+    /**
+     * Get all block rotations as a Map.
+     * @returns {Map<number, number>} blockIndex → rotationIndex
+     */
+    get blockRotations() {
+        return this._blockRotations;
+    }
+    /**
+     * Get the shape type for a block at a local coordinate.
+     * Returns 'cube' if not set.
+     * @param {Object} localCoordinate - The local coordinate
+     * @returns {string} The shape type
+     */
+    getBlockShape(localCoordinate) {
+        const idx = this._getIndex(localCoordinate);
+        return this._blockShapes.get(idx) || 'cube';
+    }
+    /**
+     * Set the shape type for a block at a local coordinate.
+     * Only stores non-cube shapes (sparse).
+     * @param {Object} localCoordinate - The local coordinate
+     * @param {string} shapeType - The shape type
+     */
+    setBlockShape(localCoordinate, shapeType) {
+        const idx = this._getIndex(localCoordinate);
+        if (shapeType && shapeType !== 'cube') {
+            this._blockShapes.set(idx, shapeType);
+        } else {
+            this._blockShapes.delete(idx);
+        }
+    }
+    /**
+     * Get all block shapes as a Map.
+     * @returns {Map<number, string>} blockIndex → shapeType
+     */
+    get blockShapes() {
+        return this._blockShapes;
+    }
     // Minimal reversible nudge to guarantee a rebuild without visible change
     _nudgeBlockForRemesh() {
         const mid = Math.floor(CHUNK_SIZE / 2);
@@ -1354,6 +1622,23 @@ class Chunk {
                 hash = (hash << 5) - hash + (i * 31 + this._blocks[i]);
                 hash = hash & hash; // Convert to 32bit integer
             }
+        }
+
+        // Include rotation data in hash
+        for (const [idx, rot] of this._blockRotations) {
+            hash = (hash << 5) - hash + (idx * 37 + rot * 41);
+            hash = hash & hash;
+        }
+
+        // Include shape data in hash
+        for (const [idx, shape] of this._blockShapes) {
+            let shapeHash = 0;
+            for (let c = 0; c < shape.length; c++) {
+                shapeHash = (shapeHash << 5) - shapeHash + shape.charCodeAt(c);
+                shapeHash = shapeHash & shapeHash;
+            }
+            hash = (hash << 5) - hash + (idx * 43 + shapeHash);
+            hash = hash & hash;
         }
 
         return hash;
@@ -1580,5 +1865,26 @@ class Chunk {
             CHUNK_SIZE * (localCoordinate.y + CHUNK_SIZE * localCoordinate.z)
         );
     }
+
+    /**
+     * Get cached trimesh triangle data for a shape type.
+     * Lazily computes and caches the data from BlockShapes definitions.
+     * @param {string} shapeType - The shape type string
+     * @returns {Array|null} Triangle data array or null if shape not found
+     */
+    _getTrimeshTriangleDataForShape(shapeType) {
+        if (Chunk._shapeTriangleDataCache.has(shapeType)) {
+            return Chunk._shapeTriangleDataCache.get(shapeType);
+        }
+        const shapeDef = getShapeDefinition(shapeType);
+        if (!shapeDef) return null;
+        const data = buildTrimeshTriangleData(shapeDef.vertices, shapeDef.indices);
+        Chunk._shapeTriangleDataCache.set(shapeType, data);
+        return data;
+    }
 }
+
+// Shape triangle data cache (shared across all chunks)
+Chunk._shapeTriangleDataCache = new Map();
+
 export default Chunk;

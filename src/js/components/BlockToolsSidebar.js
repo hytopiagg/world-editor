@@ -27,6 +27,7 @@ import {
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import { generateSchematicPreview } from "../utils/SchematicPreviewRenderer";
 import BlockButton from "./BlockButton";
+import BlockShapeSelector from "./BlockShapeSelector";
 import EnvironmentButton from "./EnvironmentButton";
 import { BlockIcon } from "./icons/BlockIcon";
 import { PalmTreeIcon } from "./icons/PalmTreeIcon";
@@ -96,6 +97,10 @@ const BlockToolsSidebar = ({
     onOpenTextureModal,
     onLoadSchematicFromHistory,
     isCompactMode,
+    currentRotationIndex = 0,
+    setCurrentRotationIndex,
+    currentShapeType = 'cube',
+    setCurrentShapeType,
 }) => {
     const [customBlocks, setCustomBlocks] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -3873,14 +3878,22 @@ const BlockToolsSidebar = ({
                         </div>
                     )}
                     {activeTab === "blocks" && (
-                        <div className="flex px-3 mb-3 w-full">
-                            <button
-                                className="flex justify-center items-center p-2 w-full font-medium text-center text-black bg-white rounded-md border transition-all cursor-pointer hover:border-2 hover:border-black"
-                                onClick={onOpenTextureModal}
-                            >
-                                Create Texture
-                            </button>
-                        </div>
+                        <>
+                            <BlockShapeSelector
+                                currentShapeType={currentShapeType}
+                                setCurrentShapeType={setCurrentShapeType}
+                                currentRotationIndex={currentRotationIndex}
+                                setCurrentRotationIndex={setCurrentRotationIndex}
+                            />
+                            <div className="flex px-3 mb-3 w-full">
+                                <button
+                                    className="flex justify-center items-center p-2 w-full font-medium text-center text-black bg-white rounded-md border transition-all cursor-pointer hover:border-2 hover:border-black"
+                                    onClick={onOpenTextureModal}
+                                >
+                                    Create Texture
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
             </div>

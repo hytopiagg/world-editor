@@ -167,19 +167,22 @@ interface TerrainBuilderProps {
     isInputDisabled?: boolean;
     snapToGrid?: boolean;
     onCameraPositionChange?: (position: THREE.Vector3) => void;
+    currentRotationIndex?: number;
+    currentShapeType?: string;
 }
 
 interface TerrainBuilderRef {
     buildUpdateTerrain: (options?: any) => Promise<void>;
     updateTerrainFromToolBar: (terrainData: Record<string, number>) => void;
     getCurrentTerrainData: () => Record<string, number>;
+    getCurrentRotationData: () => Record<string, number>;
     clearMap: () => Promise<void>;
     saveTerrainManually: () => void;
     updateTerrainBlocks: (addedBlocks?: Record<string, number>, removedBlocks?: Record<string, number>, options?: any) => Promise<void>;
     updateTerrainForUndoRedo: (addedBlocks?: Record<string, number>, removedBlocks?: Record<string, number>, options?: any) => Promise<void>;
     syncEnvironmentChangesToPending: (addedEnvironment?: any[], removedEnvironment?: any[]) => void;
     updateSpatialHashForBlocks: (addedBlocks?: any[], removedBlocks?: any[], options?: any) => void;
-    fastUpdateBlock: (position: THREE.Vector3 | [number, number, number] | { x: number; y: number; z: number }, blockId: number) => void;
+    fastUpdateBlock: (position: THREE.Vector3 | [number, number, number] | { x: number; y: number; z: number }, blockId: number, rotationIndex?: number) => void;
     forceChunkUpdate: (chunkKeys?: string[], options?: any) => void;
     forceRefreshAllChunks: () => boolean;
     updateGridSize: (newGridSize?: number) => Promise<void>;
@@ -283,6 +286,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             isInputDisabled,
             snapToGrid,
             onCameraPositionChange,
+            currentRotationIndex = 0,
+            currentShapeType = 'cube',
         },
         ref
     ) => {
@@ -305,6 +310,14 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             environment: {
                 added: [],
                 removed: [],
+            },
+            rotations: {
+                added: {} as Record<string, number>,
+                removed: {} as Record<string, number>,
+            },
+            shapes: {
+                added: {} as Record<string, string>,
+                removed: {} as Record<string, string>,
             },
         });
         const firstLoadCompletedRef = useRef(false); // Flag to track if the first load is complete
@@ -556,6 +569,37 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 }
 
                 // All chunk transactions awaited above have completed at this point.
+                // Save rotation data as a separate key (only non-zero values)
+                try {
+                    const currentRotations = rotationsRef.current;
+                    if (Object.keys(currentRotations).length > 0) {
+                        await DatabaseManager.saveData(
+                            STORES.TERRAIN,
+                            "current-rotations",
+                            currentRotations
+                        );
+                    }
+                } catch (_) {}
+
+                // Save shape data as a separate key (only non-cube values)
+                try {
+                    const currentShapes = shapesRef.current;
+                    if (Object.keys(currentShapes).length > 0) {
+                        await DatabaseManager.saveData(
+                            STORES.TERRAIN,
+                            "current-shapes",
+                            currentShapes
+                        );
+                    } else {
+                        // Clean up old shape data if no shapes exist
+                        await DatabaseManager.saveData(
+                            STORES.TERRAIN,
+                            "current-shapes",
+                            {}
+                        );
+                    }
+                } catch (_) {}
+
                 lastSaveTimeRef.current = Date.now(); // Update last save time
                 return true;
             } catch (error) {
@@ -571,6 +615,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             pendingChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
+                rotations: { added: {}, removed: {} },
+                shapes: { added: {}, removed: {} },
             };
 
             lastSaveTimeRef.current = Date.now();
@@ -692,6 +738,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const shadowPlaneRef = useRef<THREE.Mesh>(null);
         // SDK-compatible: directional lights removed, face-based shading baked into vertex colors
         const terrainRef = useRef<Record<string, number>>({});
+        const rotationsRef = useRef<Record<string, number>>({}); // sparse: "x,y,z" → rotationIndex (only non-zero)
+        const shapesRef = useRef<Record<string, string>>({}); // sparse: "x,y,z" → shapeType (only non-cube)
         const gridRef = useRef<THREE.GridHelper>(null);
         const mouseMoveAnimationRef = useRef(null);
         const isPlacingRef = useRef(false);
@@ -705,6 +753,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const selectionDistanceRef = useRef(256);
         const axisLockEnabledRef = useRef(axisLockEnabled);
         const currentBlockTypeRef = useRef(currentBlockType);
+        const currentRotationIndexRef = useRef(currentRotationIndex);
+        const currentShapeTypeRef = useRef(currentShapeType);
         const isFirstBlockRef = useRef(true);
         const modeRef = useRef(mode);
         const placedBlockCountRef = useRef(0); // Track number of blocks placed during a mouse down/up cycle
@@ -734,6 +784,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const terrainUndoRedoManager = new TerrainUndoRedoManager({
             terrainRef,
             totalBlocksRef,
+            rotationsRef,
             importedUpdateTerrainBlocks,
             updateSpatialHashForBlocks,
             customBlocks,
@@ -770,6 +821,14 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     environment: {
                         added: [],
                         removed: [],
+                    },
+                    rotations: {
+                        added: {},
+                        removed: {},
+                    },
+                    shapes: {
+                        added: {},
+                        removed: {},
                     },
                 };
             }
@@ -828,13 +887,20 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 // Error building terrain
             }
         };
-        const fastUpdateBlock = (position, blockId) => {
+        const fastUpdateBlock = (position, blockId, rotationIndex = 0, shapeType = 'cube') => {
             if (!position) return;
             const x = Math.round(position[0] || position.x);
             const y = Math.round(position[1] || position.y);
             const z = Math.round(position[2] || position.z);
             const posKey = `${x},${y},${z}`;
-            if (terrainRef.current[posKey] === blockId) return;
+            if (terrainRef.current[posKey] === blockId && (rotationsRef.current[posKey] || 0) === rotationIndex) return;
+            // Ensure rotations and shapes tracking exists in pendingChangesRef
+            if (!pendingChangesRef.current.rotations) {
+                pendingChangesRef.current.rotations = { added: {}, removed: {} };
+            }
+            if (!pendingChangesRef.current.shapes) {
+                pendingChangesRef.current.shapes = { added: {}, removed: {} };
+            }
             if (blockId === 0) {
                 if (!terrainRef.current[posKey]) return;
                 const originalBlockId = terrainRef.current[posKey];
@@ -842,13 +908,39 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 trackTerrainChanges({}, removedBlocks);
                 placementChangesRef.current.terrain.removed[posKey] =
                     originalBlockId;
+                // Track old rotation for undo/redo before removing
+                const oldRotation = rotationsRef.current[posKey];
+                if (oldRotation && oldRotation > 0) {
+                    pendingChangesRef.current.rotations.removed[posKey] = oldRotation;
+                }
+                // Track old shape for undo/redo before removing
+                const oldShape = shapesRef.current[posKey];
+                if (oldShape && oldShape !== 'cube') {
+                    pendingChangesRef.current.shapes.removed[posKey] = oldShape;
+                }
                 delete terrainRef.current[posKey];
+                delete rotationsRef.current[posKey];
+                delete shapesRef.current[posKey];
             } else {
                 const addedBlocks = { [posKey]: blockId };
                 trackTerrainChanges(addedBlocks, {});
                 placementChangesRef.current.terrain.added[posKey] = blockId;
                 terrainRef.current[posKey] = blockId;
-                
+                // Store rotation (only non-zero values)
+                if (rotationIndex > 0) {
+                    rotationsRef.current[posKey] = rotationIndex;
+                    pendingChangesRef.current.rotations.added[posKey] = rotationIndex;
+                } else {
+                    delete rotationsRef.current[posKey];
+                }
+                // Store shape (only non-cube values)
+                if (shapeType && shapeType !== 'cube') {
+                    shapesRef.current[posKey] = shapeType;
+                    pendingChangesRef.current.shapes.added[posKey] = shapeType;
+                } else {
+                    delete shapesRef.current[posKey];
+                }
+
                 // Dispatch event for recently used blocks tracking
                 if (typeof window !== "undefined" && blockId && typeof blockId === "number" && blockId > 0) {
                     console.log("[RecentlyUsed] fastUpdateBlock: Dispatching blocksPlaced event with blockId:", blockId);
@@ -864,6 +956,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         {
                             position: position,
                             id: blockId,
+                            rotation: rotationIndex,
+                            shape: shapeType,
                         },
                     ],
                     []
@@ -1134,7 +1228,18 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         placementSizeRef.current
                     );
                     const addedBlocks = {};
+                    const addedRotations = {};
+                    const addedShapes = {};
                     let blockWasPlaced = false; // Flag to track if any block was actually placed
+                    // Ensure rotations and shapes tracking exists
+                    if (!pendingChangesRef.current.rotations) {
+                        pendingChangesRef.current.rotations = { added: {}, removed: {} };
+                    }
+                    if (!pendingChangesRef.current.shapes) {
+                        pendingChangesRef.current.shapes = { added: {}, removed: {} };
+                    }
+                    const rotIdx = currentRotationIndexRef.current;
+                    const shapeType = currentShapeTypeRef.current;
                     positions.forEach((pos) => {
                         const blockKey = `${pos.x},${pos.y},${pos.z}`;
                         const hasInstance =
@@ -1147,6 +1252,24 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             if (!currentBlockTypeRef.current.isEnvironment) {
                                 terrainRef.current[blockKey] =
                                     currentBlockTypeRef.current.id;
+                            }
+                            // Store rotation for the placed block
+                            if (rotIdx > 0) {
+                                rotationsRef.current[blockKey] = rotIdx;
+                                addedRotations[blockKey] = rotIdx;
+                                pendingChangesRef.current.rotations.added[blockKey] = rotIdx;
+                            } else {
+                                delete rotationsRef.current[blockKey];
+                            }
+                            // Store shape for the placed block
+                            if (shapeType && shapeType !== 'cube') {
+                                shapesRef.current[blockKey] = shapeType;
+                                addedShapes[blockKey] = shapeType;
+                                if (pendingChangesRef.current.shapes) {
+                                    pendingChangesRef.current.shapes.added[blockKey] = shapeType;
+                                }
+                            } else {
+                                delete shapesRef.current[blockKey];
                             }
                             // remove it from the removed array
                             if (
@@ -1175,7 +1298,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         }
                     });
                     if (blockWasPlaced) {
-                        importedUpdateTerrainBlocks(addedBlocks, {});
+                        importedUpdateTerrainBlocks(addedBlocks, {}, addedRotations, addedShapes);
                         trackTerrainChanges(addedBlocks, {}); // <<< Add this line
                         
                         // Dispatch event for recently used blocks tracking
@@ -1241,7 +1364,25 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
                         if (terrainRef.current[blockKey]) {
                             removedBlocks[blockKey] = terrainRef.current[blockKey];
+                            // Track old rotation for undo/redo before removing
+                            const oldRotation = rotationsRef.current[blockKey];
+                            if (oldRotation && oldRotation > 0) {
+                                if (!pendingChangesRef.current.rotations) {
+                                    pendingChangesRef.current.rotations = { added: {}, removed: {} };
+                                }
+                                pendingChangesRef.current.rotations.removed[blockKey] = oldRotation;
+                            }
+                            // Track old shape for undo/redo before removing
+                            const oldShape = shapesRef.current[blockKey];
+                            if (oldShape && oldShape !== 'cube') {
+                                if (!pendingChangesRef.current.shapes) {
+                                    pendingChangesRef.current.shapes = { added: {}, removed: {} };
+                                }
+                                pendingChangesRef.current.shapes.removed[blockKey] = oldShape;
+                            }
                             delete terrainRef.current[blockKey];
+                            delete rotationsRef.current[blockKey];
+                            delete shapesRef.current[blockKey];
                             placementChangesRef.current.terrain.removed[blockKey] =
                                 removedBlocks[blockKey];
                             pendingChangesRef.current.terrain.removed[blockKey] =
@@ -1648,6 +1789,12 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const getCurrentTerrainData = () => {
             return terrainRef.current;
         };
+        const getCurrentRotationData = () => {
+            return rotationsRef.current;
+        };
+        const getCurrentShapeData = () => {
+            return shapesRef.current;
+        };
         const updateTerrainFromToolBar = (terrainData) => {
             loadingManager.showLoading("Updating terrain...", 0);
             terrainRef.current = terrainData;
@@ -1661,6 +1808,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         pendingChangesRef.current = {
                             terrain: { added: {}, removed: {} },
                             environment: { added: [], removed: [] },
+                            rotations: { added: {}, removed: {} },
+                            shapes: { added: {}, removed: {} },
                         };
                         loadingManager.updateLoading(
                             "Building terrain from imported blocks...",
@@ -2023,7 +2172,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         }
                         return DatabaseManager.getData(STORES.TERRAIN, "current");
                     })
-                    .then((savedTerrain: any) => {
+                    .then(async (savedTerrain: any) => {
                         if (!mounted) return;
                         const terrainBlockCount = savedTerrain
                             ? Object.keys(savedTerrain).length
@@ -2036,7 +2185,31 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                             pendingChangesRef.current = {
                                 terrain: { added: {}, removed: {} },
                                 environment: { added: [], removed: [] },
+                                rotations: { added: {}, removed: {} },
+                                shapes: { added: {}, removed: {} },
                             };
+                            // Load rotation data from DB
+                            try {
+                                const rotations = await DatabaseManager.getData(STORES.TERRAIN, "current-rotations");
+                                if (rotations && typeof rotations === 'object') {
+                                    Object.entries(rotations).forEach(([posKey, rot]) => {
+                                        if (typeof rot === 'number' && rot > 0) {
+                                            rotationsRef.current[posKey] = rot as number;
+                                        }
+                                    });
+                                }
+                            } catch (_) {}
+                            // Load shape data from DB
+                            try {
+                                const shapes = await DatabaseManager.getData(STORES.TERRAIN, "current-shapes");
+                                if (shapes && typeof shapes === 'object') {
+                                    Object.entries(shapes).forEach(([posKey, shape]) => {
+                                        if (typeof shape === 'string' && shape !== 'cube') {
+                                            shapesRef.current[posKey] = shape as string;
+                                        }
+                                    });
+                                }
+                            } catch (_) {}
                             loadingManager.showLoading(
                                 "Preloading textures for all blocks..."
                             );
@@ -2081,7 +2254,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                                 updateTerrainChunks(
                                                     terrainRef.current,
                                                     true,
-                                                    environmentBuilderRef
+                                                    environmentBuilderRef,
+                                                    rotationsRef.current,
+                                                    shapesRef.current
                                                 );
                                                 try {
                                                     updateChunkSystemCamera(
@@ -2095,7 +2270,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                         updateTerrainChunks(
                                             terrainRef.current,
                                             true,
-                                            environmentBuilderRef
+                                            environmentBuilderRef,
+                                            rotationsRef.current,
+                                            shapesRef.current
                                         );
                                         try {
                                             updateChunkSystemCamera(threeCamera);
@@ -2110,7 +2287,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                         window.dispatchEvent(new CustomEvent("terrainLoaded"));
                                     }
                                 } catch (error) {
-                                    updateTerrainChunks(terrainRef.current);
+                                    updateTerrainChunks(terrainRef.current, false, null, rotationsRef.current, shapesRef.current);
                                     loadingManager.hideLoading();
                                     setPageIsLoaded(true);
                                 }
@@ -2158,6 +2335,10 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     toolManagerRef.current?.activateTool(toolName, activationData),
                 pendingChangesRef,
                 baseGridYRef, // Add base grid Y reference for terrain tools
+                rotationsRef, // Rotation data for all blocks
+                shapesRef, // Shape data for all blocks
+                currentRotationIndexRef,
+                currentShapeTypeRef,
             };
             toolManagerRef.current = new ToolManager(terrainBuilderProps);
             const wallTool = new WallTool(terrainBuilderProps);
@@ -2346,6 +2527,12 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             currentBlockTypeRef.current = currentBlockType;
         }, [currentBlockType]);
         useEffect(() => {
+            currentRotationIndexRef.current = currentRotationIndex;
+        }, [currentRotationIndex]);
+        useEffect(() => {
+            currentShapeTypeRef.current = currentShapeType;
+        }, [currentShapeType]);
+        useEffect(() => {
             modeRef.current = mode;
         }, [mode]);
         useEffect(() => {
@@ -2435,6 +2622,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
             buildUpdateTerrain,
             updateTerrainFromToolBar,
             getCurrentTerrainData,
+            getCurrentRotationData,
+            getCurrentShapeData,
             clearMap,
             saveTerrainManually, // Add manual save function
             updateTerrainBlocks, // Expose for selective updates in undo/redo
@@ -2709,8 +2898,38 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         );
                         terrainRef.current = {};
                         Object.entries(blocks).forEach(([posKey, blockId]) => {
-                            terrainRef.current[posKey] = blockId;
+                            terrainRef.current[posKey] = blockId as number;
                         });
+                        // Load rotation data
+                        rotationsRef.current = {};
+                        try {
+                            const rotations = await DatabaseManager.getData(
+                                STORES.TERRAIN,
+                                "current-rotations"
+                            );
+                            if (rotations && typeof rotations === 'object') {
+                                Object.entries(rotations).forEach(([posKey, rot]) => {
+                                    if (typeof rot === 'number' && rot > 0) {
+                                        rotationsRef.current[posKey] = rot as number;
+                                    }
+                                });
+                            }
+                        } catch (_) {}
+                        // Load shape data
+                        shapesRef.current = {};
+                        try {
+                            const shapes = await DatabaseManager.getData(
+                                STORES.TERRAIN,
+                                "current-shapes"
+                            );
+                            if (shapes && typeof shapes === 'object') {
+                                Object.entries(shapes).forEach(([posKey, shape]) => {
+                                    if (typeof shape === 'string' && shape !== 'cube') {
+                                        shapesRef.current[posKey] = shape as string;
+                                    }
+                                });
+                            }
+                        } catch (_) {}
                         loadingManager.updateLoading(
                             "Clearing existing terrain chunks...",
                             50
@@ -2724,7 +2943,7 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                                 `Building terrain with ${blockCount} blocks...`,
                                 60
                             );
-                            chunkSystem.updateFromTerrainData(blocks);
+                            chunkSystem.updateFromTerrainData(blocks, rotationsRef.current, shapesRef.current);
                             loadingManager.updateLoading(
                                 "Processing terrain chunks...",
                                 70
@@ -2916,6 +3135,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 pendingChangesRef.current = {
                     terrain: { added: {}, removed: {} },
                     environment: { added: [], removed: [] },
+                    rotations: { added: {}, removed: {} },
+                    shapes: { added: {}, removed: {} },
                 };
             }
 
@@ -2986,6 +3207,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 syncPendingChanges?: boolean;
                 skipUndoSave?: boolean;
                 skipSpatialHash?: boolean;
+                rotationData?: { added?: Record<string, number>; removed?: Record<string, number> };
+                shapeData?: { added?: Record<string, string>; removed?: Record<string, string> };
             } = {}
         ) => {
 
@@ -3067,6 +3290,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     pendingChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
+                        rotations: { added: {}, removed: {} },
+                        shapes: { added: {}, removed: {} },
                     };
                 }
 
@@ -3152,9 +3377,46 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
 
             Object.entries(removedBlocks).forEach(([posKey]) => {
                 delete terrainRef.current[posKey];
+                delete rotationsRef.current[posKey];
+                delete shapesRef.current[posKey];
             });
+
+            // Apply rotation data if provided (e.g., from undo/redo)
+            const rotData = options.rotationData;
+            const rotationsForChunks: Record<string, number> = {};
+            if (rotData) {
+                // Restore rotations for added blocks
+                if (rotData.added) {
+                    Object.entries(rotData.added).forEach(([posKey, rot]) => {
+                        if (rot > 0) {
+                            rotationsRef.current[posKey] = rot;
+                            rotationsForChunks[posKey] = rot;
+                        } else {
+                            delete rotationsRef.current[posKey];
+                        }
+                    });
+                }
+                // Remove rotations for removed blocks (already handled above)
+            }
+
+            // Apply shape data if provided (e.g., from undo/redo)
+            const shpData = options.shapeData;
+            const shapesForChunks: Record<string, string> = {};
+            if (shpData) {
+                if (shpData.added) {
+                    Object.entries(shpData.added).forEach(([posKey, shape]) => {
+                        if (shape && shape !== 'cube') {
+                            shapesRef.current[posKey] = shape;
+                            shapesForChunks[posKey] = shape;
+                        } else {
+                            delete shapesRef.current[posKey];
+                        }
+                    });
+                }
+            }
+
             totalBlocksRef.current = Object.keys(terrainRef.current).length;
-            importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
+            importedUpdateTerrainBlocks(addedBlocks, removedBlocks, rotationsForChunks, shapesForChunks);
             if (!options.skipSpatialHash) {
                 const addedBlocksArray = Object.entries(addedBlocks).map(
                     ([posKey, blockId]) => {

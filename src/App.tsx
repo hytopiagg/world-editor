@@ -7,6 +7,7 @@ import { Vector3, SRGBColorSpace, NoToneMapping } from 'three';
 import "./css/App.css";
 import { cameraManager } from "./js/Camera";
 import { IS_UNDER_CONSTRUCTION, version } from "./js/Constants";
+import { getNextYRotation, getNextFaceRotation, getRotationLabel } from "./js/blocks/BlockRotations";
 import EnvironmentBuilder, { environmentModels } from "./js/EnvironmentBuilder";
 import TerrainBuilder from "./js/TerrainBuilder";
 import { BlockToolOptions } from "./js/components/BlockToolOptions";
@@ -98,6 +99,8 @@ function App() {
     const undoRedoManagerRef = useRef(null);
     const lastResetProjectIdRef = useRef<string | null>(null);
     const [currentBlockType, setCurrentBlockType] = useState(blockTypes[0]);
+    const [currentRotationIndex, setCurrentRotationIndex] = useState(0);
+    const [currentShapeType, setCurrentShapeType] = useState('cube');
     const [mode, setMode] = useState("add");
     const [axisLockEnabled, setAxisLockEnabled] = useState(false);
     const [cameraReset, setCameraReset] = useState(false);
@@ -406,6 +409,28 @@ function App() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
+
+    // Block rotation keyboard shortcuts: R cycles Y rotation, T cycles face orientation
+    useEffect(() => {
+        const handleRotationKey = (e: KeyboardEvent) => {
+            // Don't handle if typing in an input or modifier keys
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+            if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+
+            if (e.key === 'r') {
+                e.preventDefault();
+                // R: cycle Y rotation (0 → 90 → 180 → 270 → 0)
+                setCurrentRotationIndex(prev => getNextYRotation(prev));
+            } else if (e.key === 't') {
+                e.preventDefault();
+                // T: cycle face orientation
+                setCurrentRotationIndex(prev => getNextFaceRotation(prev));
+            }
+        };
+        window.addEventListener('keydown', handleRotationKey);
+        return () => window.removeEventListener('keydown', handleRotationKey);
     }, []);
 
     useEffect(() => {
@@ -948,6 +973,10 @@ function App() {
                         environmentBuilder={environmentBuilderRef.current}
                         onPlacementSettingsChange={setPlacementSettings}
                         setPlacementSize={setPlacementSize}
+                        currentRotationIndex={currentRotationIndex}
+                        setCurrentRotationIndex={setCurrentRotationIndex}
+                        currentShapeType={currentShapeType}
+                        setCurrentShapeType={setCurrentShapeType}
                     />
                 )}
 
@@ -1118,6 +1147,8 @@ function App() {
                             customBlocks={getCustomBlocks()}
                             snapToGrid={placementSettings.snapToGrid}
                             onCameraPositionChange={setCameraPosition}
+                            currentRotationIndex={currentRotationIndex}
+                            currentShapeType={currentShapeType}
                         />
                         <EnvironmentBuilder
                             key={`eb-${projectId}`}

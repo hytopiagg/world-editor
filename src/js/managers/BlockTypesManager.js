@@ -176,6 +176,7 @@ const processCustomBlock = async (block, deferAtlasRebuild = false) => {
                 ? 0
                 : undefined,
         isLiquid: block.isLiquid === true, // Store isLiquid flag
+        shapeType: block.shapeType || 'cube', // Block shape (cube, half_slab, wedge_45, etc.)
 
         isMultiTexture:
             block.sideTextures && Object.keys(block.sideTextures).length > 0,
@@ -223,14 +224,15 @@ const processCustomBlock = async (block, deferAtlasRebuild = false) => {
                     isLiquid: processedBlock.isLiquid || false,
                     textureUris: textureUris,
                     lightLevel: processedBlock.lightLevel,
+                    shapeType: processedBlock.shapeType,
                 });
-                
+
                 // Register without loading textures immediately
                 await registry.registerBlockType(blockType);
-                
+
                 // Don't queue textures here - they'll be loaded on-demand when chunks need them
                 // This prevents FPS drops from loading all textures at once
-                
+
                 try {
                     window.dispatchEvent(
                         new CustomEvent("custom-block-registered", {
@@ -252,11 +254,12 @@ const processCustomBlock = async (block, deferAtlasRebuild = false) => {
                     isLiquid: processedBlock.isLiquid || false,
                     textureUris: textureUris,
                     lightLevel: processedBlock.lightLevel,
+                    shapeType: processedBlock.shapeType,
                 });
-                
+
                 // Register without loading textures immediately
                 await registry.registerBlockType(blockType);
-                
+
                 // Don't queue textures here - they'll be loaded on-demand when chunks need them
                 // This prevents FPS drops from loading all textures at once
             }

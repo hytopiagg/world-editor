@@ -7,6 +7,7 @@ import {
     DEFAULT_BLOCK_NEIGHBOR_OFFSETS,
     BlockFaceAxes,
 } from "./BlockConstants";
+import { buildTrimeshTriangleData, getShapeDefinition } from "./BlockShapes";
 /**
  * Represents a block type in the world
  */
@@ -40,6 +41,21 @@ class BlockType {
         this.variantOfId = data.variantOfId;
         this.variantOfName = data.variantOfName;
         this.variantLightLevel = data.variantLightLevel;
+
+        // Shape/trimesh support
+        this._shapeType = data.shapeType || 'cube';
+        this._trimeshVertices = data.trimeshVertices || null;
+        this._trimeshIndices = data.trimeshIndices || null;
+        this._trimeshTriangleDataCache = null;
+
+        // Auto-populate trimesh data from shape definition if shapeType is set
+        if (this._shapeType !== 'cube' && !this._trimeshVertices) {
+            const shapeDef = getShapeDefinition(this._shapeType);
+            if (shapeDef) {
+                this._trimeshVertices = shapeDef.vertices;
+                this._trimeshIndices = shapeDef.indices;
+            }
+        }
 
         this._isCommonlyUsed = data.id < 10;
 
@@ -116,6 +132,59 @@ class BlockType {
      */
     get lightLevel() {
         return this._lightLevel;
+    }
+    /**
+     * Get the block shape type
+     * @returns {string} The shape type (e.g., 'cube', 'half_slab', 'wedge_45')
+     */
+    get shapeType() {
+        return this._shapeType;
+    }
+    /**
+     * Check if this block uses trimesh (non-cube) geometry
+     * @returns {boolean} True if the block has trimesh vertices/indices
+     */
+    get isTrimesh() {
+        return this._trimeshVertices !== null && this._trimeshVertices !== undefined;
+    }
+    /**
+     * Get the raw trimesh vertices (Float32Array in unit cube space)
+     * @returns {Float32Array|null}
+     */
+    get trimeshVertices() {
+        return this._trimeshVertices;
+    }
+    /**
+     * Get the raw trimesh indices (Uint32Array)
+     * @returns {Uint32Array|null}
+     */
+    get trimeshIndices() {
+        return this._trimeshIndices;
+    }
+    /**
+     * Get pre-computed per-triangle data for rendering (lazy-computed, cached).
+     * Each entry has: v0, v1, v2, normal, blockFace, uv0, uv1, uv2.
+     * @returns {Array|null}
+     */
+    get trimeshTriangleData() {
+        if (!this.isTrimesh) return null;
+        if (!this._trimeshTriangleDataCache) {
+            this._trimeshTriangleDataCache = buildTrimeshTriangleData(
+                this._trimeshVertices,
+                this._trimeshIndices
+            );
+        }
+        return this._trimeshTriangleDataCache;
+    }
+    /**
+     * Set custom trimesh geometry (for imported shapes)
+     * @param {Float32Array} vertices
+     * @param {Uint32Array} indices
+     */
+    setTrimeshGeometry(vertices, indices) {
+        this._trimeshVertices = vertices;
+        this._trimeshIndices = indices;
+        this._trimeshTriangleDataCache = null; // invalidate cache
     }
     /**
      * Check if this block type has multi-sided textures
