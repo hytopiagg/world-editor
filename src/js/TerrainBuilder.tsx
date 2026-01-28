@@ -733,6 +733,8 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
         const placementChangesRef = useRef({
             terrain: { added: {}, removed: {} },
             environment: { added: [], removed: [] },
+            rotations: { added: {}, removed: {} },
+            shapes: { added: {}, removed: {} },
         });
         const instancedMeshRef = useRef({});
         const shadowPlaneRef = useRef<THREE.Mesh>(null);
@@ -912,16 +914,43 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 const oldRotation = rotationsRef.current[posKey];
                 if (oldRotation && oldRotation > 0) {
                     pendingChangesRef.current.rotations.removed[posKey] = oldRotation;
+                    if (placementChangesRef.current.rotations) {
+                        placementChangesRef.current.rotations.removed[posKey] = oldRotation;
+                    }
                 }
                 // Track old shape for undo/redo before removing
                 const oldShape = shapesRef.current[posKey];
                 if (oldShape && oldShape !== 'cube') {
                     pendingChangesRef.current.shapes.removed[posKey] = oldShape;
+                    if (placementChangesRef.current.shapes) {
+                        placementChangesRef.current.shapes.removed[posKey] = oldShape;
+                    }
                 }
                 delete terrainRef.current[posKey];
                 delete rotationsRef.current[posKey];
                 delete shapesRef.current[posKey];
             } else {
+                // Track old rotation/shape when REPLACING a block (not just removing)
+                // This ensures undo restores the original shape, not just the block
+                if (terrainRef.current[posKey]) {
+                    // Track old rotation for undo if it existed
+                    const oldRotation = rotationsRef.current[posKey];
+                    if (oldRotation && oldRotation > 0) {
+                        pendingChangesRef.current.rotations.removed[posKey] = oldRotation;
+                        if (placementChangesRef.current.rotations) {
+                            placementChangesRef.current.rotations.removed[posKey] = oldRotation;
+                        }
+                    }
+                    // Track old shape for undo if it existed
+                    const oldShape = shapesRef.current[posKey];
+                    if (oldShape && oldShape !== 'cube') {
+                        pendingChangesRef.current.shapes.removed[posKey] = oldShape;
+                        if (placementChangesRef.current.shapes) {
+                            placementChangesRef.current.shapes.removed[posKey] = oldShape;
+                        }
+                    }
+                }
+
                 const addedBlocks = { [posKey]: blockId };
                 trackTerrainChanges(addedBlocks, {});
                 placementChangesRef.current.terrain.added[posKey] = blockId;
@@ -930,6 +959,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 if (rotationIndex > 0) {
                     rotationsRef.current[posKey] = rotationIndex;
                     pendingChangesRef.current.rotations.added[posKey] = rotationIndex;
+                    if (placementChangesRef.current.rotations) {
+                        placementChangesRef.current.rotations.added[posKey] = rotationIndex;
+                    }
                 } else {
                     delete rotationsRef.current[posKey];
                 }
@@ -937,6 +969,9 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                 if (shapeType && shapeType !== 'cube') {
                     shapesRef.current[posKey] = shapeType;
                     pendingChangesRef.current.shapes.added[posKey] = shapeType;
+                    if (placementChangesRef.current.shapes) {
+                        placementChangesRef.current.shapes.added[posKey] = shapeType;
+                    }
                 } else {
                     delete shapesRef.current[posKey];
                 }
@@ -3414,6 +3449,18 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                     });
                 }
             }
+
+            // For any block being added that doesn't have an explicit shape in shapesForChunks,
+            // check if shapesRef.current has a shape for it (from database or prior operations).
+            // This ensures the chunk system renders the correct shape even when shapeData.added is incomplete.
+            Object.keys(addedBlocks).forEach((posKey) => {
+                if (!shapesForChunks[posKey]) {
+                    const existingShape = shapesRef.current[posKey];
+                    if (existingShape && existingShape !== 'cube') {
+                        shapesForChunks[posKey] = existingShape;
+                    }
+                }
+            });
 
             totalBlocksRef.current = Object.keys(terrainRef.current).length;
             importedUpdateTerrainBlocks(addedBlocks, removedBlocks, rotationsForChunks, shapesForChunks);

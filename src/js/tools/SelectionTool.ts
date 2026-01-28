@@ -21,6 +21,8 @@ class SelectionTool extends BaseTool {
     selectionPreview = null;
     selectedBlocks = null;
     selectedEnvironments = null;
+    selectedRotations = new Map<string, number>();
+    selectedShapes = new Map<string, string>();
     selectionActive = false;
     selectionMode: SelectionMode = "move";
     moveOffset = new THREE.Vector3();
@@ -37,6 +39,14 @@ class SelectionTool extends BaseTool {
         environment: {
             added: [],
             removed: [],
+        },
+        rotations: {
+            added: {},
+            removed: {},
+        },
+        shapes: {
+            added: {},
+            removed: {},
         },
     };
 
@@ -881,9 +891,19 @@ class SelectionTool extends BaseTool {
 
         this.selectedBlocks = new Map();
         this.selectedEnvironments = new Map();
+        this.selectedRotations = new Map<string, number>();
+        this.selectedShapes = new Map<string, string>();
         this.originalPositions = new Map();
         this.originalEnvironmentPositions = new Map();
         const removedBlocksObj = {};
+        const removedRotationsObj = {};
+        const removedShapesObj = {};
+
+        // Get rotation and shape refs from TerrainBuilder
+        const rotationsRef = (this.terrainBuilderRef as any)?.current?.getCurrentRotationData?.() ||
+            (this.terrainBuilderProps as any)?.rotationsRef?.current || {};
+        const shapesRef = (this.terrainBuilderRef as any)?.current?.getCurrentShapeData?.() ||
+            (this.terrainBuilderProps as any)?.shapesRef?.current || {};
 
         // Calculate center of selection
         let totalX = 0;
@@ -904,6 +924,14 @@ class SelectionTool extends BaseTool {
                             new THREE.Vector3(x, baseY + y, z)
                         );
 
+                        // Capture rotation and shape
+                        if (rotationsRef[posKey]) {
+                            this.selectedRotations.set(posKey, rotationsRef[posKey]);
+                        }
+                        if (shapesRef[posKey]) {
+                            this.selectedShapes.set(posKey, shapesRef[posKey]);
+                        }
+
                         // Add to center calculation
                         totalX += x;
                         totalY += baseY + y;
@@ -917,6 +945,13 @@ class SelectionTool extends BaseTool {
                             delete this.pendingChangesRef.current.terrain.added[
                                 posKey
                             ];
+                            // Track removed rotations and shapes
+                            if (rotationsRef[posKey]) {
+                                removedRotationsObj[posKey] = rotationsRef[posKey];
+                            }
+                            if (shapesRef[posKey]) {
+                                removedShapesObj[posKey] = shapesRef[posKey];
+                            }
                         }
                     }
                 }
@@ -930,6 +965,8 @@ class SelectionTool extends BaseTool {
             };
 
             this.changes.terrain.removed = removedBlocksObj;
+            this.changes.rotations.removed = removedRotationsObj;
+            this.changes.shapes.removed = removedShapesObj;
         }
 
         // Collect environment objects in the selection area
@@ -989,7 +1026,11 @@ class SelectionTool extends BaseTool {
                 this.terrainBuilderRef.current.updateTerrainBlocks(
                     {},
                     removedBlocksObj,
-                    { skipUndoSave: true }
+                    {
+                        skipUndoSave: true,
+                        rotationData: { removed: removedRotationsObj },
+                        shapeData: { removed: removedShapesObj },
+                    }
                 );
             }
 
@@ -1035,6 +1076,8 @@ class SelectionTool extends BaseTool {
         // Place terrain blocks
         if (this.selectedBlocks && this.terrainRef?.current) {
             const addedBlocks = {};
+            const addedRotations = {};
+            const addedShapes = {};
 
             for (const [posKey, blockId] of this.selectedBlocks) {
                 const originalPos = this.originalPositions.get(posKey);
@@ -1057,6 +1100,16 @@ class SelectionTool extends BaseTool {
 
                     addedBlocks[newPosKey] = blockId;
                     this.terrainRef.current[newPosKey] = blockId;
+
+                    // Transfer rotation and shape to new position
+                    const rotation = this.selectedRotations.get(posKey);
+                    const shape = this.selectedShapes.get(posKey);
+                    if (rotation) {
+                        addedRotations[newPosKey] = rotation;
+                    }
+                    if (shape) {
+                        addedShapes[newPosKey] = shape;
+                    }
                 }
             }
 
@@ -1064,7 +1117,11 @@ class SelectionTool extends BaseTool {
                 this.terrainBuilderRef.current.updateTerrainBlocks(
                     addedBlocks,
                     {},
-                    { skipUndoSave: true }
+                    {
+                        skipUndoSave: true,
+                        rotationData: { added: addedRotations },
+                        shapeData: { added: addedShapes },
+                    }
                 );
             }
             this.pendingChangesRef.current.terrain.added = {
@@ -1072,6 +1129,8 @@ class SelectionTool extends BaseTool {
                 ...addedBlocks,
             };
             this.changes.terrain.added = addedBlocks;
+            this.changes.rotations.added = addedRotations;
+            this.changes.shapes.added = addedShapes;
         }
 
         // Place environment objects
@@ -1143,6 +1202,8 @@ class SelectionTool extends BaseTool {
     resetSelectionState() {
         this.selectedBlocks = null;
         this.selectedEnvironments = null;
+        this.selectedRotations = new Map<string, number>();
+        this.selectedShapes = new Map<string, string>();
         this.selectionActive = false;
         this.selectionStartPosition = null;
         this.moveOffset = new THREE.Vector3();
@@ -1157,6 +1218,14 @@ class SelectionTool extends BaseTool {
             environment: {
                 added: [],
                 removed: [],
+            },
+            rotations: {
+                added: {},
+                removed: {},
+            },
+            shapes: {
+                added: {},
+                removed: {},
             },
         };
         this.tooltip = this.originalTooltip;

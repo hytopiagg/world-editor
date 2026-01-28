@@ -7,6 +7,8 @@ import BaseTool from "./BaseTool";
  */
 export interface PatternData {
     blocks: Record<string, number>; // "x,y,z" -> blockId
+    rotations: Record<string, number>; // "x,y,z" -> rotationIndex (only non-zero)
+    shapes: Record<string, string>; // "x,y,z" -> shapeType (only non-cube)
     width: number;
     height: number;
     depth: number;
@@ -22,6 +24,8 @@ interface ParsedPatternBlock {
     dy: number; // delta y from origin
     dz: number; // delta z from origin
     blockId: number;
+    rotation?: number; // optional rotation index
+    shape?: string; // optional shape type
 }
 
 /**
@@ -348,15 +352,20 @@ export default class FindReplaceTool extends BaseTool {
     }
     
     // Normalize a block pattern to have origin at 0,0,0
-    normalizePattern(blocks: Record<string, number>, name?: string): PatternData {
+    normalizePattern(
+        blocks: Record<string, number>,
+        name?: string,
+        rotations?: Record<string, number>,
+        shapes?: Record<string, string>
+    ): PatternData {
         const entries = Object.entries(blocks);
         if (entries.length === 0) {
-            return { blocks: {}, width: 0, height: 0, depth: 0, name };
+            return { blocks: {}, rotations: {}, shapes: {}, width: 0, height: 0, depth: 0, name };
         }
-        
+
         let minX = Infinity, minY = Infinity, minZ = Infinity;
         let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-        
+
         // Find bounds
         entries.forEach(([posKey]) => {
             const [x, y, z] = posKey.split(",").map(Number);
@@ -367,17 +376,28 @@ export default class FindReplaceTool extends BaseTool {
             maxY = Math.max(maxY, y);
             maxZ = Math.max(maxZ, z);
         });
-        
+
         // Normalize to origin
         const normalizedBlocks: Record<string, number> = {};
+        const normalizedRotations: Record<string, number> = {};
+        const normalizedShapes: Record<string, string> = {};
         entries.forEach(([posKey, blockId]) => {
             const [x, y, z] = posKey.split(",").map(Number);
             const normalizedKey = `${x - minX},${y - minY},${z - minZ}`;
             normalizedBlocks[normalizedKey] = blockId;
+            // Copy rotation and shape if present
+            if (rotations && rotations[posKey]) {
+                normalizedRotations[normalizedKey] = rotations[posKey];
+            }
+            if (shapes && shapes[posKey]) {
+                normalizedShapes[normalizedKey] = shapes[posKey];
+            }
         });
-        
+
         return {
             blocks: normalizedBlocks,
+            rotations: normalizedRotations,
+            shapes: normalizedShapes,
             width: maxX - minX + 1,
             height: maxY - minY + 1,
             depth: maxZ - minZ + 1,
@@ -388,30 +408,44 @@ export default class FindReplaceTool extends BaseTool {
     // Rotate a pattern by 90 degrees (clockwise when viewed from above)
     rotatePattern(pattern: PatternData, times: number): PatternData {
         if (times === 0) return pattern;
-        
+
         let rotatedBlocks: Record<string, number> = { ...pattern.blocks };
+        let rotatedRotations: Record<string, number> = { ...(pattern.rotations || {}) };
+        let rotatedShapes: Record<string, string> = { ...(pattern.shapes || {}) };
         let width = pattern.width;
         let depth = pattern.depth;
-        
+
         for (let i = 0; i < times; i++) {
             const newBlocks: Record<string, number> = {};
+            const newRotations: Record<string, number> = {};
+            const newShapes: Record<string, string> = {};
             const currentWidth = width; // Capture current width for this iteration
-            
+
             Object.entries(rotatedBlocks).forEach(([posKey, blockId]) => {
                 const [x, y, z] = posKey.split(",").map(Number);
                 // Rotate 90° clockwise: (x, z) -> (z, width-1-x)
                 const newX = z;
                 const newZ = (currentWidth - 1) - x;
-                newBlocks[`${newX},${y},${newZ}`] = blockId;
+                const newKey = `${newX},${y},${newZ}`;
+                newBlocks[newKey] = blockId;
+                // Carry over rotation and shape data
+                if (rotatedRotations[posKey]) {
+                    newRotations[newKey] = rotatedRotations[posKey];
+                }
+                if (rotatedShapes[posKey]) {
+                    newShapes[newKey] = rotatedShapes[posKey];
+                }
             });
-            
+
             rotatedBlocks = newBlocks;
+            rotatedRotations = newRotations;
+            rotatedShapes = newShapes;
             // Swap width and depth
             [width, depth] = [depth, width];
         }
-        
+
         // Re-normalize to ensure origin is at 0,0,0
-        return this.normalizePattern(rotatedBlocks, pattern.name);
+        return this.normalizePattern(rotatedBlocks, pattern.name, rotatedRotations, rotatedShapes);
     }
     
     // Cancel any ongoing search
@@ -737,7 +771,17 @@ export default class FindReplaceTool extends BaseTool {
         
         const addedBlocks: Record<string, number> = {};
         const removedBlocks: Record<string, number> = {};
+        const addedRotations: Record<string, number> = {};
+        const addedShapes: Record<string, string> = {};
+        const removedRotations: Record<string, number> = {};
+        const removedShapes: Record<string, string> = {};
         const addedBlockKeys: string[] = [];
+
+        // Get rotation and shape refs to track what's being removed
+        const rotationsRef = (this.terrainBuilderRef as any)?.current?.getCurrentRotationData?.() ||
+            (this.terrainBuilderProps as any)?.rotationsRef?.current || {};
+        const shapesRef = (this.terrainBuilderRef as any)?.current?.getCurrentShapeData?.() ||
+            (this.terrainBuilderProps as any)?.shapesRef?.current || {};
         
         // Store matches for adjustment
         const matchesWithPatterns: Array<{
@@ -790,21 +834,35 @@ export default class FindReplaceTool extends BaseTool {
             Object.keys(rotatedFindPattern.blocks).forEach(posKey => {
                 const [px, py, pz] = posKey.split(",").map(Number);
                 const worldKey = `${match.position.x + px},${match.position.y + py},${match.position.z + pz}`;
-                
+
                 if (terrainData[worldKey] !== undefined) {
                     removedBlocks[worldKey] = terrainData[worldKey];
+                    // Track rotation and shape being removed
+                    if (rotationsRef[worldKey]) {
+                        removedRotations[worldKey] = rotationsRef[worldKey];
+                    }
+                    if (shapesRef[worldKey]) {
+                        removedShapes[worldKey] = shapesRef[worldKey];
+                    }
                     delete terrainData[worldKey];
                 }
             });
-            
+
             // Add new blocks (from replace pattern) centered on the original position
             Object.entries(rotatedReplacePattern.blocks).forEach(([posKey, blockId]) => {
                 const [px, py, pz] = posKey.split(",").map(Number);
                 const worldKey = `${match.position.x + px + centerOffsetX},${match.position.y + py + centerOffsetY},${match.position.z + pz + centerOffsetZ}`;
-                
+
                 addedBlocks[worldKey] = blockId;
                 addedBlockKeys.push(worldKey);
                 terrainData[worldKey] = blockId;
+                // Apply rotation and shape from replace pattern
+                if (rotatedReplacePattern.rotations && rotatedReplacePattern.rotations[posKey]) {
+                    addedRotations[worldKey] = rotatedReplacePattern.rotations[posKey];
+                }
+                if (rotatedReplacePattern.shapes && rotatedReplacePattern.shapes[posKey]) {
+                    addedShapes[worldKey] = rotatedReplacePattern.shapes[posKey];
+                }
             });
             
             replacedCount++;
@@ -826,6 +884,8 @@ export default class FindReplaceTool extends BaseTool {
         if (this.terrainBuilderRef?.current?.updateTerrainBlocks) {
             this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, removedBlocks, {
                 skipUndoSave: true,
+                rotationData: { added: addedRotations, removed: removedRotations },
+                shapeData: { added: addedShapes, removed: removedShapes },
             });
         }
         
@@ -978,12 +1038,38 @@ export default class FindReplaceTool extends BaseTool {
         
         // Save undo snapshot NOW
         if (this.undoRedoManager?.current?.saveUndo) {
+            // Get rotation and shape refs
+            const rotationsRef = (this.terrainBuilderRef as any)?.current?.getCurrentRotationData?.() ||
+                (this.terrainBuilderProps as any)?.rotationsRef?.current || {};
+            const shapesRef = (this.terrainBuilderRef as any)?.current?.getCurrentShapeData?.() ||
+                (this.terrainBuilderProps as any)?.shapesRef?.current || {};
+
+            // Collect rotations and shapes for added blocks
+            const addedRotations: Record<string, number> = {};
+            const addedShapes: Record<string, string> = {};
+            Object.keys(finalAdded).forEach(key => {
+                if (rotationsRef[key]) {
+                    addedRotations[key] = rotationsRef[key];
+                }
+                if (shapesRef[key]) {
+                    addedShapes[key] = shapesRef[key];
+                }
+            });
+
             const snapshot = {
                 terrain: {
                     added: { ...finalAdded },
                     removed: { ...finalRemoved },
                 },
                 environment: { added: [], removed: [] },
+                rotations: {
+                    added: addedRotations,
+                    removed: {},
+                },
+                shapes: {
+                    added: addedShapes,
+                    removed: {},
+                },
             };
             this.undoRedoManager.current.saveUndo(snapshot);
         }
@@ -1319,27 +1405,42 @@ export default class FindReplaceTool extends BaseTool {
         
         // Collect blocks in selection
         const blocks: Record<string, number> = {};
+        const rotations: Record<string, number> = {};
+        const shapes: Record<string, string> = {};
         const terrainData = this.terrainRef.current;
-        
+
+        // Get rotation and shape refs from TerrainBuilder
+        const rotationsRef = (this.terrainBuilderRef as any)?.current?.getCurrentRotationData?.() ||
+            (this.terrainBuilderProps as any)?.rotationsRef?.current || {};
+        const shapesRef = (this.terrainBuilderRef as any)?.current?.getCurrentShapeData?.() ||
+            (this.terrainBuilderProps as any)?.shapesRef?.current || {};
+
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
                 for (let y = 0; y < this.selectionHeight; y++) {
                     const posKey = `${x},${baseY + y},${z}`;
                     if (terrainData[posKey] !== undefined) {
                         blocks[posKey] = terrainData[posKey];
+                        // Capture rotation and shape
+                        if (rotationsRef[posKey]) {
+                            rotations[posKey] = rotationsRef[posKey];
+                        }
+                        if (shapesRef[posKey]) {
+                            shapes[posKey] = shapesRef[posKey];
+                        }
                     }
                 }
             }
         }
-        
+
         if (Object.keys(blocks).length === 0) {
             console.warn("[FindReplaceTool] No blocks found in selection");
             this.selectionStartPosition = null;
             this.clearAllPreviews();
             return;
         }
-        
-        const pattern = this.normalizePattern(blocks, "Selection");
+
+        const pattern = this.normalizePattern(blocks, "Selection", rotations, shapes);
         
         if (this.currentSelectionMode === "find") {
             this.findPattern = pattern;

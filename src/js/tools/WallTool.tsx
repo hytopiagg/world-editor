@@ -115,6 +115,8 @@ class WallTool extends BaseTool {
             this.placementChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
+                rotations: { added: {}, removed: {} },
+                shapes: { added: {}, removed: {} },
             };
         }
         console.log("WallTool finished onActivate successfully.");
@@ -131,6 +133,8 @@ class WallTool extends BaseTool {
             this.placementChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
+                rotations: { added: {}, removed: {} },
+                shapes: { added: {}, removed: {} },
             };
         }
     }
@@ -345,6 +349,10 @@ class WallTool extends BaseTool {
         }
         const blockTypeId = this.currentBlockTypeRef.current.id;
 
+        // Get current rotation and shape from TerrainBuilder refs
+        const currentRotation = (this.terrainBuilderProps as any).currentRotationIndexRef?.current || 0;
+        const currentShape = (this.terrainBuilderProps as any).currentShapeTypeRef?.current || 'cube';
+
         const points = this.getLinePoints(
             Math.round(startPos.x),
             Math.round(startPos.z),
@@ -353,6 +361,8 @@ class WallTool extends BaseTool {
         );
 
         const addedBlocks = {};
+        const addedRotations = {};
+        const addedShapes = {};
         const baseY = Math.round(startPos.y);
 
         for (const point of points) {
@@ -365,6 +375,14 @@ class WallTool extends BaseTool {
                 addedBlocks[posKey] = blockTypeId;
                 this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
                 delete this.pendingChangesRef.current.terrain.removed[posKey];
+
+                // Track rotation and shape for new blocks
+                if (currentRotation > 0) {
+                    addedRotations[posKey] = currentRotation;
+                }
+                if (currentShape && currentShape !== 'cube') {
+                    addedShapes[posKey] = currentShape;
+                }
             }
         }
 
@@ -379,7 +397,10 @@ class WallTool extends BaseTool {
             this.terrainRef.current[posKey] = blockId;
         });
 
-        this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {});
+        this.terrainBuilderRef.current.updateTerrainBlocks(addedBlocks, {}, {
+            rotationData: { added: addedRotations },
+            shapeData: { added: addedShapes },
+        });
 
         const addedBlocksArray = Object.entries(addedBlocks).map(
             ([posKey, blockId]) => {
@@ -402,6 +423,19 @@ class WallTool extends BaseTool {
         if (this.placementChangesRef) {
             Object.entries(addedBlocks).forEach(([key, value]) => {
                 this.placementChangesRef.current.terrain.added[key] = value;
+            });
+            // Track rotation and shape in placement changes for undo/redo
+            if (!this.placementChangesRef.current.rotations) {
+                this.placementChangesRef.current.rotations = { added: {}, removed: {} };
+            }
+            if (!this.placementChangesRef.current.shapes) {
+                this.placementChangesRef.current.shapes = { added: {}, removed: {} };
+            }
+            Object.entries(addedRotations).forEach(([key, value]) => {
+                this.placementChangesRef.current.rotations.added[key] = value;
+            });
+            Object.entries(addedShapes).forEach(([key, value]) => {
+                this.placementChangesRef.current.shapes.added[key] = value;
             });
         }
         return true;
@@ -447,7 +481,13 @@ class WallTool extends BaseTool {
         );
 
         const removedBlocks = {};
+        const removedRotations = {};
+        const removedShapes = {};
         const baseY = Math.round(startPos.y);
+
+        // Get rotation and shape refs from TerrainBuilder
+        const rotationsRef = (this.terrainBuilderProps as any).rotationsRef?.current || {};
+        const shapesRef = (this.terrainBuilderProps as any).shapesRef?.current || {};
 
         for (const point of points) {
             const [x, z] = point;
@@ -457,6 +497,14 @@ class WallTool extends BaseTool {
                 if (!this.terrainRef.current[posKey]) continue;
 
                 removedBlocks[posKey] = this.terrainRef.current[posKey];
+
+                // Track rotation and shape being removed for undo
+                if (rotationsRef[posKey]) {
+                    removedRotations[posKey] = rotationsRef[posKey];
+                }
+                if (shapesRef[posKey]) {
+                    removedShapes[posKey] = shapesRef[posKey];
+                }
             }
         }
 
@@ -471,7 +519,10 @@ class WallTool extends BaseTool {
             delete this.terrainRef.current[posKey];
         });
 
-        this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks);
+        this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks, {
+            rotationData: { removed: removedRotations },
+            shapeData: { removed: removedShapes },
+        });
 
         const removedBlocksArray = Object.entries(removedBlocks).map(
             ([posKey, blockId]) => {
@@ -495,9 +546,19 @@ class WallTool extends BaseTool {
             Object.entries(removedBlocks).forEach(([key, value]) => {
                 this.placementChangesRef.current.terrain.removed[key] = value;
             });
-
-
-
+            // Track removed rotation and shape in placement changes for undo/redo
+            if (!this.placementChangesRef.current.rotations) {
+                this.placementChangesRef.current.rotations = { added: {}, removed: {} };
+            }
+            if (!this.placementChangesRef.current.shapes) {
+                this.placementChangesRef.current.shapes = { added: {}, removed: {} };
+            }
+            Object.entries(removedRotations).forEach(([key, value]) => {
+                this.placementChangesRef.current.rotations.removed[key] = value;
+            });
+            Object.entries(removedShapes).forEach(([key, value]) => {
+                this.placementChangesRef.current.shapes.removed[key] = value;
+            });
         }
         return true;
     }

@@ -20,6 +20,8 @@ export default class ReplaceTool extends BaseTool {
     lastReplace: number;
     strokeAdded: Record<string, number>;
     strokeRemoved: Record<string, number>;
+    strokeRotations: Record<string, number>;
+    strokeShapes: Record<string, string>;
     undoRedoManager: any;
 
     constructor(terrainBuilderProps: any) {
@@ -33,6 +35,8 @@ export default class ReplaceTool extends BaseTool {
         this.lastReplace = 0;
         this.strokeAdded = {};
         this.strokeRemoved = {};
+        this.strokeRotations = {};
+        this.strokeShapes = {};
 
         // Reference to undo/redo manager from terrainBuilderProps (if provided)
         this.undoRedoManager = terrainBuilderProps.undoRedoManager;
@@ -175,6 +179,8 @@ export default class ReplaceTool extends BaseTool {
         // Reset stroke tracking for new operation - this allows replacing blocks from previous strokes
         this.strokeAdded = {};
         this.strokeRemoved = {};
+        this.strokeRotations = {};
+        this.strokeShapes = {};
 
 
 
@@ -247,6 +253,14 @@ export default class ReplaceTool extends BaseTool {
                         removed: { ...this.strokeRemoved },
                     },
                     environment: { added: [], removed: [] },
+                    rotations: {
+                        added: { ...this.strokeRotations },
+                        removed: {},
+                    },
+                    shapes: {
+                        added: { ...this.strokeShapes },
+                        removed: {},
+                    },
                 } as any;
                 this.undoRedoManager.current.saveUndo(snapshot);
             }
@@ -255,6 +269,8 @@ export default class ReplaceTool extends BaseTool {
         // Reset stroke tracking for next operation
         this.strokeAdded = {};
         this.strokeRemoved = {};
+        this.strokeRotations = {};
+        this.strokeShapes = {};
     }
 
     /* ============================= Core logic =========================== */
@@ -314,6 +330,12 @@ export default class ReplaceTool extends BaseTool {
 
         const addedBlocks: Record<string, number> = {};
         const removedBlocks: Record<string, number> = {};
+        const preservedRotations: Record<string, number> = {};
+        const preservedShapes: Record<string, string> = {};
+
+        // Get rotation and shape refs from TerrainBuilder to preserve existing values
+        const rotationsRef = (this.terrainBuilderProps as any).rotationsRef?.current || {};
+        const shapesRef = (this.terrainBuilderProps as any).shapesRef?.current || {};
 
         const intRadius = Math.ceil(radius);
 
@@ -369,6 +391,13 @@ export default class ReplaceTool extends BaseTool {
                             removedBlocks[posKey] = currentId;
                         }
 
+                        // Preserve original rotation and shape
+                        if (rotationsRef[posKey]) {
+                            preservedRotations[posKey] = rotationsRef[posKey];
+                        }
+                        if (shapesRef[posKey]) {
+                            preservedShapes[posKey] = shapesRef[posKey];
+                        }
                     }
                 }
             }
@@ -376,10 +405,12 @@ export default class ReplaceTool extends BaseTool {
 
         if (Object.keys(addedBlocks).length || Object.keys(removedBlocks).length) {
             // Direct replacement approach - much simpler than add/remove logic
-            this._applyBlockReplacements(addedBlocks, removedBlocks);
+            this._applyBlockReplacements(addedBlocks, removedBlocks, preservedRotations, preservedShapes);
 
             // Update stroke tracking for undo/redo
             Object.assign(this.strokeAdded, addedBlocks);
+            Object.assign(this.strokeRotations, preservedRotations);
+            Object.assign(this.strokeShapes, preservedShapes);
             Object.keys(addedBlocks).forEach(posKey => {
                 // Only set the original removed block once per position per stroke
                 if (!this.strokeRemoved[posKey]) {
@@ -395,7 +426,12 @@ export default class ReplaceTool extends BaseTool {
      * Apply block replacements directly without the add/remove cancellation logic.
      * This is much simpler and more direct for replacement operations.
      */
-    private _applyBlockReplacements(addedBlocks: Record<string, number>, removedBlocks: Record<string, number>) {
+    private _applyBlockReplacements(
+        addedBlocks: Record<string, number>,
+        removedBlocks: Record<string, number>,
+        preservedRotations: Record<string, number>,
+        preservedShapes: Record<string, string>
+    ) {
         console.log("ReplaceTool: Applying block replacements");
         const terrainRef = (this.terrainBuilderProps as any).terrainRef;
         const pendingChangesRef = (this.terrainBuilderProps as any).pendingChangesRef;
@@ -411,15 +447,23 @@ export default class ReplaceTool extends BaseTool {
             terrainRef.current[posKey] = newBlockId;
         });
 
-        // 2. Update chunk system with the changes
-        importedUpdateTerrainBlocks(addedBlocks, removedBlocks);
+        // 2. Update chunk system with the changes, preserving rotation/shape
+        importedUpdateTerrainBlocks(addedBlocks, removedBlocks, preservedRotations, preservedShapes);
 
         // 3. Update pending changes for auto-save (track replacements as changes)
         if (!pendingChangesRef.current) {
             pendingChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
+                rotations: { added: {}, removed: {} },
+                shapes: { added: {}, removed: {} },
             };
+        }
+        if (!pendingChangesRef.current.rotations) {
+            pendingChangesRef.current.rotations = { added: {}, removed: {} };
+        }
+        if (!pendingChangesRef.current.shapes) {
+            pendingChangesRef.current.shapes = { added: {}, removed: {} };
         }
 
         // For replacements, we track them as "replacements" to avoid cancellation logic
@@ -435,7 +479,13 @@ export default class ReplaceTool extends BaseTool {
             }
         });
 
-
+        // Track preserved rotations/shapes
+        Object.entries(preservedRotations).forEach(([posKey, rotation]) => {
+            pendingChangesRef.current.rotations.added[posKey] = rotation;
+        });
+        Object.entries(preservedShapes).forEach(([posKey, shape]) => {
+            pendingChangesRef.current.shapes.added[posKey] = shape;
+        });
     }
 
     /* ============================ Settings ============================== */

@@ -8,6 +8,7 @@ import { loadingManager } from "./managers/LoadingManager";
 import JSZip from "jszip";
 import { zoneManager } from "./managers/ZoneManager";
 import { Zone } from "./types/DatabaseTypes";
+import { getShapeDefinition, BlockShapeType } from "./blocks/BlockShapes";
 
 export const importMap = async (
     file,
@@ -1053,11 +1054,23 @@ export const exportMapFile = async (
         };
         // === End helper utilities ===
 
-        // --- Determine Used Block IDs ---
+        // --- Determine Used Block IDs and Shapes ---
         const usedBlockIds = new Set<number>();
-        Object.values(simplifiedTerrain).forEach(blockId => {
+        // Build a map: blockId -> Set of shapes used
+        const shapesPerBlockId = new Map<number, Set<string>>();
+
+        // Get shape data for analysis
+        const shapeDataForAnalysis: Record<string, string> = terrainBuilderRef?.current?.getCurrentShapeData?.() || {};
+
+        Object.entries(simplifiedTerrain).forEach(([posKey, blockId]) => {
             if (typeof blockId === 'number') { // Ensure it's a valid ID
                 usedBlockIds.add(blockId);
+                const shape = shapeDataForAnalysis[posKey] || 'cube';
+
+                if (!shapesPerBlockId.has(blockId)) {
+                    shapesPerBlockId.set(blockId, new Set());
+                }
+                shapesPerBlockId.get(blockId)!.add(shape);
             }
         });
 
@@ -1115,92 +1128,142 @@ export const exportMapFile = async (
         const selectedSkybox = await DatabaseManager.getData(STORES.SETTINGS, `project:${DatabaseManager.getCurrentProjectId()}:selectedSkybox`);
 
 
-        // --- Remap block IDs to 1..254 for SDK compatibility ---
-        const sortedUsedIds = Array.from(usedBlockIds)
-            .filter((id) => id !== 0)
-            .sort((a, b) => a - b);
+        // --- Create shape-aware block type mapping for SDK compatibility ---
+        // Each block+shape combination becomes a separate block type in the export
+        interface ExportBlockTypeEntry {
+            originalId: number;
+            shape: string;
+            exportId: number;
+        }
+
+        const exportBlockTypeEntries: ExportBlockTypeEntry[] = [];
+        let nextExportId = 1;
+
+        // Sort by original ID for consistency
+        const sortedBlockIds = Array.from(shapesPerBlockId.keys()).sort((a, b) => a - b);
+
+        for (const originalId of sortedBlockIds) {
+            const shapes = Array.from(shapesPerBlockId.get(originalId)!);
+            // Put 'cube' first if present for cleaner output
+            const sortedShapes = shapes.sort((a, b) => {
+                if (a === 'cube') return -1;
+                if (b === 'cube') return 1;
+                return a.localeCompare(b);
+            });
+
+            for (const shape of sortedShapes) {
+                exportBlockTypeEntries.push({
+                    originalId,
+                    shape,
+                    exportId: nextExportId++,
+                });
+            }
+        }
+
         const MAX_EXPORT_IDS = 254;
-        if (sortedUsedIds.length > MAX_EXPORT_IDS) {
+        if (exportBlockTypeEntries.length > MAX_EXPORT_IDS) {
             loadingManager.hideLoading();
-            alert(`Too many block types to export (${sortedUsedIds.length}). The export format supports up to ${MAX_EXPORT_IDS}. Reduce unique block types and try again.`);
+            alert(`Too many block type/shape combinations to export (${exportBlockTypeEntries.length}). The export format supports up to ${MAX_EXPORT_IDS}. Reduce unique combinations and try again.`);
             return;
         }
 
-        const originalToExportId = new Map<number, number>();
-        let nextExportId = 1; // 1..254
-        for (const originalId of sortedUsedIds) {
-            originalToExportId.set(originalId, nextExportId++);
+        // Create lookup: "originalId:shape" -> exportId
+        const blockShapeToExportId = new Map<string, number>();
+        for (const entry of exportBlockTypeEntries) {
+            blockShapeToExportId.set(`${entry.originalId}:${entry.shape}`, entry.exportId);
         }
 
         // Get rotation data for export
         const rotationData: Record<string, number> = terrainBuilderRef?.current?.getCurrentRotationData?.() || {};
-        // Get shape data for export
-        const shapeData: Record<string, string> = terrainBuilderRef?.current?.getCurrentShapeData?.() || {};
+        // Get shape data for export (reuse shapeDataForAnalysis from earlier)
+        const shapeData: Record<string, string> = shapeDataForAnalysis;
 
+        // Remap terrain using shape-aware block type IDs
+        // The `s` field is no longer exported - shapes are now encoded in the block type itself
         const remappedTerrain = Object.entries(simplifiedTerrain).reduce((acc, [key, value]) => {
             const originalId = typeof value === 'number' ? value : Number(value);
-            const mappedId = originalToExportId.get(originalId) ?? originalId;
-            const rotation = rotationData[key] || 0;
             const shape = shapeData[key] || 'cube';
-            // Use {i, r, s} format for blocks with rotation/shape, plain number otherwise
-            if (rotation > 0 || (shape && shape !== 'cube')) {
-                const entry: any = { i: mappedId };
-                if (rotation > 0) entry.r = rotation;
-                if (shape && shape !== 'cube') entry.s = shape;
-                (acc as any)[key] = entry;
-            } else {
-                (acc as any)[key] = mappedId;
+            const rotation = rotationData[key] || 0;
+
+            // Look up the correct export ID for this block+shape combination
+            const exportId = blockShapeToExportId.get(`${originalId}:${shape}`);
+            if (exportId === undefined) {
+                console.warn(`No export ID for block ${originalId} shape ${shape}`);
+                return acc;
             }
+
+            // Only include rotation if non-zero (saves space, SDK handles missing r as 0)
+            if (rotation > 0) {
+                (acc as any)[key] = { i: exportId, r: rotation };
+            } else {
+                (acc as any)[key] = exportId;
+            }
+
             return acc;
-        }, {} as Record<string, number | { i: number; r?: number; s?: string }>);
+        }, {} as Record<string, number | { i: number; r?: number }>);
 
 
         loadingManager.updateLoading("Building export data structure...", 70);
         const exportData = {
-            // Export block type definitions only for the blocks actually used
-            blockTypes: usedBlockTypes.map((block) => {
-                // Determine JSON paths based on zip structure
-                const isMulti = block.isMultiTexture || false;
-                const sanitizedBlockName = sanitizeName(block.name);
+            // Export block type definitions for each block+shape combination
+            blockTypes: exportBlockTypeEntries.map((entry) => {
+                const originalBlock = usedBlockTypes.find(b => b.id === entry.originalId);
+                if (!originalBlock) return null;
 
-                // --- Main texture path (single-texture blocks) ---
+                // Determine JSON paths based on zip structure
+                const isMulti = originalBlock.isMultiTexture || false;
+                const sanitizedBlockName = sanitizeName(originalBlock.name);
+                const isNonCubeShape = entry.shape !== 'cube';
+
+                // --- Main texture path (same for all shape variants of a block) ---
                 let textureUriForJson: string | undefined;
                 if (isMulti) {
                     // Multi-texture blocks reference their folder
-                    textureUriForJson = `blocks/${block.name}`;
-                } else if (block.textureUri) {
-                    const ext = getFileExtensionFromUri(block.textureUri);
+                    textureUriForJson = `blocks/${originalBlock.name}`;
+                } else if (originalBlock.textureUri) {
+                    const ext = getFileExtensionFromUri(originalBlock.textureUri);
                     const fileNameSingle = `${sanitizedBlockName}.${ext}`;
                     textureUriForJson = `blocks/${fileNameSingle}`;
                 }
 
-
-
-                // Build customColliderOptions for trimesh block types
+                // Build customColliderOptions for non-cube shapes
                 let customColliderOptions: any = undefined;
-                try {
-                    const BlockTypeRegistryMod = require('./blocks/BlockTypeRegistry').default;
-                    const registeredType = BlockTypeRegistryMod.instance?.getBlockType(block.id);
-                    if (registeredType?.isTrimesh && registeredType.trimeshVertices && registeredType.trimeshIndices) {
+                if (isNonCubeShape) {
+                    // Get shape definition from BlockShapes
+                    const shapeDef = getShapeDefinition(entry.shape as BlockShapeType);
+                    if (shapeDef) {
                         customColliderOptions = {
                             shape: 'trimesh',
-                            vertices: Array.from(registeredType.trimeshVertices),
-                            indices: Array.from(registeredType.trimeshIndices),
+                            vertices: Array.from(shapeDef.vertices),
+                            indices: Array.from(shapeDef.indices),
                         };
                     }
-                } catch (_) {}
+                } else {
+                    // For cube shapes, check if original block type already has trimesh data
+                    try {
+                        const BlockTypeRegistryMod = require('./blocks/BlockTypeRegistry').default;
+                        const registeredType = BlockTypeRegistryMod.instance?.getBlockType(originalBlock.id);
+                        if (registeredType?.isTrimesh && registeredType.trimeshVertices && registeredType.trimeshIndices) {
+                            customColliderOptions = {
+                                shape: 'trimesh',
+                                vertices: Array.from(registeredType.trimeshVertices),
+                                indices: Array.from(registeredType.trimeshIndices),
+                            };
+                        }
+                    } catch (_) {}
+                }
 
                 return {
-                    id: originalToExportId.get(block.id) ?? block.id,
-                    name: block.name,
-                    textureUri: textureUriForJson, // For multi texture blocks this will be folder path; single texture blocks file path
-                    isCustom: block.isCustom || (block.id >= 1000 && block.id < 2000),
+                    id: entry.exportId,
+                    name: isNonCubeShape ? `${originalBlock.name}_${entry.shape}` : originalBlock.name,
+                    textureUri: textureUriForJson, // All shape variants use the same texture
+                    isCustom: originalBlock.isCustom || (originalBlock.id >= 1000 && originalBlock.id < 2000),
                     isMultiTexture: isMulti,
-                    lightLevel: (block as any).lightLevel,
-                    isLiquid: (block as any).isLiquid === true, // Export isLiquid flag if set to true
+                    lightLevel: (originalBlock as any).lightLevel,
+                    isLiquid: (originalBlock as any).isLiquid === true, // Export isLiquid flag if set to true
                     ...(customColliderOptions ? { customColliderOptions } : {}),
                 };
-            }),
+            }).filter(Boolean),
             blocks: remappedTerrain,
             entities: environmentObjects.reduce((acc, obj) => {
                 const entityType = environmentModels.find(

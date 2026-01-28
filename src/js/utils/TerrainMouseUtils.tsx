@@ -166,6 +166,8 @@ function handleTerrainMouseDown(
             placementChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
+                rotations: { added: {}, removed: {} },
+                shapes: { added: {}, removed: {} },
             };
             updatePreviewPosition();
             if (isFirstBlockRef.current) {

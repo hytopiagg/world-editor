@@ -77,6 +77,8 @@ class GroundTool extends BaseTool {
             this.placementChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
+                rotations: { added: {}, removed: {} },
+                shapes: { added: {}, removed: {} },
             };
         }
         return true; // Indicate successful activation
@@ -94,6 +96,8 @@ class GroundTool extends BaseTool {
             this.placementChangesRef.current = {
                 terrain: { added: {}, removed: {} },
                 environment: { added: [], removed: [] },
+                rotations: { added: {}, removed: {} },
+                shapes: { added: {}, removed: {} },
             };
         }
     }
@@ -132,6 +136,8 @@ class GroundTool extends BaseTool {
                     this.placementChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
+                        rotations: { added: {}, removed: {} },
+                        shapes: { added: {}, removed: {} },
                     };
                 } else {
                     console.warn(
@@ -181,6 +187,8 @@ class GroundTool extends BaseTool {
                         this.placementChangesRef.current = {
                             terrain: { added: {}, removed: {} },
                             environment: { added: [], removed: [] },
+                            rotations: { added: {}, removed: {} },
+                            shapes: { added: {}, removed: {} },
                         };
                     } else {
                         console.warn("GroundTool: No changes to save");
@@ -204,6 +212,8 @@ class GroundTool extends BaseTool {
                     this.placementChangesRef.current = {
                         terrain: { added: {}, removed: {} },
                         environment: { added: [], removed: [] },
+                        rotations: { added: {}, removed: {} },
+                        shapes: { added: {}, removed: {} },
                     };
 
                     if (this.isPlacingRef) {
@@ -379,6 +389,10 @@ class GroundTool extends BaseTool {
 
         const blockTypeId = this.currentBlockTypeRef.current.id;
 
+        // Get current rotation and shape from TerrainBuilder refs
+        const currentRotation = (this.terrainBuilderProps as any).currentRotationIndexRef?.current || 0;
+        const currentShape = (this.terrainBuilderProps as any).currentShapeTypeRef?.current || 'cube';
+
         const minX = Math.min(Math.round(startPos.x), Math.round(endPos.x));
         const maxX = Math.max(Math.round(startPos.x), Math.round(endPos.x));
         const minZ = Math.min(Math.round(startPos.z), Math.round(endPos.z));
@@ -388,6 +402,8 @@ class GroundTool extends BaseTool {
         console.time("GroundTool-placeGround");
 
         const addedBlocks = {};
+        const addedRotations = {};
+        const addedShapes = {};
 
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
@@ -411,6 +427,14 @@ class GroundTool extends BaseTool {
                         addedBlocks[posKey] = blockTypeId;
                         this.pendingChangesRef.current.terrain.added[posKey] = blockTypeId;
                         delete this.pendingChangesRef.current.terrain.removed[posKey];
+
+                        // Track rotation and shape for new blocks
+                        if (currentRotation > 0) {
+                            addedRotations[posKey] = currentRotation;
+                        }
+                        if (currentShape && currentShape !== 'cube') {
+                            addedShapes[posKey] = currentShape;
+                        }
                     }
                 }
             }
@@ -430,7 +454,11 @@ class GroundTool extends BaseTool {
         this.terrainBuilderRef.current.updateTerrainBlocks(
             addedBlocks,
             {},
-            { skipUndoSave: true }
+            {
+                skipUndoSave: true,
+                rotationData: { added: addedRotations },
+                shapeData: { added: addedShapes },
+            }
         );
 
         const addedBlocksArray = Object.entries(addedBlocks).map(
@@ -454,6 +482,19 @@ class GroundTool extends BaseTool {
         if (this.placementChangesRef) {
             Object.entries(addedBlocks).forEach(([key, value]) => {
                 this.placementChangesRef.current.terrain.added[key] = value;
+            });
+            // Track rotation and shape in placement changes for undo/redo
+            if (!this.placementChangesRef.current.rotations) {
+                this.placementChangesRef.current.rotations = { added: {}, removed: {} };
+            }
+            if (!this.placementChangesRef.current.shapes) {
+                this.placementChangesRef.current.shapes = { added: {}, removed: {} };
+            }
+            Object.entries(addedRotations).forEach(([key, value]) => {
+                this.placementChangesRef.current.rotations.added[key] = value;
+            });
+            Object.entries(addedShapes).forEach(([key, value]) => {
+                this.placementChangesRef.current.shapes.added[key] = value;
             });
         }
         return true;
@@ -486,6 +527,12 @@ class GroundTool extends BaseTool {
         console.time("GroundTool-eraseGround");
 
         const removedBlocks = {};
+        const removedRotations = {};
+        const removedShapes = {};
+
+        // Get rotation and shape refs from TerrainBuilder
+        const rotationsRef = (this.terrainBuilderProps as any).rotationsRef?.current || {};
+        const shapesRef = (this.terrainBuilderProps as any).shapesRef?.current || {};
 
         for (let x = minX; x <= maxX; x++) {
             for (let z = minZ; z <= maxZ; z++) {
@@ -510,6 +557,14 @@ class GroundTool extends BaseTool {
                         removedBlocks[posKey] = blockId;
                         this.pendingChangesRef.current.terrain.removed[posKey] = blockId;
                         delete this.pendingChangesRef.current.terrain.added[posKey];
+
+                        // Track rotation and shape being removed for undo
+                        if (rotationsRef[posKey]) {
+                            removedRotations[posKey] = rotationsRef[posKey];
+                        }
+                        if (shapesRef[posKey]) {
+                            removedShapes[posKey] = shapesRef[posKey];
+                        }
                     }
                 }
             }
@@ -532,6 +587,8 @@ class GroundTool extends BaseTool {
 
         this.terrainBuilderRef.current.updateTerrainBlocks({}, removedBlocks, {
             skipUndoSave: true,
+            rotationData: { removed: removedRotations },
+            shapeData: { removed: removedShapes },
         });
 
         const removedBlocksArray = Object.entries(removedBlocks).map(
@@ -555,6 +612,19 @@ class GroundTool extends BaseTool {
         if (this.placementChangesRef) {
             Object.entries(removedBlocks).forEach(([key, value]) => {
                 this.placementChangesRef.current.terrain.removed[key] = value;
+            });
+            // Track removed rotation and shape in placement changes for undo/redo
+            if (!this.placementChangesRef.current.rotations) {
+                this.placementChangesRef.current.rotations = { added: {}, removed: {} };
+            }
+            if (!this.placementChangesRef.current.shapes) {
+                this.placementChangesRef.current.shapes = { added: {}, removed: {} };
+            }
+            Object.entries(removedRotations).forEach(([key, value]) => {
+                this.placementChangesRef.current.rotations.removed[key] = value;
+            });
+            Object.entries(removedShapes).forEach(([key, value]) => {
+                this.placementChangesRef.current.shapes.removed[key] = value;
             });
         }
         return true;

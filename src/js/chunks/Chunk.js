@@ -419,14 +419,63 @@ class Chunk {
                                 meshNormals.push(rn[0], rn[1], rn[2]);
 
                                 // UV lookup from atlas
-                                let texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(
-                                    blockType.name, tri.blockFace, uv
-                                );
+                                let texCoords = null;
+                                const isCustomBlock = blockType.id >= 1000;
+
+                                if (isCustomBlock) {
+                                    // Custom block: try ID-based lookup (same pattern as cube rendering)
+                                    const faceCoordMap = {
+                                        top: "+y", bottom: "-y",
+                                        left: "-x", right: "+x",
+                                        front: "+z", back: "-z",
+                                    };
+                                    const faceCoord = faceCoordMap[tri.blockFace] || tri.blockFace;
+
+                                    const candidates = [
+                                        actualTextureUri,                           // 1) Direct data URI
+                                        String(blockType.id),                       // 2) ID as string
+                                        `blocks/${blockType.id}`,                   // 3) blocks/<id>
+                                        `blocks/${blockType.id}/${faceCoord}.png`,  // 4) blocks/<id>/<face>.png
+                                    ];
+
+                                    // Add variant base ID candidates if applicable
+                                    if (typeof blockType.variantOfId === "number") {
+                                        const baseId = blockType.variantOfId;
+                                        candidates.push(String(baseId));
+                                        candidates.push(`blocks/${baseId}`);
+                                        candidates.push(`blocks/${baseId}/${faceCoord}.png`);
+                                    }
+
+                                    const atlas = BlockTextureAtlas.instance;
+                                    for (const key of candidates) {
+                                        if (!key) continue;
+                                        texCoords = atlas.getTextureUVCoordinateSync(key, uv);
+                                        if (texCoords && !(texCoords[0] === 0 && texCoords[1] === 0 && texCoords[2] === 1 && texCoords[3] === 1)) {
+                                            break;
+                                        }
+                                        atlas.queueTextureForLoading(key);
+                                        texCoords = null;
+                                    }
+
+                                    // Fallback to name-based lookup
+                                    if (!texCoords) {
+                                        texCoords = atlas.getMultiSidedTextureUV(blockType.name, tri.blockFace, uv);
+                                    }
+                                } else {
+                                    // Built-in block: use existing name-based lookup
+                                    texCoords = BlockTextureAtlas.instance.getMultiSidedTextureUV(
+                                        blockType.name, tri.blockFace, uv
+                                    );
+                                }
+
+                                // Fallback to direct texture URI
                                 if (!texCoords) {
                                     texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(
                                         actualTextureUri, uv
                                     );
                                 }
+
+                                // Final fallback to error texture
                                 if (!texCoords) {
                                     texCoords = BlockTextureAtlas.instance.getTextureUVCoordinateSync(
                                         "./assets/blocks/error.png", uv

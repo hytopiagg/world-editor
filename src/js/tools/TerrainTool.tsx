@@ -24,8 +24,12 @@ export class TerrainTool extends BaseTool {
     dirtyChunks: Set<string>;
     pendingAdded: Record<string, number>;
     pendingRemoved: Record<string, number>;
+    pendingRotations: Record<string, number>;
+    pendingShapes: Record<string, string>;
     strokeAdded: Record<string, number>;
     strokeRemoved: Record<string, number>;
+    strokeRotations: Record<string, number>;
+    strokeShapes: Record<string, string>;
 
     constructor(terrainBuilderProps: any) {
         super(terrainBuilderProps);
@@ -65,10 +69,14 @@ export class TerrainTool extends BaseTool {
         this.dirtyChunks = new Set();
         this.pendingAdded = {};
         this.pendingRemoved = {};
+        this.pendingRotations = {};
+        this.pendingShapes = {};
 
         // Initialize per-stroke change tracking
         this.strokeAdded = {};
         this.strokeRemoved = {};
+        this.strokeRotations = {};
+        this.strokeShapes = {};
 
         // Pre-compute fall-off table for the initial radius
         this.falloffTable = [];
@@ -204,6 +212,8 @@ export class TerrainTool extends BaseTool {
         // Reset per-stroke change trackers
         this.strokeAdded = {};
         this.strokeRemoved = {};
+        this.strokeRotations = {};
+        this.strokeShapes = {};
 
         // Store original heights for undo
         this.storeOriginalHeights();
@@ -229,8 +239,13 @@ export class TerrainTool extends BaseTool {
 
         // Flush remaining dirty chunks
         if ((Object.keys(this.pendingAdded).length || Object.keys(this.pendingRemoved).length) && (this.terrainBuilderProps as any).updateTerrainBlocks) {
-            (this.terrainBuilderProps as any).updateTerrainBlocks(this.pendingAdded, this.pendingRemoved, { syncPendingChanges: true });
+            (this.terrainBuilderProps as any).updateTerrainBlocks(this.pendingAdded, this.pendingRemoved, {
+                syncPendingChanges: true,
+                rotationData: { added: this.pendingRotations },
+                shapeData: { added: this.pendingShapes },
+            });
             this.pendingAdded = {}; this.pendingRemoved = {};
+            this.pendingRotations = {}; this.pendingShapes = {};
         }
 
         if (this.dirtyChunks.size > 0 && (this.terrainBuilderProps as any).forceChunkUpdate) {
@@ -260,6 +275,14 @@ export class TerrainTool extends BaseTool {
                         removed: { ...this.strokeRemoved },
                     },
                     environment: null,
+                    rotations: {
+                        added: { ...this.strokeRotations },
+                        removed: {},
+                    },
+                    shapes: {
+                        added: { ...this.strokeShapes },
+                        removed: {},
+                    },
                 } as any;
                 this.undoRedoManager.current.saveUndo(snapshot);
             }
@@ -363,7 +386,13 @@ export class TerrainTool extends BaseTool {
         // Track changes for real-time application
         const addedBlocks = {};
         const removedBlocks = {};
+        const addedRotations = {};
+        const addedShapes = {};
         const terrainData = (this.terrainBuilderProps as any).terrainRef.current;
+
+        // Get current rotation and shape from TerrainBuilder refs
+        const currentRotation = (this.terrainBuilderProps as any).currentRotationIndexRef?.current || 0;
+        const currentShape = (this.terrainBuilderProps as any).currentShapeTypeRef?.current || 'cube';
 
         // Cache ground levels to avoid repeated calculations
         const groundLevelCache = new Map();
@@ -465,6 +494,13 @@ export class TerrainTool extends BaseTool {
                             // Always use the currently selected block type
                             const blockType = selectedBlockId;
                             addedBlocks[blockKey] = blockType;
+                            // Track rotation and shape for new blocks
+                            if (currentRotation > 0) {
+                                addedRotations[blockKey] = currentRotation;
+                            }
+                            if (currentShape && currentShape !== 'cube') {
+                                addedShapes[blockKey] = currentShape;
+                            }
                         }
                     }
                 }
@@ -477,18 +513,29 @@ export class TerrainTool extends BaseTool {
             // Buffer terrain changes; commit during flush for better performance
             Object.assign(this.pendingAdded, addedBlocks);
             Object.assign(this.pendingRemoved, removedBlocks);
+            Object.assign(this.pendingRotations, addedRotations);
+            Object.assign(this.pendingShapes, addedShapes);
 
             // Accumulate per-stroke changes for accurate undo
             Object.assign(this.strokeAdded, addedBlocks);
             Object.assign(this.strokeRemoved, removedBlocks);
+            Object.assign(this.strokeRotations, addedRotations);
+            Object.assign(this.strokeShapes, addedShapes);
 
             // Periodically flush chunk meshing for near-real-time visuals
             const nowFlush = performance.now();
             if (nowFlush - this.lastMeshUpdate > 250) {
                 // First push buffered terrain updates so mesher sees new blocks
                 if ((Object.keys(this.pendingAdded).length || Object.keys(this.pendingRemoved).length) && (this.terrainBuilderProps as any).updateTerrainBlocks) {
-                    (this.terrainBuilderProps as any).updateTerrainBlocks(this.pendingAdded, this.pendingRemoved, { syncPendingChanges: true, skipSpatialHash: true, skipUndoSave: true });
+                    (this.terrainBuilderProps as any).updateTerrainBlocks(this.pendingAdded, this.pendingRemoved, {
+                        syncPendingChanges: true,
+                        skipSpatialHash: true,
+                        skipUndoSave: true,
+                        rotationData: { added: this.pendingRotations },
+                        shapeData: { added: this.pendingShapes },
+                    });
                     this.pendingAdded = {}; this.pendingRemoved = {};
+                    this.pendingRotations = {}; this.pendingShapes = {};
                 }
 
                 if (this.dirtyChunks.size > 0 && (this.terrainBuilderProps as any).forceChunkUpdate) {
@@ -754,6 +801,12 @@ export class TerrainTool extends BaseTool {
         if (!pendingRef.terrain) {
             pendingRef.terrain = { added: {}, removed: {} };
         }
+        if (!pendingRef.rotations) {
+            pendingRef.rotations = { added: {}, removed: {} };
+        }
+        if (!pendingRef.shapes) {
+            pendingRef.shapes = { added: {}, removed: {} };
+        }
 
         // Merge buffered additions
         Object.entries(this.pendingAdded).forEach(([key, val]) => {
@@ -771,9 +824,21 @@ export class TerrainTool extends BaseTool {
             pendingRef.terrain.removed[key] = val;
         });
 
+        // Merge buffered rotations
+        Object.entries(this.pendingRotations).forEach(([key, val]) => {
+            pendingRef.rotations.added[key] = val;
+        });
+
+        // Merge buffered shapes
+        Object.entries(this.pendingShapes).forEach(([key, val]) => {
+            pendingRef.shapes.added[key] = val;
+        });
+
         // Clear internal buffers – changes safely transferred
         this.pendingAdded = {};
         this.pendingRemoved = {};
+        this.pendingRotations = {};
+        this.pendingShapes = {};
 
         // Keep dirtyChunks so selective meshing still happens on the visual side.
     }
