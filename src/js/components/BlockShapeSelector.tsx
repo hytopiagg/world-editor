@@ -9,13 +9,31 @@ interface BlockShapeSelectorProps {
     setCurrentRotationIndex: (rotationIndex: number) => void;
 }
 
-const SHAPE_DISPLAY: { type: BlockShapeType; label: string; icon: string }[] = [
+const SHAPE_DISPLAY: { type: BlockShapeType; label: string; icon: React.ReactNode }[] = [
     { type: BlockShapeType.CUBE, label: 'Cube', icon: '\u25A0' },           // ■
     { type: BlockShapeType.HALF_SLAB, label: 'Slab', icon: '\u2584' },      // ▄
     { type: BlockShapeType.WEDGE_45, label: 'Wedge', icon: '\u25E2' },      // ◢
-    { type: BlockShapeType.STAIRS_2, label: 'Stairs 2', icon: '\u2587' },   // ▇
-    { type: BlockShapeType.STAIRS_3, label: 'Stairs 3', icon: '\u2586' },   // ▆
-    { type: BlockShapeType.QUARTER, label: 'Quarter', icon: '\u25A3' },     // ▣
+    { type: BlockShapeType.STAIRS_2, label: 'Stairs 2', icon: (             // 2-step stair profile
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="0" y="8" width="8" height="8" />
+            <rect x="8" y="0" width="8" height="16" />
+        </svg>
+    ) },
+    { type: BlockShapeType.STAIRS_3, label: 'Stairs 3', icon: (             // 3-step stair profile
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="0" y="11" width="5" height="5" />
+            <rect x="5.5" y="5.5" width="5" height="10.5" />
+            <rect x="11" y="0" width="5" height="16" />
+        </svg>
+    ) },
+    { type: BlockShapeType.QUARTER, label: 'Quarter', icon: (               // 2×2 grid, top-left highlighted
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <rect x="0" y="0" width="7" height="7" opacity="1" />
+            <rect x="9" y="0" width="7" height="7" opacity="0.3" />
+            <rect x="0" y="9" width="7" height="7" opacity="0.3" />
+            <rect x="9" y="9" width="7" height="7" opacity="0.3" />
+        </svg>
+    ) },
     { type: BlockShapeType.FENCE_POST, label: 'Post', icon: '\u2502' },     // │
     { type: BlockShapeType.CROSS, label: 'Cross', icon: '\u2716' },         // ✖
     { type: BlockShapeType.FENCE_1H, label: 'Fence 1', icon: '\u251C' },   // ├

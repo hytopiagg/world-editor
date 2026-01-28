@@ -128,16 +128,15 @@ const FACE_GROUP_STARTS: number[] = [
 ];
 
 /**
- * Get the next Y rotation (cycling 0→90→180→270→0).
- * If the current rotation is not a Y rotation, returns Y_90 as the starting point.
+ * Get the next rotation within the current face group.
+ * Cycles 0°→90°→180°→270°→0° while staying on the same face axis.
+ * Each face group has 4 consecutive indices (Y: 0-3, NY: 4-7, X: 8-11, etc.)
  */
 export function getNextYRotation(currentEnumIndex: number): number {
-    const idx = Y_ROTATION_CYCLE.indexOf(currentEnumIndex);
-    if (idx === -1) {
-        // Not currently a Y rotation; start at Y_90
-        return BLOCK_ROTATIONS.Y_90.enumIndex;
-    }
-    return Y_ROTATION_CYCLE[(idx + 1) % Y_ROTATION_CYCLE.length];
+    const groupStart = Math.floor(currentEnumIndex / 4) * 4;
+    const subRotation = currentEnumIndex % 4;
+    const nextSubRotation = (subRotation + 1) % 4;
+    return groupStart + nextSubRotation;
 }
 
 /**

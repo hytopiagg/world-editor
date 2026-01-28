@@ -1002,6 +1002,8 @@ function App() {
                         getAvailableEntities={handleGetAvailableEntities}
                         loadAISchematic={handleLoadAISchematic}
                         onConvertComponentToEntity={handleConvertComponentToEntity}
+                        currentRotationIndex={currentRotationIndex}
+                        currentShapeType={currentShapeType}
                     />
                 )}
 

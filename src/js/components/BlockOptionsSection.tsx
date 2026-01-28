@@ -12,9 +12,11 @@ interface BlockOptionsSectionProps {
     onDownloadBlock: (block: any) => void;
     onDeleteBlock: (block: any) => void;
     isCompactMode: boolean;
+    currentRotationIndex?: number;
+    currentShapeType?: string;
 }
 
-export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, onDownloadBlock, onDeleteBlock, isCompactMode }: BlockOptionsSectionProps) {
+export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, onDownloadBlock, onDeleteBlock, isCompactMode, currentRotationIndex, currentShapeType }: BlockOptionsSectionProps) {
     const [editableName, setEditableName] = useState(selectedBlock?.name || '');
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -146,7 +148,13 @@ export default function BlockOptionsSection({ selectedBlock, onUpdateBlockName, 
                 }}
             >
                 {Object.keys(textureObjects).length > 0 ? (
-                    <BlockPreview3D textureObjects={textureObjects} target={[0, -0.3, 0]} showControls={false} />
+                    <BlockPreview3D
+                        textureObjects={textureObjects}
+                        target={[0, -0.3, 0]}
+                        showControls={false}
+                        rotationIndex={currentRotationIndex ?? 0}
+                        shapeType={currentShapeType ?? 'cube'}
+                    />
                 ) : (
                     <div className="flex justify-center items-center h-full text-xs text-white/50">Loading Preview...</div>
                 )}
