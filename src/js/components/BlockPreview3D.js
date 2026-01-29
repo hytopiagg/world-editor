@@ -53,7 +53,7 @@ const PreviewCube = ({ textureObjects, rotationIndex = 0, shapeType = 'cube' }) 
         const shapeDef = BLOCK_SHAPES[shapeType];
         if (!shapeDef) return null;
 
-        const triangles = buildTrimeshTriangleData(shapeDef.vertices, shapeDef.indices);
+        const triangles = buildTrimeshTriangleData(shapeDef.vertices, shapeDef.indices, shapeType);
         const vertCount = triangles.length * 3;
         const positions = new Float32Array(vertCount * 3);
         const normals = new Float32Array(vertCount * 3);

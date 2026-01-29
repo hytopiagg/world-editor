@@ -90,7 +90,8 @@ export function computeTrimeshUV(
  */
 export function buildTrimeshTriangleData(
     vertices: Float32Array,
-    indices: Uint32Array
+    indices: Uint32Array,
+    shapeType?: string
 ): TrimeshTriangleData[] {
     const triangles: TrimeshTriangleData[] = [];
     for (let i = 0; i < indices.length; i += 3) {
@@ -120,8 +121,10 @@ export function buildTrimeshTriangleData(
         const uv1 = computeTrimeshUV(v1, blockFace);
         const uv2 = computeTrimeshUV(v2, blockFace);
 
+
         triangles.push({ v0, v1, v2, normal, blockFace, uv0, uv1, uv2 });
     }
+
     return triangles;
 }
 
@@ -363,141 +366,201 @@ const FENCE_2H_INDICES = idx([
 ]);
 
 // --- OUTER CORNER STAIRS (2-step, corner piece) ---
-// Layout (top-down):
-//   Step 2 (y=1): x∈[0,0.5], z∈[0,0.5]
-//   Step 1 (y=0.5): x∈[0,1], z∈[0.5,1]
-// Vertices numbered 0-16:
-//   Bottom (y=0): 0=(0,0,0) 1=(0.5,0,0) 2=(1,0,0) 3=(1,0,0.5) 4=(1,0,1) 5=(0,0,1) 6=(0,0,0.5) 7=(0.5,0,0.5)
-//   Step1 (y=0.5): 8=(0,0.5,0.5) 9=(0.5,0.5,0.5) 10=(1,0.5,0.5) 11=(1,0.5,1) 12=(0,0.5,1)
-//   Step2 (y=1):   13=(0,1,0) 14=(0.5,1,0) 15=(0.5,1,0.5) 16=(0,1,0.5)
+// Like STAIRS_2 but with back-right corner (x∈[0.5,1], z∈[0,0.5]) cut out above y=0.5
 const OCS2_VERTICES = v([
-    // Bottom (y=0)
-    0,0,0,      // 0
-    0.5,0,0,    // 1
-    1,0,0,      // 2
-    1,0,0.5,    // 3
-    1,0,1,      // 4
-    0,0,1,      // 5
-    0,0,0.5,    // 6
-    0.5,0,0.5,  // 7
-    // Step 1 top (y=0.5)
-    0,0.5,0.5,    // 8
-    0.5,0.5,0.5,  // 9
-    1,0.5,0.5,    // 10
-    1,0.5,1,      // 11
-    0,0.5,1,      // 12
-    // Step 2 top (y=1)
-    0,1,0,      // 13
-    0.5,1,0,    // 14
-    0.5,1,0.5,  // 15
-    0,1,0.5,    // 16
+    // y=0 plane (bottom)
+    0,0,0,      // 0: x=0, z=0
+    0.5,0,0,    // 1: x=0.5, z=0
+    1,0,0,      // 2: x=1, z=0
+    0,0,0.5,    // 3: x=0, z=0.5
+    0.5,0,0.5,  // 4: x=0.5, z=0.5
+    1,0,0.5,    // 5: x=1, z=0.5
+    0,0,1,      // 6: x=0, z=1
+    1,0,1,      // 7: x=1, z=1
+    // y=0.5 plane (step 1 top / cutout floor)
+    0,0.5,0.5,    // 8: x=0, z=0.5
+    0.5,0.5,0.5,  // 9: x=0.5, z=0.5 (corner of step 2)
+    1,0.5,0.5,    // 10: x=1, z=0.5
+    0,0.5,1,      // 11: x=0, z=1
+    1,0.5,1,      // 12: x=1, z=1
+    0.5,0.5,0,    // 13: x=0.5, z=0 (cutout floor)
+    1,0.5,0,      // 14: x=1, z=0 (cutout floor)
+    // y=1 plane (step 2 top) - only x∈[0,0.5], z∈[0,0.5]
+    0,1,0,      // 15: x=0, z=0
+    0.5,1,0,    // 16: x=0.5, z=0
+    0.5,1,0.5,  // 17: x=0.5, z=0.5
+    0,1,0.5,    // 18: x=0, z=0.5
 ]);
 const OCS2_INDICES = idx([
-    // Bottom face (y=0) — entire base quad
-    0,2,4, 0,4,5,
-    // Step 1 top (y=0.5, z=0.5..1)
-    8,11,10, 8,12,11,
-    // Step 2 top (y=1, x=0..0.5, z=0..0.5)
-    13,15,14, 13,16,15,
-    // Front face (z=1, y 0→0.5)
-    5,4,11, 5,11,12,
-    // Back face (z=0, x∈[0,0.5], y 0→1) — vertical wall
-    0,14,1, 0,13,14,
-    // Left face (x=0) — L-shaped, fan from vertex 0
-    0,16,13, 0,8,16, 0,12,8, 0,5,12,
-    // Right face (x=1, z∈[0.5,1], y 0→0.5)
-    3,11,4, 3,10,11,
-    // Z-riser lower (z=0.5, y 0→0.5, facing -z) — full width x∈[0,1]
-    6,9,7, 6,8,9, 7,10,3, 7,9,10,
-    // Z-riser upper (z=0.5, x∈[0,0.5], y 0.5→1, facing -z)
-    8,15,9, 8,16,15,
-    // X-riser (x=0.5, z∈[0,0.5], y 0→1, facing +x) — vertical wall
-    1,15,7, 1,14,15,
+    // Bottom y=0 (normal -Y) - full quad
+    0,2,7, 0,7,6,
+    // Step 1 top y=0.5, z∈[0.5,1] (normal +Y)
+    8,12,10, 8,11,12,
+    // Step 2 top y=1 (normal +Y)
+    15,17,16, 15,18,17,
+    // Cutout floor y=0.5, x∈[0.5,1], z∈[0,0.5] (normal +Y)
+    13,10,14, 13,9,10,
+    // Front z=1 (normal +Z)
+    6,7,12, 6,12,11,
+    // Back z=0, x∈[0,0.5], y∈[0,1] (normal -Z)
+    0,16,1, 0,15,16,
+    // Back z=0, x∈[0.5,1], y∈[0,0.5] (normal -Z)
+    1,14,2, 1,13,14,
+    // Left x=0 (normal -X) - L-shaped fan
+    0,18,15, 0,8,18, 0,11,8, 0,6,11,
+    // Right x=1, y∈[0,0.5] (normal +X)
+    2,12,7, 2,10,12, 2,14,10,
+    // Z-riser z=0.5, x∈[0,0.5], y∈[0,0.5] (normal -Z)
+    3,9,4, 3,8,9,
+    // Z-riser z=0.5, x∈[0.5,1], y∈[0,0.5] (normal -Z)
+    4,10,5, 4,9,10,
+    // Z-riser z=0.5, x∈[0,0.5], y∈[0.5,1] (normal -Z)
+    8,17,9, 8,18,17,
+    // X-riser x=0.5, z∈[0,0.5], y∈[0,0.5] (normal +X)
+    1,9,4, 1,13,9,
+    // X-riser x=0.5, z∈[0,0.5], y∈[0.5,1] (normal +X)
+    13,17,9, 13,16,17,
 ]);
 
 // --- OUTER CORNER STAIRS (3-step) ---
-// Layout (top-down):
-//   Step 3 (y=1):   x∈[0,1/3], z∈[0,1/3]
-//   Step 2 (y=2/3): x∈[0,2/3], z∈[1/3,2/3]
-//   Step 1 (y=1/3): x∈[0,1],   z∈[2/3,1]
-// Fractional constants
+// Layout (top-down view, +Z is front, +X is right):
+//   Step 3 (y=2/3→1): x∈[0,1/3], z∈[0,1/3] - back-left corner (tallest)
+//   Step 2 (y=1/3→2/3): x∈[0,2/3], z∈[1/3,2/3] - middle band
+//   Step 1 (y=0→1/3): full base, top at z∈[2/3,1] - front (shortest)
+//   Open corner: the staircase notch cut into back-right
 const T = 1/3;
 const TT = 2/3;
-// Vertices numbered 0-28:
-//   Bottom (y=0):
-//     0=(0,0,0) 1=(T,0,0) 2=(TT,0,0) 3=(1,0,0)
-//     4=(1,0,T) 5=(1,0,TT) 6=(1,0,1) 7=(0,0,1)
-//     8=(0,0,TT) 9=(0,0,T) 10=(T,0,T) 11=(TT,0,T) 12=(TT,0,TT) 13=(T,0,TT)
-//   Step1 (y=T):
-//     14=(0,T,TT) 15=(T,T,TT) 16=(TT,T,TT) 17=(1,T,TT) 18=(1,T,1) 19=(0,T,1)
-//   Step2 (y=TT):
-//     20=(0,TT,T) 21=(T,TT,T) 22=(TT,TT,T) 23=(TT,TT,TT) 24=(0,TT,TT)
-//   Step3 (y=1):
-//     25=(0,1,0) 26=(T,1,0) 27=(T,1,T) 28=(0,1,T)
 const OCS3_VERTICES = v([
-    // Bottom (y=0) — 14 vertices
-    0,0,0,      // 0
-    T,0,0,      // 1
-    TT,0,0,     // 2
-    1,0,0,      // 3
-    1,0,T,      // 4
-    1,0,TT,     // 5
-    1,0,1,      // 6
-    0,0,1,      // 7
-    0,0,TT,     // 8
-    0,0,T,      // 9
-    T,0,T,      // 10
-    TT,0,T,     // 11
-    TT,0,TT,    // 12
-    T,0,TT,     // 13
-    // Step 1 top (y=T) — z∈[TT,1], full width
-    0,T,TT,     // 14
-    T,T,TT,     // 15
-    TT,T,TT,    // 16
-    1,T,TT,     // 17
-    1,T,1,      // 18
-    0,T,1,      // 19
-    // Step 2 top (y=TT) — z∈[T,TT], x∈[0,TT]
-    0,TT,T,     // 20
-    T,TT,T,     // 21
-    TT,TT,T,    // 22
-    TT,TT,TT,   // 23
-    0,TT,TT,    // 24
-    // Step 3 top (y=1) — z∈[0,T], x∈[0,T]
-    0,1,0,      // 25
-    T,1,0,      // 26
-    T,1,T,      // 27
-    0,1,T,      // 28
+    // Bottom corners (y=0)
+    0,0,0,      // 0: back-left
+    1,0,0,      // 1: back-right
+    1,0,1,      // 2: front-right
+    0,0,1,      // 3: front-left
+    // Step 1 top (y=T) - front strip z∈[TT,1]
+    0,T,TT,     // 4: left at z=TT
+    T,T,TT,     // 5
+    TT,T,TT,    // 6
+    1,T,TT,     // 7: right at z=TT
+    1,T,1,      // 8: front-right
+    0,T,1,      // 9: front-left
+    // Step 2 top (y=TT) - middle strip
+    0,TT,T,     // 10: left at z=T
+    T,TT,T,     // 11
+    TT,TT,T,    // 12
+    TT,TT,TT,   // 13
+    0,TT,TT,    // 14
+    // Step 3 top (y=1) - back-left corner
+    0,1,0,      // 15: back-left
+    T,1,0,      // 16
+    T,1,T,      // 17
+    0,1,T,      // 18
+    // Interior floor at y=T (cut-out area)
+    T,T,0,      // 19
+    TT,T,0,     // 20
+    1,T,0,      // 21
+    T,T,T,      // 22
+    TT,T,T,     // 23
+    1,T,T,      // 24
+    // Interior floor at y=TT
+    T,TT,0,     // 25
+    TT,TT,0,    // 26
+    // Bottom edge vertices
+    0,0,T,      // 27: left at z=T
+    0,0,TT,     // 28: left at z=TT
+    T,0,0,      // 29: at x=T, z=0
+    TT,0,0,     // 30: at x=TT, z=0
+    T,0,T,      // 31: at x=T, z=T
+    TT,0,T,     // 32: at x=TT, z=T
+    T,0,TT,     // 33: at x=T, z=TT
+    TT,0,TT,    // 34: at x=TT, z=TT
+    1,0,T,      // 35: right at z=T
+    1,0,TT,     // 36: right at z=TT
 ]);
 const OCS3_INDICES = idx([
-    // Bottom face (y=0) — entire base
-    0,3,6, 0,6,7,
-    // Step 1 top (y=T, z∈[TT,1])
-    14,18,17, 14,19,18,
-    // Step 2 top (y=TT, z∈[T,TT], x∈[0,TT])
-    20,23,22, 20,24,23,
-    // Step 3 top (y=1, z∈[0,T], x∈[0,T])
-    25,27,26, 25,28,27,
-    // Front face (z=1, y 0→T)
-    7,6,18, 7,18,19,
-    // Back face (z=0, x∈[0,T], y 0→1)
-    0,26,1, 0,25,26,
-    // Left face (x=0) — L-shaped fan from vertex 0
-    0,28,25, 0,20,28, 0,24,20, 0,14,24, 0,19,14, 0,7,19,
-    // Right face (x=1, z∈[TT,1], y 0→T)
-    5,18,6, 5,17,18,
-    // Z-riser at z=TT (y 0→T, full width, facing -z)
-    8,15,13, 8,14,15, 13,16,12, 13,15,16, 12,17,5, 12,16,17,
-    // Z-riser at z=TT (y T→TT, x∈[0,TT], facing -z)
-    14,23,16, 14,24,23,
-    // Z-riser at z=T (y 0→TT, x∈[0,TT], facing -z)
-    9,21,10, 9,20,21, 10,22,11, 10,21,22,
-    // Z-riser at z=T (y TT→1, x∈[0,T], facing -z)
-    20,27,21, 20,28,27,
-    // X-riser at x=TT (z∈[T,TT], y 0→TT, facing +x)
-    11,23,12, 11,22,23,
-    // X-riser at x=T (z∈[0,T], y 0→1, facing +x)
-    1,27,10, 1,26,27,
+    // === EXTERIOR FACES ===
+
+    // Bottom (normal -Y)
+    0,2,3, 0,1,2,
+
+    // Step 1 top y=T, z∈[TT,1] (normal +Y)
+    4,8,7, 4,9,8,
+
+    // Step 2 top y=TT, z∈[T,TT] (normal +Y)
+    10,13,12, 10,14,13,
+
+    // Step 3 top y=1 (normal +Y)
+    15,17,16, 15,18,17,
+
+    // Front face z=1 (normal +Z)
+    3,2,8, 3,8,9,
+
+    // Back face z=0, x∈[0,T], full height (normal -Z)
+    0,16,29, 0,15,16,
+
+    // Back face z=0, x∈[T,TT], y∈[0,T] (normal -Z)
+    29,20,30, 29,19,20,
+
+    // Back face z=0, x∈[T,TT], y∈[T,TT] (normal -Z)
+    19,26,20, 19,25,26,
+
+    // Back face z=0, x∈[TT,1], y∈[0,T] (normal -Z)
+    30,21,1, 30,20,21,
+
+    // Left face x=0 (normal -X) - L-shaped
+    0,18,15, 0,10,18, 0,14,10, 0,4,14, 0,9,4, 0,3,9,
+
+    // Right face x=1, z∈[TT,1], y∈[0,T] (normal +X)
+    36,8,2, 36,7,8,
+
+    // Right face x=1, z∈[T,TT], y∈[0,T] (normal +X)
+    35,7,36, 35,24,7,
+
+    // Right face x=1, z∈[0,T], y∈[0,T] (normal +X)
+    1,24,35, 1,21,24,
+
+    // === INTERIOR FACES ===
+
+    // Floor at y=T, z∈[T,TT], x∈[TT,1] (normal +Y)
+    23,7,24, 23,6,7,
+
+    // Floor at y=T, z∈[0,T], x∈[T,1] (normal +Y)
+    19,23,20, 19,22,23, 20,24,21, 20,23,24,
+
+    // Floor at y=TT, z∈[0,T], x∈[T,TT] (normal +Y)
+    25,12,26, 25,11,12,
+
+    // Z-riser at z=TT, y∈[0,T], full width (normal -Z)
+    28,5,33, 28,4,5, 33,6,34, 33,5,6, 34,7,36, 34,6,7,
+
+    // Z-riser at z=TT, y∈[T,TT], x∈[0,TT] (normal -Z)
+    4,13,6, 4,14,13,
+
+    // Z-riser at z=T, y∈[0,T], x∈[0,T] (normal -Z)
+    27,22,31, 27,11,22, 27,10,11,
+
+    // Z-riser at z=T, y∈[0,T], x∈[T,TT] (normal -Z)
+    31,23,32, 31,22,23, 22,12,23, 22,11,12,
+
+    // Z-riser at z=T, y∈[TT,1], x∈[0,T] (normal -Z)
+    10,17,11, 10,18,17,
+
+    // Z-riser at z=T, y∈[0,T], x∈[TT,1] (normal -Z)
+    32,24,35, 32,23,24,
+
+    // X-riser at x=TT, z∈[T,TT], y∈[0,T] (normal +X)
+    32,13,34, 32,12,13,
+
+    // X-riser at x=TT, z∈[T,TT], y∈[T,TT] (normal +X)
+    23,12,13,
+
+    // X-riser at x=TT, z∈[0,T], y∈[0,T] (normal +X)
+    30,23,32, 30,20,23,
+
+    // X-riser at x=T, z∈[0,T], y∈[0,T] (normal +X)
+    29,22,31, 29,19,22,
+
+    // X-riser at x=T, z∈[0,T], y∈[T,1] (normal +X)
+    19,17,22, 19,16,17,
 ]);
 
 /**

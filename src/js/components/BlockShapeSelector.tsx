@@ -43,8 +43,9 @@ const SECONDARY_SHAPES: { type: BlockShapeType; label: string; icon: React.React
     { type: BlockShapeType.CROSS, label: 'Cross', icon: '\u2716' },         // ✖
     { type: BlockShapeType.FENCE_1H, label: 'Fence 1', icon: '\u251C' },   // ├
     { type: BlockShapeType.FENCE_2H, label: 'Fence 2', icon: '\u2560' },   // ╠
-    { type: BlockShapeType.OUTER_CORNER_STAIRS_2, label: 'Corner 2', icon: '\u2514' }, // └
-    { type: BlockShapeType.OUTER_CORNER_STAIRS_3, label: 'Corner 3', icon: '\u2517' }, // ┗
+    // Temporarily hidden - geometry rendering issues
+    // { type: BlockShapeType.OUTER_CORNER_STAIRS_2, label: 'Corner 2', icon: '\u2514' }, // └
+    // { type: BlockShapeType.OUTER_CORNER_STAIRS_3, label: 'Corner 3', icon: '\u2517' }, // ┗
 ];
 
 const BlockShapeSelector: React.FC<BlockShapeSelectorProps> = ({

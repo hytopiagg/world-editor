@@ -13,6 +13,10 @@ import { DEFAULT_BLOCK_AO_INTENSITY } from "../blocks/BlockConstants";
 import BlockTextureAtlas from "../blocks/BlockTextureAtlas";
 import { rotateAroundBlockCenter, rotateDirection, BLOCK_ROTATION_MATRICES } from "../blocks/BlockRotations";
 import { getShapeDefinition, buildTrimeshTriangleData } from "../blocks/BlockShapes";
+
+// DEBUG flag for trimesh logging
+const TRIMESH_DEBUG = false;
+
 /**
  * Represents a chunk in the world
  */
@@ -381,6 +385,27 @@ class Chunk {
                     }
 
                     if (triangleData) {
+                        // DEBUG: Log trimesh block processing for corner stairs
+                        const shapeForLog = instanceShape || (blockType.isTrimesh ? blockType.trimesh : null);
+                        if (TRIMESH_DEBUG && shapeForLog && shapeForLog.includes('corner')) {
+                            console.log('[Chunk] Processing trimesh block:', {
+                                position: { x: globalX, y: globalY, z: globalZ },
+                                shapeType: shapeForLog,
+                                triangleCount: triangleData.length,
+                                rotation: blockRotation
+                            });
+                            // Log first few triangles
+                            triangleData.slice(0, 5).forEach((tri, i) => {
+                                console.log(`[Chunk] Triangle ${i}:`, {
+                                    v0: tri.v0.map(n => n.toFixed(3)),
+                                    v1: tri.v1.map(n => n.toFixed(3)),
+                                    v2: tri.v2.map(n => n.toFixed(3)),
+                                    normal: tri.normal.map(n => n.toFixed(3)),
+                                    blockFace: tri.blockFace
+                                });
+                            });
+                        }
+
                         const meshPositions = solidMeshPositions;
                         const meshNormals = solidMeshNormals;
                         const meshUvs = solidMeshUvs;
@@ -1922,12 +1947,33 @@ class Chunk {
      * @returns {Array|null} Triangle data array or null if shape not found
      */
     _getTrimeshTriangleDataForShape(shapeType) {
-        if (Chunk._shapeTriangleDataCache.has(shapeType)) {
-            return Chunk._shapeTriangleDataCache.get(shapeType);
+        if (TRIMESH_DEBUG && shapeType.includes('corner')) {
+            console.log('[Chunk] Getting trimesh data for shape:', shapeType);
         }
+
+        if (Chunk._shapeTriangleDataCache.has(shapeType)) {
+            const cached = Chunk._shapeTriangleDataCache.get(shapeType);
+            if (TRIMESH_DEBUG && shapeType.includes('corner')) {
+                console.log('[Chunk] Using cached data, triangles:', cached?.length);
+            }
+            return cached;
+        }
+
         const shapeDef = getShapeDefinition(shapeType);
+        if (TRIMESH_DEBUG && shapeType.includes('corner')) {
+            console.log('[Chunk] Shape definition:', shapeDef ? {
+                type: shapeDef.type,
+                name: shapeDef.name,
+                vertexCount: shapeDef.vertices.length / 3,
+                indexCount: shapeDef.indices.length
+            } : 'NULL');
+        }
+
         if (!shapeDef) return null;
-        const data = buildTrimeshTriangleData(shapeDef.vertices, shapeDef.indices);
+        const data = buildTrimeshTriangleData(shapeDef.vertices, shapeDef.indices, shapeType);
+        if (TRIMESH_DEBUG && shapeType.includes('corner')) {
+            console.log('[Chunk] Built triangle data, count:', data.length);
+        }
         Chunk._shapeTriangleDataCache.set(shapeType, data);
         return data;
     }
@@ -1935,5 +1981,19 @@ class Chunk {
 
 // Shape triangle data cache (shared across all chunks)
 Chunk._shapeTriangleDataCache = new Map();
+
+// DEBUG: Helper to clear the shape cache for testing
+Chunk.clearShapeCache = function() {
+    console.log('[Chunk] Clearing shape triangle data cache');
+    Chunk._shapeTriangleDataCache.clear();
+};
+
+// DEBUG: Expose cache for inspection
+if (TRIMESH_DEBUG) {
+    console.log('[Chunk] TRIMESH_DEBUG is ENABLED - corner stairs debugging active');
+    // Make cache accessible from console
+    window.__CHUNK_SHAPE_CACHE__ = Chunk._shapeTriangleDataCache;
+    window.__clearShapeCache = Chunk.clearShapeCache;
+}
 
 export default Chunk;
