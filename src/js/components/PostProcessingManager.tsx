@@ -63,9 +63,11 @@ export default function PostProcessingManager({
     composer.addPass(renderPass);
 
     // Add WhiteCoreBloomPass (bloom with white-core effect and ACES tone mapping, matching SDK)
-    const resolution = new THREE.Vector2(size.width, size.height);
+    // Use actual framebuffer size (accounting for pixel ratio) to prevent blurry rendering
+    const drawingBufferSize = new THREE.Vector2();
+    gl.getDrawingBufferSize(drawingBufferSize);
     const bloomPass = new WhiteCoreBloomPass(
-      resolution,
+      drawingBufferSize,
       bloomStrength,
       bloomRadius,
       bloomThreshold
@@ -81,8 +83,8 @@ export default function PostProcessingManager({
     const outputPass = new OutputPass();
     composer.addPass(outputPass);
 
-    // Set composer size
-    composer.setSize(size.width, size.height);
+    // Set composer size using actual framebuffer dimensions (matching SDK approach)
+    composer.setSize(drawingBufferSize.x, drawingBufferSize.y);
 
     return () => {
       composer.dispose();
@@ -101,12 +103,14 @@ export default function PostProcessingManager({
     }
   }, [enabled, bloomStrength, bloomRadius, bloomThreshold]);
 
-  // Handle resize
+  // Handle resize - use actual framebuffer dimensions (matching SDK approach)
   useEffect(() => {
     if (composerRef.current && enabled) {
-      composerRef.current.setSize(size.width, size.height);
+      const drawingBufferSize = new THREE.Vector2();
+      gl.getDrawingBufferSize(drawingBufferSize);
+      composerRef.current.setSize(drawingBufferSize.x, drawingBufferSize.y);
     }
-  }, [enabled, size.width, size.height]);
+  }, [enabled, size.width, size.height, gl]);
 
   // Take over rendering when enabled
   // Return 1 from useFrame to skip R3F's default render
