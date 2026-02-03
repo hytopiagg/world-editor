@@ -77,6 +77,15 @@ const NAV_ITEMS = [
         )
     },
     {
+        key: 'screenshots', label: 'Screenshots', icon: (
+            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M3 8h2M19 8h2" />
+            </svg>
+        )
+    },
+    {
         key: 'particle-viewer', label: 'Particle Viewer', icon: (
             <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
                 <circle cx="8" cy="8" r="2" />

@@ -19,14 +19,13 @@ import SkyboxOptionsSection from "./SkyboxOptionsSection";
 import LightingOptionsSection from "./LightingOptionsSection";
 import EntityOptionsSection from "./EntityOptionsSection";
 import ZoneToolOptionsSection from "./ZoneToolOptionsSection";
+import ScreenshotGallerySection from "./ScreenshotGallerySection";
 
 interface BlockToolOptionsProps {
     totalEnvironmentObjects: any;
     terrainBuilderRef: any;
     onResetCamera: () => void;
-    onToggleSidebar: () => void;
-    onToggleOptions: () => void;
-    onToggleToolbar: () => void;
+    onTakeScreenshot: () => Promise<void>;
     activeTab: string;
     selectedBlock: any | null;
     onUpdateBlockName: (blockId: number, newName: string) => Promise<void>;
@@ -49,16 +48,16 @@ interface CollapsibleSectionProps {
     title: string;
     children: React.ReactNode;
     animationDelay?: string;
+    isOpen: boolean;
+    onToggle: () => void;
 }
 
-function CollapsibleSection({ title, children, animationDelay = "0s" }: CollapsibleSectionProps) {
-    const [isOpen, setIsOpen] = useState(true);
-
+function CollapsibleSection({ title, children, animationDelay = "0s", isOpen, onToggle }: CollapsibleSectionProps) {
     return (
         <div className="px-3">
             <button
                 className="w-full flex items-center gap-2 rounded-md text-[#F1F1F1] text-xs transition-all cursor-pointer outline-none ring-0"
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={onToggle}
             >
                 <span className="text-[#F1F1F1]/50 whitespace-nowrap">{title}</span>
                 <div className="border-b border-white/10 w-full ml-auto"></div>
@@ -78,9 +77,7 @@ export function BlockToolOptions({
     totalEnvironmentObjects,
     terrainBuilderRef,
     onResetCamera,
-    onToggleSidebar,
-    onToggleOptions,
-    onToggleToolbar,
+    onTakeScreenshot,
     activeTab,
     selectedBlock,
     onUpdateBlockName,
@@ -142,9 +139,43 @@ export function BlockToolOptions({
     // Ref for Selection Tool section to enable auto-scroll
     const selectionToolSectionRef = useRef<HTMLDivElement>(null);
 
+    // Accordion state: only one section open at a time
+    const [openSection, setOpenSection] = useState<string | null>(null);
+
+    const handleSectionToggle = (section: string) => {
+        setOpenSection(prev => prev === section ? null : section);
+    };
+
+    // Auto-open tool sections when tool changes
+    useEffect(() => {
+        const toolToSection: Record<string, string> = {
+            ground: "Ground Tool",
+            wall: "Wall Tool",
+            staircase: "Staircase Tool",
+            selection: "Selection Tool",
+            terrain: "Terrain Tool",
+            replace: "Replace Tool",
+            findreplace: "Find & Replace",
+            zone: "Zone Tool",
+        };
+        if (activeTool && toolToSection[activeTool]) {
+            setOpenSection(toolToSection[activeTool]);
+        }
+    }, [activeTool]);
+
+    // Auto-open tab sections when tab/selection changes
+    useEffect(() => {
+        if (activeTab === 'blocks' && selectedBlock) setOpenSection("Block Options");
+        else if (activeTab === 'models' && selectedBlock) setOpenSection("Model Options");
+        else if (activeTab === 'components') setOpenSection("Component Options");
+    }, [activeTab, selectedBlock]);
+
     // Auto-scroll to Selection Tool section when entity is selected
     useEffect(() => {
         const handleEntitySelected = () => {
+            // Auto-open Entity Options section
+            setOpenSection("Entity Options");
+
             // Only scroll if Selection Tool is active and section exists
             if (activeTool === "selection" && selectionToolSectionRef.current) {
                 // Small delay to ensure DOM has updated
@@ -178,7 +209,7 @@ export function BlockToolOptions({
                     width: isCompactMode ? "205px" : "295px",
                 }}>
                 {activeTab === 'blocks' && selectedBlock && (
-                    <CollapsibleSection title="Block Options">
+                    <CollapsibleSection title="Block Options" isOpen={openSection === "Block Options"} onToggle={() => handleSectionToggle("Block Options")}>
                         <BlockOptionsSection
                             selectedBlock={selectedBlock}
                             onUpdateBlockName={onUpdateBlockName}
@@ -191,7 +222,7 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTab === 'models' && selectedBlock && (
-                    <CollapsibleSection title="Model Options">
+                    <CollapsibleSection title="Model Options" isOpen={openSection === "Model Options"} onToggle={() => handleSectionToggle("Model Options")}>
                         <ModelOptionsSection
                             selectedModel={selectedBlock}
                             placementSettings={placementSettings}
@@ -205,7 +236,7 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTab === 'components' && (
-                    <CollapsibleSection title="Component Options">
+                    <CollapsibleSection title="Component Options" isOpen={openSection === "Component Options"} onToggle={() => handleSectionToggle("Component Options")}>
                         <ComponentOptionsSection
                             selectedComponent={selectedBlock}
                             isCompactMode={isCompactMode}
@@ -214,20 +245,20 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
 
-                <CollapsibleSection title="Skybox">
+                <CollapsibleSection title="Skybox" isOpen={openSection === "Skybox"} onToggle={() => handleSectionToggle("Skybox")}>
                     <SkyboxOptionsSection
                         terrainBuilderRef={terrainBuilderRef}
                     />
                 </CollapsibleSection>
 
-                <CollapsibleSection title="Lighting">
+                <CollapsibleSection title="Lighting" isOpen={openSection === "Lighting"} onToggle={() => handleSectionToggle("Lighting")}>
                     <LightingOptionsSection
                         terrainBuilderRef={terrainBuilderRef}
                     />
                 </CollapsibleSection>
 
                 {showAIComponents && (
-                    <CollapsibleSection title="AI Assistant">
+                    <CollapsibleSection title="AI Assistant" isOpen={openSection === "AI Assistant"} onToggle={() => handleSectionToggle("AI Assistant")}>
                         <AIAssistantPanel
                             isVisible={true}
                             isEmbedded={true}
@@ -238,7 +269,7 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTool === "ground" && (
-                    <CollapsibleSection title="Ground Tool" animationDelay="0.09s">
+                    <CollapsibleSection title="Ground Tool" animationDelay="0.09s" isOpen={openSection === "Ground Tool"} onToggle={() => handleSectionToggle("Ground Tool")}>
                         <GroundToolOptionsSection
                             groundTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["ground"]}
                             isCompactMode={isCompactMode}
@@ -246,7 +277,7 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTool === "wall" && (
-                    <CollapsibleSection title="Wall Tool" animationDelay="0.09s">
+                    <CollapsibleSection title="Wall Tool" animationDelay="0.09s" isOpen={openSection === "Wall Tool"} onToggle={() => handleSectionToggle("Wall Tool")}>
                         <WallToolOptionsSection
                             wallTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["wall"]}
                             isCompactMode={isCompactMode}
@@ -254,7 +285,7 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTool === "staircase" && (
-                    <CollapsibleSection title="Staircase Tool" animationDelay="0.09s">
+                    <CollapsibleSection title="Staircase Tool" animationDelay="0.09s" isOpen={openSection === "Staircase Tool"} onToggle={() => handleSectionToggle("Staircase Tool")}>
                         <StaircaseToolOptionsSection
                             staircaseTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["staircase"]}
                             isCompactMode={isCompactMode}
@@ -264,7 +295,7 @@ export function BlockToolOptions({
                 {activeTool === "selection" && (
                     <>
                         <div ref={selectionToolSectionRef}>
-                            <CollapsibleSection title="Selection Tool" animationDelay="0.09s">
+                            <CollapsibleSection title="Selection Tool" animationDelay="0.09s" isOpen={openSection === "Selection Tool"} onToggle={() => handleSectionToggle("Selection Tool")}>
                                 <SelectionToolOptionsSection
                                     selectionTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]}
                                     isCompactMode={isCompactMode}
@@ -273,7 +304,7 @@ export function BlockToolOptions({
                         </div>
                         {/* Entity Options - Only show when entity is selected */}
                         {terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]?.selectedEntity && (
-                            <CollapsibleSection title="Entity Options" animationDelay="0.12s">
+                            <CollapsibleSection title="Entity Options" animationDelay="0.12s" isOpen={openSection === "Entity Options"} onToggle={() => handleSectionToggle("Entity Options")}>
                                 <EntityOptionsSection
                                     selectedEntity={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["selection"]?.selectedEntity}
                                     isCompactMode={isCompactMode}
@@ -283,7 +314,7 @@ export function BlockToolOptions({
                     </>
                 )}
                 {activeTool === "terrain" && (
-                    <CollapsibleSection title="Terrain Tool" animationDelay="0.09s">
+                    <CollapsibleSection title="Terrain Tool" animationDelay="0.09s" isOpen={openSection === "Terrain Tool"} onToggle={() => handleSectionToggle("Terrain Tool")}>
                         <TerrainToolOptionsSection
                             terrainTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["terrain"]}
                             isCompactMode={isCompactMode}
@@ -291,7 +322,7 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTool === "replace" && (
-                    <CollapsibleSection title="Replace Tool" animationDelay="0.09s">
+                    <CollapsibleSection title="Replace Tool" animationDelay="0.09s" isOpen={openSection === "Replace Tool"} onToggle={() => handleSectionToggle("Replace Tool")}>
                         <ReplaceToolOptionsSection
                             replacementTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["replace"]}
                             isCompactMode={isCompactMode}
@@ -299,7 +330,7 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTool === "findreplace" && (
-                    <CollapsibleSection title="Find & Replace" animationDelay="0.09s">
+                    <CollapsibleSection title="Find & Replace" animationDelay="0.09s" isOpen={openSection === "Find & Replace"} onToggle={() => handleSectionToggle("Find & Replace")}>
                         <FindReplaceToolOptionsSection
                             findReplaceTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["findreplace"]}
                             isCompactMode={isCompactMode}
@@ -312,25 +343,28 @@ export function BlockToolOptions({
                     </CollapsibleSection>
                 )}
                 {activeTool === "zone" && (
-                    <CollapsibleSection title="Zone Tool" animationDelay="0.09s">
+                    <CollapsibleSection title="Zone Tool" animationDelay="0.09s" isOpen={openSection === "Zone Tool"} onToggle={() => handleSectionToggle("Zone Tool")}>
                         <ZoneToolOptionsSection
                             zoneTool={terrainBuilderRef?.current?.toolManagerRef?.current?.tools?.["zone"]}
                             isCompactMode={isCompactMode}
                         />
                     </CollapsibleSection>
                 )}
-                <CollapsibleSection title="Settings">
+                <CollapsibleSection title="Screenshots" isOpen={openSection === "Screenshots"} onToggle={() => handleSectionToggle("Screenshots")}>
+                    <ScreenshotGallerySection
+                        isCompactMode={isCompactMode}
+                        onTakeScreenshot={onTakeScreenshot}
+                    />
+                </CollapsibleSection>
+                <CollapsibleSection title="Settings" isOpen={openSection === "Settings"} onToggle={() => handleSectionToggle("Settings")}>
                     <SettingsMenu
                         terrainBuilderRef={terrainBuilderRef}
                         onResetCamera={onResetCamera}
-                        onToggleSidebar={onToggleSidebar}
-                        onToggleOptions={onToggleOptions}
-                        onToggleToolbar={onToggleToolbar}
                         isCompactMode={isCompactMode}
                         onToggleCompactMode={onToggleCompactMode}
                     />
                 </CollapsibleSection>
-                <CollapsibleSection title="Debug">
+                <CollapsibleSection title="Debug" isOpen={openSection === "Debug"} onToggle={() => handleSectionToggle("Debug")}>
                     <DebugInfo
                         totalEnvironmentObjects={totalEnvironmentObjects}
                         terrainBuilderRef={terrainBuilderRef}

@@ -15,6 +15,7 @@ export const STORES = {
     BLOCK_OVERRIDES: "block-overrides",
     ZONES: "zones",
     PROJECT_SETTINGS: "project-settings", // For per-project settings like liquid blocks, etc.
+    SCREENSHOTS: "screenshots",
 };
 // Migration status for UI feedback
 export interface MigrationStatus {
@@ -1105,6 +1106,34 @@ export class DatabaseManager {
         }
         const key = `project:${pid}:${settingKey}`;
         return this.getData(STORES.PROJECT_SETTINGS, key);
+    }
+
+    /**
+     * Get all data items whose keys start with a given prefix
+     */
+    static async getAllDataWithPrefix(storeName: string, prefix: string): Promise<any[]> {
+        const db = await this.getConnection();
+        if (!db.objectStoreNames.contains(storeName)) {
+            return [];
+        }
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(storeName, 'readonly');
+            const store = transaction.objectStore(storeName);
+            const range = this.makePrefixRange(prefix);
+            const request = store.openCursor(range);
+            const results: any[] = [];
+
+            request.onsuccess = (event) => {
+                const cursor = (event.target as IDBRequest).result;
+                if (cursor) {
+                    results.push(cursor.value);
+                    cursor.continue();
+                } else {
+                    resolve(results);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
     }
 
     /**

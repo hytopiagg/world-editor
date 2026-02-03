@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+    FaCamera,
     FaCloud,
     FaCubes,
     FaDrawPolygon,
@@ -65,6 +66,7 @@ const ToolBar = ({
     playerModeEnabled,
     onTogglePlayerMode,
     onSwitchProject,
+    onTakeScreenshot,
 }: any) => {
     const [showDimensionsModal, setShowDimensionsModal] = useState(false);
     // Replace individual submenu state variables with a single enum-based state
@@ -1498,6 +1500,14 @@ const ToolBar = ({
                                 className="control-button"
                             >
                                 <FaSave className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip text="Take Screenshot">
+                            <button
+                                onClick={() => onTakeScreenshot && onTakeScreenshot()}
+                                className="control-button"
+                            >
+                                <FaCamera className="text-[#F1F1F1] group-hover:scale-[1.02] transition-all" />
                             </button>
                         </Tooltip>
                         <div className="relative">

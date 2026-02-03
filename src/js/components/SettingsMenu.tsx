@@ -8,22 +8,16 @@ import QuickTipsManager from "./QuickTipsManager";
 interface SettingsMenuProps {
     terrainBuilderRef: any;
     onResetCamera: () => void;
-    onToggleSidebar: () => void;
-    onToggleOptions: () => void;
-    onToggleToolbar: () => void;
     isCompactMode: boolean;
     onToggleCompactMode: () => void;
 }
 
-export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggleSidebar, onToggleOptions, onToggleToolbar, isCompactMode, onToggleCompactMode }: SettingsMenuProps) {
+export default function SettingsMenu({ terrainBuilderRef, onResetCamera, isCompactMode, onToggleCompactMode }: SettingsMenuProps) {
     const maxMoveSpeed = 5;
     const [loadedDefaults, setLoadedDefaults] = useState(false);
     const [viewDistance, setViewDistance] = useState(256);
 
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
-    const [showSidebar, setShowSidebar] = useState(true);
-    const [showOptions, setShowOptions] = useState(true);
-    const [showToolbar, setShowToolbar] = useState(true);
     const [cameraSensitivity, setCameraSensitivity] = useState(5);
     const [moveSpeed, setMoveSpeed] = useState(0.2);
     const [lowResDrag, setLowResDrag] = useState(false);
@@ -164,21 +158,6 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
         }
     };
 
-    const handleSidebarToggle = () => {
-        setShowSidebar(!showSidebar);
-        onToggleSidebar();
-    };
-
-    const handleOptionsToggle = () => {
-        setShowOptions(!showOptions);
-        onToggleOptions();
-    };
-
-    const handleToolbarToggle = () => {
-        setShowToolbar(!showToolbar);
-        onToggleToolbar();
-    };
-
     const handlePointerModeToggle = async () => {
         const newValue = !isPointerUnlockedMode;
         setIsPointerUnlockedMode(newValue);
@@ -277,39 +256,6 @@ export default function SettingsMenu({ terrainBuilderRef, onResetCamera, onToggl
                     </label>
                     <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
                         animationDelay: "0.05s"
-                    }}>
-                        <span>Block Sidebar</span>
-                        <input
-                            type="checkbox"
-                            checked={showSidebar}
-                            onChange={handleSidebarToggle}
-                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
-                        />
-                    </label>
-                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
-                        animationDelay: "0.05s"
-                    }}>
-                        <span>Options Panel</span>
-                        <input
-                            type="checkbox"
-                            checked={showOptions}
-                            onChange={handleOptionsToggle}
-                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
-                        />
-                    </label>
-                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
-                        animationDelay: "0.075s"
-                    }}>
-                        <span>Toolbar</span>
-                        <input
-                            type="checkbox"
-                            checked={showToolbar}
-                            onChange={handleToolbarToggle}
-                            className="w-4 h-4 rounded bg-white/10 border-white/10 checked:bg-blue-500 checked:border-blue-500"
-                        />
-                    </label>
-                    <label className="flex items-center justify-between text-xs text-[#F1F1F1] cursor-pointer fade-down opacity-0 duration-150" style={{
-                        animationDelay: "0.087s"
                     }}>
                         <span>Compact Sidebar</span>
                         <input

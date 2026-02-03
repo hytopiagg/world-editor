@@ -37,10 +37,12 @@ import PhysicsManager from './js/physics/PhysicsManager';
 import { detectGPU, getOptimalContextAttributes } from "./js/utils/GPUDetection";
 import { updateChunkSystemCamera, processChunkRenderQueue, getChunkSystem } from "./js/chunks/TerrainBuilderIntegration";
 import { createPlaceholderBlob, dataURLtoBlob } from "./js/utils/blobUtils";
+import { generateThumbnail } from "./js/utils/thumbnailUtils";
 import { isElectronRuntime } from './js/utils/env';
 import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 import { convertComponentToGLTF } from "./js/utils/ComponentToEntityConverter";
 import PostProcessingManager from "./js/components/PostProcessingManager";
+import { zoneManager } from "./js/managers/ZoneManager";
 
 function App() {
     // Project state
@@ -190,6 +192,85 @@ function App() {
             try { (window as any).__WE_PREVIEW_VISIBLE__ = oldPreviewVisible; } catch (_) { }
             return url;
         } catch (_) { return null; }
+    };
+
+    // Screenshot capture function - hides UI, captures canvas, saves to database
+    const handleTakeScreenshot = async (): Promise<void> => {
+        try {
+            // Store current UI visibility state
+            const prevSidebar = showBlockSidebar;
+            const prevOptions = showOptionsPanel;
+            const prevToolbar = showToolbar;
+
+            // Save and hide zone visibility
+            const prevZonesVisible = zoneManager.isVisible();
+            if (prevZonesVisible) zoneManager.setVisible(false);
+
+            // Save and hide block preview indicator
+            const oldPreviewVisible = (window as any).__WE_PREVIEW_VISIBLE__;
+            (window as any).__WE_PREVIEW_VISIBLE__ = false;
+
+            // Hide all UI elements
+            setShowBlockSidebar(false);
+            setShowOptionsPanel(false);
+            setShowToolbar(false);
+
+            // Wait for UI to hide and render
+            await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+
+            // Capture screenshot
+            const container = document.querySelector('.canvas-container') as HTMLElement;
+            const canvas = container?.querySelector('canvas');
+            if (!canvas) throw new Error('Canvas not found');
+
+            const fullDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+            const thumbnailUrl = await generateThumbnail(fullDataUrl, 256, 144);
+
+            // Save to IndexedDB
+            const screenshotId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const projectId = DatabaseManager.getCurrentProjectId();
+            const screenshot = {
+                id: screenshotId,
+                projectId: projectId,
+                dataUrl: fullDataUrl,
+                timestamp: Date.now(),
+                thumbnailUrl,
+            };
+
+            await DatabaseManager.saveData(
+                STORES.SCREENSHOTS,
+                `${projectId}::screenshot::${screenshotId}`,
+                screenshot
+            );
+
+            // Restore UI
+            setShowBlockSidebar(prevSidebar);
+            setShowOptionsPanel(prevOptions);
+            setShowToolbar(prevToolbar);
+
+            // Restore zone visibility
+            if (prevZonesVisible) zoneManager.setVisible(true);
+
+            // Restore block preview visibility
+            (window as any).__WE_PREVIEW_VISIBLE__ = oldPreviewVisible;
+
+            // Show success notification via ToastManager
+            ToastManager.showToast('Screenshot saved!');
+
+            // Dispatch event for gallery refresh
+            window.dispatchEvent(new CustomEvent('screenshot-taken'));
+
+        } catch (error) {
+            console.error('Screenshot capture failed:', error);
+            // Restore UI on error
+            setShowBlockSidebar(true);
+            setShowOptionsPanel(true);
+            setShowToolbar(true);
+            // Restore zone visibility on error
+            try { if (zoneManager.isVisible() === false) zoneManager.setVisible(true); } catch (_) {}
+            // Restore block preview on error
+            try { (window as any).__WE_PREVIEW_VISIBLE__ = true; } catch (_) {}
+        }
     };
 
     // Load and apply saved skybox when page is loaded (one time only)
@@ -985,9 +1066,7 @@ function App() {
                         totalEnvironmentObjects={totalEnvironmentObjects}
                         terrainBuilderRef={terrainBuilderRef}
                         onResetCamera={() => setCameraReset(prev => !prev)}
-                        onToggleSidebar={() => setShowBlockSidebar(prev => !prev)}
-                        onToggleOptions={() => setShowOptionsPanel(prev => !prev)}
-                        onToggleToolbar={() => setShowToolbar(prev => !prev)}
+                        onTakeScreenshot={handleTakeScreenshot}
                         activeTab={activeTab}
                         selectedBlock={currentBlockType}
                         onUpdateBlockName={handleUpdateBlockName}
@@ -1200,6 +1279,7 @@ function App() {
                         playerModeEnabled={playerModeEnabled}
                         onTogglePlayerMode={togglePlayerMode}
                         onSwitchProject={handleSwitchProject}
+                        onTakeScreenshot={handleTakeScreenshot}
                     />
                 )}
 

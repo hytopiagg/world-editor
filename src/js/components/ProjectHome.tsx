@@ -10,6 +10,7 @@ import { DatabaseManager as DB } from "../managers/DatabaseManager";
 import ProjectFolderCard from "./ProjectFolderCard";
 import ModalContainer from "./ModalContainer";
 import ParticleViewerPage from "./ParticleViewerPage";
+import ScreenshotGalleryPage from "./ScreenshotGalleryPage";
 
 // Migration overlay component
 const MigrationOverlay: React.FC<{ status: MigrationStatus }> = ({ status }) => {
@@ -394,6 +395,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     useEffect(() => {
         try { (window as any).__PH_SELECTED__ = selectedIds || []; } catch (_) { }
     }, [selectedIds]);
+
+    // Handle screenshots route - must be after all hooks
+    if (activeNav === 'screenshots') {
+        return <ScreenshotGalleryPage />;
+    }
 
     // Handle particle-viewer route - must be after all hooks
     if (activeNav === 'particle-viewer') {
