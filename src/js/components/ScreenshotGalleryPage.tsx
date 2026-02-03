@@ -23,7 +23,8 @@ export default function ScreenshotGalleryPage() {
     const [selectedProject, setSelectedProject] = useState<string>("all");
     const [selectedScreenshot, setSelectedScreenshot] = useState<Screenshot | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeNav, setActiveNav] = useState("screenshots");
+    const [activeNav] = useState("screenshots");
+    const setActiveNav = (nav: string) => { window.location.hash = nav; };
     const [hoverNav, setHoverNav] = useState<string | null>(null);
 
     const loadData = useCallback(async () => {
