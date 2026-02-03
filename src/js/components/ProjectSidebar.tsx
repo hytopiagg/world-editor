@@ -36,43 +36,10 @@ const NAV_ITEMS = [
         )
     },
     {
-        key: 'generate', label: 'Generate', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <path d="M12 2l1.8 4.6L19 8l-4.2 2.2L13 15l-1-4.8L8 8l4-1.4z" />
-            </svg>
-        )
-    },
-    {
-        key: 'shared', label: 'Shared with me', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <circle cx="8" cy="8" r="3" />
-                <circle cx="16" cy="8" r="3" />
-                <path d="M2 20c1.5-3 4-5 6-5s4.5 2 6 5" />
-            </svg>
-        )
-    },
-    {
-        key: 'community', label: 'Community', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18" />
-                <path d="M12 3a14 14 0 0 1 0 18" />
-            </svg>
-        )
-    },
-    {
         key: 'tutorials', label: 'Tutorials', icon: (
             <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
                 <path d="M4 5h16v14H4z" />
                 <path d="M8 5v14" />
-            </svg>
-        )
-    },
-    {
-        key: 'changelog', label: 'Changelog', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v6l4 2" />
             </svg>
         )
     },

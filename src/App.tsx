@@ -43,6 +43,7 @@ import { getHytopiaBlocks } from "./js/utils/minecraft/BlockMapper";
 import { convertComponentToGLTF } from "./js/utils/ComponentToEntityConverter";
 import PostProcessingManager from "./js/components/PostProcessingManager";
 import { zoneManager } from "./js/managers/ZoneManager";
+import { importMap } from "./js/ImportExport";
 
 function App() {
     // Project state
@@ -460,6 +461,30 @@ function App() {
             setCameraReset(prev => !prev);
         }
     }, [projectId, pageIsLoaded]);
+
+    // Import pending template map after project loads (used by template creation flow)
+    useEffect(() => {
+        if (!pageIsLoaded || !projectId) return;
+        const templateUrl = sessionStorage.getItem("pendingTemplateImport");
+        if (!templateUrl) return;
+        sessionStorage.removeItem("pendingTemplateImport");
+
+        // Show loading immediately so user never sees the empty world
+        loadingManager.showLoading("Loading template...", 0);
+
+        (async () => {
+            try {
+                const res = await fetch(templateUrl);
+                if (!res.ok) throw new Error(`Failed to fetch template: ${res.status}`);
+                const blob = await res.blob();
+                const file = new File([blob], "template.json", { type: "application/json" });
+                await importMap(file, terrainBuilderRef, environmentBuilderRef);
+            } catch (error) {
+                console.error("Error importing template map:", error);
+                loadingManager.hideLoading();
+            }
+        })();
+    }, [pageIsLoaded, projectId]);
 
     useEffect(() => {
         const handleKeyDown = async (e) => {

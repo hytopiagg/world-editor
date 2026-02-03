@@ -162,6 +162,16 @@ const InputModal: React.FC<InputModalProps> = ({ isOpen, title, placeholder = ""
     );
 };
 
+const TEMPLATES = [
+    {
+        id: "city",
+        name: "City",
+        description: "A detailed city environment with buildings and streets.",
+        thumbnail: "./assets/template-maps/city.jpg",
+        mapUrl: "./assets/template-maps/city.json",
+    },
+];
+
 export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) => void }) {
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
@@ -186,6 +196,19 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
 
     // Loading states for project operations
     const [loadingProjects, setLoadingProjects] = useState<Record<string, string>>({});
+
+    const handleCreateFromTemplate = async (template: typeof TEMPLATES[number], projectName: string) => {
+        try {
+            const meta = await DatabaseManager.createProject(projectName);
+            if (!meta || !meta.id) return;
+            sessionStorage.setItem("pendingTemplateImport", template.mapUrl);
+            await DatabaseManager.touchProject(meta.id);
+            onOpen(meta.id);
+        } catch (error) {
+            console.error("Error creating project from template:", error);
+            alert("Failed to create project from template. Please try again.");
+        }
+    };
     
     useEffect(() => {
         // Check initial migration status
@@ -229,7 +252,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     // inline menu state is now self-contained in card components
     const [folders, setFolders] = useState<any[]>([]);
     const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-    const [inputModal, setInputModal] = useState<{ open: boolean; type: 'project' | 'folder'; onConfirm: (name: string) => void }>({ open: false, type: 'project', onConfirm: () => {} });
+    const [inputModal, setInputModal] = useState<{ open: boolean; type: 'project' | 'folder'; defaultValue?: string; onConfirm: (name: string) => void }>({ open: false, type: 'project', onConfirm: () => {} });
 
     // Using shared ProjectActionsMenu component
 
@@ -413,11 +436,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
             case 'home': return 'Home';
             case 'my-files': return 'My files';
             case 'templates': return 'Templates';
-            case 'generate': return 'Generate';
-            case 'shared': return 'Shared with me';
-            case 'community': return 'Community';
             case 'tutorials': return 'Tutorials';
-            case 'changelog': return 'Changelog';
             default: return activeNav.replace('-', ' ');
         }
     };
@@ -597,6 +616,39 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         )}
                     </div>
                 ))}
+                {activeNav === 'templates' && (
+                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-[18px] pr-2">
+                        {TEMPLATES.map((template) => (
+                            <div
+                                key={template.id}
+                                className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/30 transition-all cursor-pointer"
+                                onClick={() => {
+                                    setInputModal({
+                                        open: true,
+                                        type: 'project',
+                                        defaultValue: template.name,
+                                        onConfirm: async (name: string) => {
+                                            setInputModal({ open: false, type: 'project', onConfirm: () => {} });
+                                            await handleCreateFromTemplate(template, name);
+                                        }
+                                    });
+                                }}
+                            >
+                                <div className="aspect-video bg-black/20">
+                                    <img
+                                        src={template.thumbnail}
+                                        alt={template.name}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                                <div className="p-4">
+                                    <h3 className="text-white text-sm font-medium">{template.name}</h3>
+                                    <p className="text-white/50 text-xs mt-1">{template.description}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
                 {/* Global context menu (right-click) */}
                 {contextMenu.open && contextMenu.id && (
                     <>
@@ -699,7 +751,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                 isOpen={inputModal.open}
                 title={inputModal.type === 'project' ? 'Create Project' : 'Create Folder'}
                 placeholder={inputModal.type === 'project' ? 'Project name' : 'Folder name'}
-                defaultValue={inputModal.type === 'project' ? (newName || 'Untitled Project') : ''}
+                defaultValue={inputModal.defaultValue ?? (inputModal.type === 'project' ? (newName || 'Untitled Project') : '')}
                 onCancel={() => setInputModal({ open: false, type: inputModal.type, onConfirm: () => {} })}
                 onConfirm={inputModal.onConfirm}
             />
