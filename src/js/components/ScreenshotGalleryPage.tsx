@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { FaDownload, FaTrash, FaTimes, FaFilter } from "react-icons/fa";
+import { Download, Trash2, X, SlidersHorizontal, Camera } from "lucide-react";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import ProjectSidebar from "./ProjectSidebar";
 
@@ -117,15 +117,15 @@ export default function ScreenshotGalleryPage() {
             <main className="flex flex-col p-5 gap-4 overflow-y-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
-                    <h1 className="text-2xl font-semibold text-white">Screenshots</h1>
+                    <h1 className="text-[16px] font-semibold text-white/90">Screenshots</h1>
 
                     {/* Project Filter */}
                     <div className="flex items-center gap-2">
-                        <FaFilter className="text-white/50" />
+                        <SlidersHorizontal size={15} className="text-white/40" />
                         <select
                             value={selectedProject}
                             onChange={(e) => setSelectedProject(e.target.value)}
-                            className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-white/40"
+                            className="bg-white/[0.06] border border-white/10 focus:border-white/20 rounded-xl px-3 py-2 text-white text-[13px] focus:outline-none transition-colors duration-200"
                         >
                             <option value="all">All Projects</option>
                             {projects.map((project) => (
@@ -143,21 +143,19 @@ export default function ScreenshotGalleryPage() {
                         Loading screenshots...
                     </div>
                 ) : filteredScreenshots.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-white/50">
-                        <svg viewBox="0 0 24 24" className="w-16 h-16 stroke-white/30 fill-none stroke-[1.5] mb-4">
-                            <rect x="3" y="5" width="18" height="14" rx="2" />
-                            <circle cx="12" cy="12" r="3" />
-                            <path d="M3 8h2M19 8h2" />
-                        </svg>
-                        <p className="text-lg">No screenshots yet</p>
-                        <p className="text-sm mt-1">Take screenshots in your projects to see them here</p>
+                    <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] flex flex-col items-center justify-center py-12 px-6">
+                        <div className="w-12 h-12 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-3">
+                            <Camera size={24} className="text-white/20" />
+                        </div>
+                        <span className="text-white/30 text-[13px]">No screenshots yet</span>
+                        <span className="text-white/20 text-[11px] mt-1">Take screenshots in your projects to see them here</span>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredScreenshots.map((screenshot) => (
                             <div
                                 key={screenshot.id}
-                                className="relative group rounded-lg overflow-hidden bg-white/5 border border-white/10 hover:border-white/30 transition-all cursor-pointer"
+                                className="relative group rounded-xl overflow-hidden bg-[#141821] border border-white/10 hover:border-white/20 hover:translate-y-[-2px] transition-all duration-200 cursor-pointer"
                                 onClick={() => setSelectedScreenshot(screenshot)}
                             >
                                 <div className="aspect-video">
@@ -182,20 +180,20 @@ export default function ScreenshotGalleryPage() {
                                             e.stopPropagation();
                                             handleDownload(screenshot);
                                         }}
-                                        className="p-1.5 rounded bg-black/60 hover:bg-black/80 text-white transition-colors"
+                                        className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
                                         title="Download"
                                     >
-                                        <FaDownload size={12} />
+                                        <Download size={13} />
                                     </button>
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             handleDelete(screenshot);
                                         }}
-                                        className="p-1.5 rounded bg-black/60 hover:bg-red-600 text-white transition-colors"
+                                        className="p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white transition-colors"
                                         title="Delete"
                                     >
-                                        <FaTrash size={12} />
+                                        <Trash2 size={13} />
                                     </button>
                                 </div>
                             </div>
@@ -210,7 +208,7 @@ export default function ScreenshotGalleryPage() {
                         onClick={() => setSelectedScreenshot(null)}
                     >
                         <div
-                            className="relative max-w-[90vw] max-h-[90vh] rounded-lg overflow-hidden"
+                            className="relative max-w-[90vw] max-h-[90vh] rounded-xl overflow-hidden"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <img
@@ -221,24 +219,24 @@ export default function ScreenshotGalleryPage() {
                             <div className="absolute top-2 right-2 flex gap-2">
                                 <button
                                     onClick={() => handleDownload(selectedScreenshot)}
-                                    className="p-2 rounded-md bg-black/60 hover:bg-black/80 text-white transition-colors"
+                                    className="p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
                                     title="Download"
                                 >
-                                    <FaDownload />
+                                    <Download size={16} />
                                 </button>
                                 <button
                                     onClick={() => handleDelete(selectedScreenshot)}
-                                    className="p-2 rounded-md bg-black/60 hover:bg-red-600 text-white transition-colors"
+                                    className="p-2 rounded-lg bg-black/60 hover:bg-red-600 text-white transition-colors"
                                     title="Delete"
                                 >
-                                    <FaTrash />
+                                    <Trash2 size={16} />
                                 </button>
                                 <button
                                     onClick={() => setSelectedScreenshot(null)}
-                                    className="p-2 rounded-md bg-black/60 hover:bg-black/80 text-white transition-colors"
+                                    className="p-2 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
                                     title="Close"
                                 >
-                                    <FaTimes />
+                                    <X size={16} />
                                 </button>
                             </div>
                             <div className="absolute bottom-2 left-2 bg-black/60 px-3 py-2 rounded">

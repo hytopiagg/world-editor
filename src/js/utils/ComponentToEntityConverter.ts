@@ -665,7 +665,7 @@ export async function convertComponentToGLTF(
                         // It's a JSON object, convert to string then to ArrayBuffer
                         const jsonString = JSON.stringify(gltf);
                         const encoder = new TextEncoder();
-                        arrayBuffer = encoder.encode(jsonString).buffer;
+                        arrayBuffer = encoder.encode(jsonString).buffer as ArrayBuffer;
                     }
 
                     // Dispose of materials and textures

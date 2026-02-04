@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ImageOff, MoreVertical } from "lucide-react";
 import ProjectActionsMenu, { } from "./ProjectActionsMenu";
 
 export type ProjectMeta = {
@@ -69,7 +70,7 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
     return (
         <div
             key={p.id}
-            className="flex flex-col rounded-lg overflow-visible transition-shadow"
+            className="flex flex-col rounded-xl overflow-visible transition-all duration-200"
             data-pid={p.id}
             draggable
             onDragStart={(e) => {
@@ -100,10 +101,10 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
         >
             <div className="relative">
                 {isHoverOrActive && (
-                    <div className="absolute -inset-[6px] border-2 border-white/95 rounded-[10px] pointer-events-none z-[1]" />
+                    <div className="absolute -inset-[6px] border-2 border-[#2b6aff]/80 rounded-[14px] pointer-events-none z-[1]" />
                 )}
                 <div
-                    className={`relative bg-[#141821] rounded-lg overflow-hidden transition-[transform,box-shadow,outline] ease-out ${isHoverOrActive ? 'shadow-[0_6px_16px_rgba(0,0,0,0.35)]' : ''}`}
+                    className={`relative bg-[#141821] rounded-xl overflow-hidden border border-white/10 hover:border-white/20 transition-all duration-200 ease-out ${isHoverOrActive ? 'shadow-[0_6px_16px_rgba(0,0,0,0.35)] translate-y-[-2px]' : ''}`}
                     onDoubleClick={() => onOpen(p.id)}
                     draggable
                     onDragStart={(e) => {
@@ -125,10 +126,14 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                                 src={p.thumbnailDataUrl}
                             />
                         ) : (
-                            <div className={`absolute inset-0 flex items-center justify-center text-[#7b8496] text-[12px] transition-transform ease-in-out will-change-transform ${hoveredId === p.id ? 'scale-[1.07]' : 'scale-[1]'} bg-[#141821]`}>No Thumbnail</div>
+                            <div className={`absolute inset-0 flex items-center justify-center transition-transform ease-in-out will-change-transform ${hoveredId === p.id ? 'scale-[1.07]' : 'scale-[1]'} bg-gradient-to-br from-[#141821] to-[#0d1018]`}>
+                                <ImageOff size={28} className="text-white/10" />
+                            </div>
                         )}
+                        {/* Gradient overlay at bottom of thumbnail */}
+                        <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#141821] to-transparent pointer-events-none" />
                         {selected && (
-                            <div className="absolute inset-0 bg-white/15 pointer-events-none" />
+                            <div className="absolute inset-0 bg-[#2b6aff]/10 pointer-events-none" />
                         )}
                         {loadingState && (
                             <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-none">
@@ -151,20 +156,18 @@ const ProjectGridCard: React.FC<Props> = ({ project: p, index, selected, hovered
                     </div>
                     <div className="ph-menu relative transform-none w-[28px] h-[28px] inline-block z-[1100]" onClick={(e) => e.stopPropagation()}>
                         <button
-                            className={`ph-menu-trigger bg-transparent border-0 text-[#cfd6e4] rounded-md w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center transition-opacity ${hoveredId === p.id || inlineOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                            className={`ph-menu-trigger bg-transparent border-0 text-white/50 rounded-lg hover:bg-white/10 hover:text-white/80 w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center transition-all duration-200 ${hoveredId === p.id || inlineOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
                             onClick={() => {
                                 if (inlineOpen) {
-                                    // Close immediately if already open
                                     setInlineOpen(false);
                                 } else {
-                                    // Close any other inline menus and the global context menu first
                                     try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
                                     setContextMenu({ id: null, x: 0, y: 0, open: false });
                                     setInlineOpen(true);
                                 }
                             }}
                         >
-                            ⋮
+                            <MoreVertical size={16} />
                         </button>
                         {inlineOpen && (
                             <div className="ph-inline-menu absolute right-0 top-[30px] block" onClick={(e) => e.stopPropagation()}>

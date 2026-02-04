@@ -1,4 +1,5 @@
 import React from "react";
+import { Home, FolderOpen, LayoutGrid, BookOpen, Camera, Sparkles } from "lucide-react";
 
 interface Props {
     activeNav: string;
@@ -8,65 +9,17 @@ interface Props {
 }
 
 const NAV_ITEMS = [
-    {
-        key: 'home', label: 'Home', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <path d="M3 10l9-7 9 7" />
-                <path d="M5 10v10h14V10" />
-                <path d="M9 20v-6h6v6" />
-            </svg>
-        )
-    },
-    {
-        key: 'my-files', label: 'My files', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <path d="M3 7h18v12H3z" />
-                <path d="M3 7l4-4h10l4 4" />
-            </svg>
-        )
-    },
-    {
-        key: 'templates', label: 'Templates', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <rect x="4" y="4" width="7" height="7" />
-                <rect x="13" y="4" width="7" height="7" />
-                <rect x="4" y="13" width="7" height="7" />
-                <rect x="13" y="13" width="7" height="7" />
-            </svg>
-        )
-    },
-    {
-        key: 'tutorials', label: 'Tutorials', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <path d="M4 5h16v14H4z" />
-                <path d="M8 5v14" />
-            </svg>
-        )
-    },
-    {
-        key: 'screenshots', label: 'Screenshots', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <circle cx="12" cy="12" r="3" />
-                <path d="M3 8h2M19 8h2" />
-            </svg>
-        )
-    },
-    {
-        key: 'particle-viewer', label: 'Particle Viewer', icon: (
-            <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-white/60 fill-none stroke-[1.6]">
-                <circle cx="8" cy="8" r="2" />
-                <circle cx="16" cy="8" r="2" />
-                <circle cx="8" cy="16" r="2" />
-                <circle cx="16" cy="16" r="2" />
-            </svg>
-        )
-    },
+    { key: 'home', label: 'Home', icon: <Home size={16} className="text-white/60" /> },
+    { key: 'my-files', label: 'My files', icon: <FolderOpen size={16} className="text-white/60" /> },
+    { key: 'templates', label: 'Templates', icon: <LayoutGrid size={16} className="text-white/60" /> },
+    { key: 'tutorials', label: 'Tutorials', icon: <BookOpen size={16} className="text-white/60" /> },
+    { key: 'screenshots', label: 'Screenshots', icon: <Camera size={16} className="text-white/60" /> },
+    { key: 'particle-viewer', label: 'Particle Viewer', icon: <Sparkles size={16} className="text-white/60" /> },
 ];
 
 const ProjectSidebar: React.FC<Props> = ({ activeNav, setActiveNav, hoverNav, setHoverNav }) => {
     return (
-        <aside className="bg-[#0e1117] border-r-0 p-5 flex flex-col gap-4 w-[280px]">
+        <aside className="bg-[#0e1117]/80 backdrop-blur-md border-r border-white/[0.06] p-5 flex flex-col gap-4 w-[280px]">
             <div className="flex items-center justify-start py-[6px]">
                 <img src={"./assets/img/Hytopia_Tiny.png"} className="w-auto h-6" />
             </div>
@@ -74,7 +27,7 @@ const ProjectSidebar: React.FC<Props> = ({ activeNav, setActiveNav, hoverNav, se
                 {NAV_ITEMS.map((item) => (
                     <div
                         key={item.key}
-                        className={`px-2.5 py-2 rounded-lg cursor-pointer flex items-center gap-2 text-white/60 ${activeNav === item.key ? 'bg-white/10' : hoverNav === item.key ? 'bg-white/5' : 'bg-transparent'}`}
+                        className={`px-2.5 py-2 rounded-lg cursor-pointer flex items-center gap-2 text-white/60 transition-colors duration-200 ${activeNav === item.key ? 'bg-white/[0.08]' : hoverNav === item.key ? 'bg-white/[0.05]' : 'bg-transparent'}`}
                         onMouseEnter={() => setHoverNav(item.key)}
                         onMouseLeave={() => setHoverNav(null)}
                         onClick={() => setActiveNav(item.key)}

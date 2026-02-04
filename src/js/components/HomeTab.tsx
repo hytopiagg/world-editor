@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { Plus, ImageOff, ChevronRight, Clock, LayoutGrid, Camera } from "lucide-react";
 import { DatabaseManager, STORES } from "../managers/DatabaseManager";
 import ChangelogPanel from "./ChangelogPanel";
 
@@ -76,12 +77,10 @@ const SectionHeader: React.FC<{ title: string; onSeeAll: () => void; icon: React
         </div>
         <button
             onClick={onSeeAll}
-            className="flex items-center gap-1.5 text-white/30 hover:text-white/60 text-[12px] transition-all duration-200 bg-transparent border border-white/[0.06] hover:border-white/15 hover:bg-white/[0.04] rounded-lg px-3 py-1.5 cursor-pointer"
+            className="flex items-center gap-1.5 text-white/30 hover:text-white/60 text-[12px] transition-all duration-200 bg-transparent border border-white/10 hover:border-white/20 hover:bg-white/[0.04] rounded-lg px-3 py-1.5 cursor-pointer"
         >
             See all
-            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 stroke-current fill-none stroke-[2.5]">
-                <path d="M9 18l6-6-6-6" />
-            </svg>
+            <ChevronRight size={14} />
         </button>
     </div>
 );
@@ -191,27 +190,9 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
     const recentProjects = projects.slice(0, 3);
     const recentScreenshots = screenshots.slice(0, 6);
 
-    const clockIcon = (
-        <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-current fill-none stroke-[1.8]">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 6v6l4 2" />
-        </svg>
-    );
-    const templateIcon = (
-        <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-current fill-none stroke-[1.8]">
-            <rect x="3" y="3" width="8" height="8" rx="1" />
-            <rect x="13" y="3" width="8" height="8" rx="1" />
-            <rect x="3" y="13" width="8" height="8" rx="1" />
-            <rect x="13" y="13" width="8" height="8" rx="1" />
-        </svg>
-    );
-    const cameraIcon = (
-        <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-current fill-none stroke-[1.8]">
-            <rect x="2" y="6" width="20" height="14" rx="2" />
-            <circle cx="12" cy="13" r="4" />
-            <path d="M7 6l1-3h8l1 3" />
-        </svg>
-    );
+    const clockIcon = <Clock size={16} />;
+    const templateIcon = <LayoutGrid size={16} />;
+    const cameraIcon = <Camera size={16} />;
 
     return (
         <div className="grid [grid-template-columns:1fr_300px] gap-0 h-full overflow-hidden">
@@ -222,11 +203,9 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                 <section className={`${mounted ? 'home-tab-fade-in home-tab-stagger-1' : 'opacity-0'}`}>
                     <SectionHeader title="Recent Projects" onSeeAll={() => onNavigate("my-files")} icon={clockIcon} />
                     {recentProjects.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] flex flex-col items-center justify-center py-12 px-6">
+                        <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] flex flex-col items-center justify-center py-12 px-6">
                             <div className="w-12 h-12 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-3">
-                                <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-white/20 fill-none stroke-[1.5]">
-                                    <path d="M12 5v14M5 12h14" />
-                                </svg>
+                                <Plus size={24} className="text-white/20" />
                             </div>
                             <span className="text-white/30 text-[13px]">No projects yet</span>
                             <span className="text-white/20 text-[11px] mt-1">Create your first project to get started</span>
@@ -236,7 +215,7 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                             {recentProjects.map((p, i) => (
                                 <div
                                     key={p.id}
-                                    className={`home-project-card rounded-xl overflow-hidden bg-[#141821] cursor-pointer group ${mounted ? `home-tab-fade-in home-tab-stagger-${i + 2}` : 'opacity-0'}`}
+                                    className={`home-project-card rounded-xl overflow-hidden bg-[#141821] border border-white/10 cursor-pointer group ${mounted ? `home-tab-fade-in home-tab-stagger-${i + 2}` : 'opacity-0'}`}
                                     onClick={() => onOpenProject(p.id)}
                                 >
                                     <div className="relative w-full pt-[56.25%] overflow-hidden">
@@ -248,10 +227,7 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                                             />
                                         ) : (
                                             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#141821] to-[#0d1018]">
-                                                <svg viewBox="0 0 24 24" className="w-8 h-8 stroke-white/10 fill-none stroke-[1.2]">
-                                                    <rect x="2" y="2" width="20" height="20" rx="3" />
-                                                    <path d="M8 8h8v8H8z" />
-                                                </svg>
+                                                <ImageOff size={28} className="text-white/10" />
                                             </div>
                                         )}
                                         {/* Gradient overlay at bottom of thumbnail */}
@@ -261,17 +237,12 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                                         <div className="min-w-0">
                                             <div className="text-white/90 text-[13px] font-medium truncate">{p.name || "Untitled"}</div>
                                             <div className="text-white/30 text-[11px] mt-0.5 flex items-center gap-1">
-                                                <svg viewBox="0 0 24 24" className="w-3 h-3 stroke-current fill-none stroke-[2] shrink-0 opacity-60">
-                                                    <circle cx="12" cy="12" r="10" />
-                                                    <path d="M12 6v6l4 2" />
-                                                </svg>
+                                                <Clock size={12} className="shrink-0 opacity-60" />
                                                 {formatLastEdited(p.updatedAt || p.createdAt)}
                                             </div>
                                         </div>
                                         <div className="w-7 h-7 rounded-lg bg-white/[0.06] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
-                                            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 stroke-white/50 fill-none stroke-[2.5]">
-                                                <path d="M9 18l6-6-6-6" />
-                                            </svg>
+                                            <ChevronRight size={14} className="text-white/50" />
                                         </div>
                                     </div>
                                 </div>
@@ -287,7 +258,7 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                         {templates.map((template) => (
                             <div
                                 key={template.id}
-                                className="home-template-card rounded-xl overflow-hidden bg-[#141821] cursor-pointer group"
+                                className="home-template-card rounded-xl overflow-hidden bg-[#141821] border border-white/10 cursor-pointer group"
                                 onClick={() => onCreateFromTemplate(template)}
                             >
                                 <div className="relative aspect-video overflow-hidden">
@@ -299,9 +270,7 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                                     {/* Play / use overlay */}
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
                                         <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 scale-75 group-hover:scale-100">
-                                            <svg viewBox="0 0 24 24" className="w-5 h-5 stroke-white fill-none stroke-[2]">
-                                                <path d="M12 5v14M5 12h14" />
-                                            </svg>
+                                            <Plus size={20} className="text-white" />
                                         </div>
                                     </div>
                                 </div>
@@ -323,13 +292,9 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                 <section className={`${mounted ? 'home-tab-fade-in home-tab-stagger-4' : 'opacity-0'} pb-4`}>
                     <SectionHeader title="Screenshots" onSeeAll={() => onNavigate("screenshots")} icon={cameraIcon} />
                     {recentScreenshots.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] flex flex-col items-center justify-center py-10 px-6">
+                        <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] flex flex-col items-center justify-center py-10 px-6">
                             <div className="w-12 h-12 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-3">
-                                <svg viewBox="0 0 24 24" className="w-6 h-6 stroke-white/20 fill-none stroke-[1.5]">
-                                    <rect x="2" y="6" width="20" height="14" rx="2" />
-                                    <circle cx="12" cy="13" r="4" />
-                                    <path d="M7 6l1-3h8l1 3" />
-                                </svg>
+                                <Camera size={24} className="text-white/20" />
                             </div>
                             <span className="text-white/30 text-[13px]">No screenshots yet</span>
                             <span className="text-white/20 text-[11px] mt-1">Capture moments from your projects</span>
@@ -339,7 +304,7 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
                             {recentScreenshots.map((s, i) => (
                                 <div
                                     key={s.id}
-                                    className={`home-screenshot-thumb rounded-lg overflow-hidden cursor-pointer ring-1 ring-white/[0.06] hover:ring-white/20 ${mounted ? `home-tab-fade-in home-tab-stagger-${Math.min(i + 1, 6)}` : 'opacity-0'}`}
+                                    className={`home-screenshot-thumb rounded-xl overflow-hidden cursor-pointer ring-1 ring-white/[0.06] hover:ring-white/20 ${mounted ? `home-tab-fade-in home-tab-stagger-${Math.min(i + 1, 6)}` : 'opacity-0'}`}
                                     onClick={() => onNavigate("screenshots")}
                                 >
                                     <div className="aspect-video">
@@ -357,7 +322,7 @@ const HomeTab: React.FC<Props> = ({ projects, templates, onOpenProject, onNaviga
             </div>
 
             {/* Right column - changelog */}
-            <div className="border-l border-white/[0.06] overflow-hidden flex flex-col">
+            <div className="border-l border-white/10 overflow-hidden flex flex-col">
                 <ChangelogPanel />
             </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ImageOff, MoreVertical } from "lucide-react";
 import ProjectActionsMenu from "./ProjectActionsMenu";
 
 interface ProjectMeta {
@@ -63,7 +64,7 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
 
     return (
         <div
-            className={`grid grid-cols-[160px_1fr_28px] items-center gap-x-3 p-2.5 rounded-xl border border-transparent cursor-pointer relative ${selected ? 'bg-white/10' : (hoveredId === p.id ? 'bg-white/5' : 'bg-transparent')}`}
+            className={`grid grid-cols-[160px_1fr_28px] items-center gap-x-3 p-2.5 rounded-xl border cursor-pointer relative transition-all duration-200 ${selected ? 'bg-[#2b6aff]/10 border-[#2b6aff]/30' : (hoveredId === p.id ? 'bg-white/[0.04] border-white/20' : 'border-white/10 bg-transparent')}`}
             data-pid={p.id}
             draggable
             onDragStart={(e) => {
@@ -87,9 +88,9 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
         >
             <div className="relative">
                 {selected && (
-                    <div className="absolute -inset-[6px] border-2 border-white/95 rounded-[10px] pointer-events-none z-[1]" />
+                    <div className="absolute -inset-[6px] border-2 border-[#2b6aff]/80 rounded-[14px] pointer-events-none z-[1]" />
                 )}
-                <div className="relative w-full h-[90px] rounded-lg overflow-hidden bg-[#141821]" draggable onDragStart={(e) => {
+                <div className="relative w-full h-[90px] rounded-xl overflow-hidden bg-[#141821]" draggable onDragStart={(e) => {
                     try { e.dataTransfer!.effectAllowed = 'move'; } catch (_) { }
                     try { e.dataTransfer?.setData('text/project-id', p.id); } catch (_) { }
                     try {
@@ -101,7 +102,9 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
                     {p.thumbnailDataUrl ? (
                         <img src={p.thumbnailDataUrl} alt="Project thumbnail" className="object-cover absolute inset-0 w-full h-full" />
                     ) : (
-                        <div className="absolute inset-0 bg-[#141821] text-[#7b8496] flex items-center justify-center rounded-lg text-[12px]">No Thumbnail</div>
+                        <div className="absolute inset-0 bg-gradient-to-br from-[#141821] to-[#0d1018] flex items-center justify-center rounded-xl">
+                            <ImageOff size={22} className="text-white/10" />
+                        </div>
                     )}
                     {loadingState && (
                         <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-none">
@@ -119,10 +122,9 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
             </div>
             <div className="ph-menu relative w-[28px] h-[28px] justify-self-end self-center z-[1100]" onClick={(e) => e.stopPropagation()}>
                 <button
-                    className={`ph-menu-trigger bg-transparent border-0 text-[#cfd6e4] rounded-md w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center transition-opacity ${hoveredId === p.id || menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                    className={`ph-menu-trigger bg-transparent border-0 text-white/50 rounded-lg hover:bg-white/10 hover:text-white/80 w-[28px] h-[28px] cursor-pointer leading-none inline-flex items-center justify-center transition-all duration-200 ${hoveredId === p.id || menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
                     onClick={() => {
                         if (menuOpen) {
-                            // Close immediately if already open
                             setMenuOpen(false);
                         } else {
                             try { window.dispatchEvent(new Event('ph-close-inline-menus')); } catch (_) { }
@@ -131,7 +133,7 @@ const ProjectListCard: React.FC<Props> = ({ project: p, index, selected, hovered
                         }
                     }}
                 >
-                    ⋮
+                    <MoreVertical size={16} />
                 </button>
                 <div className={`ph-inline-menu absolute right-0 top-[30px] ${menuOpen ? 'block' : 'hidden'}`} onClick={(e) => e.stopPropagation()}>
                     <ProjectActionsMenu variant="inline" id={p.id} projects={projects} setProjects={setProjects} setContextMenu={setContextMenu} onOpen={onOpen} onRequestClose={() => setMenuOpen(false)} setLoadingProjects={setLoadingProjects} />

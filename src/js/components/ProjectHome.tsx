@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { DatabaseManager, MigrationStatus } from "../managers/DatabaseManager";
 import ProjectActionsMenu from "./ProjectActionsMenu";
 import ProjectGridCard from "./ProjectGridCard";
@@ -521,7 +522,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                 {/* Content area */}
                 {activeNav === 'my-files' && (viewMode === 'grid' ? (
                     <div
-                        className="overflow-visible grid [grid-template-columns:repeat(auto-fill,minmax(340px,1fr))] gap-[18px] pr-2 relative"
+                        className="overflow-visible grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4 pr-2 relative"
                         onDragOver={(e) => { e.preventDefault(); try { e.dataTransfer!.dropEffect = 'move'; } catch (_) { } }}
                         onDrop={async (e) => {
                             try {
@@ -556,9 +557,15 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             />
                         ))}
                         {loading ? (
-                            <div style={{ opacity: 0.7 }}>Loading...</div>
+                            <div className="col-span-full flex items-center justify-center py-12 text-white/40 text-[13px]">Loading...</div>
                         ) : (filtered.filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId)).length === 0 && (!activeFolderId ? folders.length === 0 : true)) ? (
-                            <div style={{ opacity: 0.7 }}>No projects found.</div>
+                            <div className="col-span-full rounded-xl border border-dashed border-white/10 bg-white/[0.02] flex flex-col items-center justify-center py-12 px-6">
+                                <div className="w-12 h-12 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-3">
+                                    <Plus size={24} className="text-white/20" />
+                                </div>
+                                <span className="text-white/30 text-[13px]">No projects found</span>
+                                <span className="text-white/20 text-[11px] mt-1">Create a new project to get started</span>
+                            </div>
                         ) : (
                             filtered
                                 .filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId))
@@ -592,7 +599,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         )}
                     </div>
                 ) : (
-                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))] gap-[14px] pr-2 relative"
+                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))] gap-4 pr-2 relative"
                         onDragOver={(e) => { e.preventDefault(); try { e.dataTransfer!.dropEffect = 'move'; } catch (_) { } }}
                         onDrop={async (e) => {
                             try {
@@ -606,9 +613,15 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                         }}
                     >
                         {loading ? (
-                            <div style={{ opacity: 0.7 }}>Loading...</div>
+                            <div className="col-span-full flex items-center justify-center py-12 text-white/40 text-[13px]">Loading...</div>
                         ) : filtered.filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId)).length === 0 ? (
-                            <div style={{ opacity: 0.7 }}>No projects found.</div>
+                            <div className="col-span-full rounded-xl border border-dashed border-white/10 bg-white/[0.02] flex flex-col items-center justify-center py-12 px-6">
+                                <div className="w-12 h-12 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-3">
+                                    <Plus size={24} className="text-white/20" />
+                                </div>
+                                <span className="text-white/30 text-[13px]">No projects found</span>
+                                <span className="text-white/20 text-[11px] mt-1">Create a new project to get started</span>
+                            </div>
                         ) : (
                             filtered
                                 .filter((p) => !activeFolderId ? (p.folderId == null) : (p.folderId === activeFolderId))
@@ -638,11 +651,11 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     </div>
                 ))}
                 {activeNav === 'templates' && (
-                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-[18px] pr-2">
+                    <div className="grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4 pr-2">
                         {TEMPLATES.map((template) => (
                             <div
                                 key={template.id}
-                                className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/30 transition-all cursor-pointer"
+                                className="relative group rounded-xl overflow-hidden bg-[#141821] border border-white/10 hover:border-white/20 hover:translate-y-[-2px] hover:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_0_1px_rgba(43,106,255,0.25)] transition-all duration-200 cursor-pointer"
                                 onClick={() => {
                                     setInputModal({
                                         open: true,
@@ -655,16 +668,27 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                                     });
                                 }}
                             >
-                                <div className="aspect-video bg-black/20">
+                                <div className="relative aspect-video overflow-hidden">
                                     <img
                                         src={template.thumbnail}
                                         alt={template.name}
-                                        className="w-full h-full object-cover"
+                                        className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.08]"
                                     />
+                                    {/* Play / use overlay */}
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 scale-75 group-hover:scale-100">
+                                            <Plus size={20} className="text-white" />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="p-4">
-                                    <h3 className="text-white text-sm font-medium">{template.name}</h3>
-                                    <p className="text-white/50 text-xs mt-1">{template.description}</p>
+                                <div className="px-3.5 py-3 flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-white/90 text-[13px] font-medium">{template.name}</div>
+                                        <div className="text-white/40 text-[12px] mt-0.5 leading-relaxed line-clamp-2">{template.description}</div>
+                                    </div>
+                                    <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-md bg-[#2b6aff]/15 text-[#6b9fff] font-medium mt-0.5">
+                                        Template
+                                    </span>
                                 </div>
                             </div>
                         ))}
