@@ -2176,6 +2176,7 @@ const EnvironmentBuilder = (
                 .map(part => part.charAt(0).toUpperCase() + part.slice(1))
                 .join(" "),
             modelUrl: model.modelUrl,
+            thumbnailUrl: model.thumbnailUrl || null,
             isCustom: model.isCustom || false,
         }));
     };

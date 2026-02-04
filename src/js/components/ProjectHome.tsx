@@ -11,6 +11,7 @@ import ProjectFolderCard from "./ProjectFolderCard";
 import ModalContainer from "./ModalContainer";
 import ParticleViewerPage from "./ParticleViewerPage";
 import ScreenshotGalleryPage from "./ScreenshotGalleryPage";
+import HomeTab from "./HomeTab";
 
 // Migration overlay component
 const MigrationOverlay: React.FC<{ status: MigrationStatus }> = ({ status }) => {
@@ -108,7 +109,7 @@ const MigrationOverlay: React.FC<{ status: MigrationStatus }> = ({ status }) => 
     );
 };
 
-type Project = {
+export type Project = {
     id: string;
     name: string;
     createdAt: number;
@@ -162,7 +163,7 @@ const InputModal: React.FC<InputModalProps> = ({ isOpen, title, placeholder = ""
     );
 };
 
-const TEMPLATES = [
+export const TEMPLATES = [
     {
         id: "city",
         name: "City",
@@ -186,7 +187,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     const [pressedCardId, setPressedCardId] = useState<string | null>(null);
     const [activeNav, setActiveNav] = useState<string>(() => {
         try {
-            const hash = window.location.hash.replace('#', '') || 'my-files';
+            const hash = window.location.hash.replace('#', '') || 'home';
             return hash;
         } catch (_) { return 'my-files'; }
     });
@@ -238,7 +239,7 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
     useEffect(() => {
         const handleHashChange = () => {
             try {
-                const hash = window.location.hash.replace('#', '') || 'my-files';
+                const hash = window.location.hash.replace('#', '') || 'home';
                 setActiveNav(hash);
             } catch (_) {
                 setActiveNav('my-files');
@@ -465,6 +466,26 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                     setContextMenu({ id: '__ROOT__', x: e.clientX, y: e.clientY, open: true });
                 }}
             >
+                {activeNav === 'home' ? (
+                    <HomeTab
+                        projects={projects}
+                        templates={TEMPLATES}
+                        onOpenProject={handleOpen}
+                        onNavigate={(nav) => setActiveNav(nav)}
+                        onCreateFromTemplate={(template) => {
+                            setInputModal({
+                                open: true,
+                                type: 'project',
+                                defaultValue: template.name,
+                                onConfirm: async (name: string) => {
+                                    setInputModal({ open: false, type: 'project', onConfirm: () => {} });
+                                    await handleCreateFromTemplate(template, name);
+                                }
+                            });
+                        }}
+                    />
+                ) : (
+                <>
                 <ProjectHeader
                     viewMode={viewMode}
                     setViewMode={setViewMode}
@@ -648,6 +669,8 @@ export default function ProjectHome({ onOpen }: { onOpen: (projectId: string) =>
                             </div>
                         ))}
                     </div>
+                )}
+                </>
                 )}
                 {/* Global context menu (right-click) */}
                 {contextMenu.open && contextMenu.id && (

@@ -31,6 +31,7 @@ import Tooltip from "./Tooltip";
 import { getBlockTypes } from "../managers/BlockTypesManager";
 import "../../css/AxiomBlockRemapper.css";
 import { AxiomBlockRemapper } from "./AxiomBlockRemapper.jsx";
+import { getRotationLabel } from "../blocks/BlockRotations";
 import { NBTParser } from "../utils/minecraft/NBTParser";
 import {
     suggestMapping,
@@ -112,6 +113,32 @@ const ToolBar = ({
     const [openSelectorFor, setOpenSelectorFor] = useState<number | null>(null);
     const [remapSearchTerms, setRemapSearchTerms] = useState<Record<number, string>>({});
 
+    // Tab state for the remap modal
+    const [remapTab, setRemapTab] = useState<'blocks' | 'entities'>('blocks');
+
+    // Entity remap state
+    const [usedEntityCounts, setUsedEntityCounts] = useState<Record<string, number>>({});
+    const [entityRemapTargets, setEntityRemapTargets] = useState<Record<string, string | null>>({});
+    const [openEntitySelectorFor, setOpenEntitySelectorFor] = useState<string | null>(null);
+    const [entitySearchTerms, setEntitySearchTerms] = useState<Record<string, string>>({});
+
+    // Breakdown by shape toggle state
+    const [breakdownByShape, setBreakdownByShape] = useState(false);
+    const [breakdownRemapTargets, setBreakdownRemapTargets] = useState<Record<string, number | null>>({});
+
+    // Precomputed rotation/shape info for the current terrain
+    const [blockRotationInfo, setBlockRotationInfo] = useState<Record<number, Set<number>>>({});
+    const [blockShapeInfo, setBlockShapeInfo] = useState<Record<number, Set<string>>>({});
+
+    // Precomputed combo data: unique (blockId, rotation, shape) combinations with counts
+    const [blockComboData, setBlockComboData] = useState<Array<{
+        blockId: number;
+        rotation: number;
+        shape: string;
+        count: number;
+        comboKey: string;
+    }>>([]);
+
     // Remove Hidden Blocks modal state
     const [showRemoveHiddenModal, setShowRemoveHiddenModal] = useState(false);
     const [removeHiddenOptions, setRemoveHiddenOptions] = useState({
@@ -157,26 +184,91 @@ const ToolBar = ({
 
     const openGlobalRemap = () => {
         try {
+            // --- Block data ---
             const data = terrainBuilderRef?.current?.getCurrentTerrainData?.();
-            if (!data) {
-                alert("Terrain data not available.");
-                return;
-            }
             const counts: Record<number, number> = {};
-            Object.values(data).forEach((id: any) => {
-                if (typeof id === "number") {
-                    counts[id] = (counts[id] || 0) + 1;
-                }
-            });
+            if (data) {
+                Object.values(data).forEach((id: any) => {
+                    if (typeof id === "number") {
+                        counts[id] = (counts[id] || 0) + 1;
+                    }
+                });
+            }
             const initialTargets: Record<number, number | null> = {};
             Object.keys(counts).forEach((idStr) => {
                 const id = parseInt(idStr);
-                initialTargets[id] = id; // default to identity mapping
+                initialTargets[id] = id;
             });
             setUsedBlockCounts(counts);
             setGlobalRemapTargets(initialTargets);
             setOpenSelectorFor(null);
             setRemapSearchTerms({});
+
+            // --- Rotation/shape info per block type ---
+            const rotInfo: Record<number, Set<number>> = {};
+            const shpInfo: Record<number, Set<string>> = {};
+            if (data) {
+                const rotData = terrainBuilderRef?.current?.getCurrentRotationData?.() || {};
+                const shpData = terrainBuilderRef?.current?.getCurrentShapeData?.() || {};
+                for (const [posKey, id] of Object.entries(data as Record<string, number>)) {
+                    const blockId = id as number;
+                    if (!rotInfo[blockId]) rotInfo[blockId] = new Set();
+                    if (!shpInfo[blockId]) shpInfo[blockId] = new Set();
+                    const rot = rotData[posKey] || 0;
+                    const shp = shpData[posKey] || 'cube';
+                    rotInfo[blockId].add(rot);
+                    shpInfo[blockId].add(shp);
+                }
+            }
+            setBlockRotationInfo(rotInfo);
+            setBlockShapeInfo(shpInfo);
+            setBreakdownByShape(false);
+            setBreakdownRemapTargets({});
+
+            // Compute combo data: unique (blockId, rotation, shape) combinations with counts
+            const comboCounts: Record<string, { blockId: number; rotation: number; shape: string; count: number }> = {};
+            if (data) {
+                const rotData2 = terrainBuilderRef?.current?.getCurrentRotationData?.() || {};
+                const shpData2 = terrainBuilderRef?.current?.getCurrentShapeData?.() || {};
+                for (const [posKey, id] of Object.entries(data as Record<string, number>)) {
+                    const blockId = id as number;
+                    const rot = rotData2[posKey] || 0;
+                    const shp = shpData2[posKey] || 'cube';
+                    const key = `${blockId}:${rot}:${shp}`;
+                    if (!comboCounts[key]) {
+                        comboCounts[key] = { blockId, rotation: rot, shape: shp, count: 0 };
+                    }
+                    comboCounts[key].count++;
+                }
+            }
+            const comboArray = Object.entries(comboCounts).map(([comboKey, data]) => ({
+                ...data,
+                comboKey,
+            }));
+            comboArray.sort((a, b) => b.count - a.count);
+            setBlockComboData(comboArray);
+
+            // --- Entity data ---
+            const entityCounts: Record<string, number> = {};
+            try {
+                const allEntities = environmentBuilderRef?.current?.getAllEnvironmentObjects?.() || [];
+                for (const ent of allEntities) {
+                    if (ent.modelUrl) {
+                        entityCounts[ent.modelUrl] = (entityCounts[ent.modelUrl] || 0) + 1;
+                    }
+                }
+            } catch (_) { }
+            const initialEntityTargets: Record<string, string | null> = {};
+            Object.keys(entityCounts).forEach((url) => {
+                initialEntityTargets[url] = url;
+            });
+            setUsedEntityCounts(entityCounts);
+            setEntityRemapTargets(initialEntityTargets);
+            setOpenEntitySelectorFor(null);
+            setEntitySearchTerms({});
+
+            // --- Reset tab ---
+            setRemapTab('blocks');
             setShowGlobalRemapModal(true);
             setActiveSubmenu(SubMenuType.NONE);
         } catch (e) {
@@ -187,6 +279,82 @@ const ToolBar = ({
 
     const getFilteredBlocksFor = (srcId: number) => {
         const term = (remapSearchTerms[srcId] || "").toLowerCase();
+        const base = (availableBlocks as any[]).filter((b: any) => !b.isVariant);
+        if (!term) return base;
+        return base.filter((b: any) => (b.name || "").toLowerCase().includes(term));
+    };
+
+    // Helper: display-friendly name from modelUrl
+    const entityDisplayName = (modelUrl: string) => {
+        try {
+            const parts = modelUrl.split('/');
+            const filename = parts[parts.length - 1];
+            return filename.replace(/\.(gltf|glb)$/i, '').replace(/[-_]/g, ' ');
+        } catch (_) {
+            return modelUrl;
+        }
+    };
+
+    // Helper: resolve entity thumbnail path (same logic as EntityBrowser/EnvironmentButton)
+    const resolveEntityThumbnail = (thumbnailUrl: string | null | undefined): string | null => {
+        if (!thumbnailUrl) return null;
+        if (thumbnailUrl.startsWith("http") || thumbnailUrl.startsWith("https") || thumbnailUrl.startsWith("blob:")) return thumbnailUrl;
+        if (thumbnailUrl.startsWith("assets/")) {
+            const cleanPath = thumbnailUrl.replace(/^\/+/, "");
+            return `${process.env.PUBLIC_URL || ""}/${cleanPath}`.replace(/\/+/g, "/").replace(/^\/\//, "/");
+        }
+        return thumbnailUrl;
+    };
+
+    // Helper: look up thumbnail for a modelUrl from available models
+    const getEntityThumbnailForUrl = (modelUrl: string): string | null => {
+        const models = getAvailableEntityModels();
+        const match = models.find((m: any) => m.modelUrl === modelUrl);
+        return resolveEntityThumbnail(match?.thumbnailUrl);
+    };
+
+    // Helper: get all available entity models for the entity selector
+    const getAvailableEntityModels = () => {
+        try {
+            return environmentBuilderRef?.current?.getAllAvailableModels?.() || [];
+        } catch (_) {
+            return [];
+        }
+    };
+
+    // Helper: filter entity models by search term
+    const getFilteredEntitiesFor = (srcUrl: string) => {
+        const term = (entitySearchTerms[srcUrl] || "").toLowerCase();
+        const models = getAvailableEntityModels();
+        if (!term) return models;
+        return models.filter((m: any) => {
+            const name = (m.displayName || m.name || entityDisplayName(m.modelUrl) || "").toLowerCase();
+            return name.includes(term);
+        });
+    };
+
+    // Helper: get shape display name
+    const getShapeDisplayName = (shape: string) => {
+        const names: Record<string, string> = {
+            'cube': 'Cube',
+            'half_slab': 'Half Slab',
+            'wedge_45': 'Wedge 45\u00B0',
+            'stairs_2': '2-Step Stairs',
+            'stairs_3': '3-Step Stairs',
+            'quarter': 'Quarter',
+            'fence_post': 'Fence Post',
+            'cross': 'Cross',
+            'fence_1h': 'Fence 1H',
+            'fence_2h': 'Fence 2H',
+            'outer_corner_stairs_2': 'Outer Corner Stairs 2',
+            'outer_corner_stairs_3': 'Outer Corner Stairs 3',
+        };
+        return names[shape] || shape;
+    };
+
+    // Helper: get filtered blocks for breakdown selector
+    const getFilteredBlocksForCombo = (comboKey: string) => {
+        const term = (remapSearchTerms[comboKey as any] || "").toLowerCase();
         const base = (availableBlocks as any[]).filter((b: any) => !b.isVariant);
         if (!term) return base;
         return base.filter((b: any) => (b.name || "").toLowerCase().includes(term));
@@ -1908,92 +2076,317 @@ const ToolBar = ({
                 >
                     <div className="axiom-remapper-modal" onMouseDown={(e) => e.stopPropagation()}>
                         <div className="axiom-remapper-header">
-                            <h2>Global Block Remap</h2>
+                            <h2>Global Remap</h2>
                             <p className="axiom-remapper-subtitle">
-                                Found {Object.keys(usedBlockCounts).length} unique block types in this map
+                                {remapTab === 'blocks'
+                                    ? `Found ${Object.keys(usedBlockCounts).length} unique block types in this map`
+                                    : `Found ${Object.keys(usedEntityCounts).length} unique entity types in this map`}
                             </p>
                         </div>
+
+                        {/* Tab Bar */}
+                        <div className="remapper-tabs">
+                            <div
+                                className={`remapper-tab ${remapTab === 'blocks' ? 'active' : ''}`}
+                                onClick={() => setRemapTab('blocks')}
+                            >
+                                Blocks<span className="remapper-tab-count">({Object.keys(usedBlockCounts).length})</span>
+                            </div>
+                            <div
+                                className={`remapper-tab ${remapTab === 'entities' ? 'active' : ''}`}
+                                onClick={() => setRemapTab('entities')}
+                            >
+                                Entities<span className="remapper-tab-count">({Object.keys(usedEntityCounts).length})</span>
+                            </div>
+                        </div>
+
                         <div
                             className="axiom-remapper-list"
                             onWheel={(e) => e.stopPropagation()}
                             onTouchMove={(e) => e.stopPropagation()}
                         >
-                            {Object.keys(usedBlockCounts)
-                                .map((k) => parseInt(k))
-                                .sort((a, b) => (usedBlockCounts[b] || 0) - (usedBlockCounts[a] || 0))
-                                .map((srcId) => {
-                                    const srcBlock = availableBlocks.find((b: any) => b.id === srcId);
-                                    const tgtId = globalRemapTargets[srcId] !== undefined ? globalRemapTargets[srcId] : srcId;
-                                    const isRemoved = tgtId === null;
-                                    const tgtBlock = !isRemoved ? availableBlocks.find((b: any) => b.id === tgtId) : null;
-                                    return (
-                                        <div key={srcId} className="axiom-remapper-item">
-                                            <div
-                                                className="remapper-item-header"
-                                                onClick={() => setOpenSelectorFor(openSelectorFor === srcId ? null : srcId)}
+                            {/* ====== BLOCKS TAB ====== */}
+                            {remapTab === 'blocks' && (
+                                <>
+                                    {Object.keys(usedBlockCounts).length > 0 && (
+                                        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+                                            <button
+                                                className={`advanced-filter-toggle ${breakdownByShape ? 'active' : ''}`}
+                                                onClick={() => setBreakdownByShape(!breakdownByShape)}
                                             >
-                                                <div className="source-block">
-                                                    <span className="block-name">{srcBlock?.name || `ID ${srcId}`}</span>
-                                                    <span className="block-count">({usedBlockCounts[srcId] || 0} blocks)</span>
-                                                    <div
-                                                        className="current-mapping"
-                                                        title="Click to change target"
-                                                    >
-                                                        <span className="arrow-sep">→</span>
-                                                        {isRemoved ? (
-                                                            <span className="remove-indicator">
-                                                                Remove
-                                                            </span>
-                                                        ) : (
-                                                            <img
-                                                                className="mapping-icon"
-                                                                src={pickBlockTexture(tgtBlock)}
-                                                                alt={tgtBlock?.name || `ID ${tgtId}`}
-                                                            />
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                                                </svg>
+                                                Breakdown by shape
+                                            </button>
+                                        </div>
+                                    )}
+                                    {Object.keys(usedBlockCounts).length === 0 ? (
+                                        <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: '40px 0' }}>
+                                            No blocks found in this map
+                                        </div>
+                                    ) : !breakdownByShape ? (
+                                        /* === Standard per-block-type rows === */
+                                        Object.keys(usedBlockCounts)
+                                            .map((k) => parseInt(k))
+                                            .sort((a, b) => (usedBlockCounts[b] || 0) - (usedBlockCounts[a] || 0))
+                                            .map((srcId) => {
+                                                const srcBlock = availableBlocks.find((b: any) => b.id === srcId);
+                                                const tgtId = globalRemapTargets[srcId] !== undefined ? globalRemapTargets[srcId] : srcId;
+                                                const isRemoved = tgtId === null;
+                                                const tgtBlock = !isRemoved ? availableBlocks.find((b: any) => b.id === tgtId) : null;
+                                                const displayCount = usedBlockCounts[srcId] || 0;
+                                                return (
+                                                    <div key={srcId} className="axiom-remapper-item">
+                                                        <div
+                                                            className="remapper-item-header"
+                                                            onClick={() => setOpenSelectorFor(openSelectorFor === srcId ? null : srcId)}
+                                                        >
+                                                            <div className="source-block">
+                                                                <span className="block-name">{srcBlock?.name || `ID ${srcId}`}</span>
+                                                                <span className="block-count">
+                                                                    ({displayCount} block{displayCount !== 1 ? 's' : ''})
+                                                                </span>
+                                                                <div className="current-mapping" title="Click to change target">
+                                                                    <span className="arrow-sep">{'\u2192'}</span>
+                                                                    {isRemoved ? (
+                                                                        <span className="remove-indicator">Remove</span>
+                                                                    ) : (
+                                                                        <img
+                                                                            className="mapping-icon"
+                                                                            src={pickBlockTexture(tgtBlock)}
+                                                                            alt={tgtBlock?.name || `ID ${tgtId}`}
+                                                                        />
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {openSelectorFor === srcId && (
+                                                            <div className="remapper-item-content">
+                                                                <input
+                                                                    type="text"
+                                                                    className="block-search"
+                                                                    placeholder="Search blocks..."
+                                                                    value={remapSearchTerms[srcId] || ""}
+                                                                    onChange={(e) => setRemapSearchTerms((prev) => ({ ...prev, [srcId]: e.target.value }))}
+                                                                    onKeyDown={(e) => e.stopPropagation()}
+                                                                />
+                                                                <div className="selector-grid icon-only">
+                                                                    <button
+                                                                        className={`selector-tile remove-tile ${isRemoved ? 'selected' : ''}`}
+                                                                        title="Remove block"
+                                                                        onClick={() => {
+                                                                            setGlobalRemapTargets((prev) => ({ ...prev, [srcId]: null }));
+                                                                            setOpenSelectorFor(null);
+                                                                        }}
+                                                                    >
+                                                                        <span className="remove-icon">{'\u00D7'}</span>
+                                                                    </button>
+                                                                    {getFilteredBlocksFor(srcId).map((blk: any) => (
+                                                                        <button
+                                                                            key={blk.id}
+                                                                            className={`selector-tile ${tgtId === blk.id ? 'selected' : ''}`}
+                                                                            title={blk.name}
+                                                                            onClick={() => {
+                                                                                setGlobalRemapTargets((prev) => ({ ...prev, [srcId]: blk.id }));
+                                                                                setOpenSelectorFor(null);
+                                                                            }}
+                                                                        >
+                                                                            <img className="selector-icon" src={pickBlockTexture(blk)} alt={blk.name} />
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
                                                         )}
                                                     </div>
-                                                </div>
-                                            </div>
-                                            {openSelectorFor === srcId && (
-                                                <div className="remapper-item-content">
-                                                    <input
-                                                        type="text"
-                                                        className="block-search"
-                                                        placeholder="Search blocks..."
-                                                        value={remapSearchTerms[srcId] || ""}
-                                                        onChange={(e) => setRemapSearchTerms((prev) => ({ ...prev, [srcId]: e.target.value }))}
-                                                        onKeyDown={(e) => e.stopPropagation()}
-                                                    />
-                                                    <div className="selector-grid icon-only">
-                                                        <button
-                                                            className={`selector-tile remove-tile ${isRemoved ? 'selected' : ''}`}
-                                                            title="Remove block"
-                                                            onClick={() => {
-                                                                setGlobalRemapTargets((prev) => ({ ...prev, [srcId]: null }));
-                                                                setOpenSelectorFor(null);
-                                                            }}
-                                                        >
-                                                            <span className="remove-icon">×</span>
-                                                        </button>
-                                                        {getFilteredBlocksFor(srcId).map((blk: any) => (
-                                                            <button
-                                                                key={blk.id}
-                                                                className={`selector-tile ${tgtId === blk.id ? 'selected' : ''}`}
-                                                                title={blk.name}
-                                                                onClick={() => {
-                                                                    setGlobalRemapTargets((prev) => ({ ...prev, [srcId]: blk.id }));
-                                                                    setOpenSelectorFor(null);
-                                                                }}
-                                                            >
-                                                                <img className="selector-icon" src={pickBlockTexture(blk)} alt={blk.name} />
-                                                            </button>
-                                                        ))}
+                                                );
+                                            })
+                                    ) : (
+                                        /* === Breakdown rows: one per (blockId, rotation, shape) combo === */
+                                        blockComboData.map((combo) => {
+                                            const srcBlock = availableBlocks.find((b: any) => b.id === combo.blockId);
+                                            const tgtId = breakdownRemapTargets[combo.comboKey] !== undefined
+                                                ? breakdownRemapTargets[combo.comboKey]
+                                                : combo.blockId;
+                                            const isRemoved = tgtId === null;
+                                            const tgtBlock = !isRemoved ? availableBlocks.find((b: any) => b.id === tgtId) : null;
+                                            const isOpen = openSelectorFor as any === combo.comboKey;
+                                            return (
+                                                <div key={combo.comboKey} className="axiom-remapper-item">
+                                                    <div
+                                                        className="remapper-item-header"
+                                                        onClick={() => setOpenSelectorFor(isOpen ? null : combo.comboKey as any)}
+                                                    >
+                                                        <div className="source-block">
+                                                            <span className="block-name">{srcBlock?.name || `ID ${combo.blockId}`}</span>
+                                                            <span className="combo-tags">
+                                                                <span className="combo-tag">{getShapeDisplayName(combo.shape)}</span>
+                                                                <span className="combo-tag">{getRotationLabel(combo.rotation)}</span>
+                                                            </span>
+                                                            <span className="block-count">
+                                                                ({combo.count} block{combo.count !== 1 ? 's' : ''})
+                                                            </span>
+                                                            <div className="current-mapping" title="Click to change target">
+                                                                <span className="arrow-sep">{'\u2192'}</span>
+                                                                {isRemoved ? (
+                                                                    <span className="remove-indicator">Remove</span>
+                                                                ) : (
+                                                                    <img
+                                                                        className="mapping-icon"
+                                                                        src={pickBlockTexture(tgtBlock)}
+                                                                        alt={tgtBlock?.name || `ID ${tgtId}`}
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
+                                                    {isOpen && (
+                                                        <div className="remapper-item-content">
+                                                            <input
+                                                                type="text"
+                                                                className="block-search"
+                                                                placeholder="Search blocks..."
+                                                                value={remapSearchTerms[combo.comboKey as any] || ""}
+                                                                onChange={(e) => setRemapSearchTerms((prev) => ({ ...prev, [combo.comboKey]: e.target.value }))}
+                                                                onKeyDown={(e) => e.stopPropagation()}
+                                                            />
+                                                            <div className="selector-grid icon-only">
+                                                                <button
+                                                                    className={`selector-tile remove-tile ${isRemoved ? 'selected' : ''}`}
+                                                                    title="Remove block"
+                                                                    onClick={() => {
+                                                                        setBreakdownRemapTargets((prev) => ({ ...prev, [combo.comboKey]: null }));
+                                                                        setOpenSelectorFor(null);
+                                                                    }}
+                                                                >
+                                                                    <span className="remove-icon">{'\u00D7'}</span>
+                                                                </button>
+                                                                {getFilteredBlocksForCombo(combo.comboKey).map((blk: any) => (
+                                                                    <button
+                                                                        key={blk.id}
+                                                                        className={`selector-tile ${tgtId === blk.id ? 'selected' : ''}`}
+                                                                        title={blk.name}
+                                                                        onClick={() => {
+                                                                            setBreakdownRemapTargets((prev) => ({ ...prev, [combo.comboKey]: blk.id }));
+                                                                            setOpenSelectorFor(null);
+                                                                        }}
+                                                                    >
+                                                                        <img className="selector-icon" src={pickBlockTexture(blk)} alt={blk.name} />
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
+                                            );
+                                        })
+                                    )}
+                                </>
+                            )}
+
+                            {/* ====== ENTITIES TAB ====== */}
+                            {remapTab === 'entities' && (
+                                <>
+                                    {Object.keys(usedEntityCounts).length === 0 ? (
+                                        <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: '40px 0' }}>
+                                            No entities found in this map
                                         </div>
-                                    );
-                                })}
+                                    ) : (
+                                        Object.keys(usedEntityCounts)
+                                            .sort((a, b) => (usedEntityCounts[b] || 0) - (usedEntityCounts[a] || 0))
+                                            .map((srcUrl) => {
+                                                const tgtUrl = entityRemapTargets[srcUrl] !== undefined ? entityRemapTargets[srcUrl] : srcUrl;
+                                                const isRemoved = tgtUrl === null;
+                                                const isChanged = tgtUrl !== srcUrl;
+                                                return (
+                                                    <div key={srcUrl} className="axiom-remapper-item">
+                                                        <div
+                                                            className="remapper-item-header"
+                                                            onClick={() => setOpenEntitySelectorFor(openEntitySelectorFor === srcUrl ? null : srcUrl)}
+                                                        >
+                                                            <div className="source-block">
+                                                                {(() => {
+                                                                    const srcThumb = getEntityThumbnailForUrl(srcUrl);
+                                                                    return srcThumb ? (
+                                                                        <img className="entity-thumbnail" src={srcThumb} alt="" />
+                                                                    ) : (
+                                                                        <span className="entity-thumbnail entity-thumbnail-fallback">
+                                                                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                                                                        </span>
+                                                                    );
+                                                                })()}
+                                                                <span className="block-name">{entityDisplayName(srcUrl)}</span>
+                                                                <span className="block-count">({usedEntityCounts[srcUrl] || 0} instance{(usedEntityCounts[srcUrl] || 0) !== 1 ? 's' : ''})</span>
+                                                                <div className="current-mapping" title="Click to change target">
+                                                                    <span className="arrow-sep">{'\u2192'}</span>
+                                                                    {isRemoved ? (
+                                                                        <span className="remove-indicator">Remove</span>
+                                                                    ) : (
+                                                                        <span className={`mapping-entity-pill ${isChanged ? 'mapping-entity-pill-changed' : ''}`}>
+                                                                            {(() => {
+                                                                                const tgtThumb = getEntityThumbnailForUrl(tgtUrl!);
+                                                                                return tgtThumb ? <img className="entity-thumbnail" src={tgtThumb} alt="" style={{ marginRight: 4 }} /> : null;
+                                                                            })()}
+                                                                            {entityDisplayName(tgtUrl!)}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {openEntitySelectorFor === srcUrl && (
+                                                            <div className="remapper-item-content">
+                                                                <input
+                                                                    type="text"
+                                                                    className="block-search"
+                                                                    placeholder="Search entities..."
+                                                                    value={entitySearchTerms[srcUrl] || ""}
+                                                                    onChange={(e) => setEntitySearchTerms((prev) => ({ ...prev, [srcUrl]: e.target.value }))}
+                                                                    onKeyDown={(e) => e.stopPropagation()}
+                                                                />
+                                                                <div className="selector-grid entity-selector-grid">
+                                                                    <button
+                                                                        className={`selector-tile remove-tile ${isRemoved ? 'selected' : ''}`}
+                                                                        title="Remove entity"
+                                                                        onClick={() => {
+                                                                            setEntityRemapTargets((prev) => ({ ...prev, [srcUrl]: null }));
+                                                                            setOpenEntitySelectorFor(null);
+                                                                        }}
+                                                                    >
+                                                                        <span className="remove-icon">{'\u00D7'}</span>
+                                                                    </button>
+                                                                    {getFilteredEntitiesFor(srcUrl).map((model: any) => {
+                                                                        const url = model.modelUrl;
+                                                                        const name = model.displayName || model.name || entityDisplayName(url);
+                                                                        const thumb = resolveEntityThumbnail(model.thumbnailUrl);
+                                                                        return (
+                                                                            <button
+                                                                                key={url}
+                                                                                className={`selector-tile ${tgtUrl === url ? 'selected' : ''}`}
+                                                                                title={name}
+                                                                                onClick={() => {
+                                                                                    setEntityRemapTargets((prev) => ({ ...prev, [srcUrl]: url }));
+                                                                                    setOpenEntitySelectorFor(null);
+                                                                                }}
+                                                                            >
+                                                                                {thumb ? (
+                                                                                    <img className="selector-icon" src={thumb} alt={name} style={{ imageRendering: 'auto' }} />
+                                                                                ) : (
+                                                                                    <span className="selector-icon selector-fallback" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                                                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                                                                                    </span>
+                                                                                )}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })
+                                    )}
+                                </>
+                            )}
                         </div>
                         <div className="axiom-remapper-actions">
                             <button className="btn-cancel" onClick={() => setShowGlobalRemapModal(false)}>Cancel</button>
@@ -2001,65 +2394,143 @@ const ToolBar = ({
                                 className="btn-confirm"
                                 onClick={async () => {
                                     try {
+                                        let hasBlockChanges = false;
+                                        let hasEntityChanges = false;
+
+                                        // ====== BLOCK REMAP ======
                                         const data = terrainBuilderRef?.current?.getCurrentTerrainData?.();
-                                        if (!data) {
-                                            alert("Terrain data not available.");
-                                            return;
-                                        }
                                         const added: Record<string, number> = {};
                                         const removed: Record<string, number> = {};
-                                        for (const [posKey, id] of Object.entries(data as Record<string, number>)) {
-                                            const srcId = id as number;
-                                            const tgtId = globalRemapTargets[srcId];
-                                            if (tgtId === null) {
-                                                // Map to nothing - remove the block
-                                                removed[posKey] = srcId;
-                                            } else if (typeof tgtId === 'number' && tgtId !== srcId) {
-                                                // Map to a different block
-                                                added[posKey] = tgtId;
-                                                removed[posKey] = srcId;
+                                        const rotAdded: Record<string, number> = {};
+                                        const shpAdded: Record<string, string> = {};
+
+                                        if (data) {
+                                            const rotData = terrainBuilderRef?.current?.getCurrentRotationData?.() || {};
+                                            const shpData = terrainBuilderRef?.current?.getCurrentShapeData?.() || {};
+
+                                            for (const [posKey, id] of Object.entries(data as Record<string, number>)) {
+                                                const srcId = id as number;
+                                                let tgtId: number | null | undefined;
+
+                                                if (breakdownByShape) {
+                                                    // Breakdown mode: look up by combo key
+                                                    const rot = rotData[posKey] || 0;
+                                                    const shp = shpData[posKey] || 'cube';
+                                                    const comboKey = `${srcId}:${rot}:${shp}`;
+                                                    tgtId = breakdownRemapTargets[comboKey];
+                                                    if (tgtId === undefined) tgtId = srcId; // no change
+                                                } else {
+                                                    // Standard mode: look up by block id
+                                                    tgtId = globalRemapTargets[srcId];
+                                                }
+
+                                                if (tgtId === undefined || tgtId === srcId) continue;
+
+                                                if (tgtId === null) {
+                                                    removed[posKey] = srcId;
+                                                } else {
+                                                    added[posKey] = tgtId;
+                                                    removed[posKey] = srcId;
+                                                    // Preserve rotation and shape for swaps
+                                                    const posRot = rotData[posKey];
+                                                    const posShp = shpData[posKey];
+                                                    if (posRot && posRot !== 0) rotAdded[posKey] = posRot;
+                                                    if (posShp && posShp !== 'cube') shpAdded[posKey] = posShp;
+                                                }
                                             }
                                         }
-                                        if (Object.keys(added).length === 0 && Object.keys(removed).length === 0) {
+
+                                        hasBlockChanges = Object.keys(added).length > 0 || Object.keys(removed).length > 0;
+
+                                        // ====== ENTITY REMAP ======
+                                        const allEntities = environmentBuilderRef?.current?.getAllEnvironmentObjects?.() || [];
+
+                                        // Collect existing instanceIds per target modelUrl (from non-remapped entities)
+                                        const existingIdsByModel: Record<string, Set<number>> = {};
+                                        for (const ent of allEntities) {
+                                            const tgt = entityRemapTargets[ent.modelUrl];
+                                            if (tgt === undefined || tgt === ent.modelUrl) {
+                                                if (!existingIdsByModel[ent.modelUrl]) existingIdsByModel[ent.modelUrl] = new Set();
+                                                existingIdsByModel[ent.modelUrl].add(ent.instanceId);
+                                            }
+                                        }
+                                        const nextIdByModel: Record<string, number> = {};
+                                        const getNextId = (modelUrl: string): number => {
+                                            const existing = existingIdsByModel[modelUrl] || new Set<number>();
+                                            let id = nextIdByModel[modelUrl] ?? 0;
+                                            while (existing.has(id)) id++;
+                                            nextIdByModel[modelUrl] = id + 1;
+                                            existing.add(id);
+                                            return id;
+                                        };
+
+                                        const targetEntities: any[] = [];
+                                        for (const ent of allEntities) {
+                                            const tgt = entityRemapTargets[ent.modelUrl];
+                                            if (tgt === undefined || tgt === ent.modelUrl) {
+                                                // No change
+                                                targetEntities.push(ent);
+                                            } else if (tgt === null) {
+                                                // Remove - skip
+                                                hasEntityChanges = true;
+                                            } else {
+                                                // Remap to different model
+                                                hasEntityChanges = true;
+                                                targetEntities.push({
+                                                    ...ent,
+                                                    modelUrl: tgt,
+                                                    name: entityDisplayName(tgt),
+                                                    instanceId: getNextId(tgt),
+                                                });
+                                            }
+                                        }
+
+                                        if (!hasBlockChanges && !hasEntityChanges) {
                                             setShowGlobalRemapModal(false);
                                             return;
                                         }
 
-                                        // Extract unique block IDs that will be placed
-                                        const uniqueBlockIds = new Set<number>();
-                                        Object.values(added).forEach(blockId => {
-                                            if (blockId && typeof blockId === 'number' && blockId > 0) {
-                                                uniqueBlockIds.add(blockId);
-                                            }
-                                        });
+                                        // Apply block remap
+                                        if (hasBlockChanges) {
+                                            const uniqueBlockIds = new Set<number>();
+                                            Object.values(added).forEach(blockId => {
+                                                if (blockId && typeof blockId === 'number' && blockId > 0) {
+                                                    uniqueBlockIds.add(blockId);
+                                                }
+                                            });
 
-                                        console.log(`[GLOBAL_REMAP] Applying remap with ${Object.keys(added).length} blocks`);
-                                        console.log(`[GLOBAL_REMAP] Found ${uniqueBlockIds.size} unique block types to preload:`, Array.from(uniqueBlockIds));
+                                            // Preload textures
+                                            try {
+                                                const blockTypeRegistry = (window as any).BlockTypeRegistry;
+                                                if (blockTypeRegistry?.instance) {
+                                                    const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
+                                                        try {
+                                                            await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
+                                                        } catch (_) { }
+                                                    });
+                                                    await Promise.allSettled(preloadPromises);
+                                                }
+                                            } catch (_) { }
 
-                                        // Preload textures for all blocks that will be placed
-                                        try {
-                                            const blockTypeRegistry = (window as any).BlockTypeRegistry;
-                                            if (blockTypeRegistry && blockTypeRegistry.instance) {
-                                                console.log(`[GLOBAL_REMAP] Preloading textures for ${uniqueBlockIds.size} block types...`);
-                                                const preloadPromises = Array.from(uniqueBlockIds).map(async (blockId) => {
-                                                    try {
-                                                        await blockTypeRegistry.instance.preloadBlockTypeTextures(blockId);
-                                                        console.log(`[GLOBAL_REMAP] ✓ Preloaded textures for block ${blockId}`);
-                                                    } catch (error) {
-                                                        console.error(`[GLOBAL_REMAP] ✗ Failed to preload textures for block ${blockId}:`, error);
-                                                    }
-                                                });
-                                                await Promise.allSettled(preloadPromises);
-                                                console.log(`[GLOBAL_REMAP] ✓ Completed texture preloading`);
-                                            } else {
-                                                console.warn("[GLOBAL_REMAP] BlockTypeRegistry not available");
-                                            }
-                                        } catch (error) {
-                                            console.error("[GLOBAL_REMAP] ✗ Error during texture preloading:", error);
-                                            // Continue with remap even if preloading fails
+                                            const rotationOpts = Object.keys(rotAdded).length > 0 ? { added: rotAdded } : undefined;
+                                            const shapeOpts = Object.keys(shpAdded).length > 0 ? { added: shpAdded } : undefined;
+                                            terrainBuilderRef?.current?.updateTerrainBlocks?.(added, removed, {
+                                                syncPendingChanges: true,
+                                                rotationData: rotationOpts,
+                                                shapeData: shapeOpts,
+                                            });
                                         }
 
-                                        terrainBuilderRef?.current?.updateTerrainBlocks?.(added, removed, { syncPendingChanges: true });
+                                        // Apply entity remap
+                                        if (hasEntityChanges) {
+                                            try {
+                                                await environmentBuilderRef?.current?.updateEnvironmentToMatch?.(targetEntities);
+                                                environmentBuilderRef?.current?.updateLocalStorage?.();
+                                            } catch (err) {
+                                                console.error("[GLOBAL_REMAP] Error applying entity remap:", err);
+                                            }
+                                        }
+
                                         setShowGlobalRemapModal(false);
                                     } catch (e) {
                                         console.error("[GLOBAL_REMAP] Error applying global remap:", e);

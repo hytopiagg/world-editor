@@ -125,6 +125,8 @@
 }
 
 .mapping-entity-pill {
+    display: inline-flex;
+    align-items: center;
     padding: 4px 8px;
     background: rgba(255, 255, 255, 0.06);
     border-radius: 9999px;
@@ -134,7 +136,7 @@
 
 .source-block {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
 }
 
@@ -445,4 +447,129 @@
 
 .axiom-remapper-list::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
+}
+
+/* Tab bar */
+.remapper-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0 24px;
+}
+
+.remapper-tab {
+    padding: 12px 20px;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    font-size: 14px;
+    font-weight: 500;
+    user-select: none;
+}
+
+.remapper-tab:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.remapper-tab.active {
+    color: #fff;
+    border-bottom-color: #4caf50;
+}
+
+.remapper-tab-count {
+    font-size: 12px;
+    margin-left: 6px;
+    opacity: 0.6;
+}
+
+/* Advanced filter toggle */
+.advanced-filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.advanced-filter-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.advanced-filter-toggle.active {
+    background: rgba(76, 175, 80, 0.15);
+    border-color: rgba(76, 175, 80, 0.4);
+    color: #4caf50;
+}
+
+/* Entity thumbnail in remap item header */
+.entity-thumbnail {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.entity-thumbnail-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Entity selector grid (thumbnail-based) */
+.selector-grid.entity-selector-grid {
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+}
+
+/* Combo tags for breakdown rows */
+.combo-tags {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.combo-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+/* Entity pill remove variant */
+.entity-pill.entity-pill-remove {
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid transparent;
+    color: rgba(255, 68, 68, 0.8);
+}
+
+.entity-pill.entity-pill-remove:hover {
+    background: rgba(255, 68, 68, 0.15);
+    border-color: rgba(255, 68, 68, 0.4);
+}
+
+.entity-pill.entity-pill-remove.selected {
+    background: rgba(255, 68, 68, 0.25);
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+/* Changed entity mapping indicator */
+.mapping-entity-pill-changed {
+    background: rgba(76, 175, 80, 0.15);
+    border-color: rgba(76, 175, 80, 0.4);
 }
