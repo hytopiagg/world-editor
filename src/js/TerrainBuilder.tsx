@@ -1597,6 +1597,15 @@ const TerrainBuilder = forwardRef<TerrainBuilderRef, TerrainBuilderProps>(
                         }
                     }
 
+                    // Snap X/Z to grid for ground plane placements when snap is enabled or for non-environment blocks
+                    if (
+                        blockIntersection.isGroundPlane &&
+                        (snapToGridRef.current || !currentBlockTypeRef.current?.isEnvironment)
+                    ) {
+                        potentialNewPosition.x = Math.round(potentialNewPosition.x);
+                        potentialNewPosition.z = Math.round(potentialNewPosition.z);
+                    }
+
                     // Override snapping for environment models when grid snapping is disabled and no block hit (ground plane)
                     if (
                         !snapToGridRef.current &&
